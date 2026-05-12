@@ -99,7 +99,14 @@ Recommended next-session order: **5 first (M7 sHM observation, the big
 unknown), 6 if time permits (cheap, related to 5)**. 7-9 are not
 blockers.
 
-## V-series queue (10 not-yet-committed rows)
+## V-series queue (~~10 not-yet-committed rows~~ **ALL LANDED 2026-05-12 audit**)
+
+**Status flip 2026-05-12 audit pass**: V25-V57 were already in
+`industrial_case_solver_findings.md` (queue was stale); V58-V72 landed
+in 2026-05-12 audit commit (Track A · A1' path). Corpus is now at 72
+V-findings (824 → 1004 lines). The queue section below is preserved
+for historical session-by-session traceability but should not be read
+as "pending".
 
 V25 + V26 + V28 + V29 + V30 + **V31** (session 4 wiring landed —
 route now calls `detect_unit` with body-class filter) + **V32**

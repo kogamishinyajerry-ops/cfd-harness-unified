@@ -738,6 +738,186 @@ If yes → V-series. If no → F-series.
 | Reference case | case_016_m219_cavity_des_acoustic (full sandbox; `evidence/{00..11}_*.json`; `case/log/{blockMesh,surfaceFeatureExtract,snappyHexMesh,checkMesh,potentialFoam,solver_rhoPimpleFoam}.txt`) |
 | Lesson | **First compound-DES root** is now anchored. Inheritance index entries: numerics_class = `compressible-DES-acoustic`. Inherits-from: V26+V27(rhoCentralFoam-specific, N/A here)+V28+V29+V30(N/A)+V31+V32 (case_006 compressible-shock-density) + V45+V46 (case_010 incompressible-LES). Receives: V52+V53+V54+V55+V56 (case_016 specific). **S-series candidates** (next playbook update): S15 "tonal noise weak → check cavity LE refinement ≥5 cells across shear layer"; S16 "FW-H spectrum noisy → move porous surface inside resolved turbulence region"; S17 "low Rossiter mode missing → extend time window to 0.75 s for 100-cycle FFT"; S18 "acoustic reflection contamination → verify waveTransmissive coefficient + far-field box ≥ 30L". All S15-S18 are candidates pending v2 HPC run evidence — none promoted to playbook yet. **Counter row**: autonomous_governance: true; sub-session round-cap=1 captured pipeline successfully |
 
+### V58 · F-NEW-26 root cause precisely localized — `build_domain_patches` thick-plate-at-face construction
+
+| field | value |
+|---|---|
+| Surface | case_003 session 10 substrate dig. `~/Desktop/case_003_crm_hls_boundary_layer/scripts/build_cad.py:191-219`'s `build_domain_patches` returns 6 boxes, each thickness `t` placed AT a face of the CFD domain cuboid. Adjacent plates overlap at the 12 edges + 8 corners of the cuboid. Worked example: `farfield_top ∩ farfield_outer` = `lx × t × t` edge volume. The y=838,200 mm coordinate from every HXT PLC error matches `domain_ymax` of case_003's domain sizing |
+| Engineer symptom | gmsh HXT rejects 28% of case_003's 393k facets with PLC self-intersection at specific coordinates. Looks like a "bridge artifact" — turns out to be exact axis-aligned geometric overlap in the source CAD |
+| Root cause | Codex case-generator framework defect: `build_domain_patches` uses thick-plate-at-face convention for boundary patch naming. Mathematical inevitability — 3 thick plates at 3 cube faces must overlap at the 3 edges where those faces meet |
+| Fix | (1) **Cross-repo**: Option A (recommended) = single watertight domain box + face groups for naming; Option B (minimum-change) = boolean cuts so each plate excludes later-listed plates; Option C (defensive) = zero-thickness face patches. Ticket: `.planning/cross_repo_tickets/2026-05-12_case_003_build_cad_farfield_overlap.md`. (2) **Workbench-side**: cannot fix — bridge layer is architecturally incapable of fixing input overlap |
+| Status | confirmed — closed-form geometric reasoning; bisection evidence (session 8 probe5) matches; coordinate match precise |
+| Reference case | case_003_crm_hls_boundary_layer (session 10 commit `<session10>`; ramp_log lines 1680-1791) |
+| Lesson | When PLC error coordinates **match domain extremes exactly**, suspect domain-patch construction in source CAD before suspecting bridge. **Inheritance**: applies to all cases using thick-plate-at-face domain naming (see V62 for class-wide impact). **Counter row**: autonomous_governance: false (cross-repo fix gates closure) |
+
+### V59 · M5.0 import-time body-pair AABB overlap defensive layer with 3-tier classification
+
+| field | value |
+|---|---|
+| Surface | case_003 session 11 commit `4f671c4`. `ui/backend/services/geometry_ingest/health_check.py` gains `BodyAABB` + `BodyPairOverlap` dataclasses + `detect_body_pair_overlaps(body_aabbs)` O(N²) sweep. 3 tiers: **containment** (outer strictly contains inner — cavity/nested obstacle, silent), **edge_overlap** (slice-shaped at AABB extents — F-NEW-26 thick-plate signature, warn 1-2 pairs / error ≥3), **significant** (intersection ≥ 25% smaller body's volume — always error) |
+| Engineer symptom | Before V59: F-NEW-26-class source-CAD bugs surfaced only at M6 mesh generation after 4+ minutes of `classifySurfaces` + HXT trial. Diagnostic is "HXT 3D mesh failed" — undiscoverable for engineers without substrate-debugging expertise |
+| Root cause | Workbench had no fail-fast for source-CAD topology bugs. M5.0 import path checked watertightness + body extents but not pairwise body-AABB overlap |
+| Fix | Defensive layer at import time. Single-line actionable diagnostic with cross-repo ticket reference. Saves 4+ min round-trip per affected case import |
+| Status | confirmed — 22 geometry_ingest tests pass (13 baseline + 9 new); covers disjoint / containment / significant / edge_slice predicates + case_003 6-plate fixture |
+| Reference case | case_003 session 11 (commit `4f671c4`); `test_geometry_ingest.py` integration cases |
+| Lesson | Source-CAD topology defects benefit from fail-fast classification at import. **3-tier classification** preserves legitimate patterns (cavity/interior-obstacle) while flagging known-bug patterns (thick-plate overlap). **Counter row**: autonomous_governance: true; spike-class shipped within session |
+
+### V60 · Cavity / interior-obstacle pattern preserved by AABB containment classification
+
+| field | value |
+|---|---|
+| Surface | case_003 session 11. The `containment` tier of `detect_body_pair_overlaps` explicitly silences the case where outer AABB strictly contains inner — i.e. LDC (lid cavity within walls), cylinder-in-channel, DEC-V61-104 interior-obstacle workflows |
+| Engineer symptom | Without containment-aware classification, V59's overlap detector would false-positive on every cavity case, breaking established workflows |
+| Root cause | "Body A overlaps body B" is ambiguous: it could mean source-CAD bug (V58 thick-plate) or legitimate enclosure (cavity). Volumetric containment ratio + AABB geometry distinguishes them: containment = `outer.extents > inner.extents AND outer.bbox ⊃ inner.bbox` |
+| Fix | Containment classification silent; edge_overlap warns ≥1 / errors ≥3; significant always errors. Integration test pins cavity preservation |
+| Status | confirmed — `test_geometry_ingest.py::test_cavity_pattern_silent` + 3 more integration cases pass |
+| Reference case | case_003 session 11; LDC + cylinder-in-channel preserved silent |
+| Lesson | When introducing a defensive check on geometric topology, **explicitly enumerate the legitimate patterns** the check must preserve. Cavity / interior-obstacle / nested-assembly were all candidates here — only containment + slice-shape disambiguation works. **Counter row**: autonomous_governance: true |
+
+### V61 · Route layer claim (**SUPERSEDED by V66 session 13**)
+
+| field | value |
+|---|---|
+| Surface | case_003 session 11 log entry claimed: "Route layer (`POST /api/import/stl`) transparently carries new diagnostic via existing IngestReport.errors/warnings contract; no route-code change needed (route test deferred to Option H)" |
+| Engineer symptom | Briefing-level assertion not verified by integration test. Session 13 Option H exercise revealed the route was calling `run_health_checks` without `body_aabbs=`, so the F-NEW-26 defensive layer was **dead code at the HTTP layer** |
+| Root cause | Session 11 added `body_aabbs: list[BodyAABB] \| None = None` as fail-safe-default kwarg. Wrapper `ingest_stl(data)` computed it and passed through. Route called the lower-level helpers directly (needed `combined` for downstream `scaffold_imported_case`) and only computed `body_extents_raw` — missed wiring `body_aabbs` |
+| Fix | See V66 — wiring closed in session 13 |
+| Status | **SUPERSEDED** by V66 — original V61 claim was wrong |
+| Reference case | case_003 session 11 (claim) + session 13 (correction) |
+| Lesson | **"Transparent surfacing" is not falsifiable without integration test.** Don't log claims of zero-change wiring without an end-to-end test that exercises the claim. **Counter row**: autonomous_governance: false (claim made without test = governance-gap surface) |
+
+### V62 · F-NEW-26 class-wide impact — 6 of 11 cases affected
+
+| field | value |
+|---|---|
+| Surface | case_003 session 12 full survey of `~/Desktop/case_*/scripts/build_cad.py`. Affected (6): case_003 / case_006 / case_007 / case_008 / case_010 / case_016. Not affected (5): case_004 (rotor, no flat domain), case_005 (internal duct, cylindrical disks), case_009 (sector-wedge), case_011 (internal HX), case_012 (internal HVAC), case_015 (internal T-junction) |
+| Engineer symptom | F-NEW-26 looked like a case_003 bug until session 10's case_008 grep; full survey reveals systemic issue. ~54% of Codex case-generator output is affected |
+| Root cause | Codex's `build_domain_patches` helper convention is **the default external-flow domain construction** in its case-generator framework. Internal-flow cases (HX, HVAC, T-junction, S-duct) use different geometric patterns (cylindrical, stack-pack) and dodge the bug |
+| Fix | Per V65 — shared-helper extraction is the preferred fix path |
+| Status | confirmed — explicit per-case `return {...}` inspection across all 11 build_cad.py files |
+| Reference case | survey output: ticket `.planning/cross_repo_tickets/2026-05-12_case_003_build_cad_farfield_overlap.md` "Class-wide affected cases" section |
+| Lesson | When a substrate bug pattern is identified, **survey the case-generator framework breadth** before assuming case-locality. Class-wide bugs in upstream tooling produce N coincident "case-specific" downstream errors. **Counter row**: autonomous_governance: false (Codex repo action required) |
+
+### V63 · case_006 has DOUBLE overlap — worst-case F-NEW-26 variant
+
+| field | value |
+|---|---|
+| Surface | case_003 session 12 survey. case_006 onera_m6_transonic builds BOTH (a) `farfield_box` — a full domain cuboid AND (b) 6 thin plates (`farfield_upstream/downstream/top/bottom/outboard/symmetry_plane_root`) at the 6 faces of that cuboid. Each plate overlaps adjacent plates AND each plate overlaps the cuboid |
+| Engineer symptom | case_006 V-series harvest probably surfaced multiple HXT errors; the additional cuboid produces 6 plate-vs-cuboid overlaps on top of the 12 plate-vs-plate edge overlaps from the base pattern |
+| Root cause | case_006's author appears to have added the `farfield_box` for far-field visualization or volumetric tagging without removing the 6-plate naming pattern. Pure "added without subtracting" defect |
+| Fix | Per V65 — shared-helper extraction removes both the plates AND the redundant cuboid by replacing them with face-group naming on a single domain volume |
+| Status | confirmed — explicit reading of case_006 build_cad.py |
+| Reference case | case_006 onera_m6_transonic (session 12 survey) |
+| Lesson | **"Worst-case variant" of a class-wide bug is informative for fix scope.** case_006's double-overlap pattern proves the fix must handle nested domain volumes, not just edge cleanup. **Counter row**: autonomous_governance: false |
+
+### V64 · case_016 has 14 patch tags — F-NEW-26 worst extent of bug
+
+| field | value |
+|---|---|
+| Surface | case_003 session 12 survey. case_016 m219_cavity_des_acoustic uses 14 thick-tag patches via `make_box(X_MIN_MM, X_MIN_MM + t, ...)` covering: inflow/outflow/top_far_field/far_field_port/starboard + 4 flat_plate_* + 5 cavity_* + fwh_porous_surface |
+| Engineer symptom | session 11's defensive layer will trigger the systematic-bug error path MOST aggressively here — N(N-1)/2 = 91 pairwise checks, with potentially dozens of edge_overlap pairs (each adjacent-plate pair contributes 12 cube-edge overlaps, scaled by patch count) |
+| Root cause | High patch count is a domain-modeling necessity for cavity-acoustic cases (FW-H porous surfaces + multiple flat-plate references). Thick-tag pattern multiplies overlaps quadratically with patch count |
+| Fix | V65 shared-helper extraction; for case_016 specifically, the 5 cavity_* + 4 flat_plate_* + fwh_porous_surface are not pure domain walls — they're acoustic-source references that may need their own naming convention |
+| Status | confirmed — explicit reading of case_016 build_cad.py |
+| Reference case | case_016 m219_cavity_des_acoustic (session 12 survey) |
+| Lesson | **Patch count amplifies F-NEW-26 quadratically**. High-patch-count cases (acoustic, multi-region CHT, multi-zone MRF) are most affected. **Counter row**: autonomous_governance: false |
+
+### V65 · F-NEW-26 recommended fix path — shared-helper extraction
+
+| field | value |
+|---|---|
+| Surface | case_003 session 12 ticket update with 3 ranked fix paths: (1) per-case retrofit — ~6 mechanical PRs; (2) **shared-helper extraction (recommended)** — factor out `cfd_domain_patches(domain_bbox, thickness, names)` helper, migrate 6 affected cases; (3) workbench-side enforcement — V59 defensive layer, already shipped |
+| Engineer symptom | Without a coordinated fix path, 6 affected cases would each get their own ad-hoc retrofit, drifting in implementation detail |
+| Root cause | The thick-plate-at-face convention is repeated 6+ times across Codex case-generator output. Factor-out is the obvious DRY fix once the bug is class-wide |
+| Fix | Shared helper applying Option A (single watertight domain box + face groups) or Option B (boolean cuts excluding later-listed plates). Migrate cases via grep + script. Ticket Option A also enables face-group naming, which is the OpenFOAM-canonical pattern for boundary identification |
+| Status | recommended — pending Codex repo action |
+| Reference case | ticket recommendation section + V62 case-list |
+| Lesson | **Class-wide bugs justify shared-helper extraction over per-case fixes.** Even if per-case fixes are individually simpler, they accumulate as N different patterns. **Counter row**: autonomous_governance: false (recommendation, not action) |
+
+### V66 · V61 was wrong — route layer wiring gap dead-coded F-NEW-26 defensive layer
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 Option H. `ui/backend/routes/import_geometry.py:128-136` called `run_health_checks(body_extents_raw=...)` but **omitted** `body_aabbs=`. The route uses lower-level helpers directly (needs `combined` for downstream `scaffold_imported_case`) and only the legacy `_per_body_max_extents` helper was wired — `body_aabbs` was never computed in the route path |
+| Engineer symptom | V59's defensive layer was alive in `geometry_ingest.ingest_stl(data: bytes)` (used by non-route callers + integration tests) but dead in the HTTP route — F-NEW-26 patterns would 200-OK through `POST /api/import/stl` instead of 400 |
+| Root cause | Optional kwarg introduced with `body_aabbs: list[BodyAABB] \| None = None` default. Wrapper passed it through; route did not. No integration test exercised route + multi-body geometry combination, so the gap was invisible |
+| Fix | session 13: `_per_body_max_extents` → `_per_body_info(loaded)` returning `(extents, aabbs)` in one Scene-iteration; route passes both; `_classify_failing_check` adds `"body_overlap"`; `_select_primary_error` prefers AABB-overlap over watertight (root cause vs symptom). 2 new route tests pin both directions |
+| Status | confirmed — `test_import_geometry_route.py::test_f_new_26_6_plate_returns_400_with_body_overlap_failing_check` + `test_disjoint_multi_solid_returns_200_no_overlap_diagnostic` |
+| Reference case | case_003 session 13 (commit `78e1f32`) |
+| Lesson | **Adding an optional kwarg with fail-safe default to a public function silently dead-codes it at non-wrapper call sites.** Need to grep ALL caller sites and decide per-site. See V69 for methodology amendment. **Counter row**: autonomous_governance: true (in-session correction) |
+
+### V67 · Interpenetrating watertight shells preserve `is_watertight=True`
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 `farfield_6_plate_stl` fixture probe. 6 individual closed boxes that interpenetrate at 12 cube edges. `combined.is_watertight` returns `True` because trimesh's watertight check verifies edge-pairing within each shell, not geometric non-intersection between shells |
+| Engineer symptom | Without this invariant, designing F-NEW-26-class test fixtures would conflate "watertight check" with "geometry validity" |
+| Root cause | trimesh implements watertight as `every edge has exactly 2 incident faces`. This is a topological condition; geometric self-intersection is a different concept (PLC error at HXT mesh time) |
+| Fix | Knowledge: when writing geometry test fixtures, **never assume `is_watertight=False` implies "broken geometry"**. The two checks are orthogonal. F-NEW-26 fixtures rely on this orthogonality to land both is_watertight + body_overlap diagnostics independently |
+| Status | confirmed — 6-plate fixture verified |
+| Reference case | case_003 session 13 (`conftest.py::farfield_6_plate_stl`) |
+| Lesson | **Topology checks (watertight, manifold) ≠ geometry checks (intersection, validity).** Treating them as the same produces false confidence. Useful invariant for any future "is this STL good?" advisor. **Counter row**: autonomous_governance: true |
+
+### V68 · `failing_check` taxonomy adds `"body_overlap"` distinct class
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13. `ImportRejection.failing_check: str` taxonomy gained `"body_overlap"` as a value distinct from `"watertight"`, `"manifold"`, `"unit_unknown"`, and the catch-all `"unknown"`. UI / frontend client can branch on this to link the cross-repo ticket |
+| Engineer symptom | Generic `"unknown"` failing_check forces the UI to display the raw error message with no contextual link. Engineers must read the error text to discover the ticket reference |
+| Root cause | Pre-V68 taxonomy didn't anticipate source-CAD topology errors as a discrete category. M5.0 had `watertight` (geometric closure) + `manifold` (edge-pairing) + `unit_unknown` (sizing); F-NEW-26 surfaces a different defect class (inter-body overlap) that needed its own label |
+| Fix | `_classify_failing_check` returns `"body_overlap"` when `report.errors` contains the AABB-overlap diagnostic. Frontend / API consumers gain a stable branch for ticket-link UX |
+| Status | confirmed — used by `test_f_new_26_6_plate_returns_400_with_body_overlap_failing_check` |
+| Reference case | case_003 session 13 (`import_geometry.py::_classify_failing_check`) |
+| Lesson | **Defect taxonomy is a stable API surface even when implemented as `str`.** New defect classes (like body_overlap) earn their own label to support UI / client branching. Don't lump into `"unknown"`. **Counter row**: autonomous_governance: true |
+
+### V69 · Pre-implementation surface-scan must trace the actual call graph, not just file paths
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 retrospective on V61's wrong claim. Session 11's surface-scan found `health_check.py` + `__init__.py` and updated both. The route at `import_geometry.py` was not in the scan output because it doesn't import `health_check` directly — it imports from the package `geometry_ingest` |
+| Engineer symptom | Optional kwarg added with fail-safe default; wrapper call site updated; route call site untouched and silently dead. V61 logged the claim without integration test, propagating the gap |
+| Root cause | Surface-scan based on grep of new symbol matches caller sites that import the changed module directly. Indirect callers (via package re-export, via wrapper) are invisible to symbol-grep |
+| Fix | **Methodology amendment**: when adding a new optional kwarg to a public function, grep ALL caller sites (not just direct importers) and decide per-site whether to pass it. Audit the call graph, not the import graph. Specifically for V61-088 surface-scan discipline, add a "call-graph trace" sub-step when the change is a new kwarg with fail-safe default |
+| Status | confirmed — V66 wiring fix exists because V69 surfaces the methodology gap |
+| Reference case | case_003 session 11 (gap created) + session 13 (gap closed + lesson extracted) |
+| Lesson | **Symbol-grep surface-scan is insufficient for fail-safe-default optional kwargs.** Fail-safe defaults make missing wire-up silent. Need explicit call-graph trace. Candidate addendum to DEC-V61-088 surface-scan discipline. **Counter row**: autonomous_governance: true (methodology gap surfaced + lesson captured in same session) |
+
+### V70 · F-NEW-17 airframe-class extent ceiling 100 → 500 m admits CRM-HLS / ship hulls
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 cont. `ui/backend/services/meshing_gmsh/gmsh_runner.py::_INDUSTRIAL_EXTENT_RANGE_M[1]` raised 100.0 → 500.0. CRM-HLS 152 m airframe + KCS ship 230 m hull + large aircraft now pass airframe-class identification. F-NEW-19 union diagonal includes the full airframe instead of just 18-27 m sub-structures |
+| Engineer symptom | Pre-V70: case_003 lc would be ~0.9 m (sub-structure-driven 27 m / 30), over-refining a 152 m airframe and either exceeding cell budget or timing out at M6. case_007 KCS ship would fail entirely |
+| Root cause | The 100 m ceiling was a pragmatic guess at airframe size. CRM-HLS is fundamentally bigger (full transport aircraft, 152 m wingspan-equivalent). Industrial ships are 200-400 m |
+| Fix | Single-line constant change + 6 new tests covering boundary values (152k, 300k, 500k inclusive, 500001 rejected, 100k still admitted = upward-compat). Tests pin the new ceiling at concrete real-case values |
+| Status | confirmed — 113/113 tests pass across meshing_gmsh + unit_detector + geometry_ingest + import_geometry_route |
+| Reference case | case_003 session 13 cont (commit `95d03ca`) |
+| Lesson | **Industrial-scale constants tuned on academic benchmarks need re-audit on industrial cases.** 100 m airframe ceiling worked on backward_step + LDC + apu_bay (sub-meter to ~10 m). CRM-HLS surfaces the gap. Future audits: ship_vof, dam-break, wind-farm. **Counter row**: autonomous_governance: true |
+
+### V71 · `gmsh_runner` and `unit_detector` industrial-extent ceilings intentionally decoupled
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 cont. `gmsh_runner._INDUSTRIAL_EXTENT_RANGE_M` ceiling raised to 500 m, but `unit_detector._INDUSTRIAL_EXTENT_RANGE_M` deliberately preserved at 100 m. The two constants answer different questions: gmsh_runner asks "is this a real body of interest?" (any plausible unit interpretation qualifies); unit_detector asks "is there a UNIQUE unit?" (multiplicity = engineer-confirm UNKNOWN) |
+| Engineer symptom | If both constants were unified, case_003's sub-structures (raw mm 18-27, plausible as both 0.018-0.027 m and 1.8-2.7 m at 500 m ceiling) would flip from confident-mm to UNKNOWN, regressing F-NEW-12 session 4 wiring |
+| Root cause | Easy refactor temptation: "two constants with the same name and same value, let's unify." But the predicates are different — preservation of F-NEW-12 confident-mm requires the unit_detector ceiling stay at 100 m so case_003's sub-structures have only one plausible unit |
+| Fix | Constants decoupled in code; rationale captured in block comment; **invariant pin test**: `test_airframe_class_diagonal_ceiling_decoupled_from_unit_detector` asserts `gmsh_runner > unit_detector`. Prevents silent regression from a future "unify the constants" refactor |
+| Status | confirmed — invariant test in `test_meshing_gmsh.py` |
+| Reference case | case_003 session 13 cont |
+| Lesson | **Two constants with the same name + same value can have different semantics.** When the semantics diverge under new requirements, decouple + pin the divergence by invariant test. Naming convention amendment candidate: `_INDUSTRIAL_AIRFRAME_CLASS_CEILING_M` (gmsh_runner) vs `_INDUSTRIAL_UNIT_PLAUSIBILITY_CEILING_M` (unit_detector). **Counter row**: autonomous_governance: true |
+
+### V72 · Per-body-class configurable extent band deferred — 500 m flat ceiling sufficient
+
+| field | value |
+|---|---|
+| Surface | case_003 session 13 cont. RESUME 5f original ask was per-body-class configurable extent band. Deferred in favor of 500 m flat ceiling |
+| Engineer symptom | Without per-body-class config, tunnels/dams/bridges (>500 m) still require explicit `sizing_field` from engineer |
+| Root cause | YAGNI on per-body-class config. 500 m flat ceiling covers airframes + ships + most large industrial bodies; super-large structures (>500 m) are rare enough that explicit engineer-supplied sizing is acceptable. Premature configurability adds API surface for a phantom requirement |
+| Fix | Deferred. Revisit only if a real case requires automated admission of >500 m bodies (e.g., dam-break tsunami case, wind-farm meso-scale) |
+| Status | deferred — explicit non-action |
+| Reference case | case_003 session 13 cont |
+| Lesson | **"Configurable" is not always better than "tuned constant".** When the constant covers 95%+ of real cases and the override path is engineer-supplied sizing_field (already exists), adding config is API bloat. **Counter row**: autonomous_governance: true |
+
 ## Cross-cutting patterns observed
 
 ### Pattern 1 — Zero IC is the universal first-iter killer
