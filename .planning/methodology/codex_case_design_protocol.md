@@ -35,6 +35,14 @@ component_bank_pick:
   alternative_ok: true | false
 defect_injection_count: 1 | 2
 defect_injection_hint: <one or two defect catalog IDs from defect catalog>
+# Priority-targeting note (2026-05-12 · post 11-case batch coverage audit):
+# Per `cross_cuts/advisor_coverage_2026-05-09.md` defect-class
+# distribution, **D3** (non-manifold shared face) and **D4** (sliver on
+# spiral/fillet edge) are uncovered across the 003-020 case set. When
+# next-batch case briefs are otherwise solver-class-flexible, prefer
+# D3 or D4 in the hint slot until each has >= 1 industrial injection.
+# D1 is over-saturated (11x in 003-020); deprioritize unless the case
+# specifically requires sub-mm gap topology.
 cad_tool_preference: cadquery | freecad | open
 sandbox_path_suggestion: ~/Desktop/case_<NNN>_<short_name>/
 non_negotiables:

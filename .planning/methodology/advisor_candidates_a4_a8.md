@@ -1,4 +1,4 @@
-# Advisor candidates A4-A8 · consolidation + harvest-003 prep
+# Defect-class advisor candidates · D6/D7/D9/D10 · consolidation + harvest-003 prep
 
 > Living document. Updated when a case sub-session sediments new evidence
 > on D6/D7/D9/D10. Promotes a candidate from "drafted" → "ready-to-land"
@@ -7,6 +7,18 @@
 >
 > **Parent**: harvest cycle 003 (triggered after case_020 sediment per
 > `case_proposal_queue.md`). This doc is the rallying point.
+>
+> **A-number reconciliation note** (added 2026-05-12 post-publish): the
+> initial draft of this doc claimed A5/A6/A7 slots for D6/D9/D10 advisor
+> candidates. That was incorrect — `.planning/cross_cuts/advisor_coverage_2026-05-09.md`
+> is SSOT for A-number allocation and had **already** assigned A6 =
+> `hvac_adpi.py`, A7 = `step_canonicalizer.py`, A8 = `shm_dict_validator.py`
+> (A5 unallocated). Only **A4 = face_orientation advisor** is shared
+> between both docs (no conflict). The defect-class advisor candidates
+> below are therefore referenced by their **defect-letter** (`D6_advisor`,
+> `D9_advisor`, `D10_advisor`) — they will receive A-numbers only when
+> harvest-003 promotes them past `drafted`. File name `advisor_candidates_a4_a8.md`
+> preserved for git-history continuity.
 
 ## Why this exists
 
@@ -53,7 +65,7 @@ in this doc + the V-row, INDEX.md cross-link.
 | Current evidence | **1 / 2** (V79 case_012 first injection · case_013 dispatched · deferred) |
 | Status | `drafted` — pending case_013 sediment |
 | V-row(s) | V79 (case_012 first injection · backfilled 2026-05-12) |
-| Sibling | Parallel to V55 (A5 / D6) and V56 (A6 / D9) advisor-gap surfacers |
+| Sibling | Parallel to V55 (D6_advisor) and V56 (D9_advisor) advisor-gap surfacers |
 
 **Pre-drafted spec**:
 
@@ -76,7 +88,7 @@ def detect_face_orientation_anomalies(
 
 Downstream classifier: `body_has_rotation_defect(anomaly, sibling_consensus_deg) -> bool`.
 
-### A5 · `extra_body_in_fluid_advisor`
+### D6_advisor · `extra_body_in_fluid_advisor` (A-number pending)
 
 | field | value |
 |---|---|
@@ -86,7 +98,7 @@ Downstream classifier: `body_has_rotation_defect(anomaly, sibling_consensus_deg)
 | Current evidence | **1 / 2** (V55 case_016 first injection · case_018 dispatched · deferred) |
 | Status | `drafted` — pending case_018 sediment |
 | V-row(s) | V55 (case_016 first injection 2026-05-11) |
-| Sibling | Parallel to V79 (A4 / D7) and V56 (A6 / D9) |
+| Sibling | Parallel to V79 (A4 face_orientation / D7) and V56 (D9_advisor) |
 
 **Pre-drafted spec**:
 
@@ -110,7 +122,7 @@ Anti-scope: does **not** detect bodies that are partially inside / partially
 outside (that's a different topology check — leave to import-time AABB
 overlap classifier V59).
 
-### A6 · `curved_surface_tessellation_accuracy_advisor`
+### D9_advisor · `curved_surface_tessellation_accuracy_advisor` (A-number pending)
 
 | field | value |
 |---|---|
@@ -120,7 +132,7 @@ overlap classifier V59).
 | Current evidence | **1 / 2** (V56 case_016 first injection · case_017 + case_020 dispatched · deferred) |
 | Status | `drafted` — pending case_017 OR case_020 sediment |
 | V-row(s) | V56 (case_016 first injection 2026-05-11) |
-| Sibling | Parallel to V79 (A4 / D7) and V55 (A5 / D6) |
+| Sibling | Parallel to V79 (A4 face_orientation / D7) and V55 (D6_advisor) |
 
 **Pre-drafted spec**:
 
@@ -148,7 +160,7 @@ Engineer must declare `curvature_physics_role: acoustic | aerodynamic | none`
 in parts_manifest; advisor only fires when role is `acoustic` or
 `aerodynamic`.
 
-### A7 · `non_watertight_shell_advisor`
+### D10_advisor · `non_watertight_shell_advisor` (A-number pending)
 
 | field | value |
 |---|---|
@@ -183,17 +195,28 @@ Anti-scope: does **not** repair the hole. Pure detection + classification.
 Repair belongs to either CAD round-trip or sHM `locationInMesh` strategy
 choice — out of advisor scope.
 
-### A8 · reserved
+### Other unallocated defect-class candidates (V-series cross-cuts)
 
-Reserved slot. Likely candidate domains (based on V-series cross-cuts):
+Two additional advisor candidates surface in V-series but are NOT
+defect-class first-injection rows — they are setup-pattern advisors
+that would prevent silent-fail (not detect injected defects):
 
-- `multi_region_cad_topology_check` (V51 candidate — fluid-volume
-  intersection detection for chtMR cases)
-- `wall_function_compat_advisor` (V49 candidate — alphat/nut/k triplet
+- `multi_region_cad_topology_check` (V51 — detects fluid-volume
+  intersection in chtMR cases before sHM short-circuits a 21-min
+  meshing iteration)
+- `wall_function_compat_advisor` (V49 — checks alphat/nut/k triplet
   consistency at conjugate baffles)
 
-Neither has the cross-topology evidence yet to commit a slot. Slot
-allocation deferred to harvest-003 retrospective.
+Neither has cross-topology defect-class evidence; both are S22/S24
+playbook-promoted (see `solver_convergence_playbook.md` for the
+checklist). Whether they merit advisor implementation vs.
+playbook-only depends on harvest-003 retrospective — playbook-only
+is the lighter-touch option.
+
+A5 slot in the A-numbering is currently **unallocated** per harvest-003
+SSOT (`advisor_coverage_2026-05-09.md`). Allocation policy: harvest
+process assigns A-numbers when an advisor is promoted from `drafted`
+to a deeper implementation plan (sub-DEC + LOC estimate).
 
 ## Cross-cutting observations
 
@@ -205,16 +228,18 @@ allocation deferred to harvest-003 retrospective.
    design envelope. The four candidates close the envelope's four
    gaps: orientation / FOD / curvature-fidelity / open-shell.
 
-2. **V25 placeholder semantic generalizes.** Future A4-A7 implementations
-   should learn from V25: do **not** return PASS based on a single
+2. **V25 placeholder semantic generalizes.** Future defect-class advisor
+   implementations (A4 face_orientation + D6/D9/D10) should learn from
+   V25: do **not** return PASS based on a single
    boolean. Each advisor should return a structured measurement
    (`deviation_deg`, `body_volume_mm3`, `chord_deviation_mm`,
    `hole_perimeter_mm`) so the engineer can sort severity, and the
    downstream classifier converts measurement → PASS/WARN/ERROR — not
    the advisor itself.
 
-3. **Hard Guardrail #3 is the immediate gate.** Until A4-A7 land, all
-   four defect classes are caught only by **manual verification** in
+3. **Hard Guardrail #3 is the immediate gate.** Until the four defect-class
+   advisors (A4 face_orientation + D6/D9/D10) land, all four defect
+   classes are caught only by **manual verification** in
    the sub-session (`scripts/check_<defect>.py` env-var-driven).
    Sub-sessions must explicitly run the manual check; skipping it
    silently passes the defect downstream. This is the operational gate
@@ -223,27 +248,30 @@ allocation deferred to harvest-003 retrospective.
 
 4. **Harvest-003 trigger.** This doc moves from "drafted" status into
    active land-implementation when **case_020 sediments**. That sediment
-   produces (a) the first D10 injection (= first A7 evidence row), (b)
-   second D9 injection (= second A6 evidence row, A6 → `ready-to-land`),
-   and likely confirms the case-018 D6 prediction (A5 → `ready-to-land`).
-   A4 promotion still waits on case_013 sediment independently.
+   produces (a) the first D10 injection (= first D10_advisor evidence
+   row), (b) second D9 injection (= second D9_advisor evidence row,
+   D9_advisor → `ready-to-land`), and likely confirms the case-018 D6
+   prediction (D6_advisor → `ready-to-land`). A4 promotion still waits
+   on case_013 sediment independently.
 
 ## Next-action checklist (when harvest-003 fires)
 
 - [ ] Case_020 sub-session writes V-rows for D10 first injection + D9
       second injection
-- [ ] Verify A6 has ≥ 2 V-rows (V56 + case_020 D9) → flip status
+- [ ] Verify D9_advisor has ≥ 2 V-rows (V56 + case_020 D9) → flip status
       `drafted` → `ready-to-land`
-- [ ] If case_013 sediment landed: verify A4 has ≥ 2 V-rows (V79 + case_013 D7)
-      → flip A4 status
-- [ ] If case_018 sediment landed: verify A5 has ≥ 2 V-rows (V55 + case_018 D6)
-      → flip A5 status
+- [ ] If case_013 sediment landed: verify A4 face_orientation has ≥ 2
+      V-rows (V79 + case_013 D7) → flip A4 status
+- [ ] If case_018 sediment landed: verify D6_advisor has ≥ 2 V-rows
+      (V55 + case_018 D6) → flip D6_advisor status
 - [ ] For each `ready-to-land` candidate: spawn implementation sub-DEC
       (sub-DEC scope per v2.3 §3 — one advisor module, one test file,
       one INDEX.md row update; not a full charter DEC unless cross ≥3
-      shared code paths)
-- [ ] A7 promotion path: needs second D10 case after case_020 — defer
-      decision until A8 slot allocation retrospective
+      shared code paths). At sub-DEC land time, the candidate receives
+      its A-number from harvest snapshot SSOT (next free slot).
+- [ ] D10_advisor promotion path: needs second D10 case after case_020 —
+      defer decision to next harvest retrospective (case_020 sediment +
+      one additional D10 injection from next batch)
 
 ## References
 

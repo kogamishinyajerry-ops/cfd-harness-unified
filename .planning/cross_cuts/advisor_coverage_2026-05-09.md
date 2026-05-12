@@ -25,9 +25,9 @@
 | **A8** — `shm_dict_validator.py` | V52 (case_012) | 1 sediment + N dispatched (HVAC-class + porous filter likely) | 1 × MED / 120 LOC = LOW | DEFER until 2nd typo-class case |
 | **A4** — face-orientation advisor | V50/case_012 + case_013 dispatched | 1 sediment + 1 dispatched | 2 × MED / 200 LOC = LOW-MED | DEFER until case_013 sediment lands |
 | **A1** — `cad_ingest_freecad.py` (CATIA + unit-context) | V1, V20, V24 | 3 sediment | 3 × MED / 100 LOC = MED | DEFER until A2-v2 lands (queued) |
-| **D6 advisor** (extra-body-in-fluid) | case_016 + case_018 dispatched | 0 sediment + 2 dispatched | speculative | DEFER until case_016 sediment |
-| **D9 advisor** (over-aggressive simplification) | case_016 + case_017 + case_020 dispatched | 0 sediment + 3 dispatched | speculative | DEFER until 2-of-3 sediment |
-| **D10 advisor** (open-shell beyond watertight) | case_020 dispatched | 0 sediment + 1 dispatched | speculative | DEFER |
+| **D6_advisor** (extra-body-in-fluid) | case_016 + case_018 dispatched · case_016 V55 sediment 2026-05-11 | **1 sediment + 1 dispatched** | speculative · spec drafted | DEFER until case_018 sediment · spec: `methodology/advisor_candidates_a4_a8.md` |
+| **D9_advisor** (over-aggressive simplification) | case_016 + case_017 + case_020 dispatched · case_016 V56 sediment 2026-05-11 | **1 sediment + 2 dispatched** | speculative · spec drafted | DEFER until 2-of-3 sediment · spec: `methodology/advisor_candidates_a4_a8.md` |
+| **D10_advisor** (open-shell beyond watertight) | case_020 dispatched | 0 sediment + 1 dispatched | speculative · spec drafted | DEFER · spec: `methodology/advisor_candidates_a4_a8.md` |
 | **Codex CAD inlet/outlet protocol amendment** | V53 (case_012) | 1 sediment + ALL Phase 1-4 cases at risk | LOW LOC / VERY HIGH frequency | **#2 (this cycle)** — protocol amendment, not new advisor |
 
 ## Loop closure check on advisor priorities (harvest 002 → harvest 003)
@@ -68,7 +68,7 @@ Harvest 003 reality (1 sub-session cycle later):
 | D4 (sliver) | 006 = 1× | A3 (likely wrong; V31) | **0× UNCOVERED** beyond case_006; carry to next batch |
 | D5 (mis-aligned shared face) | 011, 015 = 2× | A2 + sub-µm extension (none) | First D5 in case_011 v1 sediment |
 | D6 (extra body in fluid) | 016, 018 = 2× | NONE | Phase 3-4 dispatched-deferred |
-| D7 (face-orientation) | 012, 013 = 2× | NONE; case_012 used manual FreeCAD path | A4 candidate |
+| D7 (face-orientation) | 012, 013 = 2× | NONE; case_012 used manual FreeCAD path | A4 candidate · V79 backfill 2026-05-12 |
 | D8 (thin shell) | 002b/003/004/007/008/010/011/014/017 = **9×** | thin_wall_advisor [VALIDATED] | Strongest arc |
 | D9 (over-simplification) | 016, 017, 020 = 3× | NONE | Phase 3-4 dispatched-deferred |
 | D10 (open shell) | 020 = 1× | health_check (LANDED, watertight check) | Deeper open-shell pattern beyond watertight |
