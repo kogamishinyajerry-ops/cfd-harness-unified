@@ -125,4 +125,61 @@ Pacing: at most 1 Track C session per week to avoid context-overload of main ses
 - **V-row amended**: V46 (cross-reference added)
 - **ROADMAP row**: M6 main-line table
 
+## 9. V82 fix-verification appendix (2026-05-13 · post-retro within same session)
+
+Per user direction "推进 A" after retro §6 landed, the V82 fix was tested in-place on case_010 sandbox to upgrade evidence from "log-inferred" to "measured":
+
+**Fix path used** (option 3 in V82 row): OpenFOAM offline tool
+
+```bash
+cd ~/Desktop/case_010_drivaer_fastback_les/case
+# backups
+cp constant/triSurface/drivaer.stl    constant/triSurface/drivaer.stl.bak_mm
+cp constant/triSurface/drivaer.eMesh  constant/triSurface/drivaer.eMesh.bak_mm
+mkdir -p log/v1_baseline
+cp log/01_blockMesh.log log/02_surfaceFeatureExtract.log log/03_snappyHexMesh.log log/v1_baseline/
+
+# rewrite STL in m via OpenFOAM surfaceTransformPoints (preserves 6-solid block structure)
+docker run --rm --entrypoint /bin/bash -v "$PWD:/case" -w /case \
+  opencfd/openfoam-default:2312 -c "source /usr/lib/openfoam/openfoam2312/etc/bashrc; \
+    surfaceTransformPoints -scale '(0.001 0.001 0.001)' \
+      constant/triSurface/drivaer.stl constant/triSurface/drivaer_m.stl && \
+    mv constant/triSurface/drivaer_m.stl constant/triSurface/drivaer.stl"
+
+# re-extract feature edges in m
+STAGE=features bash scripts/06_run_mesh.sh
+
+# re-run sHM (interrupted at maxGlobalCells cap mid iter 3 — see V46)
+STAGE=snappy   bash scripts/06_run_mesh.sh
+```
+
+**Before/after diagnostic comparison** (same `snappyHexMeshDict`):
+
+| Diagnostic | v1 baseline (mm STL) | v1.5 fixed (m STL) |
+|---|---|---|
+| `eMesh boundingBox` | `(0, ~0, 0.10) (4610, 1120.85, 1444.28)` | `(0, ~0, 0.00010257) (4.61, 1.12085, 1.44428)` |
+| Surface refinement iter 0 marked cells | **0** ("Stopping refining since too few cells selected") | **20,749 cells** (iter 1-4: 32,279 / 31,315 / 20,161 / 3) |
+| Intersected edges trajectory | **0** throughout (all iterations) | 911 → 2,408 → 6,410 → 14,408 → 33,357 → 67,641 → 120k → 187k → 247k → 291k → **345k** |
+| Cells per refinement level (final) | level 0 only (4.6M uniform hex) | levels 0/1/2/3/4/5/6 active (4.6M / 70k / 185k / 15.2M / 808k / 505k / 27k) |
+| Total cell count (final) | 4,644,000 (= blockMesh exactly · no growth) | 21,437,177 (hit `maxGlobalCells=20,000,000` cap mid iter 3) |
+
+**Conclusion**: V82 fix unambiguously works. sHM now actually snaps to the vehicle, mirror, wheels, and defects. The mesh genuinely contains the body geometry.
+
+**Secondary obstruction revealed** (V46's legitimate finding, post-V82): base cell 0.16 m × full body refinement level (4, 5) + mirror (5, 6) explodes past the 20M-cell cap. Two paths forward (per V46 fix options): (1) coarsen base cell to 0.30 m (V46 recommendation), (2) raise `maxGlobalCells` to 30-40M and run parallel sHM. Neither is in scope for Track C session 1 (this would be a case_010 v2 sub-session deliverable).
+
+**Evidence preserved in case_010 sandbox** (not in main repo):
+- `case/log/v1_baseline/{01_blockMesh.log, 02_surfaceFeatureExtract.log, 03_snappyHexMesh.log}` — baseline mm-STL logs
+- `case/log/{01_blockMesh.log, 02_surfaceFeatureExtract.log, 03_snappyHexMesh.log}` — v1.5 fixed m-STL logs (overwritten by re-run)
+- `case/constant/triSurface/drivaer.stl.bak_mm` — original mm STL
+- `case/constant/triSurface/drivaer.eMesh.bak_mm` — original mm eMesh
+- `case/constant/triSurface/drivaer.stl` — current m STL
+- `case/constant/triSurface/drivaer.eMesh` — current m eMesh
+
+**Main repo deliverables** (this appendix):
+- V82 status flipped `partial 2026-05-13` → `fix-verified 2026-05-13 · 1 case`
+- Quick-lookup index V82 row updated with verification numbers
+- V46 amendment stands (V82 is primary cause; V46 is now the legitimate active secondary)
+
+**What this does NOT do**: case_010 v1.5 is not yet a sediment release in the case-thread sense — no v1.5 REPORT.md was written, no parts_manifest update, no full audit. To upgrade V82 from "fix-verified · 1 case" to "validated · cross-case", a 2nd case with the same scale pattern must surface independently (Pillar-2 trigger). case_007 (KCS, also CadQuery STL pipeline) is the highest-probability next candidate; main session should grep case_007 sHM log eMesh bbox before next dispatch.
+
 — EOF —
