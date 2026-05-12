@@ -7,9 +7,13 @@
 > Designed by Codex (CRS gpt-5.4 high effort, fallback path —
 > 86gs gpt-5.5 xhigh primary 503'd twice). Validated by main
 > session 2026-05-08 — see `case_006_validation.md` for the
-> 13-check report. Verdict: PASS WITH NOTES (A2 advisor pending —
-> 4th consecutive case; D4 advisor mapping likely wrong, sub-session
-> exercises judgment; NASA Glenn URL HTTP 500 persistent).
+> 13-check report. Verdict: PASS WITH NOTES (D4 advisor mapping
+> likely wrong, sub-session exercises judgment; NASA Glenn URL
+> HTTP 500 persistent).
+>
+> **A2 advisor LANDED 2026-05-08 (commit `a09ae0a`)** — D1 now
+> exercises the landed `virtual_interface_detector`; Pillar 2
+> force-extraction signal for V2 has discharged.
 
 ---
 
@@ -33,9 +37,9 @@ finding index + RAG corpus.
 Five cases already in the case fleet:
 - case_002a (APU bay buoyantSimpleFoam, internal flow + buoyancy) — active
 - case_002b (APU bay CHT, multi-region thermal coupling) — active
-- case_003 (CRM-HLS, external high-Re + boundary layer, incompressible-RANS) — dispatched, deferred
-- case_004 (NREL Phase VI rotor, MRF, incompressible-RANS-MRF) — dispatched, deferred
-- case_005 (RAE M2129 S-duct, internal compressible diffuser, compressible-RANS / rhoSimpleFoam) — dispatched, deferred
+- case_003 (CRM-HLS, external high-Re + boundary layer) — dispatched
+- case_004 (NREL Phase VI rotor, MRF) — dispatched
+- case_005 (RAE M2129 S-duct, internal compressible) — dispatched
 
 Your case fills the **external transonic 3D wing
 (compressible high-speed, shock-capturing)** row — currently
@@ -54,7 +58,8 @@ You are NOT here to ship a generic feature. You are here to:
 4. Verify Codex's injected defects against main-project advisors,
    exercising **judgment on the D4 advisor mapping** (Codex
    pointed at A3 geometry_surgery, but a sliver may be better
-   caught by A1 thin_wall_advisor — try both)
+   caught by A1 thin_wall_advisor — try both); D1 against landed
+   A2 (`virtual_interface_detector`)
 5. Do NOT refactor main project code beyond what your case
    strictly forces
 
@@ -87,9 +92,11 @@ You are NOT here to ship a generic feature. You are here to:
    deliverables: brief + CAD script + STEP path + parts manifest +
    defect manifest)
 9. `.planning/methodology/kickoff/case_006_validation.md` — main
-   session's validation notes (especially CRS fallback context +
-   D4 advisor mapping caveat + 4-of-4 A2-pending compounding +
-   NASA Glenn URL HTTP 500)
+   session's 13-check validation (CRS fallback context + D4
+   advisor mapping caveat + NASA Glenn URL HTTP 500)
+10. `.planning/cross_cuts/v_series_2026-05-08.md` — current
+    V-series snapshot; note A2 advisor LANDED row (your case_006
+    D1 row is one of 8 cases waiting for field validation)
 
 ## Hard guardrails (do NOT violate)
 
@@ -106,12 +113,15 @@ You are NOT here to ship a generic feature. You are here to:
 5. **OpenFOAM is truth source**: numerical claims must trace to a
    real OpenFOAM run
 6. **Use main-project advisors when applicable**:
+   - `from ui.backend.services.geometry_ingest.virtual_interface_detector
+     import detect_virtual_interfaces, InterfaceSpec` (for D1 — A2
+     LANDED 2026-05-08, commit a09ae0a)
    - `from ui.backend.services.geometry_ingest.thin_wall_advisor
      import detect_thin_wall_patches_at_risk` — **try first** for
      D4's 0.18 mm sliver (likely correct advisor)
    - `from ui.backend.services.geometry_ingest.geometry_surgery
      import decimate_to_tier, axial_stretch, apply_surgery` —
-     try second per Codex's (likely incorrect) mapping;
+     try second per Codex's (likely incorrect) D4 mapping;
      mismatch is a useful V-finding
    - DO NOT re-implement these case-locally
 7. **Do NOT redesign the case** — Codex's brief is your starting
@@ -326,10 +336,10 @@ Add `scripts/10b_compute_lambda_shock.py`:
 
 ### Defect ↔ advisor exercise (case_006 specific)
 
-**For D1 (0.35 mm gap)**: same as case_003/004/005. Manually
-verify via FreeCAD distToShape. Document A2-pending — this is
-**4th consecutive case** to surface this gap. Compounded
-evidence for A2 extraction.
+**For D1 (0.35 mm gap)**: A2 advisor LANDED 2026-05-08 (commit
+`a09ae0a`). See "D1 verification" section below for the 3-step
+protocol (FreeCAD ground truth → exercise landed A2 advisor →
+3-branch V-finding decision tree).
 
 **For D4 (0.18 mm sliver)**: exercise BOTH advisors:
 
@@ -378,7 +388,33 @@ Document outcome in evidence/`v1`/d4_advisor_exercise.md.
 
 Before running the CFD pipeline, verify defects:
 
-### D1 verification
+### D1 verification — A2 advisor LANDED, USE IT
+
+A2 advisor extracted to main project 2026-05-08 (commit `a09ae0a`).
+You are among the first sub-sessions to exercise it on a real
+industrial case. Treat your run as **field validation**.
+
+> [QUESTIONABLE 2026-05-08]: "exercise A2; expect detection of
+> 0.35 mm gap" framing assumes a capability A2 v1 does NOT have.
+> A2 LANDED for V2 pattern (shared-interface confirmation on
+> non-manifold STEP), NOT D1 pattern (gap-as-defect detection).
+> Per V25 (open · `industrial_case_solver_findings.md#V25`),
+> A2's `_run_shared` returns `matched=True` with hardcoded
+> placeholder fields regardless of actual gap distance.
+> Verification pending: A2-v2 sub-DEC adds `inter_face_gap_mm`
+> field to `DetectedInterface` (drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`).
+> To resolve: A2-v2 lands AND case_006 sub-session re-runs D1
+> falsification on root-fairing geometry. Until then, your A2
+> result confirms only `_run_shared`'s algorithm behavior on
+> transonic-wing root-fairing faces — interpret PASS narrowly.
+> **Special note for case_006**: root-fairing is curved geometry;
+> case_005 V21 closure showed flange-ring axial-end faces ARE
+> axis-aligned planar where `_run_shared` runs cleanly; root-
+> fairing's curvature may surface a different code-path behavior.
+> Document outcome carefully.
+
+**Step 1 — manual ground truth via FreeCAD**:
 
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; \
@@ -389,6 +425,44 @@ FreeCADCmd -c "import FreeCAD as App, Import; \
 ```
 
 Expected: ≈ 0.35 mm. Report actual measured value.
+
+**Step 2 — exercise landed A2 advisor**:
+
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    detect_virtual_interfaces, InterfaceSpec, FaceGeometry, BodyGeometry,
+)
+# Build BodyGeometry for root_fairing_pad and root_fairing_cover
+# from STEP face extraction (FreeCAD or trimesh). Each face needs:
+#   area, bbox_min, bbox_max, normal, centroid (case units, meters).
+spec = InterfaceSpec(
+    name="root_fairing_pad__root_fairing_cover_interface",
+    mode="shared",
+    bodies=("root_fairing_pad", "root_fairing_cover"),
+)
+result = detect_virtual_interfaces(bodies=[pad_body, cover_body],
+                                   specs=[spec])
+# Expect: result contains 1 DetectedInterface with the two facing
+# faces despite isSame() failing on the BREP (V2 lesson).
+```
+
+**Step 3 — V-finding judgments**:
+
+- If A2 detects → upgrade V2 / case_006 row in
+  `industrial_case_solver_findings.md` from "advisor landed" to
+  "advisor field-validated on case_006 (transonic-wing root-
+  fairing topology)"
+- If A2 misses (false negative) → V_n finding "A2 advisor
+  toy-case bias on transonic-wing fairing face counts" + propose
+  threshold tuning sub-DEC
+- If A2 produces extra spurious matches (false positive) → V_n
+  finding "A2 advisor over-eager on adjacent-but-not-shared faces
+  in fairing topology" + propose `mode='shared'` tightening
+
+The advisor's docstring explicitly forbids `isSame()` fast-path —
+do NOT propose adding one (V2 lesson preserved).
 
 ### D4 verification
 
@@ -412,6 +486,9 @@ Execute these as your work plan:
    the main repo with the structure of case_002a/b
 2. **V-series append**: every NEW failure mode goes in
    `industrial_case_solver_findings.md` as V_n. Watch for:
+   - **A2 advisor field-behavior on transonic-wing topology**
+     (above three-branch decision tree)
+   - **D4 dual-advisor exercise outcome** (above)
    - Kurganov + venkatakrishnan limiter too dissipative for
      lambda shock (likely v1 finding)
    - Characteristic far-field BCs reflect pressure waves at
@@ -497,6 +574,9 @@ When you complete (or pause):
 
 1. Reference profile up to date in main repo
 2. V-series rows added to `industrial_case_solver_findings.md`
+   (especially A2 field-validation row + D4 dual-advisor outcome
+   + density-based-specific findings — high-value sediment, you
+   are first density-based sub-session)
 3. Any new playbook patterns added to
    `solver_convergence_playbook.md`
 4. `case_index.md` updated (your row's status + last-touch)
@@ -530,9 +610,9 @@ If you encounter:
 - Stale assumption needing cross-case discussion → flag in final
   report under "Main session attention required"
 - Blocker requiring un-extracted main-project capability (e.g.,
-  A2 virtual_interface_detector, density-based fvSchemes writer
-  promotion) → hand-craft case-locally, document the gap, flag
-  for main-session extraction
+  density-based fvSchemes writer promotion to shared service) →
+  hand-craft case-locally, document the gap, flag for
+  main-session extraction (counter for harvester)
 - Codex's design fundamentally unworkable → pause, flag, main
   session asks Codex for revision (round-cap=2; round 2 should
   request 86gs xhigh if available, since round 1 used CRS
@@ -562,6 +642,7 @@ You CANNOT:
 - Re-design the case (only execute Codex's design + flag for
   revision if needed)
 - Push regime above M_inf=0.95 or α=6° (case_010 LES territory)
+- Add `isSame()` fast-path to `virtual_interface_detector` (V2 lesson)
 
 ## When you are done
 
@@ -580,34 +661,32 @@ Per main session's validation report
    you find subtle inconsistencies (e.g., dimensions slightly
    off, missing detail in CAD script), main session round 2
    will retry on 86gs xhigh
-2. **A2 (virtual_interface_detector) STILL not landed** — D1
-   verified manually; flag for extraction with **4-of-4
-   compounded evidence** (case_003/004/005/006 all surface this
-   gap). Becomes 5-of-5 after case_007. Time to extract A2
-   regardless
-3. **D4 advisor mapping likely wrong** — Codex pointed at
+2. **D4 advisor mapping likely wrong** — Codex pointed at
    geometry_surgery.decimate_to_tier; thin_wall_advisor (LANDED)
    is more likely correct for a 0.18 mm sliver. **Exercise BOTH
    advisors and document outcome** — that's the high-signal
    exercise this case
-4. **NASA Glenn URL HTTP 500** — `grc.nasa.gov/WWW/wind/valid/`
+3. **NASA Glenn URL HTTP 500** — `grc.nasa.gov/WWW/wind/valid/`
    archive persistent failure. Geometry baked into CadQuery
    constants — non-blocking. AGARD AR-138 PDF is durable
    reference for Cp data
-5. **First density-based case for project** — no prior
+4. **First density-based case for project** — no prior
    fvSchemes/Kurganov/characteristic-BC writer. Hand-craft
    case-locally; main session decides extraction priority. Likely
    shared with future external compressible cases
-6. **Lambda-shock capture is the engineering question** — v1
+5. **Lambda-shock capture is the engineering question** — v1
    may not get it; v2 limiter tuning should. If v3 still fails
    with reasonable refinement, that's a real V-finding about
    rhoCentralFoam's limits
-7. **D-section airfoil coordinate fidelity** — verify in v1
+6. **D-section airfoil coordinate fidelity** — verify in v1
    against AGARD AR-138 Appendix; if >0.5% off at any x/c,
    shock pattern displaces — flag as geometry V-finding
-8. **Mach ceiling = 0.95 / α ceiling = 6°** — beyond is
+7. **Mach ceiling = 0.95 / α ceiling = 6°** — beyond is
    case_010 LES territory; reduce if needed to stay in case_006
    envelope
+8. **A2 advisor JUST landed** (commit `a09ae0a`, 2026-05-08) —
+   you are among first industrial validators on D1; expect
+   threshold-tuning sub-DEC candidate to surface from your run
 
 === END KICKOFF ===
 
@@ -623,8 +702,11 @@ After user pastes the kickoff into a new Claude Code session:
 - [ ] Update `INDEX.md` — bump kickoff list to include case_006
 - [ ] Wait for sub-session sediment in subsequent main-session
       turns
-- [ ] When sub-session reports A2-extraction is needed (4-of-4
-      evidence), elevate A2 priority in next harvest cycle
+- [ ] When sub-session reports A2 field-validation outcome
+      (validated / false-negative / false-positive on
+      transonic-wing topology), update
+      `industrial_case_solver_findings.md` V2 row + queue any
+      threshold-tuning sub-DEC for harvest cycle
 - [ ] When sub-session reports D4 advisor exercise outcome,
       decide whether thin_wall_advisor scope needs expansion or
       A4 sliver-detector extraction is warranted

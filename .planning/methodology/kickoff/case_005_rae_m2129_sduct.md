@@ -7,9 +7,14 @@
 > Designed by Codex (gpt-5.5 via codex-relay) per
 > `codex_case_design_protocol.md`. Validated by main session
 > 2026-05-07 evening / 2026-05-08 — see `case_005_validation.md`
-> for the 13-check report. Verdict: PASS WITH NOTES (A2 advisor
-> pending — 3rd consecutive case; D2 exercises LANDED A3 advisor
-> = first such case in the project).
+> for the 13-check report. Verdict: PASS WITH NOTES.
+>
+> **A2 advisor LANDED 2026-05-08 (commit `a09ae0a`)** — D1 now
+> exercises landed `virtual_interface_detector` (first field
+> validation on compressible-internal topology); D2 exercises
+> landed A3 `geometry_surgery.decimate_to_tier` against
+> 102,400-triangle industrial-flavored input (first real A3
+> falsification opportunity).
 
 ---
 
@@ -33,13 +38,15 @@ finding index + RAG corpus.
 Four cases already in the case fleet:
 - case_002a (APU bay buoyantSimpleFoam, internal flow + buoyancy) — active
 - case_002b (APU bay CHT, multi-region thermal coupling) — active
-- case_003 (CRM-HLS, external high-Re + boundary layer, incompressible-RANS) — dispatched, deferred
-- case_004 (NREL Phase VI rotor, MRF, incompressible-RANS-MRF) — dispatched, deferred
+- case_003 (CRM-HLS, external high-Re + boundary layer) — dispatched
+- case_004 (NREL Phase VI rotor, MRF) — dispatched
 
 Your case fills the **internal compressible diffuser
-(subsonic-transonic)** row — currently uncovered. After you
-complete, the project's solver-class coverage advances by one
-axis. **case_005 is the first compressible case for the project.**
+(subsonic-transonic)** row — currently uncovered.
+**case_005 is the FIRST compressible case for the project AND
+the FIRST case to exercise a LANDED advisor end-to-end** (D2 →
+A3 `geometry_surgery.decimate_to_tier` against 102,400-triangle
+industrial-flavored input — first real falsification opportunity).
 
 You are NOT here to ship a generic feature. You are here to:
 1. Run case_005 end-to-end in its desktop sandbox
@@ -47,9 +54,9 @@ You are NOT here to ship a generic feature. You are here to:
 3. Surface and document new failure modes (V-series candidates,
    especially compressible-RANS-specific)
 4. Verify Codex's injected defects against main-project advisors —
-   **including a real falsification of LANDED advisor A3
-   (geometry_surgery.decimate_to_tier)**, which is exercised by
-   D2's 102,400-triangle overlay
+   D1 against landed A2 (`virtual_interface_detector`) AND
+   D2 against landed A3 (`geometry_surgery.decimate_to_tier`,
+   real falsification on 102,400-triangle overlay)
 5. Do NOT refactor main project code beyond what your case
    strictly forces
 
@@ -81,8 +88,12 @@ You are NOT here to ship a generic feature. You are here to:
    deliverables: brief + CAD script + STEP path + parts manifest +
    defect manifest)
 9. `.planning/methodology/kickoff/case_005_validation.md` — main
-   session's validation notes (especially A3 advisor exercise +
-   A2-pending compounding + URL HTTP 500 caveat)
+   session's 13-check validation (A3 falsification + URL HTTP 500
+   caveat)
+10. `.planning/cross_cuts/v_series_2026-05-08.md` — current
+    V-series snapshot; note A2 advisor LANDED row (your case_005
+    D1 row is one of 8 cases waiting for field validation; D2 is
+    first A3 industrial validator)
 
 ## Hard guardrails (do NOT violate)
 
@@ -102,6 +113,9 @@ You are NOT here to ship a generic feature. You are here to:
    - `from ui.backend.services.geometry_ingest.geometry_surgery
      import decimate_to_tier, axial_stretch, apply_surgery`
      — **mandatory exercise** for D2's 102,400-triangle overlay
+   - `from ui.backend.services.geometry_ingest.virtual_interface_detector
+     import detect_virtual_interfaces, InterfaceSpec` (for D1 — A2
+     LANDED 2026-05-08, commit a09ae0a)
    - `from ui.backend.services.geometry_ingest.thin_wall_advisor
      import detect_thin_wall_patches_at_risk` — not directly
      exercised by case_005 (no thin-wall defect), but useful if
@@ -367,7 +381,30 @@ falsification: PASS" — that's also valuable.
 
 Before running the CFD pipeline, verify defects:
 
-### D1 verification
+### D1 verification — A2 advisor LANDED, USE IT
+
+A2 advisor extracted to main project 2026-05-08 (commit `a09ae0a`).
+You are among the first sub-sessions to exercise it on a real
+industrial case. Treat your run as **field validation**.
+
+> [QUESTIONABLE 2026-05-08]: "exercise A2; expect detection of
+> 0.35 mm gap" framing assumes a capability A2 v1 does NOT have.
+> A2 LANDED for V2 pattern (shared-interface confirmation on
+> non-manifold STEP), NOT D1 pattern (gap-as-defect detection).
+> Per V25 (open · `industrial_case_solver_findings.md#V25` —
+> sourced by THIS case's v2 disambiguation), A2's `_run_shared`
+> returns `matched=True` with hardcoded placeholder fields
+> regardless of actual gap distance. case_005 v1+v2 falsification
+> already complete (V19 superseded by V25, V21 closed via
+> `_run_shared` re-run). v3 of this case re-runs A2 falsification
+> via A2-v2 API once it lands (drafted at
+> `.planning/patches/draft_a2_v2_gap_detection_2026-05-08.md`).
+> To resolve: A2-v2 lands AND case_005 v3 confirms `inter_face_gap_mm
+> ≈ 0.35` AND classifier returns True. Until then, your previous
+> A2 PASS confirms only that `_run_shared` runs cleanly + finds
+> facing-face candidates on flange-ring axial-end faces.
+
+**Step 1 — manual ground truth via FreeCAD**:
 
 ```bash
 FreeCADCmd -c "import FreeCAD as App, Import; \
@@ -379,20 +416,43 @@ FreeCADCmd -c "import FreeCAD as App, Import; \
 
 Expected: ≈ 0.35 mm. Report actual measured value.
 
-**A2 advisor LANDED (2026-05-08, commit `a09ae0a`)**:
-D1's `expected_advisor_to_catch` is `virtual_interface_detector`,
-**now available in main project** at
-`ui/backend/services/geometry_ingest/virtual_interface_detector.py`.
-You should:
+**Step 2 — exercise landed A2 advisor**:
 
-1. **Use the landed advisor** to detect D1 gap programmatically
-   (see module docstring; `detect_virtual_interfaces()` driver +
-   `InterfaceSpec(mode='shared'|'endcap')`)
-2. Optionally also run the FreeCAD command above as a manual
-   cross-check
-3. **Document in your final report**: defect detection used the
-   landed A2 advisor (no longer pending). Pillar 2 run-and-correct
-   loop discharged for V2/A2 axis
+```python
+import sys
+sys.path.insert(0, "/Users/Zhuanz/Desktop/cfd-harness-unified")
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    detect_virtual_interfaces, InterfaceSpec, FaceGeometry, BodyGeometry,
+)
+# Build BodyGeometry for inlet_flange_ring and inlet_flange_cover
+# from STEP face extraction (FreeCAD or trimesh). Each face needs:
+#   area, bbox_min, bbox_max, normal, centroid (case units, meters).
+spec = InterfaceSpec(
+    name="inlet_flange_ring__inlet_flange_cover_interface",
+    mode="shared",
+    bodies=("inlet_flange_ring", "inlet_flange_cover"),
+)
+result = detect_virtual_interfaces(bodies=[ring_body, cover_body],
+                                   specs=[spec])
+# Expect: result contains 1 DetectedInterface with the two facing
+# faces despite isSame() failing on the BREP (V2 lesson).
+```
+
+**Step 3 — V-finding judgments**:
+
+- If A2 detects → upgrade V2 / case_005 row in
+  `industrial_case_solver_findings.md` from "advisor landed" to
+  "advisor field-validated on case_005 (compressible-internal
+  topology)"
+- If A2 misses (false negative) → V_n finding "A2 advisor
+  toy-case bias on circular-flange face counts" + propose
+  threshold tuning sub-DEC
+- If A2 produces extra spurious matches (false positive) → V_n
+  finding "A2 advisor over-eager on adjacent-but-not-shared
+  faces in flange topology" + propose `mode='shared'` tightening
+
+The advisor's docstring explicitly forbids `isSame()` fast-path —
+do NOT propose adding one (V2 lesson preserved).
 
 ### D2 verification
 
@@ -418,6 +478,9 @@ Execute these as your work plan:
    main repo with the structure of case_002a/b
 2. **V-series append**: every NEW failure mode goes in
    `industrial_case_solver_findings.md` as V_n. Watch for:
+   - **A2 advisor field-behavior on compressible-internal
+     topology** (above three-branch decision tree)
+   - **A3 advisor first industrial falsification** (above)
    - `totalPressure` inlet BC initialization that diverges if
      phi (mass flux) starts unfavorable
    - `waveTransmissive` outlet causing pressure waves to bounce
@@ -507,6 +570,9 @@ When you complete (or pause):
 
 1. Reference profile up to date in main repo
 2. V-series rows added to `industrial_case_solver_findings.md`
+   (especially A2 + A3 field-validation rows + compressible-RANS-
+   specific findings — high-value sediment, you are first
+   compressible sub-session AND first A3 industrial validator)
 3. Any new playbook patterns added to
    `solver_convergence_playbook.md`
 4. `case_index.md` updated (your row's status + last-touch)
@@ -539,9 +605,9 @@ If you encounter:
 - Stale assumption needing cross-case discussion → flag in final
   report under "Main session attention required"
 - Blocker requiring un-extracted main-project capability (e.g.,
-  A2 virtual_interface_detector, compressible BC writer
-  promotion) → hand-craft case-locally, document the gap, flag
-  for main-session extraction
+  compressible BC writer promotion to shared service) →
+  hand-craft case-locally, document the gap, flag for
+  main-session extraction (counter for harvester)
 - Codex's design fundamentally unworkable → pause, flag, main
   session asks Codex for revision (round-cap=2)
 
@@ -566,6 +632,7 @@ You CANNOT:
 - Take a different case
 - Re-design the case (only execute Codex's design + flag for
   revision if needed)
+- Add `isSame()` fast-path to `virtual_interface_detector` (V2 lesson)
 
 ## When you are done
 
@@ -578,28 +645,27 @@ do NOT spawn additional sub-sessions or take additional cases.
 Per main session's validation report
 (`case_005_validation.md`):
 
-1. **A2 (virtual_interface_detector) not yet landed** — D1
-   verified manually; flag for extraction with **3-of-3
-   compounded evidence** (case_003 + case_004 + case_005 all
-   surface this gap)
-2. **A3 (geometry_surgery) FIRST industrial exercise** — D2's
+1. **A3 (geometry_surgery) FIRST industrial exercise** — D2's
    102,400-triangle overlay is the first non-toy input. Outcome
    shapes whether A3 needs refactor or stays as-is. Document
    verdict prominently
-3. **NASA Glenn URL HTTP 500** — `grc.nasa.gov` archive transient
+2. **NASA Glenn URL HTTP 500** — `grc.nasa.gov` archive transient
    failure at validation time. NTRS `citations/20040021333` is
    durable fallback. Script doesn't depend on URL — geometry
    parametric
-4. **First compressible case for project** — no prior
+3. **First compressible case for project** — no prior
    thermophysicalProperties writer, no totalPressure /
    waveTransmissive BC writer, no DC60 post-processor. Hand-craft
    case-locally; main session decides extraction priority
-5. **Mach ceiling = 1.3** — if your run produces strong shocks
+4. **Mach ceiling = 1.3** — if your run produces strong shocks
    (M>1.3) with separation, that's case_006 territory; reduce PR
    to stay in case_005 envelope
-6. **D2 face count tolerance** — 102,400 ±5% is acceptable due
+5. **D2 face count tolerance** — 102,400 ±5% is acceptable due
    to STEP→Faces translation noise; flag if Codex's claimed
    number is off by >10%
+6. **A2 advisor JUST landed** (commit `a09ae0a`, 2026-05-08) —
+   you are among first industrial validators on D1; expect
+   threshold-tuning sub-DEC candidate to surface from your run
 
 === END KICKOFF ===
 
@@ -615,8 +681,11 @@ After user pastes the kickoff into a new Claude Code session:
 - [ ] Update `INDEX.md` — bump kickoff list to include case_005
 - [ ] Wait for sub-session sediment in subsequent main-session
       turns
-- [ ] When sub-session reports A2-extraction is needed (3-of-3
-      evidence), elevate A2 priority in next harvest cycle
+- [ ] When sub-session reports A2 field-validation outcome
+      (validated / false-negative / false-positive on
+      compressible-internal topology), update
+      `industrial_case_solver_findings.md` V2 row + queue any
+      threshold-tuning sub-DEC for harvest cycle
 - [ ] When sub-session reports A3 falsification verdict, decide
       whether A3 refactor is needed or A3 stays as-is
 - [ ] When sub-session extracts compressible-BC / thermophysical /
