@@ -245,5 +245,22 @@ specific overlap pattern. Validates the defensive layer against
 real-world variations of the bug.
 
 Recommended order: ~~H (close route-side test gap)~~ DONE session 13
-→ I (validate defensive layer on a second affected case · case_007 or
-case_010) → C (independent · F-NEW-17 airframe extent band).
+→ ~~I~~ DEFERRED (low marginal value — see judgment below)
+→ C (independent · F-NEW-17 airframe extent band).
+
+**Option I deferral (session 13 judgment)**: case_007 + case_010 both
+use the identical 6-plate `make_box`-at-6-faces pattern as case_003
+(verified session 12 survey + session 13 grep on
+`~/Desktop/case_007_kcs_ship_vof/scripts/build_cad.py:227-258` and
+`~/Desktop/case_010_drivaer_fastback_les/scripts/build_cad.py:180-199`
+— both define `build_domain_patches()` returning 6 thick-plate
+solids). The session 13 synthetic fixture (`farfield_6_plate_stl`)
+already proves the defensive layer catches this pattern with 12
+edge-overlap pairs. Running the actual build_cad.py end-to-end on
+these cases would re-prove the same conclusion with different
+domain dimensions — incremental, not informative. The right next
+moves are: (1) wait for cross-repo Codex fix of build_cad.py
+(ticket pending); (2) Option C (independent · F-NEW-17 airframe
+extent band, shippable anytime); (3) advance to next priority case
+ramp. If a future affected case uses a non-6-plate pattern (e.g.,
+case_016 with 14 patch tags), revisit Option I then.
