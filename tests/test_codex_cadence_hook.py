@@ -53,6 +53,10 @@ def _run_hook(
         env["CODEX_CADENCE_OVERRIDE"] = "1"
     else:
         env.pop("CODEX_CADENCE_OVERRIDE", None)
+    # GitHub Actions sets CI=true globally. Most tests model developer-machine
+    # hook execution, so keep the fixture hermetic and opt into CI explicitly
+    # only in the F10 CI-refusal test.
+    env.pop("CI", None)
     # Round-2 Q6: env-driven override-reason. Tests that should pass under
     # the new gate pass extra_env={"CODEX_OVERRIDE_REASON": "..."}.
     env.pop("CODEX_OVERRIDE_REASON", None)
