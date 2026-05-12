@@ -620,7 +620,9 @@ describe("Step2Mesh · wired body", () => {
   // race.
   it("blocks prism apply with inline error while gmsh remesh is in flight", async () => {
     const user = userEvent.setup();
-    let resolveMesh: ((v: MeshSuccessResponse) => void) | null = null;
+    let resolveMesh: (v: MeshSuccessResponse) => void = () => {
+      throw new Error("mesh promise resolver was not initialized");
+    };
     apiMock.meshImported.mockImplementationOnce(
       () =>
         new Promise<MeshSuccessResponse>((resolve) => {
@@ -645,7 +647,7 @@ describe("Step2Mesh · wired body", () => {
     await waitFor(() => expect(applyBtn.disabled).toBe(true));
 
     // Resolve the mesh so the test cleanup completes.
-    resolveMesh?.(FAKE_MESH_RESPONSE);
+    resolveMesh(FAKE_MESH_RESPONSE);
     await meshPromise;
     // No prism API call ever fired.
     expect(apiMock.meshPrismLayers).not.toHaveBeenCalled();
