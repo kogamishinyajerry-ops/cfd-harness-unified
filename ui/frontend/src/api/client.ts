@@ -274,20 +274,32 @@ export const api = {
     caseId: string,
     meshMode: import("@/types/mesh_imported").MeshRequestMode,
     sizingField?: import("@/types/mesh_imported").MeshSizingField | null,
+    refinementZones?:
+      | ReadonlyArray<import("@/types/mesh_imported").MeshRefinementZone>
+      | null,
   ): Promise<import("@/types/mesh_imported").MeshSuccessResponse> => {
     // DEC-V61-135 (N2.1): when sizingField is provided AND has at
     // least one non-null field, send it along; backend gives it
     // precedence over the preset. Omit otherwise to keep V124/V125-era
     // wire shape.
+    // DEC-V61-136 (N2.2): refinementZones is layered on top of any
+    // sizing path via gmsh's Min field. Omit when empty / undefined to
+    // keep the V135-era wire shape unchanged for back-compat callers.
     const body: {
       mesh_mode: string;
       sizing_field?: import("@/types/mesh_imported").MeshSizingField;
+      refinement_zones?: ReadonlyArray<
+        import("@/types/mesh_imported").MeshRefinementZone
+      >;
     } = { mesh_mode: meshMode };
     if (sizingField) {
       const hasValue = Object.values(sizingField).some(
         (v) => v !== null && v !== undefined,
       );
       if (hasValue) body.sizing_field = sizingField;
+    }
+    if (refinementZones && refinementZones.length > 0) {
+      body.refinement_zones = refinementZones;
     }
     const resp = await fetch(
       `/api/import/${encodeURIComponent(caseId)}/mesh`,
@@ -317,6 +329,58 @@ export const api = {
     const result = (await resp.json()) as import(
       "@/types/mesh_imported"
     ).MeshSuccessResponse;
+    dispatchMeshMutated(caseId);
+    return result;
+  },
+
+  // DEC-V61-137 (N2.3): snappyHexMesh addLayers stage. Engineer-driven
+  // boundary-layer prism injection on top of an already-existing
+  // polyMesh. Distinct POST endpoint registered in V132 MUTATING_ROUTES.
+  meshPrismLayers: async (
+    caseId: string,
+    patches: ReadonlyArray<
+      import("@/types/mesh_prism_layers").PatchPrismConfig
+    >,
+  ): Promise<
+    import("@/types/mesh_prism_layers").PrismLayersSuccessResponse
+  > => {
+    const resp = await fetch(
+      `/api/import/${encodeURIComponent(caseId)}/mesh/prism-layers`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ patches }),
+        credentials: "same-origin",
+      },
+    );
+    if (!resp.ok) {
+      let detail:
+        | import("@/types/mesh_prism_layers").PrismLayersRejectionDetail
+        | string
+        | undefined;
+      try {
+        const body = await resp.json();
+        detail = body?.detail ?? body;
+      } catch {
+        detail = await resp.text();
+      }
+      const message =
+        typeof detail === "object" && detail !== null && "reason" in detail
+          ? (detail as { reason: string }).reason
+          : typeof detail === "string"
+            ? detail
+            : `prism layers failed (${resp.status})`;
+      throw new ApiError(resp.status, message, detail);
+    }
+    const result = (await resp.json()) as import(
+      "@/types/mesh_prism_layers"
+    ).PrismLayersSuccessResponse;
+    // The route refreshes constant/polyMesh in place, so MeshQualityCard
+    // listeners need the same invalidation signal as a regular mesh
+    // mutation.
     dispatchMeshMutated(caseId);
     return result;
   },

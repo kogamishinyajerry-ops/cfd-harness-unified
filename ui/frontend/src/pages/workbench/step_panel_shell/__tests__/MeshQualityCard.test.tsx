@@ -62,6 +62,7 @@ const v126Healthy: MeshQualityReportV126 = {
   checkmesh_n_severe_non_ortho_faces: 0,
   checkmesh_failed_checks: null,
   checkmesh_n_severe_non_ortho_faces_per_patch: null,
+  suggestions: [],
 };
 
 const v126Failed: MeshQualityReportV126 = {
@@ -74,6 +75,23 @@ const v126Failed: MeshQualityReportV126 = {
   checkmesh_n_severe_non_ortho_faces: 18,
   checkmesh_failed_checks: ["Max skewness = 4.2 > 4 -- SKEWED CELLS DETECTED"],
   checkmesh_n_severe_non_ortho_faces_per_patch: null,
+  suggestions: [
+    {
+      metric: "n_severe_non_ortho_faces",
+      severity: "warning",
+      suggestion_text: "18 severely non-orthogonal faces detected.",
+      recommended_change: {
+        step: "Step 2 · sizing or region refinement",
+        hint: "halve the global characteristic length",
+      },
+    },
+    {
+      metric: "max_non_orthogonality",
+      severity: "critical",
+      suggestion_text: "max non-orthogonality 78.4° exceeds OpenFOAM corrector limit.",
+      recommended_change: null,
+    },
+  ],
 };
 
 beforeEach(() => {
@@ -118,6 +136,55 @@ describe("MeshQualityCard · V126 failed path", () => {
     expect(severe.textContent).toContain("18");
     // Failed-check string surfaced verbatim.
     expect(screen.getByText(/SKEWED CELLS DETECTED/)).toBeInTheDocument();
+  });
+
+  it("DEC-V61-138 (N2.4): renders advisor suggestions with severity, text, and recommended_change as displayed metadata (no apply button)", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Failed);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-suggestions")).toBeInTheDocument(),
+    );
+    // Both fixture suggestions render.
+    const severe = screen.getByTestId(
+      "mesh-quality-suggestion-n_severe_non_ortho_faces",
+    );
+    expect(severe.textContent).toContain("warning");
+    expect(severe.textContent).toContain("18 severely non-orthogonal");
+    // recommended_change rendered as text (key/value), NOT as a button.
+    const detail = screen.getByTestId(
+      "mesh-quality-suggestion-detail-n_severe_non_ortho_faces",
+    );
+    expect(detail.textContent).toContain("step:");
+    expect(detail.textContent).toContain("Step 2 · sizing or region refinement");
+    expect(detail.textContent).toContain("hint:");
+    // V132 contract: must NOT render an Apply button anywhere in the
+    // suggestions panel.
+    const suggestionsPanel = screen.getByTestId("mesh-quality-suggestions");
+    expect(
+      suggestionsPanel.querySelectorAll("button[type='submit']"),
+    ).toHaveLength(0);
+    // Only the disclosure toggle button is permitted.
+    const buttons = suggestionsPanel.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].textContent?.toLowerCase()).toContain("suggested fixes");
+    // Critical severity advisory also renders, with recommended_change=null
+    // (so no detail block).
+    const nod = screen.getByTestId("mesh-quality-suggestion-max_non_orthogonality");
+    expect(nod.textContent).toContain("critical");
+    expect(
+      screen.queryByTestId("mesh-quality-suggestion-detail-max_non_orthogonality"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("DEC-V61-138: empty suggestions array → no panel rendered", async () => {
+    apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
+    render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByTestId("mesh-quality-suggestions"),
+    ).not.toBeInTheDocument();
   });
 
   it("base-review-2 P2: mesh_ok=false + failed_checks=null → 'Mesh failed' (NOT 'Failed 0 checks')", async () => {

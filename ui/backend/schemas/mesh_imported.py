@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from ui.backend.schemas.mesh_refinement import MeshRefinementZone
 from ui.backend.schemas.mesh_sizing import MeshSizingField
 
 
@@ -30,6 +31,7 @@ FailingCheck = Literal[
     "gmsh_diverged",
     "cell_cap_exceeded",
     "gmshToFoam_failed",
+    "refinement_zone_invalid",
 ]
 
 
@@ -45,6 +47,14 @@ class MeshRequest(BaseModel):
         "N2.1). When present, overrides the mesh_mode preset path and "
         "uses base_lc/min_lc/max_lc plus curvature/proximity gmsh "
         "options. Cell-budget hard cap (50M) still applies.",
+    )
+    refinement_zones: list[MeshRefinementZone] | None = Field(
+        default=None,
+        description="Engineer-supplied volume refinement zones (DEC-V61-136 · "
+        "N2.2). Each zone tightens gmsh's characteristic length inside a "
+        "box or sphere (level 1-3). Empty list / None = behavior "
+        "identical to N2.1. Combined with sizing_field via gmsh Min "
+        "field; cell-budget hard cap (50M) still applies.",
     )
 
 

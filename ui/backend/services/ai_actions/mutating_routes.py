@@ -34,6 +34,8 @@ Change log
   paths.
 - DEC-V61-132 (2026-05-06): N1.2 — this module created. Initial registry
   contents lifted from V130 §2 Principle B.
+- DEC-V61-137 (2026-05-07): N2.3 — adds the snappyHexMesh addLayers
+  POST endpoint and the corresponding pipeline function symbol.
 """
 from __future__ import annotations
 
@@ -81,6 +83,11 @@ MUTATING_ROUTES: frozenset[tuple[str, str]] = frozenset(
         # POST /api/import/{case_id}/solve-stream — SSE streaming
         # variant of the same solver mutation; same artifacts written.
         ("POST", "/api/import/{case_id}/solve-stream"),
+        # POST /api/import/{case_id}/mesh/prism-layers — DEC-V61-137
+        # N2.3: snappyHexMesh addLayers stage on top of the existing
+        # polyMesh. Refreshes constant/polyMesh in place; AI dispatch
+        # paths must NEVER call this route.
+        ("POST", "/api/import/{case_id}/mesh/prism-layers"),
     }
 )
 
@@ -107,6 +114,9 @@ KNOWN_MUTATION_FUNCTIONS: frozenset[tuple[str, str]] = frozenset(
         # Mesh writer
         ("ui.backend.services.meshing_gmsh.pipeline", "mesh_imported_case"),
         ("ui.backend.services.meshing_gmsh", "mesh_imported_case"),
+        # snappyHexMesh addLayers writer (DEC-V61-137 · N2.3)
+        ("ui.backend.services.meshing_snappy.pipeline", "apply_prism_layers"),
+        ("ui.backend.services.meshing_snappy", "apply_prism_layers"),
     }
 )
 

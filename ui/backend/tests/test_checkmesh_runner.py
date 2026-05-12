@@ -489,6 +489,45 @@ def test_analyze_mesh_quality_with_checkmesh_augments_report(
     report = analyze_mesh_quality(case_dir, run_checkmesh=True)
     assert report.checkmesh_max_skewness == 0.3
     assert report.checkmesh_mesh_ok is True
+    # DEC-V61-138 (N2.4): clean mesh → empty suggestions list (a single
+    # mesh_ok info entry would be noise).
+    assert report.suggestions == []
+
+
+def test_analyze_mesh_quality_populates_advisor_suggestions_on_failure(
+    tmp_path, monkeypatch
+):
+    """DEC-V61-138 (N2.4): analyzer wires advisor.derive_suggestions
+    into the V126 report when checkMesh metrics breach thresholds.
+    Verifies the integration without re-testing rule-engine semantics
+    (covered exhaustively in test_mesh_quality_advisor.py)."""
+    from ui.backend.services.mesh_quality import analyze_mesh_quality
+    from ui.backend.services.mesh_quality.checkmesh_runner import (
+        CheckMeshResult,
+    )
+
+    case_dir = tmp_path / "ldc"
+    _write_synthetic_polymesh(case_dir)
+
+    fake_result = CheckMeshResult(
+        max_non_orthogonality_deg=82.0,  # > critical 75°
+        max_skewness=1.1,                # > reject 0.95
+        max_aspect_ratio=2500.0,         # > defect 1000
+        mesh_ok=False,
+        n_severe_non_ortho_faces=12,
+        failed_checks=["non-orthogonality exceeded"],
+        raw_log_excerpt="Failed",
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.mesh_quality.checkmesh_runner.run_checkmesh",
+        lambda case_dir: fake_result,
+    )
+    report = analyze_mesh_quality(case_dir, run_checkmesh=True)
+    metrics = {s.metric for s in report.suggestions}
+    assert "n_severe_non_ortho_faces" in metrics
+    assert "max_non_orthogonality" in metrics
+    assert "max_skewness" in metrics
+    assert "max_aspect_ratio" in metrics
 
 
 def test_analyze_mesh_quality_graceful_degradation_on_container_down(

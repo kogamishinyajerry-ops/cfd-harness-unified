@@ -239,9 +239,15 @@ describe("StepPanelShell · Round-2 fixes (Codex F1 + F2)", () => {
       // The shell's onAiProcess wrapper dispatched the registered action,
       // which POSTed via api.meshImported. (DEC-V61-135 N2.1: meshImported
       // gained an optional sizingField third arg; the panel is collapsed
-      // by default so it's null here.)
+      // by default so it's null here. DEC-V61-136 N2.2: refinementZones
+      // fourth arg, also null when the zones panel is closed.)
       await waitFor(() => {
-        expect(apiMock.meshImported).toHaveBeenCalledWith("abc", "beginner", null);
+        expect(apiMock.meshImported).toHaveBeenCalledWith(
+          "abc",
+          "beginner",
+          null,
+          null,
+        );
       });
       // And Step2Mesh's success panel rendered after the resolved mock.
       await waitFor(() => {

@@ -225,6 +225,32 @@ export interface MeshQualityReportV126 extends Omit<MeshQualityReportV122, "repo
    *  when the container was unavailable OR no severe faces were
    *  written by checkMesh. */
   checkmesh_n_severe_non_ortho_faces_per_patch: Record<string, number> | null;
+  /** DEC-V61-138 (N2.4): rule-derived advisory suggestions. Empty when
+   *  checkMesh skipped (graceful degrade) OR mesh is clean. Each entry
+   *  is read-only metadata — UI MUST render `recommended_change` as
+   *  displayed text only, NOT as an apply-button payload (V132 contract:
+   *  AI / advisory surfaces never call mutating routes). */
+  suggestions: MeshFixSuggestion[];
+}
+
+/** DEC-V61-138: severity for advisor suggestions — same enum as
+ *  MeshQualitySeverity but kept distinct so the rule engine can
+ *  diverge from analyzer warning severities later if needed. */
+export type FixSeverity = "critical" | "warning" | "info";
+
+/** DEC-V61-138: a single fix advice record. The frontend pattern-matches
+ *  on `metric` to route the suggestion to the right Step 2 sub-panel.
+ *  `recommended_change` is metadata only — render as text, never POST. */
+export interface MeshFixSuggestion {
+  metric:
+    | "max_non_orthogonality"
+    | "max_skewness"
+    | "max_aspect_ratio"
+    | "n_severe_non_ortho_faces"
+    | "mesh_ok";
+  severity: FixSeverity;
+  suggestion_text: string;
+  recommended_change: Record<string, unknown> | null;
 }
 
 export type MeshQualityReport = MeshQualityReportV122 | MeshQualityReportV126;

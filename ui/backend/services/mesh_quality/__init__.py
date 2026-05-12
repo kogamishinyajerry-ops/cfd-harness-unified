@@ -31,7 +31,10 @@ from ui.backend.services.mesh_quality.checkmesh_runner import (
     CheckMeshResult,
     run_checkmesh,
 )
+from ui.backend.services.mesh_quality.advisor import derive_suggestions
 from ui.backend.services.mesh_quality.schemas import (
+    FixSeverity,
+    MeshFixSuggestion,
     MeshQualityReport,
     MeshQualityReportResponse,
     MeshQualityReportV126,
@@ -42,6 +45,8 @@ from ui.backend.services.mesh_quality.schemas import (
 __all__ = [
     "CheckMeshError",
     "CheckMeshResult",
+    "FixSeverity",
+    "MeshFixSuggestion",
     "MeshQualityNotAvailableError",
     "MeshQualityParseError",
     "MeshQualityReport",
@@ -50,5 +55,6 @@ __all__ = [
     "MeshSeverity",
     "MeshWarning",
     "analyze_mesh_quality",
+    "derive_suggestions",
     "run_checkmesh",
 ]

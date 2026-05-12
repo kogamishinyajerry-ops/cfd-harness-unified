@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from ui.backend.schemas.mesh_refinement import MeshRefinementZone
     from ui.backend.schemas.mesh_sizing import MeshSizingField
 
 
@@ -47,6 +48,16 @@ class GmshSubprocessError(RuntimeError):
     Codex Round 5 P1 + Round 6 P1: distinguishing this from
     ``GmshMeshGenerationError`` is what keeps the route layer's
     "bad geometry vs backend fault" contract intact.
+    """
+
+
+class RefinementZoneError(ValueError):
+    """Raised when a DEC-V61-136 refinement zone is invalid against the
+    case AABB (no spatial overlap with the geometry, so the gmsh field
+    would be a silent no-op). Pipeline maps to
+    ``failing_check=refinement_zone_invalid`` (HTTP 422). Distinct from
+    ``GmshMeshGenerationError`` so the rejection reason in the response
+    points the engineer at the offending zone, not "gmsh diverged".
     """
 
 
@@ -87,6 +98,98 @@ def _default_characteristic_length(diagonal: float, mesh_mode: str) -> float:
     return diagonal / (60.0 if mesh_mode == "power" else 30.0)
 
 
+def _geometry_aabb(
+    points: list[tuple[float, float, float]]
+) -> tuple[float, float, float, float, float, float] | None:
+    """Compute axis-aligned bounding box from gmsh node coordinates.
+
+    Returns ``(xmin, ymin, zmin, xmax, ymax, zmax)`` or ``None`` for
+    degenerate input (no points). Used by DEC-V61-136 (N2.2) refinement-
+    zone validation: a zone whose bbox/sphere has zero overlap with the
+    geometry AABB would produce a silent no-op gmsh field.
+    """
+    if not points:
+        return None
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    zs = [p[2] for p in points]
+    return (min(xs), min(ys), min(zs), max(xs), max(ys), max(zs))
+
+
+def _box_intersects_aabb(
+    bbox: list[float],
+    aabb: tuple[float, float, float, float, float, float],
+) -> bool:
+    """True if axis-aligned ``bbox`` (xmin..zmax) intersects geometry
+    ``aabb``. Uses standard separating-axis check (any-axis disjoint =
+    no intersection).
+    """
+    xmin, ymin, zmin, xmax, ymax, zmax = bbox
+    a_xmin, a_ymin, a_zmin, a_xmax, a_ymax, a_zmax = aabb
+    return not (
+        xmax < a_xmin
+        or xmin > a_xmax
+        or ymax < a_ymin
+        or ymin > a_ymax
+        or zmax < a_zmin
+        or zmin > a_zmax
+    )
+
+
+def _sphere_intersects_aabb(
+    center: list[float],
+    radius: float,
+    aabb: tuple[float, float, float, float, float, float],
+) -> bool:
+    """True if sphere intersects geometry AABB. Standard "closest point
+    on AABB to sphere center within radius" test.
+    """
+    cx, cy, cz = center[0], center[1], center[2]
+    a_xmin, a_ymin, a_zmin, a_xmax, a_ymax, a_zmax = aabb
+    dx = max(a_xmin - cx, 0.0, cx - a_xmax)
+    dy = max(a_ymin - cy, 0.0, cy - a_ymax)
+    dz = max(a_zmin - cz, 0.0, cz - a_zmax)
+    return (dx * dx + dy * dy + dz * dz) <= (radius * radius)
+
+
+def _validate_refinement_zones(
+    zones: list[dict],
+    aabb: tuple[float, float, float, float, float, float] | None,
+) -> None:
+    """Raise :class:`RefinementZoneError` on the first zone that has
+    zero overlap with the geometry AABB. Pure validation — does not
+    mutate gmsh state. Pydantic has already enforced shape (positive
+    extents, level in 1..3, etc.); this layer covers the geometric
+    "is this zone meaningful for THIS geometry" check.
+    """
+    if not zones or aabb is None:
+        return
+    for idx, zone in enumerate(zones):
+        geom = zone.get("geometry")
+        if geom == "box":
+            if not _box_intersects_aabb(zone["bbox"], aabb):
+                raise RefinementZoneError(
+                    f"refinement_zones[{idx}] (box) bbox={zone['bbox']} "
+                    f"has no overlap with case AABB={list(aabb)}; "
+                    "the gmsh field would be a no-op."
+                )
+        elif geom == "sphere":
+            if not _sphere_intersects_aabb(
+                zone["center"], float(zone["radius"]), aabb
+            ):
+                raise RefinementZoneError(
+                    f"refinement_zones[{idx}] (sphere) center="
+                    f"{zone['center']} radius={zone['radius']} has no "
+                    f"overlap with case AABB={list(aabb)}; the gmsh "
+                    "field would be a no-op."
+                )
+        else:
+            # Schema layer guards this; defensive backstop only.
+            raise RefinementZoneError(
+                f"refinement_zones[{idx}] has unknown geometry={geom!r}"
+            )
+
+
 def _lc_from_target_cell_count(diagonal: float, target_cell_count: int) -> float:
     """DEC-V61-124: convert an AI-proposed cell-count target to a
     characteristic length using a cube approximation.
@@ -118,6 +221,7 @@ def _gmsh_inline(
     characteristic_length_override: float | None,
     target_cell_count: int | None = None,
     sizing_field: dict | None = None,
+    refinement_zones: list[dict] | None = None,
 ) -> GmshRunResult:
     """The original gmsh-API meshing logic. Runs in a subprocess so
     ``gmsh.initialize()``'s ``signal.signal()`` call lands on a fresh
@@ -469,9 +573,21 @@ def _gmsh_inline(
             nodes = gmsh.model.mesh.getNodes()
             if nodes and len(nodes) >= 2 and len(nodes[1]) > 0:
                 xyz = nodes[1].reshape(-1, 3).tolist()
-                diagonal = _bbox_diagonal([(p[0], p[1], p[2]) for p in xyz])
+                point_tuples = [(p[0], p[1], p[2]) for p in xyz]
+                diagonal = _bbox_diagonal(point_tuples)
+                geometry_aabb = _geometry_aabb(point_tuples)
             else:
                 diagonal = 0.0
+                geometry_aabb = None
+
+            # V136 (N2.2): validate refinement zones BEFORE expensive
+            # 3D mesh generation. Pydantic already enforced shape;
+            # this layer covers spatial overlap with the case AABB.
+            # An out-of-domain zone would produce a silent no-op gmsh
+            # field, which the engineer would only catch by inspecting
+            # the resulting mesh — failing fast here is friendlier.
+            if refinement_zones:
+                _validate_refinement_zones(refinement_zones, geometry_aabb)
 
             # V135 (N2.1): sizing_field > target_cell_count >
             # characteristic_length_override > preset-derived default.
@@ -534,6 +650,84 @@ def _gmsh_inline(
                     gmsh.option.setNumber("Mesh.CharacteristicLengthMin", lc * 0.5)
                     gmsh.option.setNumber("Mesh.CharacteristicLengthMax", lc)
 
+            # V136 (N2.2): refinement-zone gmsh fields. Each zone gets
+            # its own Box/Ball field with VIn = effective_lc / 2**level
+            # and VOut = effective_lc (no-op outside zone). All zone
+            # fields are combined into a Min field that we register as
+            # the background mesh; gmsh then takes the minimum of the
+            # background field and the global CharacteristicLengthMin/Max
+            # bounds set above. The cell_budget guard remains the
+            # ultimate cap regardless of how many zones the engineer
+            # supplies.
+            if refinement_zones:
+                # Effective lc to scale zone VIn against. Sizing-field
+                # branch tracks lc_max; preset branch tracks lc. Use
+                # the larger of the two as the "outside-zone" baseline
+                # so VOut never accidentally tightens the global bound.
+                if sf_active:
+                    base_for_zones = lc_max if lc_max and lc_max > 0 else (lc if lc > 0 else 0.0)
+                else:
+                    base_for_zones = lc if lc > 0 else 0.0
+                if base_for_zones <= 0:
+                    # Degenerate fallback: gmsh's default sizing wins.
+                    # Still apply zones with a synthesized scale derived
+                    # from the geometry diagonal so the field is
+                    # meaningful instead of zero-valued.
+                    base_for_zones = diagonal / 30.0 if diagonal > 0 else 1.0
+
+                zone_field_tags: list[int] = []
+                for zone in refinement_zones:
+                    geom = zone.get("geometry")
+                    level = int(zone.get("level", 1))
+                    # 2**(-level) — keep in sync with
+                    # mesh_refinement.lc_scale_for_level for parity with
+                    # the schema's documented mapping.
+                    v_in = base_for_zones * (2.0 ** (-level))
+                    v_out = base_for_zones
+                    if geom == "box":
+                        tag = gmsh.model.mesh.field.add("Box")
+                        gmsh.model.mesh.field.setNumber(tag, "VIn", v_in)
+                        gmsh.model.mesh.field.setNumber(tag, "VOut", v_out)
+                        bbox = zone["bbox"]
+                        gmsh.model.mesh.field.setNumber(tag, "XMin", float(bbox[0]))
+                        gmsh.model.mesh.field.setNumber(tag, "YMin", float(bbox[1]))
+                        gmsh.model.mesh.field.setNumber(tag, "ZMin", float(bbox[2]))
+                        gmsh.model.mesh.field.setNumber(tag, "XMax", float(bbox[3]))
+                        gmsh.model.mesh.field.setNumber(tag, "YMax", float(bbox[4]))
+                        gmsh.model.mesh.field.setNumber(tag, "ZMax", float(bbox[5]))
+                        # Soft transition shell: smooth ramp from VIn to
+                        # VOut over a thickness equal to v_in (one zone-
+                        # interior cell). Without this, gmsh produces a
+                        # hard size discontinuity at the box face that
+                        # often causes mesher-quality warnings on the
+                        # boundary tetrahedra.
+                        gmsh.model.mesh.field.setNumber(tag, "Thickness", v_in)
+                        zone_field_tags.append(tag)
+                    elif geom == "sphere":
+                        tag = gmsh.model.mesh.field.add("Ball")
+                        gmsh.model.mesh.field.setNumber(tag, "VIn", v_in)
+                        gmsh.model.mesh.field.setNumber(tag, "VOut", v_out)
+                        center = zone["center"]
+                        gmsh.model.mesh.field.setNumber(tag, "XCenter", float(center[0]))
+                        gmsh.model.mesh.field.setNumber(tag, "YCenter", float(center[1]))
+                        gmsh.model.mesh.field.setNumber(tag, "ZCenter", float(center[2]))
+                        gmsh.model.mesh.field.setNumber(tag, "Radius", float(zone["radius"]))
+                        gmsh.model.mesh.field.setNumber(tag, "Thickness", v_in)
+                        zone_field_tags.append(tag)
+                    # Unknown geometry already rejected by
+                    # _validate_refinement_zones above.
+
+                if zone_field_tags:
+                    # Combine all zone fields into a single Min field —
+                    # gmsh evaluates each at every spatial point and
+                    # uses the minimum, so overlapping zones compose
+                    # naturally (deepest level wins in the overlap).
+                    min_tag = gmsh.model.mesh.field.add("Min")
+                    gmsh.model.mesh.field.setNumbers(
+                        min_tag, "FieldsList", [float(t) for t in zone_field_tags]
+                    )
+                    gmsh.model.mesh.field.setAsBackgroundMesh(min_tag)
+
             gmsh.model.mesh.generate(3)
 
             # Element type 4 = 4-node tetrahedron in gmsh's element-type
@@ -578,6 +772,13 @@ def _gmsh_inline(
                     f"gmsh.write failed for {output_msh_path} (likely disk-full / "
                     f"permission / I/O error): {exc}"
                 ) from exc
+        except RefinementZoneError:
+            # V136 (N2.2): zone-validation rejection must escape the
+            # generic gmsh-API catch-all below, otherwise it would be
+            # relabeled as GmshMeshGenerationError → gmsh_diverged
+            # and the engineer would lose the structured zone-index +
+            # AABB diagnostic.
+            raise
         except GmshMeshGenerationError:
             raise
         except OSError:
@@ -633,6 +834,7 @@ def _subprocess_target(
     characteristic_length_override: float | None,
     target_cell_count: int | None,
     sizing_field: dict | None,
+    refinement_zones: list[dict] | None,
     queue: "multiprocessing.Queue[tuple[str, object]]",
 ) -> None:
     """Run the gmsh meshing job inside a child process and post back the
@@ -645,6 +847,10 @@ def _subprocess_target(
     GmshMeshGenerationError so the pipeline routes it as 5xx. Codex
     Round 5 P1: a missing ``gmsh`` install, child-bootstrap failure,
     or similar backend fault must NOT be reported as "bad geometry".
+
+    V136 (N2.2): adds 'refinement_zone_error' kind so an out-of-domain
+    zone surfaces as failing_check=refinement_zone_invalid (422) rather
+    than getting collapsed into gmsh_diverged.
     """
     try:
         result = _gmsh_inline(
@@ -654,12 +860,15 @@ def _subprocess_target(
             characteristic_length_override=characteristic_length_override,
             target_cell_count=target_cell_count,
             sizing_field=sizing_field,
+            refinement_zones=refinement_zones,
         )
         # asdict() handles the Path → str translation for the dataclass
         # via a custom default factory; do it explicitly for safety.
         payload = asdict(result)
         payload["msh_path"] = str(payload["msh_path"])
         queue.put(("ok", payload))
+    except RefinementZoneError as exc:
+        queue.put(("refinement_zone_error", str(exc)))
     except GmshMeshGenerationError as exc:
         queue.put(("gmsh_error", str(exc)))
     except ImportError as exc:
@@ -680,6 +889,7 @@ def run_gmsh_on_imported_case(
     characteristic_length_override: float | None = None,
     target_cell_count: int | None = None,
     sizing_field: "MeshSizingField | None" = None,
+    refinement_zones: "list[MeshRefinementZone] | None" = None,
 ) -> GmshRunResult:
     """Mesh ``stl_path`` with gmsh and write ``output_msh_path``.
 
@@ -714,6 +924,15 @@ def run_gmsh_on_imported_case(
     enforce positivity; we marshal it across the subprocess boundary
     as a dict (pydantic models are picklable but routinely cause
     'spawn' import-order pain on macOS).
+
+    DEC-V61-136 (N2.2): ``refinement_zones`` (optional list of box /
+    sphere zones) is layered on top of sizing_field via gmsh's Min
+    field combinator. Empty list / None preserves N2.1 behavior.
+    Geometric AABB validation runs inside ``_gmsh_inline`` (after STL
+    merge) and surfaces as ``RefinementZoneError`` →
+    ``failing_check=refinement_zone_invalid`` distinct from
+    ``gmsh_diverged``. Like sizing_field, marshal as list-of-dicts
+    across the subprocess boundary.
     """
     if (
         target_cell_count is None
@@ -730,6 +949,13 @@ def run_gmsh_on_imported_case(
         # Avoid a cross-subprocess import of MeshSizingField — pass a
         # plain dict, _gmsh_inline reads keys by name.
         sizing_field_dict = sizing_field.model_dump(exclude_none=False)
+
+    # V136 (N2.2): same marshalling discipline for refinement_zones —
+    # list of pydantic discriminated-union members → list of plain
+    # dicts so the spawned subprocess does not re-import the schema.
+    refinement_zones_dict: list[dict] | None = None
+    if refinement_zones:
+        refinement_zones_dict = [z.model_dump() for z in refinement_zones]
     # Use 'spawn' explicitly: macOS defaults to 'spawn' since 3.8 and
     # Linux defaults to 'fork', which copies the parent process state
     # (including FastAPI / gmsh module-level imports). 'spawn' gives a
@@ -745,6 +971,7 @@ def run_gmsh_on_imported_case(
             characteristic_length_override,
             target_cell_count,
             sizing_field_dict,
+            refinement_zones_dict,
             queue,
         ),
     )
@@ -775,6 +1002,11 @@ def run_gmsh_on_imported_case(
             characteristic_length_used=float(payload["characteristic_length_used"]),
             generation_time_s=float(payload["generation_time_s"]),
         )
+    if kind == "refinement_zone_error":
+        # V136 (N2.2): out-of-domain zone is a structured user-input
+        # rejection (422). Re-raise as RefinementZoneError so the
+        # pipeline maps it to failing_check=refinement_zone_invalid.
+        raise RefinementZoneError(str(payload))
     if kind == "gmsh_error":
         raise GmshMeshGenerationError(str(payload))
     if kind == "os_error":

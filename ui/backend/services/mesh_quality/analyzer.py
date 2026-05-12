@@ -618,11 +618,18 @@ def analyze_mesh_quality(
     )
     if not run_checkmesh:
         return MeshQualityReport(report_kind="v122", **base_kwargs)
-    return MeshQualityReportV126(
+    report = MeshQualityReportV126(
         report_kind="v126",
         **base_kwargs,
         **_try_run_checkmesh(case_dir, patch_ranges=patch_ranges),
     )
+    # DEC-V61-138 (N2.4): rule-based fix suggestions derived from
+    # checkmesh_* metrics. Empty when checkMesh skipped (graceful
+    # degradation) or mesh is clean. Read-only metadata only — UI
+    # renders ``recommended_change`` as displayed text, not an
+    # apply-button payload (V132 contract).
+    from ui.backend.services.mesh_quality.advisor import derive_suggestions
+    return report.model_copy(update={"suggestions": derive_suggestions(report)})
 
 
 def _try_run_checkmesh(
