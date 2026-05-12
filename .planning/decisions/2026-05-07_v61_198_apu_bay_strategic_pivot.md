@@ -4,7 +4,7 @@ title: APU bay industrial signal · close B-extend arc · 5-artifact extraction 
 status: Accepted
 parent_dec: V61-130
 phase: strategic-pivot
-notion_sync_status: synced 2026-05-07 (https://www.notion.so/359c68942bed81e0ba4eef75df08d778)
+notion_sync_status: drift 2026-05-12 · resync needed (base sync 2026-05-07 https://www.notion.so/359c68942bed81e0ba4eef75df08d778)
 ---
 
 # DEC-V61-198 · APU bay strategic pivot
@@ -408,3 +408,37 @@ Immediate followups (separate commits, sub-DEC scope):
 - DEC-V61-197 — B-extend-6 close (last sub-DEC of B-extend arc)
 - `.planning/methodology/workbench_persona_findings.md` — F-series index
 - project memory `project_cfd_apu_bay_strategic_pivot.md` — durable plan trace
+
+## Status update (2026-05-12)
+
+Audit pass confirms all §C artifacts and §"Files changed" followups
+have landed; the charter is operationally complete. Status field
+remains `Accepted` — no flip needed, this is just a closure note.
+
+| Artifact | Status | Landed at |
+|---|---|---|
+| A1 `cad_ingest_freecad.py` | ✅ | `ui/backend/services/geometry_ingest/cad_ingest_freecad.py` |
+| A2 `virtual_interface_detector.py` | ✅ | same dir |
+| A3 `geometry_surgery.py` | ✅ | same dir |
+| A4 mass-balance pre-flight | ✅ | `ui/backend/services/case_bc/writer.py::check_mass_balance` (commit `3b21802` · this audit) |
+| A5 `solver_convergence_playbook.md` | ✅ | `.planning/methodology/` · 327 lines |
+| V-series seed (V1-V13) | ✅ extended | `.planning/methodology/industrial_case_solver_findings.md` · 824 lines, V1-V51+ |
+| F↔V cross-link | ✅ | `.planning/methodology/workbench_persona_findings.md` · 298 lines |
+| case_002 reference profile | ✅ split | `case_profiles/case_002a_apu_bay_buoyant_simple.md` + `case_002b_apu_bay_cht.md` |
+
+The §F monthly industrial-case dogfood substrate target has been
+exceeded: as of audit, case_003..016 have sedimented (CRM-HLS BL /
+NREL phase VI MRF / RAE M2129 / ONERA M6 / KCS ship VOF / GLC305
+IRT / Sandia Flame D / DrivAer LES / plate-fin CHT / HVAC diffuser /
+Vattenfall T-junction / M219 cavity DES), driving V-series to V51+
+and S-series to S21+. The "container that accumulates industrial CFD
+experience" framing is materializing as designed.
+
+A4 was the only artifact still owing at audit time. It is implemented
+as advisory (returns `MassBalanceCheck` dataclass, never blocks) and
+adapts the APU bay source to the main-repo schema, which has no
+`mass_flow_outlet` BC variant (relief check covers `PressureOutletBC`
+and `InletOutletBC` instead).
+
+**Notion sync drift**: this addendum drifts the local DEC from the
+2026-05-07 Notion mirror. Session-end batch sync should re-push.
