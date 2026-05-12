@@ -51,6 +51,95 @@ If yes → V-series. If no → F-series.
 - **playbook** — codified in `solver_convergence_playbook.md`; no
   code fix needed (the knowledge is the fix)
 
+## Quick-lookup index (V1–V79)
+
+> Skim layer for JIT. Each row points at the deep V-row below.
+> **Tag** uses the smallest non-overlapping axis: `D<n>` = defect class · `A<n>` = advisor · `N-<class>` = numerics inheritance · `infra` = workbench/methodology · `cad` = CAD ingest.
+> **Status** abbreviations: `closed`/`partial`/`open` (verbatim) · `Q-<date>` = `[QUESTIONABLE]` · `V-<n>x` = `[VALIDATED <n>-of-<n>]`.
+> Rebuild this table when V-rows ≥ 100 or when a numerics class rotates out of active use.
+
+| V | Topic | Tag | Case | Status |
+|---|---|---|---|---|
+| V1 | CATIA STEP `Part::insert` drops body labels | cad | 002a | closed |
+| V2 | BREP face matching fails on non-manifold STEP (A2 seed) | cad / A2 | 002a | closed |
+| V3 | kOmegaSST + zero IC → ω blowup → wall NaN | N-buoy | 002a | closed |
+| V4 | GAMG p_rgh fails on prism + thin-wall meshes | N-buoy | 002a | closed |
+| V5 | DIC/DILU preconditioner SIGFPE on comp-buoyant | N-buoy | 002a | closed |
+| V6 | Mass-flow BC + zero IC → \|U\| = 1e+129 | N-buoy | 002a | closed |
+| V7 | Compressible ρ goes negative → solver explodes | N-buoy | 002a | closed |
+| V8 | Mesh max skewness > 4 infects all linear solvers | infra | 002a | closed |
+| V9 | `0/` missing after sHM → solver fails at startup | infra | 002a | closed |
+| V10 | sHM ate thin walls; BC writer drops missing patches (A1 seed) | A1 | 002a | V-4x |
+| V11 | nut/alphat with wrong BC types → wall NaN | N-buoy | 002a | closed |
+| V12 | Mass conservation only checked at verdict stage | infra | 002a | playbook |
+| V13 | Pseudo-steady residual oscillation accepted as v1 baseline | infra | 002a | playbook |
+| V14 | CHT post-processing reports T = ±1e+300 for empty solid | N-cht | 002b | closed |
+| V15 | CHT fluid-side limitTemperature clamping (V5 crosses families) | N-cht | 002b | closed |
+| V16 | Codex `cq.Compound.makeCompound` STEP fragments via FreeCAD | cad | 003 | partial |
+| V17 | A3 advisor lacks redundancy/overlay-detection logic | A3 | 005 | open |
+| V18 | Compressible-RANS pseudo-steady mass imbalance (SIMPLE+totalP) | N-comp-rans | 005 | partial |
+| V19 | A2 advisor lacks sub-mm gap-as-defect detection (V2-pattern only) | A2 / D1 | 005 | superseded by V25 |
+| V20 | Tier-1 STEP unit-context lost on cadquery roundtrip | cad / infra | 003 | open |
+| V21 | A2 field contradiction case_003 PASS vs case_005 V19 FAIL | A2 / D1 | 005 | closed by V25 |
+| V22 | A2 `_run_shared` cross-topology PASS on rotating-machinery | A2 / D1 | 004 | Q-2026-05-08 |
+| V23 | thin_wall_advisor field-validation on rotating-machinery aux | A1 | 004 | V-4x |
+| V24 | V16 fragmentation reproduced in case_004 rotating-machinery | cad | 004 | partial |
+| V25 | A2 `_run_shared` placeholder semantic (shared vs should-be-shared) | A2 / D1 | 005 v2 | open (A2-v2 pending) |
+| V26 | Codex CAD off-by-half-width on `centered=True` cq.box origin | cad | 006 | closed |
+| V27 | rhoCentralFoam fixed deltaT yields catastrophic Co at iter 1 | N-shock | 006 | closed |
+| V28 | rhoCentralFoam fvSolution DILU unavailable for symmetric matrices | N-shock | 006 | closed |
+| V29 | OpenFOAM ESI lacks `characteristic*` BC types | N-shock | 006 | closed |
+| V30 | thin_wall_advisor extreme-thinness validation: 0.18 mm sliver | A1 | 006 | V-4x |
+| V31 | Codex defect→advisor mapping wrong for D4 sliver | cad | 006 | closed |
+| V32 | Tier-1 NASA Glenn HTTP 500 + SSL double-blocker | infra | 006 | workaround |
+| V33 | A2 `_run_shared` cross-topology PASS on ship-hydro (4th) | A2 / D1 | 007 | Q-2026-05-08 |
+| V34 | sHM free-surface band + near-hull box saturates maxGlobalCells | N-vof | 007 | partial |
+| V35 | interFoam + kOmegaSST requires `wallDist` in fvSchemes | N-vof | 007 | closed |
+| V36 | A2 cross-topology PASS on incompressible-RANS-Lag (5th) | A2 / D1 | 008 | Q-2026-05-08 |
+| V37 | thin_wall 6-topology arc closed `[VALIDATED]` | A1 | 008 | V-6x |
+| V38 | chemkinToFoam requires `THERMO ALL` header | N-react | 009 | closed |
+| V39 | chemkinToFoam transport file requires explicit `END` | N-react | 009 | closed |
+| V40 | chemkinToFoam transport-input is dual-mode | N-react | 009 | closed |
+| V41 | GRI-3.0 Tlow=300 clamp + buoyancy coflow inlet T=291 | N-react | 009 | partial |
+| V42 | A2 cross-topology PASS on combustion-burner (6th) | A2 / D1 | 009 | Q-2026-05-08 |
+| V43 | A2 cross-topology PASS on vehicle-aero (7th, roster closed) | A2 / D1 | 010 | Q-2026-05-08 |
+| V44 | thin_wall 7-topology arc reinforces `[VALIDATED]` | A1 | 010 | V-7x |
+| V45 | First transient LES infra: pimpleFoam + WALE + FOs | N-les | 010 | closed |
+| V46 | sHM 4.6M bg-cell vehicle aero interrupted at refinement iter 2 | N-les | 010 | partial |
+| V47 | sHM `minMedialAxisAngle` vs `minMedianAxisAngle` typo silent fail | infra | 015 | closed |
+| V48 | chtMR controlDict FOs need explicit `region` keyword | N-les-cht | 015 | closed |
+| V49 | Wall-modeled LES at conjugate baffle needs compressible:: triplet | N-les-cht | 015 | partial (A8 candidate) |
+| V50 | A2 cross-topology PASS on pipe-pipe weld-toe (12th) | A2 / D1 / D5 | 015 | Q-2026-05-08 |
+| V51 | sHM multi-region cellZone on intersecting volumes silently degrades | N-les-cht | 015 | open (A8 candidate) |
+| V52 | kOmegaSSTIDDES registered under simulationType LES not RAS | N-des | 016 | partial |
+| V53 | Compressible PIMPLE `transonic yes` → p asymmetric → need PBiCGStab | N-des | 016 | partial |
+| V54 | Probe coords at CAD surface fall in patch-tag helper solids | infra | 016 | partial |
+| V55 | First D6 injection — `extra_body_in_fluid` advisor gap | D6 / A5 | 016 | Q-2026-05-11 |
+| V56 | First D9 injection — `curved_surface_tessellation` advisor gap | D9 / A6 | 016 | Q-2026-05-11 |
+| V57 | First compound-DES root validated (rhoPimpleFoam+IDDES+FW-H) | N-des | 016 | partial |
+| V58 | F-NEW-26 root cause: `build_domain_patches` thick-plate-at-face | infra | 003 | confirmed |
+| V59 | M5.0 import-time body-pair AABB overlap defensive layer (3-tier) | infra | 003 | landed |
+| V60 | Cavity/interior-obstacle preserved by AABB containment classification | infra | 003 | landed |
+| V61 | Route layer claim — **SUPERSEDED by V66** | infra | 003 | superseded |
+| V62 | F-NEW-26 class-wide impact — 6 of 11 cases affected | infra | 003 | confirmed |
+| V63 | case_006 has DOUBLE overlap — worst-case F-NEW-26 variant | infra | 006 | confirmed |
+| V64 | case_016 has 14 patch tags — F-NEW-26 worst extent | infra | 016 | confirmed |
+| V65 | F-NEW-26 fix path — shared-helper extraction | infra | 003 | proposal |
+| V66 | V61 was wrong — route wiring gap dead-coded V59 defensive layer | infra | 003 | closed |
+| V67 | Interpenetrating watertight shells preserve `is_watertight=True` | infra | 003 | landed |
+| V68 | `failing_check` taxonomy adds `body_overlap` class | infra | 003 | landed |
+| V69 | Pre-impl surface-scan must trace call graph not just file paths | infra | 003 | methodology |
+| V70 | F-NEW-17 airframe extent ceiling 100 → 500 m | infra | 003 | landed |
+| V71 | gmsh_runner + unit_detector industrial-extent ceilings decoupled | infra | 003 | landed |
+| V72 | Per-body-class configurable extent band deferred | infra | 003 | deferred |
+| V73 | CheckMeshResult schema drift — backward-compat properties added | infra | 002a | closed |
+| V74 | naming.yaml 32-patch SSOT forward-write vs implementation retreat | infra | 002a | open |
+| V75 | sHM refinement coarsening fixes face count not max-skewness ceiling | infra | 002a | partial |
+| V76 | "Squeezing the balloon" — refinement moves skew between patches | infra | 002a | open |
+| V77 | Isotropic STL remesh — simple shells OK, complex bodies destroyed | infra | 002a | partial |
+| V78 | sHM handles CAD overlap better than jagged hole surgery (negative) | infra | 002a | confirmed |
+| V79 | First D7 injection — `face_orientation` advisor gap (backfill) | D7 / A4 | 012 | Q-2026-05-12 |
+
 ## Findings index
 
 ### V1 · CATIA STEP `Part::insert` drops body labels
