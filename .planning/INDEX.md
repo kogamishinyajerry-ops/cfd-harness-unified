@@ -36,6 +36,8 @@
 | `methodology/industrial_case_solver_findings.md` | **V-series.** Engineer-facing solver/mesh failure mode index. Indexed by numerics class for Pattern 6 inheritance |
 | `methodology/solver_convergence_playbook.md` | Decision tree (S1-S12) — engineer's lookup when convergence stalls |
 | `methodology/workbench_persona_findings.md` | F-series (persona/UI surface). B-extend arc closed; F-series remains live for individual additions but not primary substrate |
+| `methodology/plan_md_passes_field.md` | DEC-V61-199 Rule 2 · PLAN.md task tables from N2+ carry a `passes` column; `status: COMPLETED` alone insufficient. Sets E2E gate convention |
+| `methodology/skill_description_audit_protocol.md` | DEC-V61-199 Rule 3 · opt-in transcript-driven loop for rewriting skill `description:` fields. Same posture as Kogami (no auto-trigger) |
 
 ### Kickoff materials (per-case Codex round + sub-session paste-ready)
 
