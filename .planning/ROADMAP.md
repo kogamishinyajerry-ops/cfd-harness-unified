@@ -1,8 +1,86 @@
 # ROADMAP
 
-> **2026-04-26 refocus**: post-pivot user-as-first-customer reframe (Pivot Charter Addendum 1).
+> **2026-05-12 main-line update** (current · supersedes 2026-04-26 + 2026-04-27 refocuses below):
+> Project pivoted via DEC-V61-130 (AI-as-advisor · 2026-05-06) + DEC-V61-133
+> (v2.3 governance simplification · 2026-05-07) + DEC-V61-198 (APU bay
+> industrial-case pivot · 2026-05-07). M1-M4 Workbench Closed-Loop and
+> M5-M8 Beginner Full Stack sequences below shipped on schedule and are
+> now infrastructure; main-line shifted to **"container that accumulates
+> industrial CFD experience"** philosophy. See §"2026-05-12 main-line"
+> below before reading the 2026-04-26 sections, which remain as
+> historical-but-shipped record.
+>
+> **2026-04-26 refocus** (historical): post-pivot user-as-first-customer reframe (Pivot Charter Addendum 1).
 > Single main-line: **Workbench Closed-Loop M1-M4** — open case → modify params → real OpenFOAM → SSE phase → verdict → run history → auto-jump.
 > Phase 1-8 / W1-W4 governance archive moved to `## Closed (do not reopen)`.
+
+## 2026-05-12 main-line · post-V198 industrial-case container
+
+**North star**: cfd-harness-unified is **a container that accumulates
+industrial CFD experience**. Every real engineering-grade case that
+runs through it deposits another layer of OpenFOAM practical knowledge.
+Today's capability = solver-classes covered × sediment-depth per class.
+The AI advisor's leverage is not OpenFOAM textbooks; it is our own
+industrial process logs.
+
+**SSOT**: DEC-V61-198 charter + project memory `project_cfd_harness_roadmap_v2.md` + project memory `project_cfd_harness_blueprint_v3.md`.
+
+### M1-M6 v2 roadmap (long-term · 2026-05-06 baseline · 2026-05-12 status)
+
+| Milestone | Original priority | Status as of 2026-05-12 |
+|---|---|---|
+| **M1** AI-mutate retirement | high | ✅ in flight · V61-130 charter landed · `regenerate_mesh` deprecated (V61-131) · N1.2 mutation registry hook (V61-132) |
+| **M2** mesh control parity | high → **DOWNGRADED** to "industrial mesh diagnostic advisor" | ✅ N2.1-N2.4 sub-DECs landed (V61-134..V61-138) |
+| **M2.5** CAD ingest hardening (**NEW · post-V198**) | NEW MILESTONE | ✅ **concept complete** · A1-A5 artifacts landed in `ui/backend/services/geometry_ingest/` (1902 LOC across 10 files) · remaining work follows Pillar-2 "Run-and-correct" — see "M2.5 sediment hardening" below |
+| **M3** physics + materials | medium → **SPLIT** (schema first, UI deferred) | ✅ N3.1-N3.5 sub-DECs landed (V61-139..V61-144) |
+| **M4** BC + solver controls | medium → **UPGRADED** above M2 | ✅ N4.1-N4.5 sub-DECs landed (V61-145..V61-150) · A4 mass-balance pre-flight in `case_bc/writer.py` (commit `3b21802` 2026-05-12) |
+| **M5** post-processing | medium | ✅ N5.1-N5.4 sub-DECs landed (V61-151..V61-155) |
+| **M6** AI advisor stack | last → **PARALLELIZED** with M2.5/M3/M4 | ✅ N6.1-N6.5 sub-DECs landed (V61-156..V61-161) · corpus loader + AI review/diagnose routes exist · ⚠ **untested against real industrial cases** (Track C of 2026-05-12 audit roadmap proposal) |
+
+### Industrial-case substrate · 2026-05-12 status
+
+Per DEC-V61-198 §F monthly industrial-case dogfood replaces persona dogfood as primary quality signal. Target was 1 case/month; actual = **13 cases in 5 days** (case_002a/b through case_016 · 8/8+ solver classes covered).
+
+- Solver-class coverage: internal+buoyancy / CHT / external high-Re BL / rotating MRF / S-duct / transonic / multiphase VOF / Lagrangian / reacting / external LES / multi-stream CHT / HVAC / T-junction / DES-acoustic
+- V-series corpus: V1-V72 (1004 lines) · industrial death-mode chains, advisor falsifications, methodology gaps
+- S-series playbook: S1-S21+ promoted from V-series cross-case patterns
+- Case-generator framework: Codex (gpt-5.5) drives `~/Desktop/case_*/scripts/build_cad.py` per `codex_case_design_protocol.md`
+
+### M2.5 sediment hardening (Pillar-2 incremental · open items as of 2026-05-12)
+
+Per DEC-V61-198 §"Run-and-correct" — fix in place, no new DEC arc unless crosses ≥3 modules. Open items captured in V-series corpus:
+
+| # | Item | Source V-finding | Estimate | Status |
+|---|---|---|---|---|
+| 1 | F-NEW-20 M6 route subprocess timeout + `gmsh_timeout` failing_check | V35 + V69 + RESUME 5b | ~40 LOC + 1 test · spike-class | open · next |
+| 2 | Surface-scan call-graph trace amendment to DEC-V61-088 | V69 | doc · methodology patch | open · next |
+| 3 | `extra_body_in_fluid_advisor` (FOD inspection class) | V55 (case_016 D6) | new module · needs 2-case validation | needs next-case trigger |
+| 4 | `curved_surface_tessellation_accuracy_advisor` (acoustic-source fidelity) | V56 (case_016 D9) | new module · needs 2-case validation | needs next-case trigger |
+| 5 | Cross-repo `build_cad.py` shared-helper extraction | V58/V62/V65 | ~100 LOC in Codex repo | cross-repo (build_cad.py 5 days stale since 2026-05-08) |
+| 6 | F2 path activation + e2e validation on industrial case | RESUME 5c | exercise on case_007 / case_010 | blocked on cross-repo |
+
+### Current priorities (this week)
+
+1. M2.5 sediment hardening items #1 + #2 — next spike-class commits
+2. **M6 AI advisor dogfooding sprint** (Track C · validates the V72 corpus actually feeds useful advice vs textbook generic answers)
+3. case_003 close — blocked on cross-repo Codex action; not active workbench scope
+
+> Calendar deadlines are intentionally absent (per "禁用日期/调度门控" project rule). Sequencing is dependency-driven only.
+
+### Pillar reject list (negative-value behaviors, per V61-198)
+
+- Restart persona-driven dogfood (F1-F15 exhausted; CI smoke covers)
+- Use toy cases (LDC / backward_step) as primary substrate
+- Large UI investments (sizing-field UI / region-refinement UI under old M2-M5 plan)
+- AI auto-mutate routes (violates V130 advisory-only)
+- "Case count" as KPI (use solver-class coverage breadth × depth)
+- Write charter DEC per new case (only first-time solver-class introduction warrants charter)
+
+---
+
+## Historical main-line (2026-04-26 → 2026-05-06 · shipped via N-series + sediment burst)
+
+The sections below shipped on schedule and are preserved as record of the path the project took to reach the 2026-05-12 main-line above. M1-M4 Workbench Closed-Loop closed 2026-04-25; M5-M8 Beginner Full Stack work landed through N-series charter execution (N2-N6 + case sediment) per the 2026-05-07 charter day.
 
 ## Current main-line: Workbench Closed-Loop M1-M4
 
