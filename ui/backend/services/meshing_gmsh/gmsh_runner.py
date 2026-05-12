@@ -158,20 +158,46 @@ def _default_characteristic_length(diagonal: float, mesh_mode: str) -> float:
     return diagonal / (60.0 if mesh_mode == "power" else 30.0)
 
 
-# F-NEW-19 fix (case_003 substrate · 2026-05-11): industrial-plausibility
-# range and unit factors for the airframe-class filter, matching
-# ``unit_detector.bbox_plausible_units`` semantics. Kept inline here
-# rather than imported to avoid cross-service coupling (ADR-001) — this
-# is a small, stable contract pair (range + factors).
-_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 100.0)
+# F-NEW-19 fix (case_003 substrate · 2026-05-11): airframe-class
+# identification band for the lc-decision filter. Kept inline rather
+# than imported to avoid cross-service coupling (ADR-001).
+#
+# F-NEW-17 mitigation (session 13 · case_003 ramp): upper bound raised
+# 100 → 500 m to accommodate full-size industrial airframes (CRM-HLS
+# 152 m wingspan in transport configuration), ship hulls (200-400 m),
+# and other large bodies. Typical CFD domain is 5-10× the body of
+# interest; domain walls ≥ 2.5 km still get rejected for 500 m-class
+# airframes — distinction is preserved.
+#
+# **Intentionally decoupled from** ``unit_detector._INDUSTRIAL_EXTENT_
+# RANGE_M`` (still 100 m). Different use-cases:
+#   - gmsh_runner here: "is this a body of interest vs a CFD-domain
+#     wall" for lc calculation. Multiple plausible unit interpretations
+#     all confirm airframe-class if ANY pass — uniqueness not required.
+#   - unit_detector: "is there a SINGLE unit under which this geometry
+#     is industrially plausible" for unit decision. Raising its ceiling
+#     would flip case_003 sub-structures (18-27 m raw mm) from confident
+#     mm to engineer-confirm UNKNOWN because cm (1800-2700 m) also
+#     becomes plausible. F-NEW-12 confident-mm guess on case_003 must
+#     be preserved.
+#
+# If a future case has a body >500 m that needs lc-decision admission
+# (e.g. tunnel, dam, suspension bridge), revisit per-body-class
+# configurability (RESUME 5f) rather than raising this constant further.
+_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 500.0)
 _UNIT_FACTORS_M: tuple[float, ...] = (1e-3, 1e-2, 1.0, 0.0254)  # mm, cm, m, inch
 
 
 def _is_industrial_plausible_extent(extent: float) -> bool:
-    """True iff ``extent`` (raw STL units) is industrial-CFD-plausible
-    under at least one common unit (mm/cm/m/inch). Mirrors
-    :func:`unit_detector.bbox_plausible_units` but returns a single
-    plausibility bit instead of the unit list.
+    """True iff ``extent`` (raw STL units) is airframe-class-plausible
+    under at least one common unit (mm/cm/m/inch). Used by
+    :func:`_airframe_class_diagonal` to filter CFD-domain walls out of
+    the lc-decision union bbox.
+
+    Note: this is NOT the same predicate as
+    :func:`unit_detector.bbox_plausible_units` despite the analogous
+    construction. See the module-level comment above
+    ``_INDUSTRIAL_EXTENT_RANGE_M`` for the decoupling rationale.
     """
     if extent <= 0:
         return False
@@ -202,10 +228,12 @@ def _airframe_class_diagonal(
     taking the union bbox of the survivors yields a sensible lc.
 
     Returns the filtered diagonal, or ``fallback_diagonal`` if the
-    filter discards everything (e.g. ship/large-vehicle geometries
-    where all bodies legitimately exceed 100 m — see F-NEW-17). When
-    no body is filtered out, returns ``fallback_diagonal`` unchanged
-    to preserve byte-identical mesh output on single-class loads.
+    filter discards everything (e.g. tunnel/dam/bridge geometries
+    where all bodies legitimately exceed 500 m — F-NEW-17 partial
+    relief; ultra-large bodies still need per-body-class config per
+    RESUME 5f). When no body is filtered out, returns
+    ``fallback_diagonal`` unchanged to preserve byte-identical mesh
+    output on single-class loads.
     """
     if not body_bboxes:
         return fallback_diagonal

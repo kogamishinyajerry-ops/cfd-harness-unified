@@ -1762,6 +1762,103 @@ def test_airframe_class_diagonal_empty_input_falls_back():
     assert out == 1.0
 
 
+# ----- F-NEW-17 mitigation (session 13 · case_003 ramp): ceiling 100 → 500 m -----
+
+
+def test_plausible_extent_accepts_crm_hls_full_airframe():
+    """F-NEW-17: 152 m CRM-HLS airframe (transport configuration) raw mm
+    value 152000 must be admitted under the mm interpretation. The
+    session 5 ceiling of 100 m rejected it; the session 13 ceiling of
+    500 m accepts it.
+    """
+    # 152 m wingspan in raw mm units = 152000.
+    # mm interpretation: 152 m → ≤ 500 → plausible
+    # cm interpretation: 1520 m → > 500 → out
+    # m interpretation: 152000 m → out
+    # inch interpretation: 3860 m → out
+    # → exactly one plausible unit, but the filter only needs ≥1.
+    assert _is_industrial_plausible_extent(152_000.0) is True
+
+
+def test_plausible_extent_accepts_large_ship_hull():
+    """F-NEW-17: 300 m container-ship hull raw mm = 300000 must be
+    admitted (mm interp = 300 m ≤ 500). Verifies the filter covers
+    ship-scale industrial bodies, not just airframes."""
+    assert _is_industrial_plausible_extent(300_000.0) is True
+
+
+def test_plausible_extent_at_new_500m_ceiling_boundary():
+    """500 m is the new inclusive ceiling. Raw mm = 500000 → mm interp
+    exactly 500 m → plausible. 500001 raw → 500.001 m → out."""
+    assert _is_industrial_plausible_extent(500_000.0) is True
+    assert _is_industrial_plausible_extent(500_001.0) is False
+    # Sanity at the OLD 100 m ceiling — still plausible (cm/m/inch may
+    # also match now, but at least one always did under the old band).
+    assert _is_industrial_plausible_extent(100_000.0) is True
+
+
+def test_plausible_extent_above_new_ceiling_still_rejected():
+    """Bodies exceeding 500 m under every common unit are still
+    rejected. Domain-wall extents (case_003 2.44 km) and ultra-large
+    bridge/dam geometries land here and need explicit sizing_field."""
+    assert _is_industrial_plausible_extent(600_000.0) is False  # 600 m
+    assert _is_industrial_plausible_extent(2_438_552.0) is False  # case_003 domain
+    assert _is_industrial_plausible_extent(1e9) is False
+
+
+def test_airframe_class_diagonal_includes_crm_hls_152m_airframe():
+    """F-NEW-17 integration: case_003-like multi-class bbox with a
+    full 152 m airframe alongside 18-27 m sub-structures and 2.4 km
+    CFD-domain walls. The 152 m airframe must now contribute to the
+    airframe-class union diagonal (was filtered out at the 100 m
+    ceiling, session 5).
+    """
+    body_bboxes = [
+        # 4 CFD-domain walls (case_003 raw mm) — still rejected
+        (0.0, 0.0, 0.0, 2_438_552.0, 1.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1_600_200.0, 1.0),
+        (0.0, 0.0, 0.0, 1.0, 1.0, 1_540_764.0),
+        (0.0, 0.0, 0.0, 1_600_000.0, 1.0, 1.0),
+        # CRM-HLS full airframe (152 m wingspan in raw mm)
+        (0.0, 0.0, 0.0, 152_000.0, 30_000.0, 14_000.0),
+        # 3 airframe-class sub-structures (case_003 raw mm: ~18-27 m)
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 18_290.0, 1_910.0, 3_050.0),
+        (0.0, 0.0, 0.0, 27_430.0, 3_430.0, 1.0),
+    ]
+    fallback_diag = 3.318e6  # ~case_003 full-bbox diagonal
+    out = _airframe_class_diagonal(body_bboxes, fallback_diag)
+    # The airframe-class union bbox is now driven by the 152 m airframe:
+    # diagonal ≥ 152000 (still in raw mm units). Old (100 m ceiling)
+    # produced ~27800 — strictly less than the airframe wingspan.
+    assert out >= 152_000.0, f"expected ≥152000 (full airframe in union), got {out}"
+    assert out < 200_000.0, (
+        f"expected union diagonal driven by 152 m airframe, not contaminated "
+        f"by domain walls; got {out}"
+    )
+    # Must still be far below the 2.44 km domain fallback (domain walls rejected).
+    assert out < fallback_diag / 10
+
+
+def test_airframe_class_diagonal_ceiling_decoupled_from_unit_detector():
+    """F-NEW-17 design invariant (session 13): gmsh_runner ceiling
+    (500 m) MUST be looser than unit_detector ceiling (100 m). Pinning
+    this here so a future "let's unify the constants" refactor doesn't
+    silently regress F-NEW-12 confident-mm guess on case_003.
+    """
+    from ui.backend.services.geometry_ingest import unit_detector
+    from ui.backend.services.meshing_gmsh import gmsh_runner
+
+    detector_ceiling = unit_detector._INDUSTRIAL_EXTENT_RANGE_M[1]
+    runner_ceiling = gmsh_runner._INDUSTRIAL_EXTENT_RANGE_M[1]
+    assert runner_ceiling > detector_ceiling, (
+        f"gmsh_runner ceiling ({runner_ceiling}) must exceed unit_detector "
+        f"ceiling ({detector_ceiling}); see F-NEW-17 docstring for the "
+        f"decoupling rationale (raising unit_detector flips case_003 "
+        f"sub-structures from confident-mm to engineer-confirm UNKNOWN)."
+    )
+
+
 # ----- F2 path (F-NEW-22 + F-NEW-24 joint mitigation, case_003 session 6-7 ramp) -----
 #
 # The F2 fast-classify path activates on industrial-scale multi-named-

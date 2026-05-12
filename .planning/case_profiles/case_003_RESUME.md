@@ -1,10 +1,13 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 13 — Option H closed: route
-wiring gap for F-NEW-26 defensive layer fixed + 2 integration tests
-pin the wiring; session 11 V61 claim "no route-code change needed"
-corrected to V66 "route did NOT transparently carry; wiring closed
-session 13")
+**Last session**: 2026-05-12 (session 13 — Option H + Option C both
+closed. H: route wiring gap for F-NEW-26 defensive layer fixed + 2
+integration tests; session 11 V61 corrected to V66. C: `gmsh_runner`
+airframe-class ceiling 100 → 500 m so CRM-HLS 152 m admits to union
+diagonal; intentionally decoupled from `unit_detector` ceiling
+(preserved at 100 m for F-NEW-12 confident-mm guess); 6 new tests
+pin both the threshold and the decoupling invariant. 113/113 tests
+pass across all four touched test files.)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -84,7 +87,7 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
 | ~~5e~~ | ~~F-NEW-25 bridge sub-DEC~~ — **REDIRECTED session 8**: cannot fix at bridge layer; root cause is source CAD overlap |
 | **5g** | **F-NEW-26 source-CAD fix** (cross-repo) | sub-DEC (other repo) | ~100 LOC in `build_cad.py` (Option A) | **DIAGNOSED + TICKETED** session 10. Root cause = `build_domain_patches` thick-plate-at-face construction; 13 pairwise edge-overlaps + 8 corner overlaps. Class-wide issue (≥case_003 + case_008 confirmed identical). Ticket: `.planning/cross_repo_tickets/2026-05-12_case_003_build_cad_farfield_overlap.md`. **PENDING cross-repo (Codex) action**. |
 | ~~5h~~ | ~~F2 path validation alternative~~ synthetic industrial-scale fixture | spike | 50 LOC fixture + 3 tests | **DONE** session 9 — `large_seamed_multi_solid_box_stl` (12,288 facets) added to conftest. Surfaced 2 bugs in session 7 F2 path (default-arg pitfall + classify collapse on connected topology). Both fixed in session 9 redesign. |
-| **5f** | **F-NEW-17 mitigation** · adjust `_is_industrial_plausible_extent` upper bound for industrial airframes >100m (CRM-HLS at 152m fails); needs configurable band per body-class | spike | ~30-50 LOC + tests | independent of 5c/5e; can ship anytime; not blocking F2 implementation if F2 ignores the filter |
+| ~~5f~~ | ~~F-NEW-17 mitigation · airframe extent band 100 → 500 m~~ | spike | ~25 LOC service + ~80 LOC tests | **DONE** session 13 (cont.). `gmsh_runner` ceiling raised to 500 m; intentionally decoupled from `unit_detector` (kept at 100 m for F-NEW-12 preservation). 6 new tests + decoupling invariant pin. case_003 lc will be ~5 m post-meshing (was ~0.9 m sub-structure-driven). Per-body-class config (original ask) deferred to V72. |
 | **5b** | **F-NEW-20 mitigation spike** · M6 route soft wall-clock timeout + `gmsh_timeout` failing_check; protects workbench from degenerate sizing burning CPU indefinitely. **F-NEW-23 add**: in-process Python signals don't interrupt gmsh C++ stages — must use subprocess-wrapper + external kill | spike | ~40 LOC + 1 test | optional after 5c |
 | **6** | **F-NEW-15 substrate dig** · was Codex's `build_cad.py` for case_003 v1 intentionally emitting a 2-component airframe? ≤5 min grep at `~/Desktop/case_003_crm_hls_boundary_layer/` | substrate / data | ≤5 min | open |
 | **6a** | **F-NEW-19 alt-path probe** · trigger M6 route with explicit `sizing_field` (N2.1 custom mode) on a non-case_003 multi-class STL to validate F-NEW-19 fires end-to-end — confirms session 5's fix on a path that actually reaches the lc-decision site | observation | ~10 min | optional, validates session 5 fix on real e2e flow |
@@ -246,7 +249,7 @@ real-world variations of the bug.
 
 Recommended order: ~~H (close route-side test gap)~~ DONE session 13
 → ~~I~~ DEFERRED (low marginal value — see judgment below)
-→ C (independent · F-NEW-17 airframe extent band).
+→ ~~C (F-NEW-17 airframe extent band)~~ DONE session 13 (cont.).
 
 **Option I deferral (session 13 judgment)**: case_007 + case_010 both
 use the identical 6-plate `make_box`-at-6-faces pattern as case_003
