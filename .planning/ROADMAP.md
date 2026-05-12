@@ -35,7 +35,7 @@ industrial process logs.
 | **M3** physics + materials | medium → **SPLIT** (schema first, UI deferred) | ✅ N3.1-N3.5 sub-DECs landed (V61-139..V61-144) |
 | **M4** BC + solver controls | medium → **UPGRADED** above M2 | ✅ N4.1-N4.5 sub-DECs landed (V61-145..V61-150) · A4 mass-balance pre-flight in `case_bc/writer.py` (commit `3b21802` 2026-05-12) |
 | **M5** post-processing | medium | ✅ N5.1-N5.4 sub-DECs landed (V61-151..V61-155) |
-| **M6** AI advisor stack | last → **PARALLELIZED** with M2.5/M3/M4 | ✅ N6.1-N6.5 sub-DECs landed (V61-156..V61-161) · corpus loader + AI review/diagnose routes exist · ⚠ **untested against real industrial cases** (Track C of 2026-05-12 audit roadmap proposal) |
+| **M6** AI advisor stack | last → **PARALLELIZED** with M2.5/M3/M4 | ✅ N6.1-N6.5 sub-DECs landed (V61-156..V61-161) · corpus loader + AI review/diagnose routes exist · ⚠ **N6.x route surfaces untested**; Claude-Code-session-as-advisor e2e validated 2026-05-13 on case_010 (Track C session 1 · surfaced V82 + V83 missed by corpus + V46 attribution corrected · RETRO `2026-05-13_track_c_advisor_e2e_session_1_case_010.md`) |
 
 ### Industrial-case substrate · 2026-05-12 status
 
