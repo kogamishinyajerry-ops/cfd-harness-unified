@@ -24,7 +24,6 @@ import type {
   MaterialPresetView,
   PhysicsCommitResponse,
   RegimeContract,
-  RegimeKind,
   RegimePresetView,
 } from "@/types/physics";
 

@@ -4,8 +4,8 @@ Uses isolated temp git repos so we don't depend on the host repo's commit
 history. Verifies:
   1. Empty / fresh repo → bootstrap mode, exit 0
   2. Trailer with non-canonical verdict ("pending") → still bootstrap mode
-  3. Last verified <10 commits ago → exit 0 with within-threshold message
-  4. Last verified >=10 commits ago → exit 1 with cadence violation
+  3. Last verified below the configured threshold → exit 0 with within-threshold message
+  4. Last verified at the configured threshold → exit 1 with cadence violation
   5. CODEX_CADENCE_OVERRIDE=1 → exit 0 even past threshold
 """
 from __future__ import annotations
@@ -19,6 +19,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 HOOK = REPO_ROOT / "scripts" / "check_codex_cadence.py"
+from scripts.check_codex_cadence import THRESHOLD
 
 
 def _run_git(cwd: Path, *args: str) -> str:
@@ -97,18 +98,17 @@ def test_canonical_verdict_within_threshold(fresh_repo: Path) -> None:
         _commit(fresh_repo, f"chore: follow-up {i}")
     code, out = _run_hook(fresh_repo)
     assert code == 0
-    # Round-2: "cadence=5/10 since <sha>"
-    assert "cadence=5/10" in out
+    assert f"cadence=5/{THRESHOLD}" in out
 
 
 def test_canonical_verdict_at_threshold_blocks(fresh_repo: Path) -> None:
-    """Last verified 10 commits ago → blocked."""
+    """Last verified at the configured threshold → blocked."""
     _commit(fresh_repo, "feat: x\n\nCodex-verified: APPROVE_WITH_COMMENTS ok")
-    for i in range(10):
+    for i in range(THRESHOLD):
         _commit(fresh_repo, f"chore: follow-up {i}")
     code, out = _run_hook(fresh_repo)
     assert code == 1
-    assert "10 commits since last Codex-verified" in out
+    assert f"{THRESHOLD} commits since last Codex-verified" in out
     assert "Required action" in out
 
 
@@ -146,7 +146,7 @@ def test_q5_bootstrap_cliff_closed(fresh_repo: Path) -> None:
     """Round-2 Q5 fix: when a verified commit exists 51+ commits back,
     the old LOOKBACK=50 hook would exit 0 (mistaking it for bootstrap
     mode). The full-history scan must find it and BLOCK because the
-    cadence count is ≥ THRESHOLD=10."""
+    cadence count is at or above the configured threshold."""
     _commit(fresh_repo, "feat: ancient verify\n\nCodex-verified: APPROVE legacy")
     # Push it past the old LOOKBACK boundary
     for i in range(60):
