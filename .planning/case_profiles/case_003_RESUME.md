@@ -1,8 +1,7 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 10 — F-NEW-15 substrate dig:
-build_cad.py thick-plate-at-face root cause confirmed; class-wide
-ticket filed)
+**Last session**: 2026-05-12 (session 11 — F-NEW-26 defensive layer:
+M5.0 import-time body-pair AABB overlap detection landed)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -145,8 +144,13 @@ bypasses `partition_surfaces_by_body`; OK for external aerodynamics) +
 `build_domain_patches` thick-plate-at-face; 12 edge + 8 corner
 overlaps) + **V57** (session 10 — class-wide issue: case_003 + case_008
 share identical pattern, ≥3 more cases likely affected) + **V58**
-(session 10 — cross-repo ticket filed with 3 fix options ranked).
-V27 already LANDED-by-V199-bridge.
+(session 10 — cross-repo ticket filed with 3 fix options ranked) +
+**V59** (session 11 — M5.0 import-time AABB overlap detection lands
+with 3-tier classification: containment / edge_overlap / significant)
++ **V60** (session 11 — cavity pattern preserved by classification:
+no UX regression on LDC / cylinder-in-channel) + **V61** (session 11
+— route layer transparently carries diagnostic; explicit route-test
+deferred to Option H). V27 already LANDED-by-V199-bridge.
 
 V32 needs status update next batch: **F-NEW-19 fix LANDED session 5**;
 the unworkable-default-lc issue is solved for cases that reach the
@@ -198,22 +202,27 @@ forward is now:
 Session 10 closed Option E. case_003 e2e now waits on cross-repo
 Codex action (F-NEW-26 ticket). Workbench-side actionable items:
 
-**Option F (session 11 recommended — defensive)**: add a startup-time
-check that detects F-NEW-26-style source-CAD overlap on import.
-Implementation: M5.0 health check runs an HXT-based body-bisection
-probe (subset of session 8 probe5 logic) on multi-named-solid imports
-and rejects with a structured error pointing at the offending body
-pair. Fails fast at import rather than at mesh time, and improves
-error message specificity for downstream users hitting similar
-CAD bugs. ~80-120 LOC + 3-4 tests.
+~~Option F (session 11)~~ — **DONE** session 11 commit `4f671c4`. M5.0
+import-time body-pair AABB overlap detection landed with 3-tier
+classification (containment / edge_overlap / significant). case_003
+F-NEW-26 pattern reproduces in tests and triggers the systematic-CAD-
+bug error path. Cavity / interior-obstacle cases (LDC, cylinder-in-
+channel) preserved as silent (containment-only). 9 new tests, 76/76
+in ingest+meshing.
 
-**Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
-Independent; can ship anytime. ~30-50 LOC.
-
-**Option G (cross-repo follow-up — non-coding)**: review case_006 /
+**Option G (session 12 recommended — non-coding)**: review case_006 /
 case_007 / case_010 build_cad.py for the same thick-plate-at-face
 pattern that case_003 + case_008 share. ≤30 min per case. Confirms or
 expands the cross-repo ticket's scope.
 
-Recommended order: F (closes the defensive layer for current+future
-similar CAD bugs) → G (confirm class-wide scope) → C (independent).
+**Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
+Independent; can ship anytime. ~30-50 LOC.
+
+**Option H (route-layer follow-up)**: end-to-end integration test
+exercising `POST /api/import/stl` with a synthetic 6-plate STL to
+verify the new defensive-layer error surfaces as a structured 4xx
+through the route. ~30-50 LOC. Confirms the route already carries
+the diagnostic transparently (which it should, but unverified).
+
+Recommended order: G (confirm class-wide scope + escalate ticket if
+needed) → H (close route-side test gap) → C (independent).
