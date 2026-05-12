@@ -1,7 +1,7 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 7 — F-NEW-24 reclassified as
-gmsh-tolerance artifact + F-NEW-25 confirmed real multi-instance)
+**Last session**: 2026-05-12 (session 8 — F-NEW-25 → F-NEW-26 root cause
+relocated to source CAD overlap in Codex `build_cad.py`)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -31,15 +31,15 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
     artifact on km-scale CAD. Fix is a single gmsh option set
     (`Tolerance=1e-12`), bundled into F2 path implementation (V45).
     NOT a real substrate wall.
-1b. **F-NEW-25 (CONFIRMED REAL)** — multi-instance bridge stitching
-    issue: at least 2 distinct self-intersection points along y=838200 mm
-    farfield boundary (HXT PLC errors at (-838124, 838200, 838124) under
-    Tolerance=1e-8 and (1.6e6, 838200, -702488) under Tolerance=1e-12).
-    ~28% of input facets (111k/393k) fail HXT constrained recovery.
-    Root cause: `step_to_per_body_stl` runs FreeCAD `MeshPart.meshFromShape`
-    per body independently; adjacent farfield boxes share edges but
-    independent tessellations don't enforce vertex identity. Bridge needs
-    pre-tessellation farfield-merge (sub-DEC, ~100 LOC sidecar change).
+~~1b. F-NEW-25 bridge per-body tessellation~~ — **RECLASSIFIED session 8
+    as F-NEW-26**: source CAD overlap, not bridge artifact. Body-bisection
+    probe (session 8 probe5) showed 3 farfield bodies alone (9 KB STL,
+    36 facets) produce PLC self-intersection at same coordinate magnitude
+    as the full 10-body case. Bridge transformations (compound / fuse /
+    vertex snap) cannot construct self-intersection from non-overlapping
+    inputs → inputs themselves overlap. **Blocker is now in Codex's
+    `build_cad.py` farfield construction (cross-repo), not in this
+    workbench.**
 1c. **F-NEW-17 firing (session 6 obs)** — 152m CRM-HLS airframe exceeds
     F-NEW-19's 100m airframe-class ceiling. Filter retains only 18-27m
     sub-structures, rejects actual airframe. Filter band needs adjustment
@@ -78,7 +78,9 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
 | ~~5a~~ | ~~F-NEW-19 mitigation spike · body-class-aware default lc~~ | ~~spike~~ | ~~~80 LOC + 8 tests~~ | **DONE** session 5 — but not yet exercised end-to-end (blocked by F-NEW-22) |
 | ~~5c~~ | ~~F-NEW-22 + F-NEW-24 joint spike~~ F2 path implementation in `gmsh_runner.py`: fast-classify + skip `createGeometry()` + `addSurfaceLoop` + `addVolume` + `Geometry.Tolerance=1e-12`. Activation gate `_should_use_f2_path` (≥2 named solids + ≥10k facets) | spike | 100 LOC service + 139 LOC tests | **DONE** session 7 (commit `3d4a778`) — 52/52 tests pass (43 baseline + 9 new). F2 path PhysicalGroup preservation verified on seamed multi-solid STL with monkeypatched threshold. case_003 e2e still gated on 5e. |
 | ~~5d~~ | ~~F-NEW-24 bridge filter~~ — **REMOVED session 7**: F-NEW-24 is artifact, not substrate. No bridge change needed. |
-| **5e** | **F-NEW-25 mitigation** · bridge pre-tessellation farfield-merge in `_freecad_step_to_stl_sidecar.py`: detect bodies whose faces share edges (or `farfield`-prefixed) and join via `Part.Fuse` before `MeshPart.meshFromShape` | sub-DEC | ~100 LOC sidecar + 2-3 tests | clears the **only** remaining substrate wall before case_003 e2e |
+| ~~5e~~ | ~~F-NEW-25 bridge sub-DEC~~ — **REDIRECTED session 8**: cannot fix at bridge layer; root cause is source CAD overlap |
+| **5g** | **F-NEW-26 source-CAD fix** · Codex's `build_cad.py` farfield bodies overlap (probe5 evidence). Options: (a) single watertight farfield box with face-group naming, (b) per-body offset to exclude neighbors, (c) BRepAlgoAPI_Section at construction. Cross-repo work | sub-DEC (other repo) | ~100-200 LOC in `build_cad.py` | **NEXT** — only path to case_003 e2e mesh |
+| **5h** | **F2 path validation alternative** · build a synthetic industrial-scale (≥10k facets) multi-named-solid STL fixture (3-body box with non-overlapping geometry) to measure F2 path's claimed ~80× speedup in-suite | spike | ~50 LOC fixture + 1 test | independent of 5g; validates session 7's F2 implementation against real-industrial-size input |
 | **5f** | **F-NEW-17 mitigation** · adjust `_is_industrial_plausible_extent` upper bound for industrial airframes >100m (CRM-HLS at 152m fails); needs configurable band per body-class | spike | ~30-50 LOC + tests | independent of 5c/5e; can ship anytime; not blocking F2 implementation if F2 ignores the filter |
 | **5b** | **F-NEW-20 mitigation spike** · M6 route soft wall-clock timeout + `gmsh_timeout` failing_check; protects workbench from degenerate sizing burning CPU indefinitely. **F-NEW-23 add**: in-process Python signals don't interrupt gmsh C++ stages — must use subprocess-wrapper + external kill | spike | ~40 LOC + 1 test | optional after 5c |
 | **6** | **F-NEW-15 substrate dig** · was Codex's `build_cad.py` for case_003 v1 intentionally emitting a 2-component airframe? ≤5 min grep at `~/Desktop/case_003_crm_hls_boundary_layer/` | substrate / data | ≤5 min | open |
@@ -122,7 +124,17 @@ SUPERSEDES V39 single-instance framing) + **V44** (session 7 —
 HXT diagnostically superior to Delaunay 3D for substrate-error
 cases; fast-fails with named coord + entity pair) + **V45**
 (session 7 — F-NEW-22 + F-NEW-24 fixable as one F2-path spike,
-F-NEW-25 separate bridge sub-DEC). V27 already LANDED-by-V199-bridge.
+F-NEW-25 separate bridge sub-DEC) + **V46** (session 8 — F-NEW-25
+is symptom of F-NEW-26 source-CAD overlap; SUPERSEDES V43) + **V47**
+(session 8 — `Part.makeCompound` purely topological, no vertex
+stitching) + **V48** (session 8 — `fuse + removeSplitter` cleans
+BRep but not tessellation; OCC tessellates per-face) + **V49**
+(session 8 — post-tessellation vertex snap cannot fix F-NEW-26 at
+any tolerance) + **V50** (session 8 — body-bisection: 3 farfield
+bodies alone, 9 KB STL, reproduce PLC error → source CAD overlap
+proven) + **V51** (session 8 — case_003 e2e blocker is cross-repo:
+Codex `build_cad.py`, not workbench-side). V27 already
+LANDED-by-V199-bridge.
 
 V32 needs status update next batch: **F-NEW-19 fix LANDED session 5**;
 the unworkable-default-lc issue is solved for cases that reach the
@@ -171,20 +183,23 @@ Session 7 collapsed F-NEW-24 into an artifact (gmsh tolerance) and
 confirmed F-NEW-25 is the only remaining substrate wall. The plan
 forward is now:
 
-~~Option A (session 7 continuation)~~ — **DONE** session 7 commit
-`3d4a778`. F2 path is now resident in `gmsh_runner.py`, activation-
-gated by `_should_use_f2_path`. 52/52 tests pass.
+Session 8 redirected the F-NEW-25 work — bridge-layer fixes cannot
+reach the actual root cause (F-NEW-26, source CAD overlap in Codex's
+`build_cad.py`). Workbench-side options narrow:
 
-**Option B (session 8 recommended)**: F-NEW-25 sub-DEC — bridge sidecar
-pre-tessellation farfield-merge via `Part.Fuse` on coplanar / edge-
-sharing bodies before `MeshPart.meshFromShape`. ~100 LOC sidecar + 2-3
-tests. Sub-DEC because it touches the bridge's emit contract (number
-of output bodies may shrink). Once this lands, re-run case_003 e2e:
-F2 path + clean-stitched substrate should mesh.
+**Option D (session 9 recommended)**: F2 path validation alternative —
+build a synthetic industrial-scale (≥10k facets) multi-named-solid
+STL fixture (3-body box, non-overlapping geometry) and measure F2
+path's ~80× claim in-suite. Decouples F2 validation from case_003's
+upstream CAD bug. ~50 LOC fixture + 1 integration test.
+
+**Option E**: F-NEW-15 substrate dig — read Codex's `build_cad.py`
+in `~/Desktop/case_003_crm_hls_boundary_layer/` and write up a
+ticket for the cross-repo fix. ≤30 min reading.
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
 Independent; can ship anytime. ~30-50 LOC.
 
-Recommended next session: B. After B, case_003 e2e should clear and
-F2 path's performance claim (~80× speedup, V36) can be measured
-in-suite on the real 393k-facet load.
+Recommended order: D (clears the F2 validation gap that session 7
+deferred) → E (file cross-repo ticket for case_003 unblock) → C
+(any time).
