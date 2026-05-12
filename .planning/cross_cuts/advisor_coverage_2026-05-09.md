@@ -21,7 +21,7 @@
 |---|---|---|---|---|
 | **A2-v2** — gap-distance API + classifier | V25 (closed 2026-05-12 by DEC-V61-198-sub-A2v2) | **LANDED** | 174 LOC source+test; under 250 sub-DEC ceiling | **DONE — was #1; closed by Claude Code main session 2026-05-12** |
 | **A6** — `hvac_adpi.py` ADPI/throw/dumping post-processor | case_012 v1 sediment | 1 sediment + N dispatched (012/015 likely) | 1 × MED / 150 LOC = LOW | DEFER until 2nd HVAC-class case |
-| **A7** — `step_canonicalizer.py` | V51 (case_012 + cross-checked case_002a/case_005/case_011) | **4 sediment** (timestamp-determinism observed in all four) | 4 × MED / 80 LOC = **MEDIUM-HIGH** | **#3 (this cycle)** — bundle into Codex-protocol fix arc |
+| **A7** — `step_canonicalizer.py` | V80 (case_012 backfill 2026-05-13 + cross-cuts case_002a / case_005 / case_011) | **4 sediment · LANDED 2026-05-12** | ~115 LOC source + 10-test suite | **DONE — was #3; closed by Claude Code main session 2026-05-12 by DEC-V61-198-sub-A7** |
 | **A8** — `shm_dict_validator.py` | V52 (case_012) | 1 sediment + N dispatched (HVAC-class + porous filter likely) | 1 × MED / 120 LOC = LOW | DEFER until 2nd typo-class case |
 | **A4** — face-orientation advisor | V50/case_012 + case_013 dispatched | 1 sediment + 1 dispatched | 2 × MED / 200 LOC = LOW-MED | DEFER until case_013 sediment lands |
 | **A1** — `cad_ingest_freecad.py` (CATIA + unit-context) | V1, V20, V24 | 3 sediment | 3 × MED / 100 LOC = MED | DEFER until A2-v2 lands (queued) |
