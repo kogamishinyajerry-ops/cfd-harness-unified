@@ -18,7 +18,7 @@ parent_review:
     > ROADMAP §60-day 已勾选项,这是 ROADMAP 状态读取失败,不是"两条独立线"。
     > 如果接受"server hardening 与 client UI 平行演化"作为通用借口,下一次会
     > 变成"在已有 X 旁边重写 X′"的合理化。
-notion_sync_status: drift 2026-05-12 · resync needed (base sync 2026-05-03 https://www.notion.so/354c68942bed81c487fbe424d82d524c)
+notion_sync_status: synced 2026-05-12 (resync from base 2026-05-03 https://www.notion.so/354c68942bed81c487fbe424d82d524c)
 autonomous_governance: true  # this DEC modifies Claude Code's own startup discipline; does NOT modify Kogami contract or files (P-1..P-5), so §4 skip rule does NOT fire — Kogami review IS required per §4 first item (autonomous_governance rule-change DEC)
 kogami_review_round1_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/review.md
 kogami_review_round2_path: .planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/review.md
@@ -479,6 +479,7 @@ the LOC count).
 
 ### Notion sync
 
-This amendment drifts the local DEC body from the 2026-05-03 Notion
-sync. Frontmatter `notion_sync_status` flipped to `drift 2026-05-12 ·
-resync needed`; session-end batch sync should re-push.
+This amendment drifted the local DEC body from the 2026-05-03 Notion
+sync; resynced via `mcp__claude_ai_Notion__notion-update-page` on
+2026-05-12 (V69 amendment block inserted before `## Archive linkage`).
+Frontmatter `notion_sync_status` is back to `synced 2026-05-12`.
