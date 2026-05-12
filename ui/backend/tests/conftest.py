@@ -74,6 +74,63 @@ def seamed_multi_solid_box_stl(
     return b"".join(chunks)
 
 
+def large_seamed_multi_solid_box_stl(
+    *,
+    subdivisions: int = 5,
+    inlet: str = "inlet",
+    outlet: str = "outlet",
+    walls: str = "walls",
+    size: float = 0.1,
+) -> bytes:
+    """Industrial-scale variant of :func:`seamed_multi_solid_box_stl`.
+
+    Subdivides the base 12-facet box ``subdivisions`` times (4× per iter)
+    so the total facet count crosses the F2 path activation threshold
+    (``_F2_PATH_FACET_THRESHOLD = 10_000``). At ``subdivisions=5`` the
+    total is 12,288 facets (4096 per ±x-normal patch, 4096 per +x, 4096
+    on the 4 walls combined) — just over threshold so F2 activates
+    without monkeypatching.
+
+    Used by session 9 to validate F2 path on a fixture that:
+      - trips the real activation gate (no monkeypatch needed)
+      - is clean (no overlap, no self-intersection — unlike case_003's
+        Codex-generated source per session 8 F-NEW-26 finding)
+      - exercises the named-solid voting block at scale
+    """
+    import numpy as np
+    import re as _re
+
+    box = trimesh.creation.box([size, size, size])
+    for _ in range(subdivisions):
+        box = box.subdivide()
+    normals = box.face_normals
+    inlet_mask = np.isclose(normals[:, 0], -1.0)
+    outlet_mask = np.isclose(normals[:, 0], 1.0)
+    walls_mask = ~(inlet_mask | outlet_mask)
+
+    solid_re = _re.compile(rb"^\s*solid\b[^\n]*", _re.MULTILINE)
+    endsolid_re = _re.compile(rb"^\s*endsolid\b[^\n]*", _re.MULTILINE)
+
+    chunks: list[bytes] = []
+    for name, mask in (
+        (inlet, inlet_mask),
+        (outlet, outlet_mask),
+        (walls, walls_mask),
+    ):
+        face_index = np.flatnonzero(mask)
+        patch = box.submesh([face_index], append=True, repair=False)
+        raw = patch.export(file_type="stl_ascii")
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8")
+        encoded = name.encode("ascii")
+        raw = solid_re.sub(b"solid " + encoded, raw, count=1)
+        raw = endsolid_re.sub(b"endsolid " + encoded, raw, count=1)
+        if not raw.endswith(b"\n"):
+            raw += b"\n"
+        chunks.append(raw)
+    return b"".join(chunks)
+
+
 def cube_with_interior_obstacle_stl(
     *,
     outer_size: float = 1.0,

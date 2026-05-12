@@ -1,7 +1,8 @@
 # case_003 · RESUME
 
-**Last session**: 2026-05-12 (session 8 — F-NEW-25 → F-NEW-26 root cause
-relocated to source CAD overlap in Codex `build_cad.py`)
+**Last session**: 2026-05-12 (session 9 — F2 path redesign: skip
+classifySurfaces entirely + fix default-arg pitfall surfaced by
+industrial-fixture test)
 **Status**: Phase 4a STEP→STL bridge shipped; workbench import endpoint
 exercised (sessions 2-3); `detect_unit` body-class filter wired through
 route (session 4); M6 mesh route observed to not converge on default
@@ -76,11 +77,11 @@ The "STL → cells" wall is **M6 gmsh**, not M7 sHM.
 | ~~4~~ | ~~F-NEW-12 wiring · route call detect_unit~~ | ~~spike~~ | ~~~70 LOC + 2 tests~~ | **DONE** session 4 · `unit_guess` now `mm` on case_003 combined STL |
 | ~~5~~ | ~~M7 sHM real run~~ — **superseded by session 4 follow-up M6 observation**; the relevant stage in this codebase is M6 gmsh, not M7 sHM | obs | n/a | **DONE-as-observation** session 4 |
 | ~~5a~~ | ~~F-NEW-19 mitigation spike · body-class-aware default lc~~ | ~~spike~~ | ~~~80 LOC + 8 tests~~ | **DONE** session 5 — but not yet exercised end-to-end (blocked by F-NEW-22) |
-| ~~5c~~ | ~~F-NEW-22 + F-NEW-24 joint spike~~ F2 path implementation in `gmsh_runner.py`: fast-classify + skip `createGeometry()` + `addSurfaceLoop` + `addVolume` + `Geometry.Tolerance=1e-12`. Activation gate `_should_use_f2_path` (≥2 named solids + ≥10k facets) | spike | 100 LOC service + 139 LOC tests | **DONE** session 7 (commit `3d4a778`) — 52/52 tests pass (43 baseline + 9 new). F2 path PhysicalGroup preservation verified on seamed multi-solid STL with monkeypatched threshold. case_003 e2e still gated on 5e. |
+| ~~5c~~ | ~~F-NEW-22 + F-NEW-24 joint spike~~ F2 path: **session 7 commit `3d4a778`** used fast-classify (bug B in session 9); **session 9 redesign** skips `classifySurfaces` entirely + uses gmsh.merge-time discrete entities directly. Activation gate `_should_use_f2_path` (≥2 named solids + ≥10k facets) — default-arg pitfall fixed (bug A). Bypasses `partition_surfaces_by_body` (DEC-V61-104) because discrete entities lack edges; F2 target use cases (external aerodynamics) don't need interior-obstacle subtraction. | spike | service + tests | **REDESIGNED** session 9 — 54/54 tests pass on both seamed + disjoint topologies. case_003 e2e still gated on F-NEW-26 cross-repo. |
 | ~~5d~~ | ~~F-NEW-24 bridge filter~~ — **REMOVED session 7**: F-NEW-24 is artifact, not substrate. No bridge change needed. |
 | ~~5e~~ | ~~F-NEW-25 bridge sub-DEC~~ — **REDIRECTED session 8**: cannot fix at bridge layer; root cause is source CAD overlap |
 | **5g** | **F-NEW-26 source-CAD fix** · Codex's `build_cad.py` farfield bodies overlap (probe5 evidence). Options: (a) single watertight farfield box with face-group naming, (b) per-body offset to exclude neighbors, (c) BRepAlgoAPI_Section at construction. Cross-repo work | sub-DEC (other repo) | ~100-200 LOC in `build_cad.py` | **NEXT** — only path to case_003 e2e mesh |
-| **5h** | **F2 path validation alternative** · build a synthetic industrial-scale (≥10k facets) multi-named-solid STL fixture (3-body box with non-overlapping geometry) to measure F2 path's claimed ~80× speedup in-suite | spike | ~50 LOC fixture + 1 test | independent of 5g; validates session 7's F2 implementation against real-industrial-size input |
+| ~~5h~~ | ~~F2 path validation alternative~~ synthetic industrial-scale fixture | spike | 50 LOC fixture + 3 tests | **DONE** session 9 — `large_seamed_multi_solid_box_stl` (12,288 facets) added to conftest. Surfaced 2 bugs in session 7 F2 path (default-arg pitfall + classify collapse on connected topology). Both fixed in session 9 redesign. |
 | **5f** | **F-NEW-17 mitigation** · adjust `_is_industrial_plausible_extent` upper bound for industrial airframes >100m (CRM-HLS at 152m fails); needs configurable band per body-class | spike | ~30-50 LOC + tests | independent of 5c/5e; can ship anytime; not blocking F2 implementation if F2 ignores the filter |
 | **5b** | **F-NEW-20 mitigation spike** · M6 route soft wall-clock timeout + `gmsh_timeout` failing_check; protects workbench from degenerate sizing burning CPU indefinitely. **F-NEW-23 add**: in-process Python signals don't interrupt gmsh C++ stages — must use subprocess-wrapper + external kill | spike | ~40 LOC + 1 test | optional after 5c |
 | **6** | **F-NEW-15 substrate dig** · was Codex's `build_cad.py` for case_003 v1 intentionally emitting a 2-component airframe? ≤5 min grep at `~/Desktop/case_003_crm_hls_boundary_layer/` | substrate / data | ≤5 min | open |
@@ -133,8 +134,14 @@ BRep but not tessellation; OCC tessellates per-face) + **V49**
 any tolerance) + **V50** (session 8 — body-bisection: 3 farfield
 bodies alone, 9 KB STL, reproduce PLC error → source CAD overlap
 proven) + **V51** (session 8 — case_003 e2e blocker is cross-repo:
-Codex `build_cad.py`, not workbench-side). V27 already
-LANDED-by-V199-bridge.
+Codex `build_cad.py`, not workbench-side) + **V52** (session 9 —
+F2 path skip `classifySurfaces` entirely; use gmsh.merge discrete
+entities) + **V53** (session 9 — Python default-arg pitfall masked
+session 7 F2 test setup bug) + **V54** (session 9 —
+`classifySurfaces(angle=180°, ...)` topology-dependent: preserves
+disjoint entities, collapses seamed) + **V55** (session 9 — F2
+bypasses `partition_surfaces_by_body`; OK for external aerodynamics).
+V27 already LANDED-by-V199-bridge.
 
 V32 needs status update next batch: **F-NEW-19 fix LANDED session 5**;
 the unworkable-default-lc issue is solved for cases that reach the
@@ -183,23 +190,26 @@ Session 7 collapsed F-NEW-24 into an artifact (gmsh tolerance) and
 confirmed F-NEW-25 is the only remaining substrate wall. The plan
 forward is now:
 
-Session 8 redirected the F-NEW-25 work — bridge-layer fixes cannot
-reach the actual root cause (F-NEW-26, source CAD overlap in Codex's
-`build_cad.py`). Workbench-side options narrow:
+Session 9 closed Option D and surfaced two real F2 path bugs from
+session 7. After the redesign, F2 path is now topology-independent
+(works on both seamed and disjoint multi-named-solid inputs) and
+provably correct on the synthetic industrial fixture.
 
-**Option D (session 9 recommended)**: F2 path validation alternative —
-build a synthetic industrial-scale (≥10k facets) multi-named-solid
-STL fixture (3-body box, non-overlapping geometry) and measure F2
-path's ~80× claim in-suite. Decouples F2 validation from case_003's
-upstream CAD bug. ~50 LOC fixture + 1 integration test.
+case_003 e2e remains blocked by F-NEW-26 (cross-repo Codex build_cad.py
+farfield overlap). Workbench-side, the only remaining items are:
 
-**Option E**: F-NEW-15 substrate dig — read Codex's `build_cad.py`
-in `~/Desktop/case_003_crm_hls_boundary_layer/` and write up a
-ticket for the cross-repo fix. ≤30 min reading.
+**Option E (session 10 recommended)**: F-NEW-15 substrate dig — read
+Codex's `build_cad.py` in `~/Desktop/case_003_crm_hls_boundary_layer/`,
+identify the farfield-overlap mechanism, write up a cross-repo ticket.
+≤30 min reading; documents what Codex needs to fix.
 
 **Option C**: F-NEW-17 fix — adjust the airframe-class extent band.
 Independent; can ship anytime. ~30-50 LOC.
 
-Recommended order: D (clears the F2 validation gap that session 7
-deferred) → E (file cross-repo ticket for case_003 unblock) → C
-(any time).
+**Option F (defensive)**: add a startup-time check that detects
+F-NEW-26-style source-CAD overlap on import (e.g., body-bisection
+HXT probe in M5.0 health check) so future cases with similar CAD
+bugs fail fast at import rather than at mesh time. ~50-80 LOC.
+
+Recommended order: E (file cross-repo ticket so Codex can fix
+case_003) → C → F.
