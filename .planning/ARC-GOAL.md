@@ -59,6 +59,7 @@
 - [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
+- [x] **M-CASE011-V2** case_011 v2 sub-session · V85 + V86 narrow-criterion fix verification · sub-DEC: `2026-05-13_v61_198_sub_case_011_v2_fix_verification.md` (2026-05-13 · V85+V86 → fix-verified · 1 case · surfaces V89 + V90 in dict-orchestration family · solver deferred to v3 sub-session per retention caveats)
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
 
 ### Tier 2 · advisor 加宽
@@ -87,13 +88,13 @@
 ```
 当前 Track C session 通过:    3 / 6   (case_010 + case_011 + case_004)
 当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED as candidate post-session-3, awaiting 2nd MRF case for promotion)
-当前 V-series 行数:          88 / 100   (methodology + runtime 同步 · V88 case_004 MRF setup advisor coverage gap landed in both corpora)
-当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_004 v1 has no mesh + no solver, +0 unchanged)
+当前 V-series 行数:          90 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · all in both corpora)
+当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v4 mesh has all 3 named regions per V85 §9 narrow criterion but cold retention 3% + solid 37% → CHT solver deferred to case_011 v3 sub-session)
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-13 (M-TRACK-3 Track C session 3 case_004 NREL MRF · retro landed · V88 compound row in both corpora · A6/A8 confirmed NOT advanced by case_004 substrate · A9 mrf_setup_advisor candidate registered · V83 overdetermined for Pillar-2 audit_verdict_semantics_advisor extraction)` · 更新人：`Claude Code Opus 4.7 session (main · Track C session 3 retro)`
+最后更新时间：`2026-05-13 (M-CASE011-V2 case_011 v2 sub-session · V85 + V86 fix-verified · 1 case in both corpora · V89 + V90 sediment as candidate cross-case patterns in dict-orchestration family · solver deferred to case_011 v3 sub-session per cold retention 3% caveat)` · 更新人：`Claude Code Opus 4.7 session (main · case_011 v2 sub-session DEC-V61-198-sub-case-011-v2-fix-verification)`
 
 ---
 
