@@ -56,7 +56,7 @@
 - [ ] **M-A4** A4 face_orientation advisor LANDED · commit: `_____`
   - 🔬 Research drafted 2026-05-13 · `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`)
   - 🚧 BLOCKED on case_013 D7 sub-session (2nd cross-topology evidence required)
-- [ ] **M-V81** V81 inlet/outlet validator closed · commit: `_____`
+- [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [ ] **M-TRACK-2** Track C session 2 · case_011 · retro: `_____`
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
@@ -86,14 +86,14 @@
 
 ```
 当前 Track C session 通过:    1 / 6   (case_010 only)
-当前 LANDED advisor:          4 / 8   (A1, A2-v2, A3, A7)
+当前 LANDED advisor:          5 / 8   (A1, A2-v2, A3, A5, A7)
 当前 V-series 行数:          84 / 100
 当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS)
 当前左半轴均分:             6.4 / 7.2
 当前右半轴均分:             8.7 / 8.7 ✓
 ```
 
-最后更新时间：`2026-05-13 (post M-DRIFT + M-A4 research)` · 更新人：`Claude Code Opus 4.7 session`
+最后更新时间：`2026-05-13 (post M-V81 close · A5 landed)` · 更新人：`Claude Code Opus 4.7 session`
 
 ---
 
