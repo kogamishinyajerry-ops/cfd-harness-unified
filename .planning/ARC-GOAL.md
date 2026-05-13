@@ -55,7 +55,7 @@
 
 - [ ] **M-A4** A4 face_orientation advisor LANDED · commit: `_____`
   - 🔬 Research drafted 2026-05-13 · `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`)
-  - 🚧 BLOCKED on case_013 D7 sub-session (2nd cross-topology evidence required)
+  - ✅ **UNBLOCKED 2026-05-13** · case_013 D7 sediment landed via DEC-V61-198-sub-case-013-D7-injection · cross-topology evidence pair complete (V79 case_012 Z-axis + V87 case_013 XY-axis · both manual-verified within tolerance) · A4 status: `ready-to-land`, next session implements `ui/backend/services/geometry_ingest/face_orientation_advisor.py`
 - [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
@@ -87,24 +87,27 @@
 ```
 当前 Track C session 通过:    2 / 6   (case_010 + case_011)
 当前 LANDED advisor:          5 / 8   (A1, A2-v2, A3, A5, A7)
-当前 V-series 行数:          86 / 100   (V85 + V86 landed 2026-05-13 · session 2)
+当前 V-series 行数:          87 / 100   (methodology V85+V86+V87; runtime V87 only · V85/V86 backfill to runtime corpus = pre-existing drift, deferred to next session)
 当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v1 mesh broken, no solver run, +0)
 当前左半轴均分:             6.4 / 7.2
 当前右半轴均分:             8.7 / 8.7 ✓
 ```
 
-最后更新时间：`2026-05-13 (post M-TRACK-2 close · V85 + V86 landed)` · 更新人：`Claude Code Opus 4.7 session`
+最后更新时间：`2026-05-13 (post case_013 D7 sediment · M-A4 unblocked · V87 added)` · 更新人：`Claude Code Opus 4.7 session`
 
 ---
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-13 session 3 末** · M-TRACK-2 闭环（retro `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md`；V85 + V86 landed to both methodology + runtime corpus via single commit per pre-commit `check_corpus_sync.py` hook · drift=clean）。Track C counter 1 → 2。第二个工业 case 验证 surfaced **3 net-new root causes** (plate sub-cell sealing + solid insidePoint geometrically inside hot fluid + .eMesh orphan in features list) that the case_011 sub-session's `cross_cuts/v_series_case_011_append_2026-05-09.md` draft V47-V50 + `evidence/v1/REPORT.md` 都漏了。Pacing **accelerated** per user direction (session 1 + session 2 same-day vs session 1 §7 ≥1 week recommendation).
+> **2026-05-13 session 4 末** · case_013 D7 sediment landed (DEC-V61-198-sub-case-013-D7-injection)。M-A4 promotion gate met (V79 case_012 Z-axis 38° + V87 case_013 XY-axis 22°), A4 advisor `drafted` → `ready-to-land`。Mesh ran end-to-end in 37s but with V83-class acceptable-fail (only 2 of 22 patches promoted at cell-size 10mm); v1 substrate adequate for D7 evidence purpose, not solver-ready.
+>
+> **Pre-existing drift surfaced**: ARC-GOAL session-3 entry claimed "V85 + V86 landed to both methodology + runtime corpus" but runtime corpus actually ended at V84 — V85/V86 are methodology-only. My commit adds V87 to both, so drift hook satisfied for this commit but V85/V86 runtime backfill remains pending.
 >
 > **下一会话候选**：
-> 1. **case_011 v2 sub-session dispatch** — 落地 V85 fix path (reposition solid insidePoint to plate centroid + bump plate-bearing surfaces to level (3, 4) + wire .eMesh files into `features ()` block per V86)；promotes V85 Status `open` → `fix-verified · 1 case` (session 1 §9 V82 pattern)
-> 2. **M-TRACK-3 Track C session 3 case_004 NREL Phase VI MRF** — rotating-machinery numerics class，sparse corpus coverage (V22-V24 only) makes this a "blind spot we don't yet know about" probe
-> 3. **case_013 D7 sub-session dispatch + land** — 解锁 M-A4 (1-2 天)
-> 4. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选项
+> 1. **M-A4 implementation** — write `ui/backend/services/geometry_ingest/face_orientation_advisor.py` per `draft_a4_face_orientation_2026-05-13.md`; case_012 + case_013 STEP files as regression test inputs (1 sub-DEC scope)
+> 2. **V85/V86 runtime corpus backfill** — propagate methodology V85+V86 rows to runtime corpus (housekeeping; ~10 minutes; closes pre-existing drift)
+> 3. **case_011 v2 sub-session dispatch** — land V85 fix path (reposition insidePoint + plate-bearing refinement + .eMesh wiring per V86)
+> 4. **M-TRACK-3 Track C session 3 case_004 NREL Phase VI MRF** — rotating-machinery numerics class probe
+> 5. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选项
 >
 > **推荐顺序**：先 case_011 v2 sub-session（V85/V86 fix-verification 自然延续；本 retro §9 已 scope；解决 1 case 的同时 V85 promote from open → fix-verified），再 M-TRACK-3（resume weekly cadence per session 1 §7，避免 same-day-multi-session 主 context 负担）。case_013 D7 解锁 M-A4 是 Tier 1 阻塞项但对 Track C arc 不直接贡献，可延后。

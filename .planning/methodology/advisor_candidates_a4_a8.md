@@ -62,10 +62,11 @@ in this doc + the V-row, INDEX.md cross-link.
 | Defect class | D7 — "wrong-normal-direction face" (`component_bank.md` L128); generalized to "component rotated from intended orientation" |
 | Signature | A face or body whose dominant face normal deviates from a declared/sibling-consensus orientation by more than a per-group tolerance (default 5°) |
 | Engineering symptom | Silent flow-pattern asymmetry (rotated diffuser vane → asymmetric jet throw), or sHM `locationInMesh` ambiguity if normal is fully reversed |
-| Current evidence | **1 / 2** (V79 case_012 first injection · case_013 dispatched · deferred) |
-| Status | `drafted` — pending case_013 sediment |
-| V-row(s) | V79 (case_012 first injection · backfilled 2026-05-12) |
+| Current evidence | **2 / 2** (V79 case_012 whole-vane Z-axis rotation 38° · V87 case_013 LE-chunk XY-axis rotation 22°) |
+| Status | **`ready-to-land` 2026-05-13** — promotion gate met. Research draft `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`) defines API; implementation path lands as `ui/backend/services/geometry_ingest/face_orientation_advisor.py`. case_012 + case_013 D7 STEP files become canonical regression tests covering Z-axis + XY-axis rotation topologies. M-A4 milestone unblocked, ready for next session implementation |
+| V-row(s) | V79 (case_012 first injection · backfilled 2026-05-12) + V87 (case_013 cross-topology completion · 2026-05-13) |
 | Sibling | Parallel to V55 (D6_advisor) and V56 (D9_advisor) advisor-gap surfacers |
+| Promotion note | First A-candidate to clear 2-case promotion gate on a tight cadence (5 days, case_012 → case_013). A2-v2 took 10-case overdetermined evidence; A4 cleared on minimum-2 because the defect class has well-defined geometric measurement (face-normal computation) — verification difficulty is low even though detection method varies with rotation-axis topology |
 
 **Pre-drafted spec**:
 
