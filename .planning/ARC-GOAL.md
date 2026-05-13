@@ -54,8 +54,10 @@
 ### Tier 1 · 解锁性（并行 ok）
 
 - [ ] **M-A4** A4 face_orientation advisor LANDED · commit: `_____`
+  - 🔬 Research drafted 2026-05-13 · `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`)
+  - 🚧 BLOCKED on case_013 D7 sub-session (2nd cross-topology evidence required)
 - [ ] **M-V81** V81 inlet/outlet validator closed · commit: `_____`
-- [ ] **M-DRIFT** Corpus drift-prevention hook · commit: `_____`
+- [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [ ] **M-TRACK-2** Track C session 2 · case_011 · retro: `_____`
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
 
@@ -91,10 +93,18 @@
 当前右半轴均分:             8.7 / 8.7 ✓
 ```
 
-最后更新时间：`2026-05-13` · 更新人：`Claude Code Opus 4.7 session`
+最后更新时间：`2026-05-13 (post M-DRIFT + M-A4 research)` · 更新人：`Claude Code Opus 4.7 session`
 
 ---
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> 2026-05-13 · 启动 M-DRIFT (spike-class · 30 LOC · 1 commit) + M-A4 research（spec drafting, code 留下一会话）。
+> **2026-05-13 session 2 末** · M-DRIFT 闭环（commit `d53afbc`，hook 已 self-tested + installed at .git/hooks/commit-msg）。M-A4 research deliverable 落档（commit `615dacb`），但 M-A4 implementation 阻塞在 case_013 D7 sub-session（需要 ≥ 2 cross-topology evidence）。
+>
+> **下一会话候选**：
+> 1. **case_013 D7 sub-session dispatch + land** — 解锁 M-A4 (1-2 天)
+> 2. **M-V81 inlet/outlet validator** — 平行 Tier 1 milestone，已有 protocol landed，validator deferred；估计 spike-class (≤30 LOC + 1 test)
+> 3. **M-TRACK-2 Track C session 2 case_011** — 启动第二个工业 case 验证 (半天 blind verdict + retro)
+> 4. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选项
+>
+> **推荐顺序**：先 M-V81（最近 spec drafted，clean closure），再 M-TRACK-2（accumulate Track C cadence），最后等机会做 case_013 解锁 M-A4。
