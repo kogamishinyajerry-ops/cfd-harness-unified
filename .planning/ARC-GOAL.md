@@ -58,7 +58,7 @@
   - 🚧 BLOCKED on case_013 D7 sub-session (2nd cross-topology evidence required)
 - [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
-- [ ] **M-TRACK-2** Track C session 2 · case_011 · retro: `_____`
+- [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
 
 ### Tier 2 · advisor 加宽
@@ -85,26 +85,26 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 Track C session 通过:    1 / 6   (case_010 only)
+当前 Track C session 通过:    2 / 6   (case_010 + case_011)
 当前 LANDED advisor:          5 / 8   (A1, A2-v2, A3, A5, A7)
-当前 V-series 行数:          84 / 100
-当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS)
+当前 V-series 行数:          86 / 100   (V85 + V86 landed 2026-05-13 · session 2)
+当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v1 mesh broken, no solver run, +0)
 当前左半轴均分:             6.4 / 7.2
 当前右半轴均分:             8.7 / 8.7 ✓
 ```
 
-最后更新时间：`2026-05-13 (post M-V81 close · A5 landed)` · 更新人：`Claude Code Opus 4.7 session`
+最后更新时间：`2026-05-13 (post M-TRACK-2 close · V85 + V86 landed)` · 更新人：`Claude Code Opus 4.7 session`
 
 ---
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-13 session 2 末** · M-DRIFT 闭环（commit `d53afbc`，hook 已 self-tested + installed at .git/hooks/commit-msg）。M-A4 research deliverable 落档（commit `615dacb`），但 M-A4 implementation 阻塞在 case_013 D7 sub-session（需要 ≥ 2 cross-topology evidence）。
+> **2026-05-13 session 3 末** · M-TRACK-2 闭环（retro `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md`；V85 + V86 landed to both methodology + runtime corpus via single commit per pre-commit `check_corpus_sync.py` hook · drift=clean）。Track C counter 1 → 2。第二个工业 case 验证 surfaced **3 net-new root causes** (plate sub-cell sealing + solid insidePoint geometrically inside hot fluid + .eMesh orphan in features list) that the case_011 sub-session's `cross_cuts/v_series_case_011_append_2026-05-09.md` draft V47-V50 + `evidence/v1/REPORT.md` 都漏了。Pacing **accelerated** per user direction (session 1 + session 2 same-day vs session 1 §7 ≥1 week recommendation).
 >
 > **下一会话候选**：
-> 1. **case_013 D7 sub-session dispatch + land** — 解锁 M-A4 (1-2 天)
-> 2. **M-V81 inlet/outlet validator** — 平行 Tier 1 milestone，已有 protocol landed，validator deferred；估计 spike-class (≤30 LOC + 1 test)
-> 3. **M-TRACK-2 Track C session 2 case_011** — 启动第二个工业 case 验证 (半天 blind verdict + retro)
+> 1. **case_011 v2 sub-session dispatch** — 落地 V85 fix path (reposition solid insidePoint to plate centroid + bump plate-bearing surfaces to level (3, 4) + wire .eMesh files into `features ()` block per V86)；promotes V85 Status `open` → `fix-verified · 1 case` (session 1 §9 V82 pattern)
+> 2. **M-TRACK-3 Track C session 3 case_004 NREL Phase VI MRF** — rotating-machinery numerics class，sparse corpus coverage (V22-V24 only) makes this a "blind spot we don't yet know about" probe
+> 3. **case_013 D7 sub-session dispatch + land** — 解锁 M-A4 (1-2 天)
 > 4. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选项
 >
-> **推荐顺序**：先 M-V81（最近 spec drafted，clean closure），再 M-TRACK-2（accumulate Track C cadence），最后等机会做 case_013 解锁 M-A4。
+> **推荐顺序**：先 case_011 v2 sub-session（V85/V86 fix-verification 自然延续；本 retro §9 已 scope；解决 1 case 的同时 V85 promote from open → fix-verified），再 M-TRACK-3（resume weekly cadence per session 1 §7，避免 same-day-multi-session 主 context 负担）。case_013 D7 解锁 M-A4 是 Tier 1 阻塞项但对 Track C arc 不直接贡献，可延后。
