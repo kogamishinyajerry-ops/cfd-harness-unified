@@ -60,6 +60,7 @@
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
 - [x] **M-CASE011-V2** case_011 v2 sub-session · V85 + V86 narrow-criterion fix verification · sub-DEC: `2026-05-13_v61_198_sub_case_011_v2_fix_verification.md` (2026-05-13 · V85+V86 → fix-verified · 1 case · surfaces V89 + V90 in dict-orchestration family · solver deferred to v3 sub-session per retention caveats)
+- [x] **M-CASE011-V3** case_011 v3 sub-session · `cellZoneInside inside` heterogeneity (V92) + STL face-label loss (V94) + chtMultiRegionSimpleFoam e2e PASS · sub-DEC: `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (2026-05-14 · v5b mesh: hot 142% / cold 115% / solid 37% retention · cold retention 3% → 115% via `cellZoneInside inside` empirically validated · solid 37% kept at insidePoint walk (V92 surfaced — `inside` ray-cast fails for fuse_many internal-void STL topology) · chtMultiRegionSimpleFoam **PASS** at 200 SIMPLE iter, no FATAL, residuals reducing 3-5 orders, T fields equilibrated to ~360 K conduction midpoint · physics degenerate caveat per V94 — case_011 STL has no labeled inlet/outlet face-zones so substrate runs sealed-conduction box not the intended flow-through HX)
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
 
 ### Tier 2 · advisor 加宽
@@ -74,7 +75,7 @@
 ### Tier 3 · 收口 + V62
 
 - [ ] **M-D9-D10** D9/D10 promotion · harvest-003 实质推进 · commit: `_____`
-- [ ] **M-XCLASS** 跨 numerics-class 第二案例 · retro: `_____`
+- [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
 - [ ] **M-TRACK-5** Track C session 5 · retro: `_____`
 - [ ] **M-TRACK-6** Track C session 6 · retro: `_____`
 - [ ] **M-V100** V-series ≥ 100 marker · commit: `_____`
@@ -88,13 +89,13 @@
 ```
 当前 Track C session 通过:    4 / 6   (case_010 + case_011 + case_004 + case_009)
 当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED post-session-4 awaiting 2nd reacting case)
-当前 V-series 行数:          91 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (Tlow patch incomplete · 14.7M warnings persist · meta-level V83 cross-application) · all in both corpora)
-当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v4 mesh has all 3 named regions per V85 §9 narrow criterion but cold retention 3% + solid 37% → CHT solver deferred to case_011 v3 sub-session; case_009 v1 cold-flow PASS [QUESTIONABLE] per V91 warning-flood evidence, ignite ran 593 μs only → reacting-low-Mach conservative count +0 until v1.5 cleanup)
+当前 V-series 行数:          94 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity (cold succeeds 3%→115% · solid regresses 37%→0%) · V93 reacting low-Mach pre-ignition T floor rule (case_009 v1.5 cleanup) · V94 case_011 STL face-label loss through cq.exporters.export — solver runs but in degenerate pure-conduction mode · all in both corpora)
+当前 e2e numerics class:     2 / 3   (compressible-buoyant-RANS · CHT-multi-stream (case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter PASS 2026-05-14 — degenerate physics caveat per V94, procedural e2e demonstrated); case_009 reacting-low-Mach v1.5 ignition 2000-step ran with V93 fix — pending Track C session 5 retro consolidation for 3rd class advance)
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-13 (M-TRACK-4 Track C session 4 · case_009 Sandia Flame D · V91 V41 sediment-state correction landed in both corpora · 4-session same-day pacing acknowledged accelerated cadence beyond session-1 §7 weekly recommendation · A10 thermo_polynomial_range_advisor candidate registered · V41 [VALIDATED]→[QUESTIONABLE] amendment deferred to separate user-ratified commit)` · 更新人：`Claude Code Opus 4.7 session (main · Track C session 4 case_009 blind advisor e2e)`
+最后更新时间：`2026-05-14 (M-CASE011-V3 case_011 v3 sub-session · V92 cellZoneInside inside heterogeneity + V94 STL face-label loss landed in both corpora · chtMultiRegionSimpleFoam PASS at 200 SIMPLE iter on v5b mesh · M-XCLASS milestone ticks ✓ · e2e numerics class 1/3 → 2/3 with CHT-multi-stream demonstrated; degenerate physics caveat per V94 documented in REPORT §5.1)` · 更新人：`Claude Code Opus 4.7 session (main · case_011 v3 sub-session DEC-V61-198-sub-case-011-v3-solver-e2e)`
 
 ---
 
