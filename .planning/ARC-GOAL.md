@@ -89,8 +89,8 @@
 当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7)
 当前 V-series 行数:          87 / 100   (methodology + runtime 同步 · 验证: 2 文件均 87 行 V-header · drift 通过 B2/B3 commit 自动消除)
 当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v1 mesh broken, no solver run, +0)
-当前左半轴均分:             6.4 / 7.2  (未重画 · 雷达图静态)
-当前右半轴均分:             8.7 / 8.7 ✓
+当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
+当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
 最后更新时间：`2026-05-13 (M-A4 LANDED · DEC-V61-198-sub-A4 · A4 advisor + 9-test suite + V79/V87 closure · LANDED counter 5→6)` · 更新人：`Claude Code Opus 4.7 session (main · M-A4 implementation)`
