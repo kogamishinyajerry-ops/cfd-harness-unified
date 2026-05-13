@@ -1154,7 +1154,7 @@ If yes → V-series. If no → F-series.
 | Engineer symptom | After F1-F5 (V75-V78) exhausted all non-trivial mesh-tuning levers on case_002a — refinement-level coarsening, sHM dict drop, STL body deletion, per-patch refinement bumps, isotropic remeshing of simple shells, bbox shell-punch surgery — v32 still failed checkMesh PASS threshold (max_skew 6.87 > 4 default). Implicit assumption driving the seven-iteration debug arc: "max_skewness > 4 means solver will diverge / crash / produce garbage". F4b tested this assumption directly. **Result inverts the assumption**: solver runs stably with no FATAL / Floating point / Killed / Segmentation signatures and bounded residuals. The 4 threshold is sHM's iteration-acceptance criterion (when sHM rejects a candidate cell, it backs off and re-snaps), not a forecast about solver behavior on the final mesh |
 | Root cause | OpenFOAM `meshQualityControls.maxSkewness 4` default is the **sHM mesh-generation accept-reject threshold**, calibrated for sHM's own iterative snap algorithm — sHM uses it to decide "is this candidate snap geometrically valid". It is conservative because sHM doesn't know what solver will run downstream nor what numerical schemes will absorb skewness. Production solver schemes — specifically (a) `cellLimited Gauss linear 1` for grads bounds the gradient at each cell face so skew-induced gradient errors can't propagate, (b) `bounded Gauss upwind` for divs treats convective transport with maximum stability, (c) `Gauss linear limited 0.5` for laplacian applies a 0.5-strength skewness correction (industry-standard tolerable-skewness handling), (d) `nNonOrthogonalCorrectors 5` in potentialFoam + `2` in main loop iterates the pressure equation enough to absorb residual non-orthogonality coupling — provide layered tolerance for max_skewness 6-8. Combined system rejects skewness as a numerical concern below ~8 with these schemes. **The 4 threshold and the 8 wall are TWO DIFFERENT THRESHOLDS**: 4 = sHM-default reject-wall (conservative, geometric); 8 = where production schemes stop absorbing (numerical, scheme-dependent). v32 at 6.87 sits comfortably between them |
 | Fix | None needed — F4b empirically validates that v32 (best-of-7-iter mesh state) is solver-viable as-is. The seven-iteration debug arc V73-V78 had diminishing returns; the right exit condition was "solver runs stably" not "max_skewness < 4". **Methodology fix for future industrial cases**: when mesh quality drops below sHM's 4 default but holds above the 8 numerical wall (5-7 range), run a **5-minute solver smoke test FIRST** before pursuing more mesh-tuning interventions. If smoke-test passes (no FATAL in 50 SIMPLE iterations), accept the mesh and move on. Mesh quality is a numerical safety margin per existing Pattern 3 — but the size of the margin needed depends on scheme choice, not on sHM defaults. **Documentary edit**: sHM `meshQualityControls.maxInternalSkewness 3 → 8` carried forward in case_002a snappyHexMeshDict so future sHM runs on this geometry won't fight the threshold. **Workflow-level fix**: `09_run_solver.sh` should `make distclean-times` or check time-dir-vs-polyMesh cell-count compatibility before `startFrom latestTime` engagement — the first F4b launch failed on stale 500/U from a prior 3.16M-cell mesh run because no auto-cleanup happens between mesh-rebuild cycles (Foam `internalField` size mismatch error after potentialFoam read at time=500) |
-| Status | preliminary positive — empirically observed through step 213/3000 (7%). Full 3000-step convergence pending ~13 more hours of wall-clock; late-stage divergence (if any appears) becomes a separate V-row, does NOT contradict V84's core claim "solver runs without crashing on max_skew 6.87". DEC-V61-198 final "Not validated · Solver execution from Claude Code Bash" item — **operationally validated**: Claude Code session drove the entire pipeline end-to-end from a single chat window (geometry ingest case_002a-history → mesh build → 7-iter mesh debug V73-V78 → STL surgery V75 F2.1 → naming.yaml audit V74 → schema drift fix V73 → BC write → potentialFoam warm-start → buoyantSimpleFoam live convergence), no human-handoff for any step. **Open follow-ups**: (1) restore apu_intake patch (requires STL surgery on body_1 louver per V75) to recover correct outlet physics — current run uses farfield_cylinder as relief, scientifically valid but not the engineering scenario; (2) post-mortem at step 3000 to populate "did it actually steady-state converge" vs "did it just not crash" |
+| Status | **closed positive** — solver ran cleanly for **2689 SIMPLE iters** (ExecutionTime 37460 s = 10.4 h CPU; ClockTime 39403 s = 10.95 h wall) before user-invoked early stop via runtime `controlDict.stopAt writeNow` (originally targeted endTime=3000; halted at ~89% per user decision once stability was sufficiently demonstrated). Convergence trajectory: p_rgh initial residual climbed from 0.22 (step 100) → plateaued at **0.39-0.54 (steps 500-2689)** — flow is **statistically stable but NOT numerically converged to steady state**. T bounded throughout — Tmax 804-855 K (oscillating around ~830-840 mean, never clamped at 200/1500 K limits); Tmin 316-321 K (tight). Cumulative continuity drift: -0.027 (step 500) → -0.061 (step 2689) — ~6% mass deficit growing slowly, sign of imperfect farfield-as-outlet mass-conservation given missing dedicated `apu_intake` outlet. limitVelocity stable at 5-6% cells clamped at 150 m/s (combustor jet zone). **Diagnosis**: the case did not steady-state because (a) missing dedicated outlet patch — flow exits via `farfield_cylinder` zeroGradient, which is mass-conservative only in the integral sense not the local sense; (b) buoyant plume + combustor jet interaction is intrinsically unsteady, requires `buoyantPimpleFoam` (transient) rather than `buoyantSimpleFoam` (steady-state) for a numerically converged answer. **Mesh quality was never the bottleneck** — max_skew 6.87 / 20-skew-face mesh absorbed 2689 SIMPLE iters with zero FATAL / FPE / Killed / Segmentation signatures and bounded fields throughout. DEC-V61-198 final "Not validated · Solver execution from Claude Code Bash" item — **operationally validated**: Claude Code session drove the entire pipeline end-to-end from a single chat window (geometry ingest case_002a-history → mesh build → 7-iter mesh debug V73-V78 → STL surgery V75 F2.1 → naming.yaml audit V74 → schema drift fix V73 → BC write → potentialFoam warm-start → buoyantSimpleFoam 10.4 h live run → user-invoked clean early stop via runtime controlDict edit), no human-handoff for any step. **Open follow-ups** (NOT scope of F4b): (1) restore apu_intake patch via STL surgery on body_1 louver per V75 to recover correct outlet physics; (2) switch to `buoyantPimpleFoam` if true unsteady physics is needed, or accept time-averaged statistical-steady from a longer simpleFoam run after (1); both blocked on (1) |
 | Reference case | APU bay case_002a F4b · `~/Desktop/apu-bay-ventilation/case/log/05_solver.log` (initial bz2cqh4sv background task; OpenFOAM 2312 docker container `966d36c69cba`); preceding mesh state from RESUME `.planning/case_profiles/case_002a_RESUME.md`; controlDict endTime=3000 + writeInterval=50; fvSchemes/fvSolution as described above |
 | Lesson | **Two big lessons.** (1) **The implicit-threshold trap**: a seven-iteration mesh debug arc (V73-V78) was driven by the implicit assumption that sHM's `maxSkewness 4` default = solver-instability ceiling. It is not. It is a mesh-generator-internal threshold tuned for sHM's snap algorithm, calibrated conservatively because sHM doesn't know your downstream numerics. Production solver schemes (cellLimited + bounded upwind + limited laplacian + non-ortho correctors) absorb 6-8 routinely. The right diagnostic question for industrial CFD is NOT "does mesh pass checkMesh defaults" but **"does the solver run cleanly for ~50 iters with the schemes I plan to use"**. Five minutes of solver smoke beats seven hours of mesh debug. (2) **Strategic claim closure for DEC-V61-198**: Claude Code session window drove the COMPLETE workflow — geometry / mesh-build / mesh-debug / mesh-arc-sedimentation (V73-V78) / BC write / solver launch / live convergence monitoring — without leaving the chat. The four DEC-V61-198 pillars (Run-and-correct · Sediment-as-you-go · Strategic narrative coherence · Solver execution from Bash) now all have empirical session-evidence on the same case_002a. **Connecting V84 to existing patterns**: confirms Pattern 3 ("Mesh quality is a numerical safety margin") with new precision — the margin's size depends on scheme choice, not sHM defaults. Confirms Pattern 1 ("Zero IC is the universal first-iter killer") — potentialFoam warm-start was essential here too. Suggests new Pattern candidate: **"sHM mesh-quality defaults are mesh-generator-internal thresholds, not solver-stability forecasts"** (validation pending: a 2nd industrial case where production schemes absorb max_skew 6-8 → promote to confirmed pattern). **Counter row**: autonomous_governance: true (session ran the entire pipeline without external gate; F4b decision-to-launch was main-session reasoning, no DEC required for solver-launch verification per v2.3 scope-driven rule — single-test mode, no schema break, no governance change) |
 
@@ -1221,45 +1221,51 @@ explicitly so AI Diagnose can suggest "your case is class
 compressible-buoyant-RANS, here are the 6 V-findings that apply
 even though you're using a different solver family".
 
-## Corpus sync arrears (2026-05-13 · open methodology gap)
+## Corpus sync arrears (synced through V84 as of 2026-05-14)
 
 `docs/openfoam_corpus/industrial_solver_findings_v_series.md` (consumed by
 `ui/backend/services/ai_advisor/corpus_loader.py`, which feeds the N6
 `/ai-review` and `/ai-diagnose` routes) is the **runtime advisor copy** of
-this file. The two are intended to be kept in sync.
+this file. The two are kept in sync.
 
-**As of 2026-05-13, the runtime copy is V57-high.** This file is V84-high.
-**V58 through V84 (27 V-rows) + the V46 2026-05-13 amendment** are NOT
-visible to the shipped advisor routes. Findings in this drift band include
-substantive solver / mesh / advisor lessons across case_003/004/005/006/
-007/008/009/010/011/012/015/016/002a — the corpus is materially behind the
-case-sediment harness.
+**Status 2026-05-14**: runtime copy is **synced through V84**. The
+V58..V84 backfill (27 V-rows) + V46 2026-05-13 amendment landed in
+`docs/openfoam_corpus/industrial_solver_findings_v_series.md` this
+session, closing the 27-row arrears originally surfaced by Codex review
+on `e56f160..e89a88f` (P2 finding · "patch does not make case_010 lessons
+available to advisor routes"). Verification: `test_n6_1_corpus_loader.py`
+25/25 PASS · `test_ai_advisor_contract.py` PASS · `test_n6_5_offline_fallback.py`
+PASS · ad-hoc `find_relevant("STL scale", top_k=3)` returns V82 as the
+top hit.
 
-Surfaced by Codex review on `e56f160..e89a88f` (2026-05-13, P2 finding):
-"For any `/ai-review` or `/ai-diagnose` request that needs the case_010
-lessons, this patch does not actually make them available to the advisor
-routes." The narrow Codex finding (V82/V83/V46-amendment unsynced) is in
-fact a symptom of a wider 27-row sync arrears.
+**Drift-prevention proposal** (sediment hardening, NOT scope of this
+sync commit):
 
-**Resolution path** (deferred to a dedicated sync commit, NOT bundled into
-the Codex-verified trailer commit that surfaces this note):
+The 27-row arrears built up because the runtime copy is hand-synced
+after sediment lands here; nothing fails fast when the two diverge.
+Three drift-prevention options, in increasing rigor:
 
-1. Append V58..V84 + the V46 amendment block to
-   `docs/openfoam_corpus/industrial_solver_findings_v_series.md` in
-   order, preserving the row structure (Surface / Engineer symptom /
-   Root cause / Fix / Status / Reference case / Lesson)
-2. Verify `corpus_loader.py` ingests the updated file (re-run
-   `tests/test_n6_1_corpus_loader.py` + ad-hoc query for "STL scale"
-   to confirm V82 surfaces)
-3. Update this section to "synced through V<N> as of <date>"
-4. Promote sync discipline into a hook or scheduled
-   sediment-end-of-session check so the drift can't grow past
-   ~5 rows again
+1. **Lightweight pre-commit hook** — when this file changes, fail the
+   commit if `docs/openfoam_corpus/industrial_solver_findings_v_series.md`
+   was not touched in the same commit (or carry an explicit
+   `Corpus-sync-defer: <reason>` trailer to opt out for trailer-only
+   commits). Cheap, surfaces drift at the latest possible safe point.
+2. **Per-session sediment-end check** — at session close, diff `^### V`
+   header counts between methodology and runtime copy; if the methodology
+   is ahead by ≥1 V-row, emit a sediment-end warning routing to a
+   `/corpus-sync` flow. Less mechanical but easier to ignore.
+3. **Make the runtime copy a generated artifact** — derive
+   `docs/openfoam_corpus/industrial_solver_findings_v_series.md` from
+   methodology via a content-stripping transform (drop the Quick-lookup
+   index + governance frontmatter; keep V-rows + Cross-cutting + How-to-add).
+   Eliminates drift structurally but requires careful handling of the
+   intentional differences (notably the runtime copy currently has no
+   Quick-lookup index by design — it's a corpus-loader-ingested doc,
+   not a human-navigated one).
 
-**Why deferred**: a 27-row sync is a non-trivial doc edit that warrants
-its own focused commit; bundling it into a Codex-verified trailer
-muddies both the trailer's audit value and the sync commit's scope.
-Next session that opens this V-series file is the natural pickup.
+**Recommendation**: option 1 first (one-commit reach), with option 3
+deferred to a later "advisor corpus pipeline" DEC if drift recurs after
+option 1 is in place.
 
 ## How to add a new V-finding
 
