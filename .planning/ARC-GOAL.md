@@ -67,7 +67,7 @@
 - [ ] **M-A8** A8 shm_dict_validator advisor LANDED · commit: `_____`
 - [ ] **M-A5** A5 unallocated 填充 · 候选 drafted · commit: `_____`
 - [ ] **M-D6** D6 advisor promotion drafted → ready-to-land · commit: `_____`
-- [ ] **M-TRACK-3** Track C session 3 · case_004 NREL MRF · retro: `_____`
+- [x] **M-TRACK-3** Track C session 3 · case_004 NREL MRF · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_3_case_004.md` (2026-05-13 · surfaced V88 compound row — MRF setup advisor coverage gap · 3rd cross-application of V83 across audit surfaces · A6/A8 2nd-evidence NOT produced by case_004 substrate · A9 mrf_setup_advisor candidate registered)
 - [ ] **M-TRACK-4** Track C session 4 · case_009 Sandia Flame D · retro: `_____`
 
 ### Tier 3 · 收口 + V62
@@ -85,15 +85,15 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 Track C session 通过:    2 / 6   (case_010 + case_011)
-当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7)
-当前 V-series 行数:          87 / 100   (methodology + runtime 同步 · 验证: 2 文件均 87 行 V-header · drift 通过 B2/B3 commit 自动消除)
-当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v1 mesh broken, no solver run, +0)
+当前 Track C session 通过:    3 / 6   (case_010 + case_011 + case_004)
+当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED as candidate post-session-3, awaiting 2nd MRF case for promotion)
+当前 V-series 行数:          88 / 100   (methodology + runtime 同步 · V88 case_004 MRF setup advisor coverage gap landed in both corpora)
+当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_004 v1 has no mesh + no solver, +0 unchanged)
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-13 (M-A4 LANDED · DEC-V61-198-sub-A4 · A4 advisor + 9-test suite + V79/V87 closure · LANDED counter 5→6)` · 更新人：`Claude Code Opus 4.7 session (main · M-A4 implementation)`
+最后更新时间：`2026-05-13 (M-TRACK-3 Track C session 3 case_004 NREL MRF · retro landed · V88 compound row in both corpora · A6/A8 confirmed NOT advanced by case_004 substrate · A9 mrf_setup_advisor candidate registered · V83 overdetermined for Pillar-2 audit_verdict_semantics_advisor extraction)` · 更新人：`Claude Code Opus 4.7 session (main · Track C session 3 retro)`
 
 ---
 
