@@ -23,7 +23,7 @@
 | **A6** — `hvac_adpi.py` ADPI/throw/dumping post-processor | case_012 v1 sediment | 1 sediment + N dispatched (012/015 likely) | 1 × MED / 150 LOC = LOW | DEFER until 2nd HVAC-class case |
 | **A7** — `step_canonicalizer.py` | V80 (case_012 backfill 2026-05-13 + cross-cuts case_002a / case_005 / case_011) | **4 sediment · LANDED 2026-05-12** | ~115 LOC source + 10-test suite | **DONE — was #3; closed by Claude Code main session 2026-05-12 by DEC-V61-198-sub-A7** |
 | **A8** — `shm_dict_validator.py` | V52 (case_012) | 1 sediment + N dispatched (HVAC-class + porous filter likely) | 1 × MED / 120 LOC = LOW | DEFER until 2nd typo-class case |
-| **A4** — face-orientation advisor | V79/case_012 + V87/case_013 sedimented 2026-05-13 | **2 sediment** | 2 × MED / 200 LOC = LOW-MED | **READY-TO-LAND** — promotion gate met. Draft `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`). Implementation: `ui/backend/services/geometry_ingest/face_orientation_advisor.py` next session |
+| **A4** — face-orientation advisor | V79/case_012 + V87/case_013 sedimented 2026-05-13 | **2 sediment · LANDED 2026-05-13** | ~260 LOC source + 9-test suite | **DONE — closes V79 + V87 [QUESTIONABLE] markers; M-A4 Tier 1 milestone met (DEC-V61-198-sub-A4-face-orientation-advisor)** |
 | **A5** — `inlet_outlet_validator.py` | V81 (case_012 backfill 2026-05-13) closure | 1 sediment + 6 dispatched at risk · **LANDED 2026-05-13** | ~210 LOC source + 9-test suite | **DONE — closes V81 partial; M-V81 milestone met (DEC-V61-198-sub-A5-inlet-outlet-validator)** |
 | **A1** — `cad_ingest_freecad.py` (CATIA + unit-context) | V1, V20, V24 | 3 sediment | 3 × MED / 100 LOC = MED | DEFER until A2-v2 lands (queued) |
 | **D6_advisor** (extra-body-in-fluid) | case_016 + case_018 dispatched · case_016 V55 sediment 2026-05-11 | **1 sediment + 1 dispatched** | speculative · spec drafted | DEFER until case_018 sediment · spec: `methodology/advisor_candidates_a4_a8.md` |
@@ -69,7 +69,7 @@ Harvest 003 reality (1 sub-session cycle later):
 | D4 (sliver) | 006 = 1× | A3 (likely wrong; V31) | **0× UNCOVERED** beyond case_006; carry to next batch |
 | D5 (mis-aligned shared face) | 011, 015 = 2× | A2 + sub-µm extension (none) | First D5 in case_011 v1 sediment |
 | D6 (extra body in fluid) | 016, 018 = 2× | NONE | Phase 3-4 dispatched-deferred |
-| D7 (face-orientation) | 012, 013 = 2× sedimented 2026-05-13 | NONE landed; both used manual FreeCAD verification | A4 **ready-to-land** · V79 + V87 (cross-topology gate met) |
+| D7 (face-orientation) | 012, 013 = 2× sedimented 2026-05-13 | **A4 LANDED 2026-05-13** (DEC-V61-198-sub-A4) | V79 + V87 closed; both regressions pinned in 9-test suite |
 | D8 (thin shell) | 002b/003/004/007/008/010/011/014/017 = **9×** | thin_wall_advisor [VALIDATED] | Strongest arc |
 | D9 (over-simplification) | 016, 017, 020 = 3× | NONE | Phase 3-4 dispatched-deferred |
 | D10 (open shell) | 020 = 1× | health_check (LANDED, watertight check) | Deeper open-shell pattern beyond watertight |

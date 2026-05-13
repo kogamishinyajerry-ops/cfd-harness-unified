@@ -53,9 +53,9 @@
 
 ### Tier 1 · 解锁性（并行 ok）
 
-- [ ] **M-A4** A4 face_orientation advisor LANDED · commit: `_____`
+- [x] **M-A4** A4 face_orientation advisor LANDED · commit: `PENDING_SHA` (2026-05-13 · DEC-V61-198-sub-A4)
   - 🔬 Research drafted 2026-05-13 · `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`)
-  - ✅ **UNBLOCKED 2026-05-13** · case_013 D7 sediment landed via DEC-V61-198-sub-case-013-D7-injection · cross-topology evidence pair complete (V79 case_012 Z-axis + V87 case_013 XY-axis · both manual-verified within tolerance) · A4 status: `ready-to-land`, next session implements `ui/backend/services/geometry_ingest/face_orientation_advisor.py`
+  - ✅ **LANDED 2026-05-13** · `ui/backend/services/geometry_ingest/face_orientation_advisor.py` + 9-test suite. V79 + V87 [QUESTIONABLE] → [VALIDATED] in both methodology + runtime corpora. Pure dict-consumer (mirrors A5 pattern); regression tests pin V79 38.000° + V87 21.979° ground-truth measurements
 - [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
@@ -86,27 +86,26 @@
 
 ```
 当前 Track C session 通过:    2 / 6   (case_010 + case_011)
-当前 LANDED advisor:          5 / 8   (A1, A2-v2, A3, A5, A7)  · A4 ready-to-land
+当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7)
 当前 V-series 行数:          87 / 100   (methodology + runtime 同步 · 验证: 2 文件均 87 行 V-header · drift 通过 B2/B3 commit 自动消除)
 当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v1 mesh broken, no solver run, +0)
 当前左半轴均分:             6.4 / 7.2  (未重画 · 雷达图静态)
 当前右半轴均分:             8.7 / 8.7 ✓
 ```
 
-最后更新时间：`2026-05-13 (post 3-parallel-sessions verify · drift claim retracted · A4 ready)` · 更新人：`Claude Code Opus 4.7 session (main · 验收)`
+最后更新时间：`2026-05-13 (M-A4 LANDED · DEC-V61-198-sub-A4 · A4 advisor + 9-test suite + V79/V87 closure · LANDED counter 5→6)` · 更新人：`Claude Code Opus 4.7 session (main · M-A4 implementation)`
 
 ---
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-13 session 4 末** · case_013 D7 sediment landed (DEC-V61-198-sub-case-013-D7-injection)。M-A4 promotion gate met (V79 case_012 Z-axis 38° + V87 case_013 XY-axis 22°), A4 advisor `drafted` → `ready-to-land`。Mesh ran end-to-end in 37s but with V83-class acceptable-fail (only 2 of 22 patches promoted at cell-size 10mm); v1 substrate adequate for D7 evidence purpose, not solver-ready.
+> **2026-05-13 session 5 末** · M-A4 LANDED (DEC-V61-198-sub-A4-face-orientation-advisor)。Tier 1 advisor-land milestones now 4/4 complete (M-A4 + M-V81 + M-DRIFT + M-TRACK-2 all `[x]`); only optional M-APU-RESTORE remains in Tier 1. LANDED advisor counter 5 → 6 (A1, A2-v2, A3, A4, A5, A7). A4 ships as pure dict-consumer mirroring A5 — FreeCAD normal extraction stays caller-side, keeping the advisor side-effect-free and the 9-test suite running in 0.06s without a CAD-library runtime dep. V79 + V87 status flipped to [VALIDATED] in both methodology + runtime corpora; drift hook parity satisfied in the same commit.
 >
-> **Pre-existing drift surfaced**: ARC-GOAL session-3 entry claimed "V85 + V86 landed to both methodology + runtime corpus" but runtime corpus actually ended at V84 — V85/V86 are methodology-only. My commit adds V87 to both, so drift hook satisfied for this commit but V85/V86 runtime backfill remains pending.
+> **下一会话候选**（M-A4 已完成 · 从清单移除）：
+> 1. **M-A6** A6 hvac_adpi post-processor — Tier 2 advisor widen · case_012 V52 + 2nd HVAC-class sediment trigger
+> 2. **M-A8** A8 shm_dict_validator — Tier 2 advisor widen · V86 (case_011 features-list orphaning) + V52 (case_012 typo) two-case promotion gate
+> 3. **M-TRACK-3** Track C session 3 case_004 NREL Phase VI MRF — rotating-machinery numerics class probe
+> 4. **case_011 v2 sub-session dispatch** — land V85 fix path + e2e numerics class +1 (CHT-multi-stream)
+> 5. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选收口
 >
-> **下一会话候选**（V85/V86 runtime backfill 已完成 · 从清单移除）：
-> 1. **M-A4 implementation** — write `ui/backend/services/geometry_ingest/face_orientation_advisor.py` per `draft_a4_face_orientation_2026-05-13.md`; case_012 + case_013 STEP files as regression test inputs · 闭合 Tier 1 最后一个 advisor land milestone（除可选 M-APU-RESTORE）
-> 2. **case_011 v2 sub-session dispatch** — land V85 fix path (reposition insidePoint + plate-bearing refinement + .eMesh wiring per V86)；同时让 e2e numerics class 计数 +1（CHT-multi-stream 成为第 2 个）
-> 3. **M-TRACK-3 Track C session 3 case_004 NREL Phase VI MRF** — rotating-machinery numerics class probe · resume weekly cadence per session 1 §7
-> 4. **M-APU-RESTORE** APU bay STL surgery — Tier 1 可选项
->
-> **推荐**：**并行启动 (a) M-A4 implementation + (b) case_011 v2**。两者都是单 milestone 完整闭环（M-A4 是 advisor stack code · case_011 v2 是 substrate work），文件路径互不交叉（M-A4 主仓 services/ · case_011 v2 外部 substrate）。M-TRACK-3 等本周晚些（避免今天 Track C 双场次过密）。
+> **推荐**：**M-TRACK-3 Track C session 3** — Tier 1 advisor stack is structurally complete; the next leverage point is **validating that the advisor stack actually drives Track C session decisions on a NEW numerics class** (rotating-machinery MRF). This moves the ARC-GOAL counters that matter most: Track C through-put (2→3), end-to-end numerics class (1→2 if solver runs). M-A6/M-A8 are Tier 2 widening that benefits from more cross-topology evidence first; running Track C session 3 generates that evidence.
