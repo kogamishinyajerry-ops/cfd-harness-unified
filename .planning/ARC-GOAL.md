@@ -60,7 +60,7 @@
 - [x] **M-DRIFT** Corpus drift-prevention hook · commit: `d53afbc` (2026-05-13)
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
 - [x] **M-CASE011-V2** case_011 v2 sub-session · V85 + V86 narrow-criterion fix verification · sub-DEC: `2026-05-13_v61_198_sub_case_011_v2_fix_verification.md` (2026-05-13 · V85+V86 → fix-verified · 1 case · surfaces V89 + V90 in dict-orchestration family · solver deferred to v3 sub-session per retention caveats)
-- [x] **M-CASE011-V3** case_011 v3 sub-session · `cellZoneInside inside` heterogeneity (V92) + STL face-label loss (V94) + chtMultiRegionSimpleFoam e2e PASS · sub-DEC: `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (2026-05-14 · v5b mesh: hot 142% / cold 115% / solid 37% retention · cold retention 3% → 115% via `cellZoneInside inside` empirically validated · solid 37% kept at insidePoint walk (V92 surfaced — `inside` ray-cast fails for fuse_many internal-void STL topology) · chtMultiRegionSimpleFoam **PASS** at 200 SIMPLE iter, no FATAL, residuals reducing 3-5 orders, T fields equilibrated to ~360 K conduction midpoint · physics degenerate caveat per V94 — case_011 STL has no labeled inlet/outlet face-zones so substrate runs sealed-conduction box not the intended flow-through HX)
+- [x] **M-CASE011-V3** case_011 v3 sub-session · `cellZoneInside inside` heterogeneity (V92) + STL face-label loss (V94) + chtMultiRegionSimpleFoam e2e PASS · commit: `45d046f` · sub-DEC: `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (2026-05-14 · v5b mesh: hot 142% / cold 115% / solid 37% retention · cold retention 3% → 115% via `cellZoneInside inside` empirically validated · solid 37% kept at insidePoint walk (V92 surfaced — `inside` ray-cast fails for fuse_many internal-void STL topology) · chtMultiRegionSimpleFoam **PASS** at 200 SIMPLE iter, no FATAL, residuals reducing 3-5 orders, T fields equilibrated to ~360 K conduction midpoint · physics degenerate caveat per V94 — case_011 STL has no labeled inlet/outlet face-zones so substrate runs sealed-conduction box not the intended flow-through HX)
 - [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
 
 ### Tier 2 · advisor 加宽
@@ -75,7 +75,7 @@
 ### Tier 3 · 收口 + V62
 
 - [ ] **M-D9-D10** D9/D10 promotion · harvest-003 实质推进 · commit: `_____`
-- [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
+- [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · commit: `45d046f` · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
 - [ ] **M-TRACK-5** Track C session 5 · retro: `_____`
 - [ ] **M-TRACK-6** Track C session 6 · retro: `_____`
 - [ ] **M-V100** V-series ≥ 100 marker · commit: `_____`
