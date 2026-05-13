@@ -69,7 +69,7 @@
 - [ ] **M-A5** A5 unallocated 填充 · 候选 drafted · commit: `_____`
 - [ ] **M-D6** D6 advisor promotion drafted → ready-to-land · commit: `_____`
 - [x] **M-TRACK-3** Track C session 3 · case_004 NREL MRF · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_3_case_004.md` (2026-05-13 · surfaced V88 compound row — MRF setup advisor coverage gap · 3rd cross-application of V83 across audit surfaces · A6/A8 2nd-evidence NOT produced by case_004 substrate · A9 mrf_setup_advisor candidate registered)
-- [ ] **M-TRACK-4** Track C session 4 · case_009 Sandia Flame D · retro: `_____`
+- [x] **M-TRACK-4** Track C session 4 · case_009 Sandia Flame D · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_4_case_009.md` (2026-05-13 · surfaced V91 — V41 sediment-state correction (Tlow=200K patch incomplete: 13/53 species at 300K incl. N2/AR/CH3O · 14.7M warning lines in production logs · 08b mech-loader doesn't automate V41 patch) · 4th cross-application of V83 intent-cross-reference pattern (NEW: V-series sediment-status as verifiable artifact class) · A6/A8 2nd-evidence NOT produced by case_009 substrate (foreclosed by-construction: no HVAC, blockMesh-only no sHM) · A10 thermo_polynomial_range_advisor candidate registered · V41 status amendment [VALIDATED]→[QUESTIONABLE] deferred to separate commit per retro §6)
 
 ### Tier 3 · 收口 + V62
 
@@ -86,15 +86,15 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 Track C session 通过:    3 / 6   (case_010 + case_011 + case_004)
-当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED as candidate post-session-3, awaiting 2nd MRF case for promotion)
-当前 V-series 行数:          90 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · all in both corpora)
-当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v4 mesh has all 3 named regions per V85 §9 narrow criterion but cold retention 3% + solid 37% → CHT solver deferred to case_011 v3 sub-session)
+当前 Track C session 通过:    4 / 6   (case_010 + case_011 + case_004 + case_009)
+当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED post-session-4 awaiting 2nd reacting case)
+当前 V-series 行数:          91 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (Tlow patch incomplete · 14.7M warnings persist · meta-level V83 cross-application) · all in both corpora)
+当前 e2e numerics class:     1 / 3   (compressible-buoyant-RANS; case_011 v4 mesh has all 3 named regions per V85 §9 narrow criterion but cold retention 3% + solid 37% → CHT solver deferred to case_011 v3 sub-session; case_009 v1 cold-flow PASS [QUESTIONABLE] per V91 warning-flood evidence, ignite ran 593 μs only → reacting-low-Mach conservative count +0 until v1.5 cleanup)
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-13 (M-CASE011-V2 case_011 v2 sub-session · V85 + V86 fix-verified · 1 case in both corpora · V89 + V90 sediment as candidate cross-case patterns in dict-orchestration family · solver deferred to case_011 v3 sub-session per cold retention 3% caveat)` · 更新人：`Claude Code Opus 4.7 session (main · case_011 v2 sub-session DEC-V61-198-sub-case-011-v2-fix-verification)`
+最后更新时间：`2026-05-13 (M-TRACK-4 Track C session 4 · case_009 Sandia Flame D · V91 V41 sediment-state correction landed in both corpora · 4-session same-day pacing acknowledged accelerated cadence beyond session-1 §7 weekly recommendation · A10 thermo_polynomial_range_advisor candidate registered · V41 [VALIDATED]→[QUESTIONABLE] amendment deferred to separate user-ratified commit)` · 更新人：`Claude Code Opus 4.7 session (main · Track C session 4 case_009 blind advisor e2e)`
 
 ---
 
