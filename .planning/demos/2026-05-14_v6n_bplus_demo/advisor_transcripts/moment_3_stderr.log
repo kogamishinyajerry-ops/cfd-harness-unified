@@ -1,0 +1,406 @@
+Reading additional input from stdin...
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+model: gpt-5.4
+provider: OpenAI
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019e1f63-91a5-73b2-8d3f-1bcddcc5232b
+--------
+user
+# AI Advisor Moment 3 — "Which upgrade path under 7-day ARM 4-core budget?"
+
+## Context for the model
+
+You are the AI advisor in cfd-harness-unified. The engineer accepted your Moment-2 diagnosis (30 % bay-temperature deficit is dominated by numerical dissipation, with missing radiation as compounding secondary). They now need to choose among the four upgrade paths you previously offered, under a hard budget: ARM 4-core only (no HPC), 7 calendar days, 1 engineer time-share. They want your prioritization, not a final pick — they decide.
+
+**Constraints they've already absorbed:**
+
+- ARM 4-core MPI peak ≈ 12-15 cell-iter/s/core on this case → 943k cells × 2000 iters ≈ 35 hours wall-clock per run baseline
+- ENGINEERING_CAVEAT.md already documented the 4 paths you offered in Moment 2:
+  1. Tier-1 numerical upgrade (backward 2nd-order + adjustTimeStep + LUST/linearUpwind + nOuterCorr=8) — previously ETA-estimated 7 days, marked "resource-mismatched" → effectively unaffordable here
+  2. Steady-state solver chain (buoyantSimpleFoam / buoyantBoussinesqSimpleFoam) — previously 5 failed attempts (numerical avalanche ρ → 1e+10, ω → 1e+42 at iter 4-10) → strong negative prior
+  3. Boussinesq from scratch (independent dir, incompressible BC, transportProperties) — 1-2h setup + 4-8h solve, gives "true steady balance field" without compressibility chain instability
+  4. CHT two-region (chtMultiRegionFoam) + radiation P1 model — captures conduction inside solid bodies + radiative coupling (~30 % of convective heat flux on 14 high-T bodies)
+
+**Corpus references available:**
+
+- **V5/V6/V7** — buoyant-compressible IC chain death modes (validate path 2 negative prior)
+- **V15** — fluid-internal numerics inherit across solver families (relevant to path 4 chtMultiRegionFoam — most v6N findings will transfer)
+- **S5 playbook** — buoyant + jet + suction-outlet + k-ω SST startup instability under SIMPLE iteration (codifies why path 2 keeps failing)
+
+## Engineer's input (paste-ready)
+
+```
+OK so my budget is hard:
+  - ARM 4-core only, no HPC access
+  - 7 calendar days end-to-end (Mon-Sun)
+  - I'm the only engineer; ~5h/day on this
+
+Of the four paths you offered, which should I do first? I want
+priority not single-pick. I'm worried path-4 (CHT + radiation)
+sounds best on paper but eats my whole budget on setup with
+nothing to show by Wednesday. And I don't want to repeat path-2
+(SIMPLE) when V5/V6/V7 already burned us 5 times.
+```
+
+## Required output shape
+
+Respond as the workbench advisor would:
+
+1. **Quick verdict** — ordered priority of the 4 paths (1=do first, 4=skip), one sentence each
+2. **Why this order** — 3-4 bullets on the prioritization logic (calendar exposure + physics ROI + repeatable failure avoidance)
+3. **Concrete week plan** — a Mon-Sun schedule mapping the priorities onto the 7-day budget, with explicit "what gets shipped if I have to stop on Wednesday vs Friday vs Sunday" milestones
+4. **What I'm explicitly NOT recommending** — name the path you're deprioritizing and why (so the engineer sees you considered it)
+5. **One question back to the engineer** — what would change your prioritization if they answered it (e.g., "is the radiation contribution actually needed for the sizing decision, or just for completeness?")
+6. **Reminder** — final pick is the engineer's, not yours; you optimized for ROI under stated constraints which may be wrong
+
+**Style constraints:**
+- Total length 350-500 words (this is the meatiest Moment, 90-second video)
+- Use a small table for the week plan (Mon/Tue/Wed/Thu/Fri/Sat/Sun → activity → milestone)
+- Engineer-to-engineer tone; respect that they pushed back ("I don't want to repeat path-2")
+- Don't sandbag — give a clear #1 priority, not "it depends"
+- End with the advisory-only reminder
+codex
+I’m reading the local evidence behind the four paths first so the ranking is anchored to the recorded failure modes and setup costs, not just the pasted summary.
+exec
+/bin/zsh -lc 'rg --files .' in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 0ms:
+./advisor_transcripts/moment_2_prompt.md
+./advisor_transcripts/moment_1_stderr.log
+./advisor_transcripts/moment_2_output.md
+./advisor_transcripts/moment_3_prompt.md
+./advisor_transcripts/moment_3_stderr.log
+./advisor_transcripts/moment_3_output.md
+./advisor_transcripts/moment_1_prompt.md
+./advisor_transcripts/moment_1_output.md
+./advisor_transcripts/moment_2_stderr.log
+
+exec
+/bin/zsh -lc 'rg -n "ENGINEERING_CAVEAT|V5|V6|V7|V15|S5|Tier-1|Boussinesq|chtMultiRegionFoam|radiation|buoyantSimpleFoam|buoyantBoussinesqSimpleFoam|adjustTimeStep|nOuterCorr|LUST|linearUpwind" -S ..' in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 0ms:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:9:- **V5** (closed) — `DIC`/`DILU` preconditioner SIGFPE on compressible buoyant matrices; use `PBiCGStab`/`DILU` or `GAMG` for p_rgh.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:11:- **V15** (closed) — V-findings inherit across solver families when fluid-internal numerics are shared (V5/V6/V7 from buoyantSimpleFoam recur in chtMultiRegionSimpleFoam).
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:12:- **Engineering caveat** (file `~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md`) — already diagnoses three numerical-dissipation root causes:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:41:  div(phi,U)        linearUpwindV grad(U)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:52:2. **Corpus citations** (cite ENGINEERING_CAVEAT.md sections + V-ids where relevant, max 3 items)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:61:- Cite ENGINEERING_CAVEAT.md inline like "[CAVEAT §3.2]" — exact section number not required, the file reference is what matters
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_prompt.md:62:- If radiation is a missing physics term that compounds the dissipation issue, mention it but mark it as secondary cause vs numerical primary
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_prompt.md:5:You are the AI advisor in the cfd-harness-unified workbench (project SSOT: AI is advisor, not driver — you suggest, the engineer decides; LLM-offline runnability is a project invariant; corpus-grounded references are mandatory). The engineer is preparing to run `buoyantSimpleFoam` (steady-state compressible buoyant RANS) on an APU bay ventilation case. They just ran `checkMesh` and want to know if they can proceed.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_prompt.md:10:- **V84** (preliminary positive 2026-05-13) — `max_skewness 4` is sHM's **reject-wall**, NOT a solver-instability ceiling — `buoyantSimpleFoam` runs stably on max_skew 6.87 / 20-skew-face industrial mesh with production-tuned schemes (case_002a F4b, 2689 SIMPLE iters / 10.4 h ExecutionTime, zero FATAL/FPE). Schemes used: cellLimited grad + bounded upwind for div + limited laplacian + non-orthogonality correctors. **Lesson**: the right diagnostic question is NOT "does mesh pass checkMesh defaults" but **"does the solver run cleanly for ~50 iters with the schemes I plan to use"**. Five minutes of solver smoke beats seven hours of mesh debug.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_prompt.md:25:I'm about to run buoyantSimpleFoam steady-state. Should I:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_prompt.md:31:  div(phi,U)     bounded Gauss linearUpwindV grad(U)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:5:You are the AI advisor in cfd-harness-unified. The engineer accepted your Moment-2 diagnosis (30 % bay-temperature deficit is dominated by numerical dissipation, with missing radiation as compounding secondary). They now need to choose among the four upgrade paths you previously offered, under a hard budget: ARM 4-core only (no HPC), 7 calendar days, 1 engineer time-share. They want your prioritization, not a final pick — they decide.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:10:- ENGINEERING_CAVEAT.md already documented the 4 paths you offered in Moment 2:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:11:  1. Tier-1 numerical upgrade (backward 2nd-order + adjustTimeStep + LUST/linearUpwind + nOuterCorr=8) — previously ETA-estimated 7 days, marked "resource-mismatched" → effectively unaffordable here
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:12:  2. Steady-state solver chain (buoyantSimpleFoam / buoyantBoussinesqSimpleFoam) — previously 5 failed attempts (numerical avalanche ρ → 1e+10, ω → 1e+42 at iter 4-10) → strong negative prior
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:13:  3. Boussinesq from scratch (independent dir, incompressible BC, transportProperties) — 1-2h setup + 4-8h solve, gives "true steady balance field" without compressibility chain instability
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:14:  4. CHT two-region (chtMultiRegionFoam) + radiation P1 model — captures conduction inside solid bodies + radiative coupling (~30 % of convective heat flux on 14 high-T bodies)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:18:- **V5/V6/V7** — buoyant-compressible IC chain death modes (validate path 2 negative prior)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:19:- **V15** — fluid-internal numerics inherit across solver families (relevant to path 4 chtMultiRegionFoam — most v6N findings will transfer)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:20:- **S5 playbook** — buoyant + jet + suction-outlet + k-ω SST startup instability under SIMPLE iteration (codifies why path 2 keeps failing)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:31:priority not single-pick. I'm worried path-4 (CHT + radiation)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:34:(SIMPLE) when V5/V6/V7 already burned us 5 times.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_prompt.md:45:5. **One question back to the engineer** — what would change your prioritization if they answered it (e.g., "is the radiation contribution actually needed for the sizing decision, or just for completeness?")
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:18:You are the AI advisor in cfd-harness-unified. The engineer accepted your Moment-2 diagnosis (30 % bay-temperature deficit is dominated by numerical dissipation, with missing radiation as compounding secondary). They now need to choose among the four upgrade paths you previously offered, under a hard budget: ARM 4-core only (no HPC), 7 calendar days, 1 engineer time-share. They want your prioritization, not a final pick — they decide.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:23:- ENGINEERING_CAVEAT.md already documented the 4 paths you offered in Moment 2:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:24:  1. Tier-1 numerical upgrade (backward 2nd-order + adjustTimeStep + LUST/linearUpwind + nOuterCorr=8) — previously ETA-estimated 7 days, marked "resource-mismatched" → effectively unaffordable here
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:25:  2. Steady-state solver chain (buoyantSimpleFoam / buoyantBoussinesqSimpleFoam) — previously 5 failed attempts (numerical avalanche ρ → 1e+10, ω → 1e+42 at iter 4-10) → strong negative prior
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:26:  3. Boussinesq from scratch (independent dir, incompressible BC, transportProperties) — 1-2h setup + 4-8h solve, gives "true steady balance field" without compressibility chain instability
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:27:  4. CHT two-region (chtMultiRegionFoam) + radiation P1 model — captures conduction inside solid bodies + radiative coupling (~30 % of convective heat flux on 14 high-T bodies)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:31:- **V5/V6/V7** — buoyant-compressible IC chain death modes (validate path 2 negative prior)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:32:- **V15** — fluid-internal numerics inherit across solver families (relevant to path 4 chtMultiRegionFoam — most v6N findings will transfer)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:33:- **S5 playbook** — buoyant + jet + suction-outlet + k-ω SST startup instability under SIMPLE iteration (codifies why path 2 keeps failing)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:44:priority not single-pick. I'm worried path-4 (CHT + radiation)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:47:(SIMPLE) when V5/V6/V7 already burned us 5 times.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_3_stderr.log:58:5. **One question back to the engineer** — what would change your prioritization if they answered it (e.g., "is the radiation contribution actually needed for the sizing decision, or just for completeness?")
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:22:- **V5** (closed) — `DIC`/`DILU` preconditioner SIGFPE on compressible buoyant matrices; use `PBiCGStab`/`DILU` or `GAMG` for p_rgh.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:24:- **V15** (closed) — V-findings inherit across solver families when fluid-internal numerics are shared (V5/V6/V7 from buoyantSimpleFoam recur in chtMultiRegionSimpleFoam).
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:25:- **Engineering caveat** (file `~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md`) — already diagnoses three numerical-dissipation root causes:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:54:  div(phi,U)        linearUpwindV grad(U)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:65:2. **Corpus citations** (cite ENGINEERING_CAVEAT.md sections + V-ids where relevant, max 3 items)
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:74:- Cite ENGINEERING_CAVEAT.md inline like "[CAVEAT §3.2]" — exact section number not required, the file reference is what matters
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:75:- If radiation is a missing physics term that compounds the dissipation issue, mention it but mark it as secondary cause vs numerical primary
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:85:/bin/zsh -lc "sed -n '1,240p' ~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md" in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:103:| 动量对流 | linearUpwindV grad(U)（2 阶 biased）| 工程级 |
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:138:- adjustTimeStep maxCo=5–30
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:139:- LUST grad(U) + linearUpwind grad(*) for scalars
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:140:- nOuterCorr=8, residualControl 1e-6
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:144:- `buoyantSimpleFoam` GAMG/PCG + URF=0.7→0.3 + setFields reset → 全部在 iter 4–10 数值雪崩（ρ → 1e+10、ω → 1e+42）
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:145:- `buoyantBoussinesqSimpleFoam` 链式 dim/BC 错配，未启动成功
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:150:1. **从零搭建 Boussinesq case**（独立目录，全套 incompressible BC + transportProperties），约 1-2h 设置 + 4-8h 解算 — 真正稳态平衡场
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:153:4. **改用 CHT 双区域**（chtMultiRegionFoam），固体 body 内部传导 + 流体侧 conjugate 边界，比 fixedValue T BC 更接近真实
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:161:| `reports/v6N/ENGINEERING_CAVEAT.md` | **本文件** |
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:162:| `case_refined_v2/200/` 系列 | 原始仿真状态（已被 Boussinesq 切换尝试损坏，proc*/190/ 是最近完整 checkpoint） |
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_2_stderr.log:167:/bin/zsh -lc 'rg -n "CFL|limitedLinear|cellLimited|numerical dissipation|radiation|Euler" ~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md' in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_stderr.log:18:You are the AI advisor in the cfd-harness-unified workbench (project SSOT: AI is advisor, not driver — you suggest, the engineer decides; LLM-offline runnability is a project invariant; corpus-grounded references are mandatory). The engineer is preparing to run `buoyantSimpleFoam` (steady-state compressible buoyant RANS) on an APU bay ventilation case. They just ran `checkMesh` and want to know if they can proceed.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_stderr.log:23:- **V84** (preliminary positive 2026-05-13) — `max_skewness 4` is sHM's **reject-wall**, NOT a solver-instability ceiling — `buoyantSimpleFoam` runs stably on max_skew 6.87 / 20-skew-face industrial mesh with production-tuned schemes (case_002a F4b, 2689 SIMPLE iters / 10.4 h ExecutionTime, zero FATAL/FPE). Schemes used: cellLimited grad + bounded upwind for div + limited laplacian + non-orthogonality correctors. **Lesson**: the right diagnostic question is NOT "does mesh pass checkMesh defaults" but **"does the solver run cleanly for ~50 iters with the schemes I plan to use"**. Five minutes of solver smoke beats seven hours of mesh debug.
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_stderr.log:38:I'm about to run buoyantSimpleFoam steady-state. Should I:
+../2026-05-14_v6n_bplus_demo/advisor_transcripts/moment_1_stderr.log:44:  div(phi,U)     bounded Gauss linearUpwindV grad(U)
+
+codex
+I’ve confirmed the negative prior on path 2 and the transfer risk on path 4. I’m pulling the earlier caveat text now so the ranking reflects the exact setup/solve tradeoffs you already documented.
+exec
+/bin/zsh -lc "sed -n '1,240p' advisor_transcripts/moment_2_output.md" in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+exec
+/bin/zsh -lc "sed -n '120,190p' advisor_transcripts/moment_2_stderr.log" in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 0ms:
+ succeeded in 0ms:
+2. **limitedLinear 1 在最强温度梯度处退化为 1 阶 upwind**：燃烧室出口 615K vs 周围 328K 接口处对流通量被 1 阶格式数值耗散。
+3. **cellLimited grad 全开**：jet shear layer 梯度被限幅压平。
+
+## 可视化结论（仍有工程意义）
+
+✓ **燃烧室热出口 600K 区清晰可见**（图 05）— 边界 fixedValue 由解算器忠实呈现
+✓ **|U| 主流场 jet + plume 结构准确**（图 03）— 速度场不受能量耗散影响
+✓ **APU body 表面温度梯度可见**（图 04 Inner_Surf）— 壁面 fixedValue 由对流冷却建立轮廓
+✓ **流线 + 涡分布定性正确**（图 06、07、08）
+
+✗ **bay air 平均温度被低估 ~150K** — 数值耗散吸收了 ~70% 的热焓
+✗ **firewall_front 下游热扩散范围**可能被低估
+✗ **APU body 壁面对流传热系数 h_conv** 不可靠（依赖未解析的 thermal BL）
+
+## 提升精度的两条路线（未执行）
+
+### Tier 1 数值升级（已尝试、ETA 7 天放弃）
+- backward 2 阶时间格式
+- adjustTimeStep maxCo=5–30
+- LUST grad(U) + linearUpwind grad(*) for scalars
+- nOuterCorr=8, residualControl 1e-6
+- 在 943k cells × 4-core ARM 上 ETA = 7 天，资源不匹配
+
+### 稳态求解器（已 5 次尝试、全发散）
+- `buoyantSimpleFoam` GAMG/PCG + URF=0.7→0.3 + setFields reset → 全部在 iter 4–10 数值雪崩（ρ → 1e+10、ω → 1e+42）
+- `buoyantBoussinesqSimpleFoam` 链式 dim/BC 错配，未启动成功
+- 该 case 的 ρ 强耦合 + 高 Re jet + 抽吸出口 + k-ω SST startup 不稳定，对 SIMPLE 迭代基本不可行
+
+## 推荐后续工作
+
+1. **从零搭建 Boussinesq case**（独立目录，全套 incompressible BC + transportProperties），约 1-2h 设置 + 4-8h 解算 — 真正稳态平衡场
+2. **加 prism layer 升至 5–6 层**，验证 y+，评估壁面对流传热
+3. **加辐射模型**（P1 或 fvDOM，ε≈0.7）— 14 个 600K body 对周围的辐射热流可达对流的 30%，当前完全忽略
+4. **改用 CHT 双区域**（chtMultiRegionFoam），固体 body 内部传导 + 流体侧 conjugate 边界，比 fixedValue T BC 更接近真实
+
+## 交付物
+
+| 文件 | 说明 |
+|---|---|
+| `reports/v6N/report_v6N_HD_v3_final.html` | 4-tier 对比报告，22 MB（base64-embedded） |
+| `reports/v6N/paraview_HD_v3_smooth/0[1-8]_*_HD.png` | 8 张 3200×2000 HD 图 |
+| `reports/v6N/ENGINEERING_CAVEAT.md` | **本文件** |
+| `case_refined_v2/200/` 系列 | 原始仿真状态（已被 Boussinesq 切换尝试损坏，proc*/190/ 是最近完整 checkpoint） |
+
+**结论**：当前结果作为**工程初步评估**有意义（流场结构、燃烧室热源识别、抽吸路径），但**bay 内热平衡温度量级低估 ~30%**，不可用于精确热载荷设计或冷却需求计算。
+
+exec
+/bin/zsh -lc 'rg -n "CFL|limitedLinear|cellLimited|numerical dissipation|radiation|Euler" ~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md' in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 192ms:
+15:| 时间格式 | Euler（1 阶）| 工程级 |
+16:| 时间步 | 固定 dt=1.0s（CFL_max≈35,000）| **过粗** |
+18:| 标量对流 | limitedLinear 1（强梯度退 1 阶 upwind）| 工程级 |
+19:| 梯度限幅 | cellLimited 1（全限制）| 保守 |
+33:1. **CFL=35,000 + Euler 1 阶**：燃烧室热射流在大时间步下被**对流-扩散涂抹**，热焓未能传递到 bay 远场。
+34:2. **limitedLinear 1 在最强温度梯度处退化为 1 阶 upwind**：燃烧室出口 615K vs 周围 328K 接口处对流通量被 1 阶格式数值耗散。
+35:3. **cellLimited grad 全开**：jet shear layer 梯度被限幅压平。
+
+
+exec
+/bin/zsh -lc "sed -n '1,240p' ~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md" in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 0ms:
+# APU Bay Ventilation CHT v6N — Engineering Caveat
+
+**算例**：`case_refined_v2`（943k cells，refinementBox jet level 3，3 layer prism）
+**求解器**：`buoyantPimpleFoam` pseudo-transient（compressible buoyant），4-core MPI
+**工况**：55°C MES day plateau (t=150-200)
+- combustor_outlet：mdot=2.8 kg/s @ 615.6K（hot inflow）
+- apu_intake：mdot=4.85 kg/s（suction outflow）
+- 14 个 APU body parts：fixedValue T 343–674K
+- farfield_cylinder：pressureInletOutlet @ 328.15K
+
+## 数值精度等级
+
+| 项 | 设置 | 等级 |
+|---|---|---|
+| 时间格式 | Euler（1 阶）| 工程级 |
+| 时间步 | 固定 dt=1.0s（CFL_max≈35,000）| **过粗** |
+| 动量对流 | linearUpwindV grad(U)（2 阶 biased）| 工程级 |
+| 标量对流 | limitedLinear 1（强梯度退 1 阶 upwind）| 工程级 |
+| 梯度限幅 | cellLimited 1（全限制）| 保守 |
+| PIMPLE outer | 5 corrector，residualControl 5e-5 | 工程级 |
+
+## 已知物理偏离（数值耗散导致）
+
+理论稳态绝热混合 bay 平均温度：
+- H_in = m_combustor·Cp·T_combustor + m_farfield·Cp·T_farfield
+- H_in = 2.8·1005·616 + 2.05·1005·328 = 2.41 MW
+- T_avg_理论 ≈ 2.41e6 / (4.85·1005) ≈ **494 K**
+
+仿真观测 bay 主流场 T ≈ **328–350 K**（大部分区域）。
+
+**差距 ~150 K（30% 低估）**根因：
+
+1. **CFL=35,000 + Euler 1 阶**：燃烧室热射流在大时间步下被**对流-扩散涂抹**，热焓未能传递到 bay 远场。
+2. **limitedLinear 1 在最强温度梯度处退化为 1 阶 upwind**：燃烧室出口 615K vs 周围 328K 接口处对流通量被 1 阶格式数值耗散。
+3. **cellLimited grad 全开**：jet shear layer 梯度被限幅压平。
+
+## 可视化结论（仍有工程意义）
+
+✓ **燃烧室热出口 600K 区清晰可见**（图 05）— 边界 fixedValue 由解算器忠实呈现
+✓ **|U| 主流场 jet + plume 结构准确**（图 03）— 速度场不受能量耗散影响
+✓ **APU body 表面温度梯度可见**（图 04 Inner_Surf）— 壁面 fixedValue 由对流冷却建立轮廓
+✓ **流线 + 涡分布定性正确**（图 06、07、08）
+
+✗ **bay air 平均温度被低估 ~150K** — 数值耗散吸收了 ~70% 的热焓
+✗ **firewall_front 下游热扩散范围**可能被低估
+✗ **APU body 壁面对流传热系数 h_conv** 不可靠（依赖未解析的 thermal BL）
+
+## 提升精度的两条路线（未执行）
+
+### Tier 1 数值升级（已尝试、ETA 7 天放弃）
+- backward 2 阶时间格式
+- adjustTimeStep maxCo=5–30
+- LUST grad(U) + linearUpwind grad(*) for scalars
+- nOuterCorr=8, residualControl 1e-6
+- 在 943k cells × 4-core ARM 上 ETA = 7 天，资源不匹配
+
+### 稳态求解器（已 5 次尝试、全发散）
+- `buoyantSimpleFoam` GAMG/PCG + URF=0.7→0.3 + setFields reset → 全部在 iter 4–10 数值雪崩（ρ → 1e+10、ω → 1e+42）
+- `buoyantBoussinesqSimpleFoam` 链式 dim/BC 错配，未启动成功
+- 该 case 的 ρ 强耦合 + 高 Re jet + 抽吸出口 + k-ω SST startup 不稳定，对 SIMPLE 迭代基本不可行
+
+## 推荐后续工作
+
+1. **从零搭建 Boussinesq case**（独立目录，全套 incompressible BC + transportProperties），约 1-2h 设置 + 4-8h 解算 — 真正稳态平衡场
+2. **加 prism layer 升至 5–6 层**，验证 y+，评估壁面对流传热
+3. **加辐射模型**（P1 或 fvDOM，ε≈0.7）— 14 个 600K body 对周围的辐射热流可达对流的 30%，当前完全忽略
+4. **改用 CHT 双区域**（chtMultiRegionFoam），固体 body 内部传导 + 流体侧 conjugate 边界，比 fixedValue T BC 更接近真实
+
+## 交付物
+
+| 文件 | 说明 |
+|---|---|
+| `reports/v6N/report_v6N_HD_v3_final.html` | 4-tier 对比报告，22 MB（base64-embedded） |
+| `reports/v6N/paraview_HD_v3_smooth/0[1-8]_*_HD.png` | 8 张 3200×2000 HD 图 |
+| `reports/v6N/ENGINEERING_CAVEAT.md` | **本文件** |
+| `case_refined_v2/200/` 系列 | 原始仿真状态（已被 Boussinesq 切换尝试损坏，proc*/190/ 是最近完整 checkpoint） |
+
+**结论**：当前结果作为**工程初步评估**有意义（流场结构、燃烧室热源识别、抽吸路径），但**bay 内热平衡温度量级低估 ~30%**，不可用于精确热载荷设计或冷却需求计算。
+
+codex
+I have enough to rank it. The main tradeoff is now clear: path 3 is the only option that buys a credible thermal field and a midweek deliverable without walking back into the exact SIMPLE failure pattern you already rejected.
+exec
+/bin/zsh -lc 'wc -c advisor_transcripts/moment_2_output.md advisor_transcripts/moment_1_output.md advisor_transcripts/moment_3_output.md' in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+exec
+/bin/zsh -lc "sed -n '1,220p' advisor_transcripts/moment_2_prompt.md" in /Users/Zhuanz/Desktop/cfd-harness-unified/.planning/demos/2026-05-14_v6n_bplus_demo
+ succeeded in 0ms:
+       0 advisor_transcripts/moment_2_output.md
+    2274 advisor_transcripts/moment_1_output.md
+       0 advisor_transcripts/moment_3_output.md
+    2274 total
+
+ succeeded in 0ms:
+# AI Advisor Moment 2 — "Why is bay temperature 30% under theoretical?"
+
+## Context for the model
+
+You are the AI advisor in cfd-harness-unified. The engineer just finished a `buoyantPimpleFoam` pseudo-transient run on APU bay ventilation (v6N B+ · case_refined_v2 · 943k cells · 4-core MPI). They computed a heat-balance sanity check and found the simulated bay air mean temperature is ~150 K below what energy conservation predicts.
+
+**Project corpus snippets (cite by V-id when relevant):**
+
+- **V5** (closed) — `DIC`/`DILU` preconditioner SIGFPE on compressible buoyant matrices; use `PBiCGStab`/`DILU` or `GAMG` for p_rgh.
+- **V12** (closed) — Mass conservation only checked at verdict stage → too late. Configuration-time checks beat verdict-time checks.
+- **V15** (closed) — V-findings inherit across solver families when fluid-internal numerics are shared (V5/V6/V7 from buoyantSimpleFoam recur in chtMultiRegionSimpleFoam).
+- **Engineering caveat** (file `~/Desktop/apu-bay-ventilation-cht/reports/v6N/ENGINEERING_CAVEAT.md`) — already diagnoses three numerical-dissipation root causes:
+  1. CFL=35,000 + Euler 1st-order time → convection-diffusion smearing
+  2. `limitedLinear 1` on strongest T gradient degrades to 1st-order upwind at combustor-outlet interface (615 K vs 328 K) → numerical dissipation
+  3. `cellLimited grad` fully active → jet shear-layer gradients flattened
+- **Project four-question gate** — every advisor reply must implicitly answer: (1) Can this run LLM-offline? (2) Are you producing artifacts the engineer can audit? (3) Will TrustGate accept the citation chain? (4) Are you suggesting, not deciding?
+
+## Engineer's input (paste-ready)
+
+```
+Just finished pimple_v2_plateau run on case_refined_v2.
+Doing energy-balance sanity check:
+
+  H_in = m_combustor·Cp·T_combustor + m_farfield·Cp·T_farfield
+       = 2.8·1005·616 + 2.05·1005·328
+       = 2.41 MW
+
+  T_avg_theoretical (adiabatic steady mixing)
+       = 2.41e6 / (m_total · Cp)
+       = 2.41e6 / (4.85·1005)
+       ≈ 494 K
+
+But in ParaView the bay main flow shows T ≈ 328-350 K everywhere except
+right at the combustor outlet (~600K). That's 150 K below theory, roughly
+30% low. Combustor outlet boundary value is correct (615 K fixedValue
+honored). Walls show expected gradients. Why is the bay bulk so cold?
+
+My setup:
+  ddtSchemes        Euler
+  fixed dt          1.0s (CFL_max ≈ 35,000)
+  div(phi,U)        linearUpwindV grad(U)
+  div(phi,h)        limitedLinear 1
+  grad              cellLimited 1
+  PIMPLE outer=5, residualControl 5e-5
+```
+
+## Required output shape
+
+Respond as the workbench advisor would in `/ai-diagnose`:
+
+1. **Quick verdict** (one sentence: physics vs numerics, with confidence level)
+2. **Corpus citations** (cite ENGINEERING_CAVEAT.md sections + V-ids where relevant, max 3 items)
+3. **Root cause decomposition** — for each numerical-dissipation source, give: (a) name (b) one-line mechanism (c) approx weight in the 150 K deficit
+4. **What's still usable from this run** — be specific about which qualitative conclusions survive the dissipation (engineer needs to know what to ship vs what to redo)
+5. **Four upgrade paths** with ETA + ARM 4-core resource cost + expected physics gain
+6. **What I'm NOT telling you** (1-2 sentences on limits of advice)
+
+**Style constraints:**
+- Total length 300-450 words (becomes a 90-second video segment, the heaviest of the three)
+- Engineer-to-engineer tone; no marketing language
+- Cite ENGINEERING_CAVEAT.md inline like "[CAVEAT §3.2]" — exact section number not required, the file reference is what matters
+- If radiation is a missing physics term that compounds the dissipation issue, mention it but mark it as secondary cause vs numerical primary
+- End with one-line reminder this is advisory only
+
+codex
+**Quick Verdict**
+
+1. **Path 3 first**: Boussinesq-from-scratch is the best opening move because it is the only path that can plausibly give you a credible steady thermal field by Wednesday without re-entering the compressible SIMPLE failure regime.  
+2. **Path 4 second**: CHT + radiation has the best physics upside after Path 3, but only as a back-half stretch once you already have something shippable, because the fluid-side numerical sensitivities still carry across solver families [V15].  
+3. **Path 1 third**: Tier-1 numerics attacks the primary error source most directly, but on 4-core ARM it is a full-week bet with almost no schedule resilience and was already flagged resource-mismatched [CAVEAT].  
+4. **Path 2 skip**: I would not spend this week on the steady compressible SIMPLE chain again; five prior blowups plus the S5 startup pattern make that a repeat-failure path, not a recovery path [V5/V6/V7][S5].
+
+**Why This Order**
+
+- **Calendar exposure**: Path 3 is the only option with a same-day setup and overnight-solve profile, so it preserves a Wednesday exit ramp.
+- **Physics ROI per hour**: Path 3 buys a real steady balance field fast; Path 4 adds missing physics; Path 1 may improve the dominant deficit but eats the whole budget.
+- **Failure avoidance**: Path 2 directly revisits a known instability class; Path 4 inherits some fluid-numerics risk, so it should follow, not lead [V15].
+- **Shippability**: Under one-engineer, 5h/day conditions, “good result early, richer result later” is safer than “perfect fix or nothing.”
+
+**Week Plan**
+
+| Day | Activity | Milestone |
+|---|---|---|
+| Mon | Build independent Boussinesq case, convert BCs/properties, run smoke test | Case boots cleanly |
+| Tue | Run to steady balance, fix any BC/transport mistakes, start post | First steady bulk-T estimate |
+| Wed | Finish Path 3 post, compare vs v6N, decide whether Path 4 is worth remaining budget | **If stop Wed:** ship steady Boussinesq field, bulk-temperature correction, and delta-vs-v6N memo |
+| Thu | Start minimal Path 4 setup, reusing geometry and proven fluid settings cautiously | Coupled case assembled |
+| Fri | First Path 4 run and triage | **If stop Fri:** ship Path 3 package plus Path 4 feasibility result or first coupled trend |
+| Sat | Only continue Path 4 if Friday is numerically sane; otherwise tighten reporting and sensitivity notes | Best available upgraded evidence |
+| Sun | Final compare: v6N vs Path 3 vs optional Path 4 | **If stop Sun:** ship ranked recommendation pack with next-step decision |
+
+**What I’m Explicitly Not Recommending**
+
+Path 2. You already paid for that lesson five times. Under this budget, repeating a known SIMPLE startup avalanche is not disciplined engineering.
+
+**One Question Back**
+
+Is radiation/conjugate heat transfer actually required for this week’s design decision, or do you mainly need a defensible correction to bulk bay temperature? If radiation is decision-critical, Path 4 moves closer to the front right after Path 3.
+
+Final pick is yours; this is a priority stack optimized for ROI under the stated 7-day, 4-core, one-engineer constraint, and that constraint set may itself be the thing to challenge.
+tokens used
+36,333
