@@ -79,3 +79,18 @@ repos:
         language: script
         files: ^(ui/backend/services/(ai_actions|llm_coach)/|ui/backend/routes/ai_.*\.py$)
         stages: [pre-commit]
+
+      # M-DRIFT (advisor_substrate_arc · 2026-05-13) · Corpus drift-prevention.
+      # Fails the commit if methodology file is staged without the runtime
+      # advisor copy. Closes the gap that produced the V57→V84 27-row arrears
+      # (Codex P2 on e56f160..e89a88f, synced 2026-05-13 in a0effac).
+      # Bypass: `Corpus-sync-defer: <reason>` trailer (audited) or --no-verify.
+      # Install: pre-commit install --hook-type commit-msg
+      - id: corpus-sync
+        name: Corpus drift-prevention (methodology ↔ runtime advisor)
+        entry: python scripts/governance/check_corpus_sync.py
+        language: python
+        language_version: python3.12
+        stages: [commit-msg]
+        pass_filenames: true
+        always_run: true
