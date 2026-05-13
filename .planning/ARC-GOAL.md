@@ -53,7 +53,7 @@
 
 ### Tier 1 · 解锁性（并行 ok）
 
-- [x] **M-A4** A4 face_orientation advisor LANDED · commit: `PENDING_SHA` (2026-05-13 · DEC-V61-198-sub-A4)
+- [x] **M-A4** A4 face_orientation advisor LANDED · commit: `8183394` (2026-05-13 · DEC-V61-198-sub-A4)
   - 🔬 Research drafted 2026-05-13 · `.planning/patches/draft_a4_face_orientation_2026-05-13.md` (commit `615dacb`)
   - ✅ **LANDED 2026-05-13** · `ui/backend/services/geometry_ingest/face_orientation_advisor.py` + 9-test suite. V79 + V87 [QUESTIONABLE] → [VALIDATED] in both methodology + runtime corpora. Pure dict-consumer (mirrors A5 pattern); regression tests pin V79 38.000° + V87 21.979° ground-truth measurements
 - [x] **M-V81** V81 inlet/outlet validator closed · commit: `7f11b16` (2026-05-13 · DEC-V61-198-sub-A5)
