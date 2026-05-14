@@ -806,28 +806,48 @@ def assemble_stack(
 
     # D6 extra_body_advisor dispatch (DEC-V63-A-sub-M-D6-HTTP-WIRE ·
     # V55 evidence row · case_016 10 mm debris cube class).
-    # Dispatches when ``stl_bbox_set`` carries at least one body — the
-    # advisor performs three detection types (unregistered_body /
-    # body_in_fluid_region / undeclared_inclusion). All three require an
-    # STL inventory; the first additionally produces findings even when
-    # parts_manifest is empty (every STL body becomes
-    # ``unregistered_body``). The advisor itself is dict-pure so
-    # parts_manifest can be ``None`` (mapped to ``{}`` here so the
-    # advisor's ``.get("parts")`` walk stays safe).
-    if isinstance(stl_bbox_set, Mapping) and len(stl_bbox_set) > 0:
+    #
+    # Dispatch gate (Codex R1 P2 + P3 fix · 2026-05-14):
+    #
+    #   (P2) parts_manifest MUST be present. D6 detects three classes:
+    #        unregistered_body / body_in_fluid_region /
+    #        undeclared_inclusion. The latter two require manifest-side
+    #        bbox+role data; the first compares the STL inventory
+    #        against the manifest's body set. Without a manifest the
+    #        comparison collapses to "every STL body is unregistered",
+    #        flooding the report with bogus criticals on case_dir
+    #        layouts where ``manifest.json`` carries ``stl_bbox_set`` but
+    #        ``inputs/parts_manifest.*`` failed to load. Suppress
+    #        instead.
+    #
+    #   (P3) stl_bbox_set MUST contain ≥1 *coercible* bbox. The advisor
+    #        promises malformed entries are silently dropped via
+    #        ``_coerce_bbox`` — applying that check at the gate too means
+    #        a pure-malformed inventory does NOT inflate advisor_count
+    #        or add V55 to evidence_refs (the dispatch would otherwise
+    #        signal "D6 ran successfully" when in fact no body was
+    #        evaluated).
+    coercible_bbox_count = 0
+    if isinstance(stl_bbox_set, Mapping) and parts_manifest is not None:
+        coercible_bbox_count = sum(
+            1
+            for v in stl_bbox_set.values()
+            if extra_body_advisor._coerce_bbox(v) is not None
+        )
+    if coercible_bbox_count > 0:
         advisors_dispatched.add("extra_body_advisor")
         _dispatch(
             advisor_name="extra_body_advisor",
             module=extra_body_advisor,
             input_summary=(
-                f"stl_bbox_set={len(stl_bbox_set)} bodies, "
-                "parts_manifest="
-                f"{None if parts_manifest is None else len(parts_manifest.get('parts') or [])} parts, "
+                f"stl_bbox_set={len(stl_bbox_set)} entries "
+                f"({coercible_bbox_count} coercible), "
+                f"parts_manifest={len(parts_manifest.get('parts') or [])} parts, "
                 f"tol_mm={extra_body_containment_tol_mm}"
             ),
             func=extra_body_advisor.check_extra_bodies_in_fluid,
             args=(
-                dict(parts_manifest) if parts_manifest is not None else {},
+                dict(parts_manifest),
                 dict(stl_bbox_set),
             ),
             kwargs={"containment_tol_mm": extra_body_containment_tol_mm},

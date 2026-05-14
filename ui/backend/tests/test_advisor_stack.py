@@ -410,18 +410,62 @@ def test_d6_silently_skipped_when_stl_bbox_set_empty() -> None:
 
 def test_evidence_refs_includes_v55_when_d6_dispatches() -> None:
     """V62-A drift_guard contract: evidence_refs aggregates dispatched
-    advisors' V-rows. D6 dispatch must surface V55 in the union."""
+    advisors' V-rows. D6 dispatch must surface V55 in the union.
+
+    Codex R1 P2 (2026-05-14): D6 dispatch now requires both
+    parts_manifest AND stl_bbox_set, so the fixture includes an empty
+    manifest (the gate's role is just "manifest must exist", not
+    "manifest must be non-empty").
+    """
+    r = assemble_stack(
+        parts_manifest={"parts": []},
+        stl_bbox_set={
+            "rogue_body": [0.0, 0.0, 0.0, 5.0, 5.0, 5.0],
+        },
+    )
+    advisor_names = {c.advisor_name for c in r.advisor_calls}
+    assert "extra_body_advisor" in advisor_names
+    assert "V55" in r.evidence_refs
+    # Advisors that did NOT dispatch must not surface their V-rows. A4 +
+    # A5 do run on the empty parts_manifest fixture (no findings, just
+    # dispatch); pick a V-row from an unrelated advisor (D11/V94) to
+    # assert the union is bounded by *dispatched* advisors.
+    assert "V94" not in r.evidence_refs   # D11 not dispatched
+    assert "V52" not in r.evidence_refs   # A8 not dispatched
+
+
+def test_d6_silently_skipped_when_parts_manifest_absent() -> None:
+    """Codex R1 P2 (2026-05-14): without parts_manifest, D6's
+    ``unregistered_body`` detection would flag every STL body as a
+    critical finding (the comparison collapses). Gate skips D6 instead
+    so a manifest-only / inputs-missing case_dir layout doesn't emit a
+    wall of false criticals."""
     r = assemble_stack(
         stl_bbox_set={
             "rogue_body": [0.0, 0.0, 0.0, 5.0, 5.0, 5.0],
         },
     )
-    assert r.advisor_count == 1
-    assert r.advisor_calls[0].advisor_name == "extra_body_advisor"
-    assert "V55" in r.evidence_refs
-    # Other advisors' V-rows are NOT in the union because they didn't run.
-    assert "V79" not in r.evidence_refs
-    assert "V94" not in r.evidence_refs
+    advisor_names = {c.advisor_name for c in r.advisor_calls}
+    assert "extra_body_advisor" not in advisor_names
+    assert "V55" not in r.evidence_refs
+
+
+def test_d6_silently_skipped_when_all_bboxes_malformed() -> None:
+    """Codex R1 P3 (2026-05-14): if every stl_bbox_set entry fails
+    ``_coerce_bbox`` (non-list / wrong arity / non-numeric), no body
+    is actually evaluated. D6 must NOT inflate advisor_count or add
+    V55 to evidence_refs in that case."""
+    r = assemble_stack(
+        parts_manifest={"parts": [{"name": "wall", "role": "wall"}]},
+        stl_bbox_set={
+            "bad_str": "not_a_list",
+            "bad_arity": [0.0, 0.0, 0.0],
+            "bad_nonnumeric": ["x", 0.0, 0.0, 1.0, 1.0, 1.0],
+        },
+    )
+    advisor_names = {c.advisor_name for c in r.advisor_calls}
+    assert "extra_body_advisor" not in advisor_names
+    assert "V55" not in r.evidence_refs
 
 
 def test_shm_dict_only_dispatches_a8() -> None:
