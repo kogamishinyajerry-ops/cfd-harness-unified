@@ -4,7 +4,7 @@ title: V64-A Tier 1 sub-DEC · case_004 NREL Phase VI MRF mesh gen v2 · blockMe
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 1 · M-V64A-MESH-GEN-V2
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed81cab120c458d0c58c77)
 authored_by: Claude Code Opus 4.7 (1M context) · sub-session B54
 authored_at: 2026-05-15
 confidence: med

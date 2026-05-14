@@ -61,7 +61,7 @@
 
 ### Tier 1 · 解锁性（mesh gen + substrate prep · parallel · independent）
 
-- [ ] **M-V64A-MESH-GEN-V2** case_004 NREL Phase VI MRF mesh gen v2 · 解锁 solver execution · commit: `_____` · V63-A carry-over #2 first half
+- [x] **M-V64A-MESH-GEN-V2** case_004 NREL Phase VI MRF mesh gen v2 · commit chain `a45214a` (feat 7 system dicts) → `f8c8024` (run log + checkMesh) → `f52d5df` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-V64A-MESH-GEN-V2` Accepted (B54 · 2026-05-15 · **919k cells · checkMesh PASS-with-1-flag** · rotor + stator regions + MRF zone via topoSet · 2 advisor F-NEW findings surfaced · V63-A carry-over #2 first half CLOSED · M-V64A-VAL-FULL-1 directly unblocked · solver execution NOT in scope here · confidence: med · Notion synced)
 - [ ] **M-V64A-CASE-011-NONDEGEN** case_011 plate-fin HX non-degenerate substrate 替换 · OR PARTIAL semantics 用户裁决 rebadge · commit: `_____` · V63-A carry-over #1
 - [ ] **M-V64A-CASE-006-SUBSTRATE-V2** case_006 substrate iteration 2 · V-row 3/9 → 5/9 (V26-V28/V31/V32 + D4 ≥2 captured) · commit: `_____` · V63-A carry-over #6
 
@@ -89,7 +89,7 @@
 当前 canonical literature comparisons:            0 / 3 (start)
 当前 mesh convergence study (h/2 + h/4 monotonic): 0 / 1 (start · case TBD)
 当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (start · target 2/3 · over-met 3/3)
-当前 V63-A carry-over closure:                    0 / ≥4 (start · 8 items deferred · target #1+#2+≥2 of {#3/#4/#6})
+当前 V63-A carry-over closure:                    **1 / ≥4** (#2 first half mesh gen v2 closed B54 ✓ · 待 #2 second half [solver run] + #1/#3/#4/#6 中 ≥2)
 当前 V-row truth-capture rate:                    clause-1 baseline V63-A 2/1 (case_011 7/9 + case_004 5/9) · 起点 carry-forward · V64-A 自身 capture 0/9 cases (start)
 当前 Done dims MET:                               0 / 6 (V64-A active · M-V64A-VAL-CASE-016-FULL B53 first sub-DEC candidate cheapest unblock)
 ```
