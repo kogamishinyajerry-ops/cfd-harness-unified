@@ -548,13 +548,16 @@ def test_p2_boost_applied_for_v_rows_in_actual_findings(
         Finding,
     )
 
+    # Codex R1 P2 (2026-05-14): use a real advisor code (``tlow_above_canonical``)
+    # that the narrow finding-code → V-row map points to V41. Fabricated
+    # codes get dropped per R2 narrowing semantics.
     fabricated_finding = Finding(
-        source_advisor="fake_advisor",
-        severity="warning",
-        code="fabricated_for_test",
+        source_advisor="thermo_polynomial_range_advisor",
+        severity="critical",
+        code="tlow_above_canonical",
         message="test finding",
         location=None,
-        evidence_v_rows=("V41",),
+        evidence_v_rows=("V41", "V93"),
         raw=None,
     )
 
@@ -581,14 +584,189 @@ def test_p2_boost_applied_for_v_rows_in_actual_findings(
     body = resp.json()
 
     v41_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V41"]
-    assert v41_matches, "V41 should be surfaced when finding carries it"
+    assert v41_matches, "V41 should be surfaced when tlow_above_canonical fires"
     assert "advisor_stack" in v41_matches[0]["similarity_rationale"]
 
-    # V79/V81 are in evidence_refs but NOT in findings → must NOT be boosted.
-    for v_id in ("V79", "V81"):
+    # V79/V81 are in evidence_refs but NOT a code in findings → must NOT be boosted.
+    # V93 is in evidence_v_rows of the finding but the code ``tlow_above_canonical``
+    # narrows to V41 only — V93 must NOT be boosted either (Codex R1 P2 narrowing).
+    for v_id in ("V79", "V81", "V93"):
         matched = [m for m in body["v_row_matches"] if m["v_row_id"] == v_id]
         for m in matched:
             assert "advisor_stack" not in m["similarity_rationale"], (
-                f"{v_id} should not claim stack-cross-ref when finding "
-                f"did not carry it"
+                f"{v_id} should not claim stack-cross-ref under narrow map"
+            )
+
+
+# ---------- Codex R1 (2026-05-14) regression tests ------------------------
+
+
+def test_r1p2_first_existing_manifest_wins_no_fallback_on_malformed(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """Codex R1 P2.1: when the canonical primary manifest exists but is
+    malformed, the route must NOT silently fall back to a later candidate.
+    Cross-referencing stale fallback data is worse than skipping the
+    cross-reference entirely."""
+    case_dir = tmp_path / "case_malformed_primary"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    # Primary: malformed YAML
+    (inputs / "parts_manifest.yaml").write_text(
+        "::not::valid::yaml:: [\n", encoding="utf-8",
+    )
+    # Fallback that would silently take over under the old "loop until
+    # load succeeds" semantics:
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "face orientation",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Malformed primary → manifest treated as unavailable → stack does
+    # not run. Fall-back JSON must NOT be silently consumed.
+    assert body["stack_report"] is None, (
+        "R1 P2.1 regression: malformed primary should make stack "
+        "unavailable, not fall through to JSON sibling"
+    )
+
+
+def test_r1p2_finding_code_narrow_map_excludes_advisor_wide_v_rows(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R1 P2.2: when an advisor emits a finding whose advisor-wide
+    evidence_v_rows tuple is wider than the specific finding-code → V-row
+    narrowing, only the narrowed V-rows must be boosted. V-rows in the
+    wide tuple but NOT in the narrow map for that code must NOT be
+    boosted ('fabricated provenance')."""
+    case_dir = tmp_path / "case_for_r1_p2"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    # Real A8 shm code `typo_suspicion` — advisor stamps the wide tuple
+    # (V52, V86, V99, V100). Narrow map ties this specific code to V52
+    # only — the other three must NOT be boosted.
+    typo_finding = Finding(
+        source_advisor="shm_dict_validator",
+        severity="warning",
+        code="typo_suspicion",
+        message="test",
+        location=None,
+        evidence_v_rows=("V52", "V86", "V99", "V100"),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(typo_finding,),
+            advisor_calls=(),
+            evidence_refs=("V52", "V86", "V99", "V100"),
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-zero-token-overlap-xyzqwerty",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # V52 is in the narrow map → should be boosted + carry stack rationale
+    v52_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V52"]
+    assert v52_matches, "V52 should appear (narrow-map boost)"
+    assert "advisor_stack" in v52_matches[0]["similarity_rationale"]
+
+    # V86, V99, V100 are in the wide advisor tuple but NOT the narrow map
+    # for code typo_suspicion → must NOT be boosted nor flagged.
+    for v_id in ("V86", "V99", "V100"):
+        wide_matched = [
+            m for m in body["v_row_matches"] if m["v_row_id"] == v_id
+        ]
+        for m in wide_matched:
+            assert "advisor_stack" not in m["similarity_rationale"], (
+                f"R1 P2.2 regression: {v_id} boosted from advisor-wide "
+                f"tuple under code typo_suspicion (should narrow to V52 only)"
+            )
+
+
+def test_r1p2_unmapped_finding_code_does_not_boost(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R1 P2.2 corollary: a finding code NOT in the narrow map
+    contributes nothing to the boost set (no fabricated provenance from
+    advisor-wide tuples). Under-boosting is safer than fabricating."""
+    case_dir = tmp_path / "case_unmapped_code"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    unmapped_finding = Finding(
+        source_advisor="some_advisor",
+        severity="warning",
+        code="brand_new_unmapped_code",
+        message="test",
+        location=None,
+        evidence_v_rows=("V41", "V52", "V79"),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(unmapped_finding,),
+            advisor_calls=(),
+            evidence_refs=(),
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "no-overlap-zzz",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    for v_id in ("V41", "V52", "V79"):
+        wide_matched = [
+            m for m in body["v_row_matches"] if m["v_row_id"] == v_id
+        ]
+        for m in wide_matched:
+            assert "advisor_stack" not in m["similarity_rationale"], (
+                f"R1 P2.2 corollary: {v_id} boosted from unmapped code "
+                f"`brand_new_unmapped_code` (should contribute nothing)"
             )

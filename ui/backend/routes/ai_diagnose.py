@@ -363,6 +363,43 @@ class AIDiagnoseResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Codex R1 P2 lock (2026-05-14): map each advisor finding code to the
+# narrow V-row(s) that specifically evidence it. Used by the diagnose
+# ranking boost so that an advisor finding only contributes to its
+# precise V-row(s), not to the advisor-wide tuple. Unmapped codes
+# contribute NOTHING — under-boosting (lost signal) is safer than
+# fabricating provenance. Source for each entry: the corresponding V-row
+# body in ``docs/openfoam_corpus/industrial_solver_findings_v_series.md``
+# + the advisor module that emits the code. Extend cautiously: add a row
+# only when the code → V-row link is documented or test-verified.
+_FINDING_CODE_TO_V_ROWS: dict[str, tuple[str, ...]] = {
+    # A4 face_orientation_advisor (advisor_stack._normalize_face_orientation).
+    "face_orientation_deviation": ("V79",),
+    # A5 inlet_outlet_validator (advisor_stack._normalize_inlet_outlet).
+    "inlet_outlet_inlet": ("V81",),
+    "inlet_outlet_outlet": ("V81",),
+    # A8 shm_dict_validator native codes (passed through unchanged).
+    "typo_suspicion": ("V52",),
+    "non_planar_symmetry_patch": ("V99",),
+    "non_dict_input": ("V100",),
+    # A10 thermo_polynomial_range_advisor: V41 = partial-patch header,
+    # V93 = post-conversion per-species sweep. The native advisor codes
+    # are distinct and map 1:1.
+    "tlow_above_canonical": ("V41",),
+    "t_floor_breach": ("V93",),
+    # thin_wall_advisor (advisor_stack._normalize_thin_wall).
+    "thin_wall_at_risk": ("V10",),
+    # unit_detector (advisor_stack._normalize_unit). Both V20 (cadquery
+    # roundtrip unit loss) and V96 (64 KB scan window) apply to unit
+    # inference; the route surfaces both.
+    "unit_inference": ("V20", "V96"),
+    # virtual_interface_detector codes
+    # (advisor_stack._normalize_interfaces).
+    "interface_unmatched": ("V22",),
+    "d1_unintended_gap": ("V19", "V25"),
+}
+
+
 # Sibling /ai-review (M-ROUTE-AI-REVIEW) discovery layout — keep this in sync
 # so engineers do not need to learn two layouts. Codex R0 P1 (2026-05-14):
 # the prior flat-path ``<case_dir>/parts_manifest.json`` lookup missed the
@@ -403,29 +440,40 @@ def _load_dict_file(path: Path) -> Optional[dict[str, Any]]:
 def _discover_parts_manifest(case_dir: Path) -> Optional[dict[str, Any]]:
     """Search the sibling-aligned layout for a parts_manifest artifact.
 
-    Order:
-      1. ``<case_dir>/inputs/parts_manifest.{yaml,yml,json}`` (canonical
-         project layout, matches /ai-review).
-      2. ``<case_dir>/parts_manifest.{yaml,yml,json}`` (flat fallback for
-         non-standard test fixtures + adhoc operator layouts).
+    Search order:
+      1. ``<case_dir>/inputs/parts_manifest.yaml``
+      2. ``<case_dir>/inputs/parts_manifest.yml``
+      3. ``<case_dir>/inputs/parts_manifest.json``
+      4. ``<case_dir>/parts_manifest.yaml`` (flat fallback)
+      5. ``<case_dir>/parts_manifest.yml``
+      6. ``<case_dir>/parts_manifest.json``
 
-    First hit wins. Missing → None (silent skip per V130). Codex R0 P1
-    locked the order: the canonical layout is searched first so that
-    engineers following project convention get the cross-reference.
+    Semantics: **first existing file wins** (Codex R1 P2 lock 2026-05-14).
+    If that file fails to load (malformed YAML/JSON, non-dict payload,
+    IO error), this function returns ``None`` — it does NOT fall through
+    to a later candidate. The rationale is that cross-referencing stale
+    fallback data is a worse failure mode than skipping the
+    cross-reference entirely: ranking determinism + correctness depends
+    on which file the operator believes is canonical, not on what other
+    files happen to be lying around in the case directory.
+
+    Missing entirely → None (silent skip per V130). Malformed primary →
+    None (do not silently fall back).
     """
-    inputs_dir = case_dir / "inputs"
-    for name in _PARTS_MANIFEST_CANDIDATES:
-        candidate = inputs_dir / name
+    search_order: tuple[Path, ...] = (
+        case_dir / "inputs" / "parts_manifest.yaml",
+        case_dir / "inputs" / "parts_manifest.yml",
+        case_dir / "inputs" / "parts_manifest.json",
+        case_dir / "parts_manifest.yaml",
+        case_dir / "parts_manifest.yml",
+        case_dir / "parts_manifest.json",
+    )
+    for candidate in search_order:
         if candidate.is_file():
-            loaded = _load_dict_file(candidate)
-            if loaded is not None:
-                return loaded
-    for name in _PARTS_MANIFEST_CANDIDATES:
-        candidate = case_dir / name
-        if candidate.is_file():
-            loaded = _load_dict_file(candidate)
-            if loaded is not None:
-                return loaded
+            # First-existing wins. _load_dict_file returns None on
+            # malformed / non-dict / IO error — propagate that None
+            # directly instead of continuing to a later candidate.
+            return _load_dict_file(candidate)
     return None
 
 
@@ -545,22 +593,31 @@ async def post_ai_diagnose(
     stack_ms = (time.perf_counter() - t_stack_start) * 1000.0
 
     # Step 3: rank V-rows. Cross-reference with V-rows actually surfaced by
-    # findings (NOT ``evidence_refs``).
+    # findings, narrowed by finding-code → V-row map.
     #
-    # Codex R0 P2 (2026-05-14): ``AdvisorStackReport.evidence_refs`` is the
-    # union of ``_V_ROWS_PER_ADVISOR`` for every *dispatched* advisor,
-    # independent of whether that advisor emitted any findings. Boosting on
-    # evidence_refs would add ``+0.10`` and "surfaced by advisor_stack"
-    # rationale to V79/V81/V52 whenever A4/A5/A8 dispatched cleanly — i.e.,
-    # we would fabricate provenance for V-rows the stack never actually
-    # surfaced. R1 fix: derive the boost set from the V-rows carried by
-    # each emitted ``Finding``, so only V-rows tied to a real finding
-    # influence the diagnose ranking.
+    # Two layers of narrowing apply:
+    #
+    # 1. Codex R0 P2 (2026-05-14): the boost set is derived from emitted
+    #    ``Finding`` instances, NOT from ``AdvisorStackReport.evidence_refs``
+    #    (which would union every *dispatched* advisor's static V-row map
+    #    regardless of findings — fabricating provenance for advisors that
+    #    dispatched cleanly with zero findings).
+    #
+    # 2. Codex R1 P2 (2026-05-14): even per-finding ``evidence_v_rows``
+    #    is too wide — each advisor stamps every finding with the
+    #    advisor-wide V-row tuple (e.g., A10 thermo emits findings stamped
+    #    ``(V41, V93)`` regardless of whether the specific finding is the
+    #    V41-shape "tlow_above_canonical" or the V93-shape "t_floor_breach").
+    #    Until advisor_stack tightens evidence_v_rows per finding code, the
+    #    route narrows the boost set locally via
+    #    :data:`_FINDING_CODE_TO_V_ROWS`. Unmapped finding codes contribute
+    #    NOTHING to the boost set: under-boosting (lost signal) is safer
+    #    than fabricating provenance.
     stack_v_rows: frozenset[str] = (
         frozenset(
             v_row
             for finding in stack_report.findings
-            for v_row in finding.evidence_v_rows
+            for v_row in _FINDING_CODE_TO_V_ROWS.get(finding.code, ())
         )
         if stack_report is not None
         else frozenset()
