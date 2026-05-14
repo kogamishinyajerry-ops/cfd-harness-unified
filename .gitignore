@@ -109,3 +109,4 @@ uv.lock
 # /api/ai-review audit artifacts produced by test runs (route persistence side-effect)
 # Canonical audit doc v62_stack_4q_audit.md is tracked.
 .planning/audits/anon_*.json
+.planning/audits/*_ai_review_*.json
