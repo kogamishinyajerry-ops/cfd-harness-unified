@@ -210,7 +210,7 @@ def test_4q_gate_route_does_not_write_inside_case_dir(
     case_dir = tmp_path / "case_readonly"
     inputs = case_dir / "inputs"
     inputs.mkdir(parents=True)
-    (case_dir / "parts_manifest.json").write_text(
+    (inputs / "parts_manifest.json").write_text(
         json.dumps(_parts_manifest_basic()), encoding="utf-8",
     )
 
@@ -263,7 +263,9 @@ def test_case_dir_provided_invokes_assemble_stack(
     """case_dir + parts_manifest.json → stack_report populated."""
     case_dir = tmp_path / "case_with_parts"
     case_dir.mkdir()
-    (case_dir / "parts_manifest.json").write_text(
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+    (inputs / "parts_manifest.json").write_text(
         json.dumps(_parts_manifest_basic()), encoding="utf-8",
     )
 
@@ -390,7 +392,9 @@ def test_stack_crash_isolation_route_still_returns_200(
     returns 200 with stack_report=None (crash isolation per V62-A spec)."""
     case_dir = tmp_path / "case_for_crash"
     case_dir.mkdir()
-    (case_dir / "parts_manifest.json").write_text(
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+    (inputs / "parts_manifest.json").write_text(
         json.dumps(_parts_manifest_basic()), encoding="utf-8",
     )
 
@@ -413,3 +417,178 @@ def test_stack_crash_isolation_route_still_returns_200(
     audit = json.loads(Path(body["audit_artifact_path"]).read_text())
     assert audit["stack"]["error"] is not None
     assert "simulated advisor stack failure" in audit["stack"]["error"]
+
+
+# ---------- Codex R0 (2026-05-14) regression tests ------------------------
+
+
+def test_p1_canonical_layout_inputs_parts_manifest_invokes_stack(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """Codex R0 P1: stack must run when parts_manifest lives under
+    ``<case_dir>/inputs/`` (the project-standard layout used by
+    /ai-review and existing case fixtures), not just under the flat
+    ``<case_dir>/`` path."""
+    case_dir = tmp_path / "case_canonical_layout"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "face orientation deviation D7",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stack_report"] is not None, (
+        "P1 regression: inputs/-layout case_dir should have invoked stack"
+    )
+    assert body["stack_report"]["advisor_count"] >= 1
+
+
+def test_p1_yaml_parts_manifest_loaded_under_inputs(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """Codex R0 P1 follow-up: YAML candidates under inputs/ are loaded."""
+    case_dir = tmp_path / "case_yaml_layout"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    import yaml as _yaml
+    (inputs / "parts_manifest.yaml").write_text(
+        _yaml.safe_dump(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "face orientation",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stack_report"] is not None
+    assert body["stack_report"]["advisor_count"] >= 1
+
+
+def test_p2_boost_uses_findings_evidence_not_dispatched_advisors(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R0 P2: stack V-row boost must be derived from the
+    ``evidence_v_rows`` carried by actual emitted Findings, NOT from
+    ``AdvisorStackReport.evidence_refs`` (which unions every dispatched
+    advisor's static V-row mapping regardless of findings)."""
+    case_dir = tmp_path / "case_for_p2"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    # Patch assemble_stack to return a report where:
+    #   - evidence_refs claims V77, V88 (would falsely boost those rows)
+    #   - findings is empty (no V-rows actually surfaced)
+    # The boost set must therefore be empty.
+    from ui.backend.services.advisor_stack import AdvisorStackReport
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(),
+            advisor_calls=(),
+            evidence_refs=("V77", "V88"),
+            stack_duration_ms=0.1,
+            advisor_count=2,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-query-no-corpus-overlap-xyzqwerty",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # None of the surfaced matches should claim "surfaced by advisor_stack"
+    # rationale, because no Finding actually carried any V-row.
+    surfaced_v_ids = {
+        m["v_row_id"]
+        for m in body["v_row_matches"]
+        if "advisor_stack" in m["similarity_rationale"]
+    }
+    assert surfaced_v_ids == set(), (
+        f"P2 regression: V-rows boosted from evidence_refs without findings: "
+        f"{surfaced_v_ids}"
+    )
+
+
+def test_p2_boost_applied_for_v_rows_in_actual_findings(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R0 P2 positive-case: when a Finding actually carries V41 in
+    its evidence_v_rows, V41 must be boosted in the diagnose ranking."""
+    case_dir = tmp_path / "case_with_real_finding"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    fabricated_finding = Finding(
+        source_advisor="fake_advisor",
+        severity="warning",
+        code="fabricated_for_test",
+        message="test finding",
+        location=None,
+        evidence_v_rows=("V41",),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(fabricated_finding,),
+            advisor_calls=(),
+            evidence_refs=("V79", "V81"),  # noise; must NOT influence boost
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-no-overlap-tokens",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    v41_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V41"]
+    assert v41_matches, "V41 should be surfaced when finding carries it"
+    assert "advisor_stack" in v41_matches[0]["similarity_rationale"]
+
+    # V79/V81 are in evidence_refs but NOT in findings → must NOT be boosted.
+    for v_id in ("V79", "V81"):
+        matched = [m for m in body["v_row_matches"] if m["v_row_id"] == v_id]
+        for m in matched:
+            assert "advisor_stack" not in m["similarity_rationale"], (
+                f"{v_id} should not claim stack-cross-ref when finding "
+                f"did not carry it"
+            )

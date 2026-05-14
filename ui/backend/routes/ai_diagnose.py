@@ -44,6 +44,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+import yaml
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -362,30 +363,88 @@ class AIDiagnoseResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# Sibling /ai-review (M-ROUTE-AI-REVIEW) discovery layout — keep this in sync
+# so engineers do not need to learn two layouts. Codex R0 P1 (2026-05-14):
+# the prior flat-path ``<case_dir>/parts_manifest.json`` lookup missed the
+# repository's standard ``<case_dir>/inputs/parts_manifest.{yaml,yml,json}``
+# convention, so the advertised stack cross-reference never ran on normal
+# cases. R1 fix: mirror ``_DISCOVER_KEYS`` semantics from ai_review.py.
+_PARTS_MANIFEST_CANDIDATES: tuple[str, ...] = (
+    "parts_manifest.yaml",
+    "parts_manifest.yml",
+    "parts_manifest.json",
+)
+
+
+def _load_dict_file(path: Path) -> Optional[dict[str, Any]]:
+    """Load a YAML or JSON dict from disk; return None on any failure.
+
+    Mirrors ai_review.py loader behavior (R1): silently skip non-dict
+    payloads, malformed files, and IO errors — the calling site treats
+    absence as "no stack input available", per V130 silent-skip.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".json":
+            obj = json.loads(text)
+        else:
+            obj = yaml.safe_load(text)
+    except (json.JSONDecodeError, yaml.YAMLError):
+        return None
+    if not isinstance(obj, dict):
+        return None
+    return obj
+
+
+def _discover_parts_manifest(case_dir: Path) -> Optional[dict[str, Any]]:
+    """Search the sibling-aligned layout for a parts_manifest artifact.
+
+    Order:
+      1. ``<case_dir>/inputs/parts_manifest.{yaml,yml,json}`` (canonical
+         project layout, matches /ai-review).
+      2. ``<case_dir>/parts_manifest.{yaml,yml,json}`` (flat fallback for
+         non-standard test fixtures + adhoc operator layouts).
+
+    First hit wins. Missing → None (silent skip per V130). Codex R0 P1
+    locked the order: the canonical layout is searched first so that
+    engineers following project convention get the cross-reference.
+    """
+    inputs_dir = case_dir / "inputs"
+    for name in _PARTS_MANIFEST_CANDIDATES:
+        candidate = inputs_dir / name
+        if candidate.is_file():
+            loaded = _load_dict_file(candidate)
+            if loaded is not None:
+                return loaded
+    for name in _PARTS_MANIFEST_CANDIDATES:
+        candidate = case_dir / name
+        if candidate.is_file():
+            loaded = _load_dict_file(candidate)
+            if loaded is not None:
+                return loaded
+    return None
+
+
 def _maybe_run_stack(case_dir: Path) -> Optional[AdvisorStackReport]:
     """Invoke ``assemble_stack`` with whatever artifacts the case exposes.
 
     For V62-A's first diagnose route, the artifact extraction surface is
-    intentionally narrow: we look only for ``parts_manifest.json`` and
-    ``snappyHexMeshDict``/``shm_dict.json`` next to the case root. Richer
-    artifact discovery is M-4Q-AUDIT scope, not M-ROUTE-AI-DIAGNOSE
-    scope; this keeps the surface small enough to Codex-review.
+    intentionally narrow: only ``parts_manifest`` (under the sibling-aligned
+    layout — see :func:`_discover_parts_manifest`). Richer artifact
+    discovery (shm_dict / thermo_dict / thin_wall) is M-4Q-AUDIT scope —
+    this keeps the surface small enough to Codex-review in isolation.
 
-    Returns None if no advisory artifacts could be located; this is
+    Returns None if no parts_manifest could be located. This is
     distinguishable from "stack ran with 0 findings" because the audit
-    captures both ``stack_invoked`` (bool) and ``stack_report`` (maybe-null).
+    captures both ``invoked`` (bool) and ``report`` (maybe-null).
     """
-    parts_manifest_path = case_dir / "parts_manifest.json"
-    parts_manifest: Optional[dict[str, Any]] = None
-    if parts_manifest_path.is_file():
-        try:
-            parts_manifest = json.loads(parts_manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            parts_manifest = None
-
+    parts_manifest = _discover_parts_manifest(case_dir)
     if parts_manifest is None:
         return None
-
     return assemble_stack(parts_manifest=parts_manifest)
 
 
@@ -485,9 +544,26 @@ async def post_ai_diagnose(
             stack_report = None
     stack_ms = (time.perf_counter() - t_stack_start) * 1000.0
 
-    # Step 3: rank V-rows. Cross-reference with stack evidence_refs.
+    # Step 3: rank V-rows. Cross-reference with V-rows actually surfaced by
+    # findings (NOT ``evidence_refs``).
+    #
+    # Codex R0 P2 (2026-05-14): ``AdvisorStackReport.evidence_refs`` is the
+    # union of ``_V_ROWS_PER_ADVISOR`` for every *dispatched* advisor,
+    # independent of whether that advisor emitted any findings. Boosting on
+    # evidence_refs would add ``+0.10`` and "surfaced by advisor_stack"
+    # rationale to V79/V81/V52 whenever A4/A5/A8 dispatched cleanly — i.e.,
+    # we would fabricate provenance for V-rows the stack never actually
+    # surfaced. R1 fix: derive the boost set from the V-rows carried by
+    # each emitted ``Finding``, so only V-rows tied to a real finding
+    # influence the diagnose ranking.
     stack_v_rows: frozenset[str] = (
-        frozenset(stack_report.evidence_refs) if stack_report is not None else frozenset()
+        frozenset(
+            v_row
+            for finding in stack_report.findings
+            for v_row in finding.evidence_v_rows
+        )
+        if stack_report is not None
+        else frozenset()
     )
     t_score_start = time.perf_counter()
     scored: list[tuple[float, str, VSeriesRow, frozenset[str], frozenset[str]]] = []
