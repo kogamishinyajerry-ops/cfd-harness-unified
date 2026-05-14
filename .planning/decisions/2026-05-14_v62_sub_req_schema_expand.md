@@ -4,7 +4,7 @@ title: REQ-SCHEMA-EXPAND · AIReviewRequest exposes step_path + step_bbox + step
 status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 2 supplement · driven by M-STACK-TRACK-1 §8 + M-STACK-TRACK-2 architectural gap
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8125a9c7e81145f2972c)
 ---
 
 # DEC-V62-A-sub-REQ-SCHEMA-EXPAND · close HTTP-vs-Python advisor divergence
