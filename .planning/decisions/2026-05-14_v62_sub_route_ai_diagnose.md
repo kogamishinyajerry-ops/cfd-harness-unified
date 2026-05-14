@@ -4,7 +4,7 @@ title: M-ROUTE-AI-DIAGNOSE · POST /api/ai-diagnose · V-series similarity match
 status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 1 · M-ROUTE-AI-DIAGNOSE (stack-level route #2 of 2; pairs with M-ROUTE-AI-REVIEW)
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed819d9931fa320a414b35)
 codex_review_relay: 86gs gpt-5.4 xhigh · R0+R1+R2+R2-verbatim chain CLOSED (V133 cap reached)
 ---
 

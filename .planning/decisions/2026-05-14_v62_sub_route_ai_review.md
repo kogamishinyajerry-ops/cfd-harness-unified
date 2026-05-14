@@ -4,7 +4,7 @@ title: M-ROUTE-AI-REVIEW · POST /ai-review · advisor stack route · 4Q gate in
 status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 1 · M-ROUTE-AI-REVIEW (first of 2 stack-level routes · partially unblocks M-4Q-AUDIT)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8155bf45c38bd9390123)
 ---
 
 # DEC-V62-A-sub-ROUTE-AI-REVIEW · POST /ai-review
