@@ -4,7 +4,7 @@ title: V63-A Industrial Scale-Up Arc · charter DEC · elevated from plan-file a
 status: Accepted
 parent_dec: V62-A-close
 phase: V63-A charter (Industrial Scale-Up · ratified 2026-05-14)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed81e698c8d8d1918034c5)
 ---
 
 # DEC-V63-A-charter · V63-A Industrial Scale-Up Arc

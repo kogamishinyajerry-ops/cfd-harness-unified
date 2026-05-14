@@ -57,7 +57,7 @@
 
 ### Tier 1 · 解锁性（V62-A carry-over items · parallel · independent）
 
-- [ ] **M-D11-DRAFT** stl_face_label_validator advisor draft · V94 face-label loss coverage · sub-DEC `DEC-V63-A-sub-M-D11-DRAFT` (parent=V63-A-charter) · commit: `_____`
+- [x] **M-D11-DRAFT** stl_face_label_validator advisor LANDED · V94 face-label-loss class · 3 detection paths (orphan / duplicate / missing-ref) · commit: `57944fe` (feat) → `fa34c3c` (11 advisor tests · 4Q gate inline · case_011 V94 regression) · sub-DEC `DEC-V63-A-sub-D11` Accepted (2026-05-14 · stl_face_label_validator.py 21 KB · evidence_v_rows=(V94,) · single-case land per A2 v1 / D6 / D10 precedent · stack registration in advisor_stack.py line 183 + dispatch line 741-758 · ai_review.py stl_face_normals wire field at line 209 + auto-discover at line 736 · 74/74 tests green = 11 D11 advisor + 4 D11 stack-dispatch + 2 D11 route-wire + 26 stack regression + 31 ai_review regression · case_011 v1 V94 3-row replay green · V62-A TRACK-1 §8 enhancement #3 CLOSE-VALIDATED ✓ · carry-over #1 closed · LANDED counter 10 → 11 · D-class literal 2/3 ✓ → 3/3 ✓ MET on V63-A Done dim #3 · 4Q gate inline PASS · confidence: med · pre-merge Codex skipped per v2.3 1-sync-trigger no security boundary)
 - [ ] **M-D6-HTTP-WIRE** D6 extra_body_advisor HTTP route plumb · close REQ-SCHEMA-EXPAND stl_bbox_set scope-out · routes/ai_review.py 1-sync-trigger Codex pre-merge · commit: `_____`
 - [ ] **M-D10-CATALOG-AUDIT** STANDARD_OPENFOAM_BCS catalog 61 → ≥100 BCs · case-driven extension (not spec-audit) · commit: `_____`
 
@@ -83,11 +83,11 @@
 ```
 当前 distinct numerics class 100% adoption PASS:  3 / 5     (V62-A 起点 · 待 M-CASE-EXT-{1,2} 扩张)
 当前 V-series corpus size:                        V51+ / V100   (V62-A 起点 · 待 M-V100-LANDING)
-当前 D-class advisor LANDED:                      2 / 3     (D6 + D10 V62-A · D11 待 M-D11-DRAFT B39)
+当前 D-class advisor LANDED:                      **3 / 3 ✓ MET**   (D6 + D10 V62-A + D11 B39 · Done dim #3 MET ✓)
 当前 Industrial e2e validation report:            0 / 3     (V62-A Track C 为 session-shape · 待 M-VAL-REPORT-{1,2,3})
-当前 V62-A carry-over closure:                    0 / ≥4    (V62-A 移交 6 items · V63-A 吸收 4 · 待逐一 close)
+当前 V62-A carry-over closure:                    **1 / ≥4**   (item #1 D11 stl_face_label_validator B39 closed ✓ · 仍 5 items pending: D6 HTTP / D10 catalog / case substrate / frontend wiring / ai_diagnose drift)
 当前 V-row truth-capture rate (canonical):        1 / 9 on case_006 (V62-A TRACK-3-rerun 起点 · 待扩到 ≥5/9 + ≥3/9 on ≥3 cases)
-当前 Done dims MET:                               0 / 6
+当前 Done dims MET:                               **1 / 6**   (Done dim #3 D-class 3/3 MET ✓ via B39 D11 land)
 ```
 
 最后更新时间：`2026-05-14 (V63-A arc 初始化 · ARC-GOAL.md fresh skeleton from V62-A close · 6 Done dims set per V63-A charter DEC · DEC-V63-A-charter Accepted · plan-file ratified 2026-05-14 · V62-A ARC-GOAL frozen at ARC-GOAL-V62-A-CLOSED.md · V63-A Tier 1 dispatch unblocked · M-D11-DRAFT B39 candidate per task brief · ARC-GOAL 协议: B38/B39 双方都改 ARC-GOAL 需手动合并 · 更新人：Claude Code Opus 4.7 session main · B38 V62→V63 governance transition)`

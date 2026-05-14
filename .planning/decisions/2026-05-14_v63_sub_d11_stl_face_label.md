@@ -4,7 +4,7 @@ title: D11 stl_face_label_validator — face-label-loss class advisor (single-ca
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 1 supplement · driven by V62-A M-STACK-TRACK-1 §8 enhancement #3 carry-over
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed810385c9e88e644458cf)
 ---
 
 ## Status
