@@ -1,7 +1,11 @@
-# ARC-GOAL · V63-A Industrial Scale-Up Arc
+# ARC-GOAL · V63-A Industrial Scale-Up Arc · **CLOSED 2026-05-15**
+
+> **V63-A CLOSED 2026-05-15 · 6/6 Done dims MET ✓ · V63 close DEC `decisions/2026-05-15_v63_close_dec.md` · Successor: V64-A Validation Maturity at `ARC-GOAL.md`** (Done #4 via user-ratified PARTIAL semantics 2026-05-15 · governance precedent §3.1 of close DEC)
 
 **Plan SSOT**: [.planning/2026-05-14_v63_charter.md](2026-05-14_v63_charter.md)
 **Charter DEC**: [.planning/decisions/2026-05-14_v63_charter_dec.md](decisions/2026-05-14_v63_charter_dec.md) (DEC-V63-A-charter Accepted 2026-05-14)
+**Close DEC**: [.planning/decisions/2026-05-15_v63_close_dec.md](decisions/2026-05-15_v63_close_dec.md) (DEC-V63-A-close Accepted 2026-05-15 · 6/6 Done dims MET ✓)
+**Successor**: V64-A "Validation Maturity" · charter DEC [.planning/decisions/2026-05-15_v64_charter_dec.md](decisions/2026-05-15_v64_charter_dec.md) (Accepted 2026-05-15 · same B52 chain) · active ARC-GOAL: [.planning/ARC-GOAL.md](ARC-GOAL.md)
 **Predecessor**: [V62-A advisor stack closure arc · CLOSED 2026-05-14](ARC-GOAL-V62-A-CLOSED.md) (6/6 Done dims MET ✓ · `DEC-V62-A-close` Accepted)
 **Started**: 2026-05-14 (same B38 commit chain as V62-A close)
 **Mode**: milestone-driven (no calendar)
