@@ -1,0 +1,67 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004 NREL Phase VI MRF · M-V64A-VAL-FULL-1  |
+|    \\/     M anipulation  | Sequence S baseline · U_inf = 7 m/s             |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (7 0 0);
+
+boundaryField
+{
+    bg_inlet
+    {
+        type            fixedValue;
+        value           uniform (7 0 0);
+    }
+    bg_outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (7 0 0);
+    }
+    bg_tunnel_walls
+    {
+        type            slip;
+    }
+    "rotor_blade_.*"
+    {
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }
+    "hub_spinner_.*"
+    {
+        type            movingWallVelocity;
+        value           uniform (0 0 0);
+    }
+    nacelle_body
+    {
+        type            noSlip;
+    }
+    nacelle_service_cover
+    {
+        type            noSlip;
+    }
+    tower_body
+    {
+        type            noSlip;
+    }
+    yaw_sensor_shim
+    {
+        type            noSlip;
+    }
+}
+
+// ************************************************************************* //

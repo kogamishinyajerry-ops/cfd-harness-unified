@@ -1,0 +1,72 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004 · M-V64A-VAL-FULL-1                    |
+|    \\/     M anipulation  | omega = sqrt(k)/(Cmu^0.25 * L) ≈ 1.566 /s       |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 1.566;
+
+boundaryField
+{
+    bg_inlet
+    {
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    0.05;
+        value           uniform 1.566;
+    }
+    bg_outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 1.566;
+        value           uniform 1.566;
+    }
+    bg_tunnel_walls
+    {
+        type            slip;
+    }
+    "rotor_blade_.*"
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+    "hub_spinner_.*"
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+    nacelle_body
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+    nacelle_service_cover
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+    tower_body
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+    yaw_sensor_shim
+    {
+        type            omegaWallFunction;
+        value           uniform 1.566;
+    }
+}
+
+// ************************************************************************* //
