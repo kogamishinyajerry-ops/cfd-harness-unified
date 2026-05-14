@@ -59,6 +59,7 @@ needed; that is out of scope for V62-A.
 """
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 import time
@@ -71,33 +72,57 @@ from typing import Any, Mapping, Sequence
 _PARENT_PKG = "ui.backend.services.geometry_ingest"
 
 
-def _ensure_parent_package_placeholder() -> types.ModuleType:
-    """Pre-populate ``ui.backend.services.geometry_ingest`` in
-    ``sys.modules`` with a placeholder that skips the real
-    ``__init__.py``.
+def _ensure_parent_package_loaded() -> types.ModuleType:
+    """Ensure ``ui.backend.services.geometry_ingest`` is in ``sys.modules``.
 
-    Codex R1 P2 fix (2026-05-14): without this, my R0 fix only handled the
-    initial ``import advisor_stack`` — any *subsequent* normal import like
-    ``from ui.backend.services.geometry_ingest import face_orientation_advisor``
-    still triggers Python to import the parent package first, which runs
-    the real ``__init__.py`` → ``health_check.py`` → ``import trimesh``
-    chain and crashes in ``[ui]``-only environments.
+    Resolution order:
 
-    The placeholder is a stdlib ``ModuleType`` with ``__path__`` set to
-    the package directory so Python's import machinery can still resolve
-    sub-module file lookups against it. If the real package has already
-    been loaded (workbench env or test runner), we leave the cached
-    real-module untouched.
+    1. **Already cached** (workbench-env test runner, or a prior
+       caller already executed the real ``__init__.py``) → return the
+       cached entry untouched. No surprises for downstream code that
+       relies on the package's normal re-exports
+       (``IngestReport`` / ``canonical_stl_bytes`` / etc.).
+    2. **Real init succeeds** (workbench env: ``trimesh`` installed) →
+       return the real package. Downstream ``from
+       ui.backend.services.geometry_ingest import IngestReport`` keeps
+       working exactly as before — no shadowing.
+    3. **Real init fails** (``[ui]``-only env: no ``trimesh``) → install
+       a stdlib ``ModuleType`` placeholder with ``__path__`` set to the
+       package directory so the advisor leaves can still load. The
+       placeholder does NOT carry the workbench-only re-exports
+       (``IngestReport``, ``canonical_stl_bytes``, …); any downstream
+       code touching those symbols in a ``[ui]``-only deployment is
+       already broken by missing ``trimesh`` regardless of this module.
+
+    Codex evolution log:
+      - R0 P1 (2026-05-14): naive ``from ui.backend.services.geometry_ingest
+        import ...`` ran ``__init__.py`` → trimesh crash in ``[ui]`` env.
+      - R1 P2 (2026-05-14): leaf-only ``spec_from_file_location`` left
+        the parent package missing from ``sys.modules`` so subsequent
+        normal imports still re-triggered the real init.
+      - R2 P1 (2026-05-14): unconditional placeholder shadowed the real
+        package in workbench env, breaking ``IngestReport`` imports when
+        ``advisor_stack`` was loaded first.
+      - R3 (2026-05-14): try-real-first + fallback-placeholder
+        (this code) — both envs get what they need.
     """
     existing = sys.modules.get(_PARENT_PKG)
     if existing is not None:
         return existing
-    pkg_dir = Path(__file__).parent / "geometry_ingest"
-    placeholder = types.ModuleType(_PARENT_PKG)
-    placeholder.__path__ = [str(pkg_dir)]
-    placeholder.__file__ = str(pkg_dir / "__init__.py")
-    sys.modules[_PARENT_PKG] = placeholder
-    return placeholder
+    try:
+        importlib.import_module(_PARENT_PKG)
+    except ImportError:
+        # Real init failed — typically ``[ui]``-only env without trimesh.
+        # Drop any partial cache entry the failed import may have left
+        # behind so the placeholder is the canonical record.
+        sys.modules.pop(_PARENT_PKG, None)
+        pkg_dir = Path(__file__).parent / "geometry_ingest"
+        placeholder = types.ModuleType(_PARENT_PKG)
+        placeholder.__path__ = [str(pkg_dir)]
+        placeholder.__file__ = str(pkg_dir / "__init__.py")
+        sys.modules[_PARENT_PKG] = placeholder
+        return placeholder
+    return sys.modules[_PARENT_PKG]
 
 
 def _load_advisor(modname: str) -> Any:
@@ -114,7 +139,7 @@ def _load_advisor(modname: str) -> Any:
     3. test-time ``monkeypatch.setattr(<advisor_mod>, "fn", ...)`` patches
        the same module object the stack dispatches against.
     """
-    parent = _ensure_parent_package_placeholder()
+    parent = _ensure_parent_package_loaded()
     qualified = f"{_PARENT_PKG}.{modname}"
     if qualified in sys.modules:
         cached = sys.modules[qualified]

@@ -329,6 +329,56 @@ def test_critical_count_includes_fail_severity() -> None:
     assert r.warning_count == 0
 
 
+def test_workbench_env_real_package_exports_preserved(tmp_path: Path) -> None:
+    """Codex R2 P1 regression (2026-05-14): in workbench env (trimesh
+    installed), importing ``advisor_stack`` first must NOT shadow the
+    real ``geometry_ingest`` package. The R2 unconditional placeholder
+    broke this — `from ui.backend.services.geometry_ingest import
+    IngestReport` would ImportError because the placeholder lacked the
+    re-exported names.
+
+    Subprocess is the only honest test of import order — in-process
+    pytest already has both packages cached at collection time.
+    """
+    import subprocess
+    import textwrap
+
+    repo_root = Path(__file__).resolve().parents[3]
+    script = textwrap.dedent(
+        """
+        # Workbench env: trimesh IS available. Import advisor_stack FIRST,
+        # then verify the real package's re-exports still resolve.
+        from ui.backend.services.advisor_stack import assemble_stack
+        from ui.backend.services.geometry_ingest import (
+            IngestReport,
+            canonical_stl_bytes,
+        )
+        # Smoke: real exports must be callable / class objects, not None.
+        assert IngestReport is not None
+        assert callable(canonical_stl_bytes)
+        # Stack still works alongside.
+        r = assemble_stack(parts_manifest={"parts": []})
+        assert r.advisor_count == 2  # A4 + A5 dispatched on empty parts list
+        print("WORKBENCH_OK")
+        """
+    ).strip()
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=str(repo_root),
+        timeout=30,
+    )
+    assert result.returncode == 0, (
+        "workbench-env import-order regression.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "WORKBENCH_OK" in result.stdout, (
+        f"missing success marker.\nstdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+
+
 def test_stack_importable_without_trimesh(tmp_path: Path) -> None:
     """Codex R0 P1 + R1 P3 regression: a *cold-start* `import
     advisor_stack` must succeed in base UI environments where the
@@ -356,16 +406,16 @@ def test_stack_importable_without_trimesh(tmp_path: Path) -> None:
         """
         import sys
 
+        # Python 3.12+ uses the modern MetaPathFinder.find_spec API; the
+        # legacy find_module path is bypassed silently. We implement
+        # find_spec to actually intercept trimesh imports.
         class _BlockTrimesh:
-            def find_module(self, name, path=None):
+            def find_spec(self, name, path=None, target=None):
                 if name == "trimesh" or name.startswith("trimesh."):
-                    return self
+                    raise ModuleNotFoundError(
+                        f"simulated [ui]-only env: no module named {name}"
+                    )
                 return None
-
-            def load_module(self, name):
-                raise ImportError(
-                    f"simulated [ui]-only env: no module named {name}"
-                )
 
         sys.meta_path.insert(0, _BlockTrimesh())
 
@@ -390,7 +440,15 @@ def test_stack_importable_without_trimesh(tmp_path: Path) -> None:
         )
         assert r.advisor_count == 2
         assert r.critical_count == 1, "A5 fail should count as blocking"
-        assert "trimesh" not in sys.modules
+        # Note: we do NOT assert ``"trimesh" not in sys.modules``. Python's
+        # import machinery may insert a ``None`` sentinel as a negative
+        # cache when a finder rejects an import, which is not a leak. The
+        # behavioral checks above (advisor_count, critical_count) prove
+        # the stack functions without trimesh actually loaded.
+        cached = sys.modules.get("trimesh")
+        assert cached is None or cached.__class__.__name__ == "NoneType", (
+            f"trimesh leaked as a real module: {cached!r}"
+        )
         print("COLD_START_OK")
         """
     ).strip()
