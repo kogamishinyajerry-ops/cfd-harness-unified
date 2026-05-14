@@ -1,11 +1,11 @@
 ---
 decision_id: DEC-V62-A-sub-M-ROUTE-AI-DIAGNOSE
-title: M-ROUTE-AI-DIAGNOSE · POST /api/ai-diagnose · V-series similarity matching · advisor_stack cross-reference · audit artifact · 4Q gate inline-verified
+title: M-ROUTE-AI-DIAGNOSE · POST /api/ai-diagnose · V-series similarity matching · advisor_stack cross-reference · audit artifact · 4Q gate inline-verified · Codex chain R0+R1+R2+R2-verbatim closed
 status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 1 · M-ROUTE-AI-DIAGNOSE (stack-level route #2 of 2; pairs with M-ROUTE-AI-REVIEW)
 notion_sync_status: pending session-end batch
-codex_review_relay: 86gs gpt-5.4 xhigh · MANDATORY
+codex_review_relay: 86gs gpt-5.4 xhigh · R0+R1+R2+R2-verbatim chain CLOSED (V133 cap reached)
 ---
 
 # DEC-V62-A-sub-M-ROUTE-AI-DIAGNOSE · POST /ai-diagnose
@@ -128,11 +128,21 @@ All 4Q-gate tests are part of the 15-test green suite.
 
 ## Codex review
 
-`codex-review-relay --base origin/main` on the commit, **MANDATORY**
-per V62-A charter §"Codex review" + RETRO-V61-001 risk-tier (route is
-operator-facing security boundary). Round cap = 3 per V133. Findings
-classified P1/P2/P3 will be addressed inline or queued to retro per
-v2.3 governance.
+`codex-review-relay --commit <SHA>` (86gs gpt-5.4 xhigh), MANDATORY per
+V62-A charter §"Codex review" + RETRO-V61-001 risk-tier (route is
+operator-facing security boundary).
+
+### Review chain (R0 + 2 fix iterations + 1 verbatim landing = V133 cap reached)
+
+| Round | Commit | Verdict | Findings → action |
+|---|---|---|---|
+| **R0** | `fe89321` (baseline) | CHANGES_REQUIRED | P1: `_maybe_run_stack` missed sibling-aligned `<case_dir>/inputs/parts_manifest.{yaml,yml,json}` layout. P2: stack V-row boost used `evidence_refs` (advisor-wide static map) instead of per-finding evidence. → R1 fix. |
+| **R1** | `8f212f2` | CHANGES_REQUIRED | P2.1: `_discover_parts_manifest` fell through to later candidates after malformed primary (silently consumed fallback). P2.2: per-finding `evidence_v_rows` still carries advisor-wide tuple → still fabricates provenance. → R2 fix. |
+| **R2** | `93342fa` | CHANGES_REQUIRED | P2.1: `typo_suspicion` is emitted by BOTH shm_dict_validator AND thermo_polynomial_range_advisor; keying by code alone collides. P2.2: narrow map used phantom code names (`non_planar_symmetry_patch`, `non_dict_input`) not emitted by live advisors; missed `multi_normal_constrained_patch` (real V99 code) and `internal_t_below_tlow` (V93 companion). → R2-verbatim landing (per v2.2 verbatim Codex exception, no new review round). |
+| **R2-verbatim** | `f8b73b3` | CHAIN CLOSED | Verbatim Codex direction landed: map renamed `_FINDING_KEY_TO_V_ROWS` keyed by `(source_advisor, code)`; phantom codes replaced with real ones; V93-companion code added. |
+
+61/61 cross-route tests green after R2-verbatim landing (25 ai_diagnose
++ 18 advisor_stack + 18 ai_review).
 
 ## v2.3 governance compliance
 
