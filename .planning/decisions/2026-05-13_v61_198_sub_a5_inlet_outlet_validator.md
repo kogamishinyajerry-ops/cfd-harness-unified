@@ -4,7 +4,7 @@ title: A5 inlet_outlet_validator · automated parts_manifest audit against V81 p
 status: Accepted
 parent_dec: V61-198
 phase: A5 sub-DEC · V81 closure
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8151b392cda130be2cb3)
 parent_artifacts:
   - .planning/decisions/2026-05-12_v61_198_sub_protocol_inlet_outlet.md (V81 protocol amendment · partial → closed by this DEC)
   - .planning/patches/draft_codex_cad_inlet_outlet_protocol_amendment_2026-05-09.md (cycle 003 design including A-class pre-flight validator candidate)

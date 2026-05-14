@@ -4,7 +4,7 @@ title: case_013 D7 cross-topology evidence sediment · A4 face_orientation_advis
 status: Accepted
 parent_dec: V61-198
 phase: Industrial Extension Phase 2 #1 (case_013) · M-A4 unblocker
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed81a89ca6cdf156c34f1f)
 parent_artifacts:
   - .planning/methodology/kickoff/case_013_codex_request.md (dispatch brief)
   - .planning/methodology/kickoff/case_013_codex_response.md (Codex 5-deliverable design)

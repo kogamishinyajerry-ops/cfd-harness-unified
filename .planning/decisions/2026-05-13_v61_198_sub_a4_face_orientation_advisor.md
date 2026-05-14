@@ -4,7 +4,7 @@ title: A4 face_orientation_advisor · component-orientation defect detector for 
 status: Accepted
 parent_dec: V61-198
 phase: A4 sub-DEC · Tier 1 advisor substrate arc closure
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed812590e0cf4507cec38d)
 parent_artifacts:
   - .planning/patches/draft_a4_face_orientation_2026-05-13.md (research deliverable · commit 615dacb · API + algorithm spec)
   - .planning/methodology/industrial_case_solver_findings.md (V79 + V87 status flipped to [VALIDATED] 2026-05-13)

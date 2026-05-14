@@ -4,7 +4,7 @@ title: A8 shm_dict_validator · pre-flight snappyHexMeshDict audit (V52 typo + V
 status: Accepted
 parent_dec: V61-198
 phase: A8 sub-DEC · M-A8 Tier 2 milestone closure
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8115afcec9ed795179c9)
 parent_artifacts:
   - .planning/patches/draft_a8_shm_dict_validator_2026-05-09.md (drafted spec; this DEC implements)
   - .planning/cross_cuts/v_series_2026-05-09_case_012_append.md (V52 row updated: confirmed → [VALIDATED])

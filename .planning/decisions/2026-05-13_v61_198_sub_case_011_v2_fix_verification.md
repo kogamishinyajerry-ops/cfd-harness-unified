@@ -4,7 +4,7 @@ title: case_011 v2 sub-session · V85 + V86 narrow-criterion fix verification ·
 status: Accepted
 parent_dec: V61-198
 phase: Industrial Extension Phase 2 #1 (case_011) · V85/V86 narrow-criterion fix verification · Track C session 2 retro §9 closure
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed81df8a3efed9fade86cf)
 parent_artifacts:
   - .planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md (retro §9 v2 fix path spec; §10 pacing notes)
   - .planning/case_profiles/case_011_plate_fin_compact_hx.md (case profile + v2 recommendations)
