@@ -4,7 +4,7 @@ title: case_006 ONERA M6 input-manifest substrate extension · thin_wall + A2-v2
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 2 · M-CASE-006-SUBSTRATE (carry-over #3 · driven by TRACK-3-rerun §V-row truth-capture rate)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed810ab783c81a6f76a6f3)
 ---
 
 ## Status

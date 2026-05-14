@@ -63,10 +63,10 @@
 
 ### Tier 2 · case 扩张
 
-- [ ] **M-CASE-EXT-1** 4th distinct numerics class case (candidate: incompressible-LES-multi-fan / two-phase-VOF / heat-transfer-conjugate-radiation) · commit: `_____`
+- [x] **M-CASE-EXT-1** 4th distinct numerics class case · case_004 NREL Phase VI MRF · rotating-machine-MRF-incompressible-RANS · commit: `b5e7802` (Track C retro + ARC-GOAL attribution · `0a792da` predecessor doc attrib) · retro `.planning/retrospectives/2026-05-15_case_ext_1_case_004_nrel_phase_vi_mrf.md` · adoption 3/3 = 100% PASS ✓ · Done dim #1 3/5 → 4/5 · numerics class signature distinct from case_011/016/006 trio (rotating reference frame · incompressible MRF turbine) · stack invocation path A + path B aligned · 4Q gate offline verified · validation-truth-vs-stack diff documented
 - [ ] **M-CASE-EXT-2** 5th distinct numerics class case · commit: `_____`
 - [ ] **M-V100-LANDING** V-series corpus expansion from V51+ to V100 · ≥ 49 net-new distinct V-rows · TRUE NEW signatures (not aliased duplicates) · commit: `_____`
-- [ ] **M-CASE-006-SUBSTRATE** case_006 input-manifest extension (thin_wall_inputs.yaml + interface_bodies.json + interface_specs.json) · V-row capture 1/9 → 3/9 · commit: `_____`
+- [x] **M-CASE-006-SUBSTRATE** case_006 input-manifest extension · 3 synthesized inputs from evidence/v1/face_geometry.json + defect_manifest.yaml · commit chain `b415b15` (feat 3 files) → `7e73642` (sub-DEC) → `bb1d596` (Codex R0 APPROVE_WITH_COMMENTS · 2 P2 acknowledged) · sub-DEC `DEC-V63-A-sub-M-CASE-006-SUBSTRATE` Accepted (2026-05-14 · retro `.planning/retrospectives/2026-05-15_case_006_substrate_extension.md` · V-row capture 1/9 → **3/9 firm** ✓ V29 + V30 (thin_wall tip_cap_sliver 0.18mm critical) + D1 (A2-v2 root_fairing pad+cover gap) · V62-A carry-over #3 CLOSED ✓ · zero case_dir CAD/STL/manifest modification · confidence: med)
 
 ### Tier 3 · validation reports + close
 
@@ -81,13 +81,13 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 distinct numerics class 100% adoption PASS:  3 / 5     (V62-A 起点 · 待 M-CASE-EXT-{1,2} 扩张)
+当前 distinct numerics class 100% adoption PASS:  **4 / 5**   (V62-A 起点 3 + B43 case_004 NREL Phase VI MRF rotating-MRF-incompressible · 待 M-CASE-EXT-2 推到 5/5 MET Done dim #1)
 当前 V-series corpus size:                        V51+ / V100   (V62-A 起点 · 待 M-V100-LANDING)
 当前 D-class advisor LANDED:                      **3 / 3 ✓ MET**   (D6 + D10 V62-A + D11 B39 · Done dim #3 MET ✓)
 当前 Industrial e2e validation report:            0 / 3     (V62-A Track C 为 session-shape · 待 M-VAL-REPORT-{1,2,3})
-当前 V62-A carry-over closure:                    **3 / ≥4**   (item #1 D11 stl_face_label_validator B39 closed ✓ · item #2 D10 STANDARD_OPENFOAM_BCS catalog 80→138 B41 closed ✓ · item #4 D6 HTTP wire-up B40 closed ✓ · 仍 3 items pending: case substrate / frontend wiring / ai_diagnose drift)
-当前 V-row truth-capture rate (canonical):        1 / 9 on case_006 (V62-A TRACK-3-rerun 起点 · 待扩到 ≥5/9 + ≥3/9 on ≥3 cases)
-当前 Done dims MET:                               **1 / 6**   (Done dim #3 D-class 3/3 MET ✓ via B39 D11 land)
+当前 V62-A carry-over closure:                    **4 / ≥4 ✓ MET (Done dim #5)**   (#1 D11 B39 ✓ · #2 D10 catalog B41 ✓ · #3 case_006 substrate B42 ✓ · #4 D6 HTTP B40 ✓ · 仍 2 items pending: frontend wiring / ai_diagnose drift v2 · V63-A Done dim #5 阈值 ≥4/6 MET)
+当前 V-row truth-capture rate (canonical):        **3 / 9 on case_006** (V29 + V30 + D1 ✓ post B42 substrate extension · V26/V27/V28/V31/V32 out-of-stack-scope · D4 input-wedge-missing · 待 ≥5/9 + ≥3/9 on ≥3 cases for Done #6)
+当前 Done dims MET:                               **2 / 6**   (Done #3 D-class 3/3 MET ✓ B39 + Done #5 carry-over 4/≥4 MET ✓ B42)
 ```
 
 最后更新时间：`2026-05-14 (V63-A arc 初始化 · ARC-GOAL.md fresh skeleton from V62-A close · 6 Done dims set per V63-A charter DEC · DEC-V63-A-charter Accepted · plan-file ratified 2026-05-14 · V62-A ARC-GOAL frozen at ARC-GOAL-V62-A-CLOSED.md · V63-A Tier 1 dispatch unblocked · M-D11-DRAFT B39 candidate per task brief · ARC-GOAL 协议: B38/B39 双方都改 ARC-GOAL 需手动合并 · 更新人：Claude Code Opus 4.7 session main · B38 V62→V63 governance transition) · B40 update: M-D6-HTTP-WIRE [x] LANDED · sub-DEC DEC-V63-A-sub-M-D6-HTTP-WIRE Accepted (2026-05-14 · 71/71 tests green · V62-A REQ-SCHEMA-EXPAND §"does NOT add" item 1 closed · carry-over closure 1/≥4 → 2/≥4 · routes/ai_review.py 1-sync-trigger Codex pre-merge MANDATORY per v2.3 · pending Codex APPROVE before push) · B41 update: M-D10-CATALOG-AUDIT [x] LANDED · sub-DEC DEC-V63-A-sub-M-D10-CATALOG-AUDIT Accepted (2026-05-14 · STANDARD_OPENFOAM_BCS 80→138 BCs · 19/19 D10 tests + 67/67 D10+adjacent tests green · 3 LANDED case BC sets all 0/N unrecognized pre+post · disjoint invariant retained · catalog policy append-only · carry-over closure 2/≥4 → 3/≥4 · catalog-data-extension · zero logic mutation · zero security boundary · Codex skip per v2.3 1-sync-trigger · confidence: med · B40+B41 ARC-GOAL concat-merged manually per 双方都改协议)`
