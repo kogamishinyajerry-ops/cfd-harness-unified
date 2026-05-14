@@ -72,8 +72,8 @@
 
 ### Tier 3 · validation reports + close
 
-- [ ] **M-VAL-REPORT-1** Industrial e2e validation report 1 (full prep→solver→postp · convergence + comparison + V-row attribution) · commit: `_____`
-- [ ] **M-VAL-REPORT-2** Validation report 2 · commit: `_____`
+- [x] **M-VAL-REPORT-1** PARTIAL · case_011 v5b plate-fin HX · commit `8a78265` · validation_reports/v63_case_011_v5b_validation_report.md · Verdict PARTIAL: chtMultiRegionSimpleFoam ran 200 SIMPLE iterations but V93 degenerate-physics (case substrate is conduction-dominated boundary-equilibration · advisor stack correctly flagged) prevents FULL convergence claim · V-row attribution net-new beyond B46 retro · 4Q gate offline verified · Done dim #4 strict 0/3 FULL · PARTIAL-credit 1
+- [x] **M-VAL-REPORT-2** PARTIAL · case_004 NREL Phase VI MRF · commit `d062ee9` · validation_reports/v63_case_004_nrel_phase_vi_validation_report.md · Verdict PARTIAL: prep stage executed (CAD → STEP roundtrip + defect verification + advisor stack) but solver + postp DEFERRED to v2 (mesh generation gated) · NREL UAE Sequence S experimental comparison gated by solver execution · V-row attribution net-new beyond B43 + B45 retros · 4Q gate offline verified · Done dim #4 strict 0/3 FULL · PARTIAL-credit 2
 - [ ] **M-VAL-REPORT-3** Validation report 3 · commit: `_____`
 - [ ] **M-RADAR-V5** Capability radar v5 · scale-up signals (case count / V-row count / e2e report count) · commit: `_____`
 - [ ] **M-V64** V63-A close DEC + V64 charter draft · commit: `_____`
@@ -86,7 +86,7 @@
 当前 distinct numerics class 100% adoption PASS:  **5 / 5 ✓ MET (Done dim #1)**   (case_011 steady-laminar-CHT + case_016 compressible-DES-acoustic + case_006 compressible-transonic-shock + case_004 rotating-MRF-incompressible + case_009 reacting-low-Mach · B44 闭 Done #1)
 当前 V-series corpus size:                        **V100 / V100 ✓ MET (Done #2)**   (B47 land · grep validation = 100 · distinct-signature enforced · 5-source breakdown · drift-guard compatible)
 当前 D-class advisor LANDED:                      **3 / 3 ✓ MET**   (D6 + D10 V62-A + D11 B39 · Done dim #3 MET ✓)
-当前 Industrial e2e validation report:            0 / 3     (V62-A Track C 为 session-shape · 待 M-VAL-REPORT-{1,2,3})
+当前 Industrial e2e validation report:            **strict 0 / 3 FULL · PARTIAL-credit 2 / 3** (M-VAL-REPORT-1 case_011 v5b PARTIAL [V93 degenerate-physics] · M-VAL-REPORT-2 case_004 NREL PARTIAL [solver deferred] · 等 M-VAL-REPORT-3 + 用户裁决 PARTIAL semantics)
 当前 V62-A carry-over closure:                    **4 / ≥4 ✓ MET (Done dim #5)**   (#1 D11 B39 ✓ · #2 D10 catalog B41 ✓ · #3 case_006 substrate B42 ✓ · #4 D6 HTTP B40 ✓ · 仍 2 items pending: frontend wiring / ai_diagnose drift v2 · V63-A Done dim #5 阈值 ≥4/6 MET)
 当前 V-row truth-capture rate:                    **clause-1 ≥5/9 over-met 2/1** (case_011 7/9 + case_004 5/9) · **clause-2 ≥3/9 on ≥3 cases MET ✓ 3/3** (case_004 5/9 + case_006 3/9 + case_011 7/9) · **Done #6 FULLY MET ✓**
 当前 Done dims MET:                               **5 / 6**   (Done #1 distinct numerics 5/5 ✓ B44 · Done #2 V-corpus V100 ✓ B47 · Done #3 D-class 3/3 ✓ B39 · Done #5 carry-over 4/≥4 ✓ B42 · Done #6 cross-case 3/3 ✓ B46 · **仅剩 Done #4 industrial e2e validation reports 0/3**)
