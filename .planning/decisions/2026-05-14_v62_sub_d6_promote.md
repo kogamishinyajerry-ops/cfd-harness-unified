@@ -1,10 +1,10 @@
 ---
 decision_id: DEC-V62-A-sub-D6
 title: D6 extra_body_advisor promotion · single-case land closes V61-198 §5.2 D-class waiver + V62-A Done dim #4
-status: Proposed
+status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 2 · M-D6-PROMOTE milestone · D-class literal closure
-notion_sync_status: pending (Notion sync deferred until Status flips to Accepted per v2.3 round-1 loosen · main session reconciles)
+notion_sync_status: pending session-end batch (Notion sync deferred until Status flips to Accepted per v2.3 round-1 loosen · main session reconciles)
 parent_artifacts:
   - .planning/2026-05-14_v62_charter.md (V62-A charter SSOT · M-D6-PROMOTE Tier 2 row line 65)
   - .planning/ARC-GOAL.md (M-D6-PROMOTE [ ] → [x] · D-class counter 0/1 → 1/1 · LANDED advisor 8 → 9 · main session reconciles)
