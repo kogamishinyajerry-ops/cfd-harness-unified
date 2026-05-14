@@ -130,99 +130,167 @@ from typing import Any, Literal
 
 STANDARD_OPENFOAM_BCS: frozenset[str] = frozenset({
     # --- Core patchField subclasses (value/gradient/mixed) ---
-    "calculated",
-    "empty",
-    "fixedGradient",
-    "fixedValue",
-    "mixed",
-    "uniformFixedValue",
-    "uniformFixedGradient",
-    "uniformMixed",
-    "uniformInletOutlet",
-    "zeroGradient",
+    "calculated",                                       # case_011 v5b · case_016 m219 · ESI v2412 mainline
+    "empty",                                            # ESI v2412 mainline · fvPatchField/basic
+    "fixedGradient",                                    # ESI v2412 mainline · fvPatchField/basic
+    "fixedValue",                                       # case_011 v5b · ESI v2412 mainline
+    "mixed",                                            # ESI v2412 mainline · fvPatchField/basic
+    "uniformFixedValue",                                # ESI v2412 mainline · derivedFvPatchFields
+    "uniformFixedGradient",                             # ESI v2412 mainline · derivedFvPatchFields
+    "uniformMixed",                                     # ESI v2412 mainline · derivedFvPatchFields
+    "uniformInletOutlet",                               # ESI v2412 mainline · derivedFvPatchFields
+    "zeroGradient",                                     # case_006 · case_011 · case_016 · ESI v2412 mainline
+    "fixedMean",                                        # ESI v2412 mainline · derivedFvPatchFields
+    "fixedMeanOutletInlet",                             # ESI v2412 mainline · derivedFvPatchFields
     # --- Geometric constraints ---
-    "cyclic",
-    "cyclicAMI",
-    "cyclicACMI",
-    "cyclicSlip",
-    "processor",
-    "processorCyclic",
-    "slip",
-    "noSlip",
-    "symmetry",
-    "symmetryPlane",
-    "wedge",
-    "wall",
+    "cyclic",                                           # ESI v2412 mainline · constraint
+    "cyclicAMI",                                        # ESI v2412 mainline · constraint
+    "cyclicACMI",                                       # ESI v2412 mainline · constraint
+    "cyclicSlip",                                       # ESI v2412 mainline · constraint
+    "cyclicPeriodicAMI",                                # ESI v2412 mainline · constraint
+    "nonuniformTransformCyclic",                        # ESI v2412 mainline · constraint
+    "jumpCyclic",                                       # ESI v2412 mainline · derived · jump-discontinuity cyclic
+    "jumpCyclicAMI",                                    # ESI v2412 mainline · derived · jump-discontinuity AMI
+    "processor",                                        # ESI v2412 mainline · constraint
+    "processorCyclic",                                  # ESI v2412 mainline · constraint
+    "slip",                                             # case_011 v5b · ESI v2412 mainline · constraint
+    "noSlip",                                           # case_006 · ESI v2412 mainline · derived
+    "partialSlip",                                      # ESI v2412 mainline · derivedFvPatchFields/partialSlip
+    "fixedNormalSlip",                                  # ESI v2412 mainline · derivedFvPatchFields
+    "symmetry",                                         # case_006 · ESI v2412 mainline · constraint
+    "symmetryPlane",                                    # ESI v2412 mainline · constraint
+    "wedge",                                            # ESI v2412 mainline · constraint
+    "wall",                                             # ESI v2412 mainline · base patchType
     # --- Inlet / outlet families ---
-    "inletOutlet",
-    "outletInlet",
-    "advective",
-    "fanPressure",
-    "fixedFluxPressure",
-    "fixedProfile",
-    "flowRateInletVelocity",
-    "flowRateOutletVelocity",
-    "mappedFixed",
-    "mappedFixedValue",
-    "mappedField",
-    "pressureDirectedInletOutletVelocity",
-    "pressureDirectedInletVelocity",
-    "pressureInletOutletVelocity",
-    "pressureInletUniformVelocity",
-    "pressureInletVelocity",
-    "pressureOutlet",
-    "surfaceNormalFixedValue",
-    "swirlFlowRateInletVelocity",
-    "timeVaryingMappedFixedValue",
-    "totalPressure",
-    "totalTemperature",
+    "inletOutlet",                                      # case_011 · case_016 · ESI v2412 mainline
+    "outletInlet",                                      # ESI v2412 mainline · derived
+    "advective",                                        # ESI v2412 mainline · derived
+    "fanPressure",                                      # ESI v2412 mainline · derived
+    "fixedFluxPressure",                                # case_011 v5b · ESI v2412 mainline · derived
+    "fixedProfile",                                     # ESI v2412 mainline · derived
+    "flowRateInletVelocity",                            # case_011 v5b · ESI v2412 mainline · derived
+    "flowRateOutletVelocity",                           # ESI v2412 mainline · derived
+    "mappedFixed",                                      # ESI v2412 mainline · derived
+    "mappedFixedValue",                                 # ESI v2412 mainline · derived
+    "mappedField",                                      # ESI v2412 mainline · derived
+    "mappedFlowRate",                                   # ESI v2412 mainline · derived
+    "mappedMixed",                                      # ESI v2412 mainline · derived
+    "mappedVelocityFlux",                               # ESI v2412 mainline · derived
+    "pressureDirectedInletOutletVelocity",              # ESI v2412 mainline · derived
+    "pressureDirectedInletVelocity",                    # ESI v2412 mainline · derived
+    "pressureInletOutletVelocity",                      # case_011 v5b · ESI v2412 mainline · derived
+    "pressureInletOutletParSlipVelocity",               # ESI v2412 mainline · derived (parallel-slip variant)
+    "pressureInletUniformVelocity",                     # ESI v2412 mainline · derived
+    "pressureInletVelocity",                            # ESI v2412 mainline · derived
+    "pressureNormalInletOutletVelocity",                # ESI v2412 mainline · derived
+    "pressureOutlet",                                   # ESI v2412 mainline · derived
+    "fixedNormalInletOutletVelocity",                   # ESI v2412 mainline · derived
+    "entrainmentPressure",                              # ESI v2412 mainline · derived
+    "syringePressure",                                  # ESI v2412 mainline · derived
+    "inletOutletTotalTemperature",                      # ESI v2412 mainline · compressible derived
+    "surfaceNormalFixedValue",                          # ESI v2412 mainline · derived
+    "swirlFlowRateInletVelocity",                       # ESI v2412 mainline · derived
+    "swirlInletVelocity",                               # ESI v2412 mainline · derived
+    "timeVaryingMappedFixedValue",                      # ESI v2412 mainline · derived
+    "turbulentInlet",                                   # ESI v2412 mainline · derived
+    "turbulentDFSEMInlet",                              # ESI v2412 mainline · LES synthetic-eddy inlet
+    "turbulentDigitalFilterInlet",                      # ESI v2412 mainline · LES digital-filter inlet
+    "turbulentMixingLengthDissipationRateInlet",        # ESI v2412 mainline · turbulence-inlet helper
+    "turbulentMixingLengthFrequencyInlet",              # ESI v2412 mainline · turbulence-inlet helper
+    "totalPressure",                                    # ESI v2412 mainline · derived
+    "totalTemperature",                                 # ESI v2412 mainline · derived
+    "prghPressure",                                     # ESI v2412 mainline · multiphase derived
+    "prghTotalPressure",                                # ESI v2412 mainline · multiphase derived
+    "prghTotalHydrostaticPressure",                     # ESI v2412 mainline · multiphase derived
+    "variableHeightFlowRate",                           # ESI v2412 mainline · multiphase derived
+    "variableHeightFlowRateInletVelocity",              # ESI v2412 mainline · multiphase derived
     # --- Compressible / far-field (ESI replacements for foam-extend characteristic*) ---
-    "freestream",
-    "freestreamPressure",
-    "freestreamVelocity",
-    "waveTransmissive",
+    "freestream",                                       # case_006 · case_016 · ESI v2412 mainline · compressible
+    "freestreamPressure",                               # case_016 m219 · ESI v2412 mainline · compressible
+    "freestreamVelocity",                               # ESI v2412 mainline · compressible
+    "supersonicFreestream",                             # ESI v2412 mainline · compressible/derived
+    "waveTransmissive",                                 # case_016 m219 · ESI v2412 mainline · compressible
     # --- ABL / atmospheric ---
-    "atmBoundaryLayerInletVelocity",
-    "atmBoundaryLayerInletK",
-    "atmBoundaryLayerInletEpsilon",
-    "atmBoundaryLayerInletOmega",
-    "atmTurbulentHeatFluxTemperature",
+    "atmBoundaryLayerInletVelocity",                    # ESI v2412 mainline · atmosphericModels
+    "atmBoundaryLayerInletK",                           # ESI v2412 mainline · atmosphericModels
+    "atmBoundaryLayerInletEpsilon",                     # ESI v2412 mainline · atmosphericModels
+    "atmBoundaryLayerInletOmega",                       # ESI v2412 mainline · atmosphericModels
+    "atmTurbulentHeatFluxTemperature",                  # ESI v2412 mainline · atmosphericModels
+    "atmAlphatkWallFunction",                           # ESI v2412 mainline · atmosphericModels
+    "atmEpsilonWallFunction",                           # ESI v2412 mainline · atmosphericModels
+    "atmNutkWallFunction",                              # ESI v2412 mainline · atmosphericModels
+    "atmNutUWallFunction",                              # ESI v2412 mainline · atmosphericModels
+    "atmNutWallFunction",                               # ESI v2412 mainline · atmosphericModels
+    "atmOmegaWallFunction",                             # ESI v2412 mainline · atmosphericModels
     # --- Turbulence wall functions ---
-    "epsilonWallFunction",
-    "fWallFunction",
-    "kLowReWallFunction",
-    "kqRWallFunction",
-    "nutLowReWallFunction",
-    "nutUSpaldingWallFunction",
-    "nutUTabulatedWallFunction",
-    "nutUWallFunction",
-    "nutUBlendedWallFunction",
-    "nutkAtmRoughWallFunction",
-    "nutkRoughWallFunction",
-    "nutkWallFunction",
-    "omegaWallFunction",
-    "v2WallFunction",
+    "epsilonWallFunction",                              # ESI v2412 mainline · RAS wallFunctions
+    "fWallFunction",                                    # ESI v2412 mainline · v2-f model
+    "kLowReWallFunction",                               # ESI v2412 mainline · RAS wallFunctions
+    "kqRWallFunction",                                  # case_006 · case_016 · ESI v2412 mainline
+    "nutLowReWallFunction",                             # ESI v2412 mainline · RAS wallFunctions
+    "nutUSpaldingWallFunction",                         # case_006 · case_016 · ESI v2412 mainline
+    "nutUTabulatedWallFunction",                        # ESI v2412 mainline · RAS wallFunctions
+    "nutUWallFunction",                                 # ESI v2412 mainline · RAS wallFunctions
+    "nutUBlendedWallFunction",                          # ESI v2412 mainline · RAS wallFunctions
+    "nutkAtmRoughWallFunction",                         # ESI v2412 mainline · RAS wallFunctions
+    "nutkRoughWallFunction",                            # ESI v2412 mainline · RAS wallFunctions
+    "nutkWallFunction",                                 # ESI v2412 mainline · RAS wallFunctions
+    "omegaWallFunction",                                # case_006 · case_016 · ESI v2412 mainline
+    "v2WallFunction",                                   # ESI v2412 mainline · v2-f model
+    # --- Wall velocities (moving / rotating / translating) ---
+    "movingWallVelocity",                               # ESI v2412 mainline · derived (dynamic mesh)
+    "rotatingWallVelocity",                             # ESI v2412 mainline · derived
+    "translatingWallVelocity",                          # ESI v2412 mainline · derived
     # --- Thermal / CHT (heatTransfer + compressible namespaces) ---
-    "alphatJayatillekeWallFunction",
-    "alphatWallFunction",
-    "compressible::alphatJayatillekeWallFunction",
-    "compressible::alphatWallFunction",
-    "compressible::epsilonWallFunction",
-    "compressible::kqRWallFunction",
-    "compressible::omegaWallFunction",
-    "compressible::turbulentTemperatureCoupledBaffleMixed",
-    "compressible::turbulentTemperatureRadCoupledMixed",
-    "externalWallHeatFluxTemperature",
-    "humidityTemperatureCoupledMixed",
+    "alphatJayatillekeWallFunction",                    # ESI v2412 mainline · CHT thermal wallFunction
+    "alphatWallFunction",                               # ESI v2412 mainline · CHT thermal wallFunction
+    "compressible::alphatJayatillekeWallFunction",      # ESI v2412 mainline · compressible::ns mirror
+    "compressible::alphatWallFunction",                 # case_016 m219 · ESI v2412 mainline · compressible::ns
+    "compressible::epsilonWallFunction",                # ESI v2412 mainline · compressible::ns mirror
+    "compressible::kqRWallFunction",                    # ESI v2412 mainline · compressible::ns mirror
+    "compressible::omegaWallFunction",                  # ESI v2412 mainline · compressible::ns mirror
+    "compressible::nutkWallFunction",                   # ESI v2412 mainline · compressible::ns mirror
+    "compressible::nutkRoughWallFunction",              # ESI v2412 mainline · compressible::ns mirror
+    "compressible::nutUSpaldingWallFunction",           # ESI v2412 mainline · compressible::ns mirror
+    "compressible::nutUWallFunction",                   # ESI v2412 mainline · compressible::ns mirror
+    "compressible::nutLowReWallFunction",               # ESI v2412 mainline · compressible::ns mirror
+    "compressible::turbulentTemperatureCoupledBaffleMixed",  # case_011 v5b · ESI v2412 mainline · CHT region-coupling
+    "compressible::turbulentTemperatureRadCoupledMixed",     # ESI v2412 mainline · CHT + radiation coupling
+    "externalWallHeatFluxTemperature",                  # ESI v2412 mainline · derived CHT
+    "humidityTemperatureCoupledMixed",                  # ESI v2412 mainline · humidity-coupled CHT
+    "turbulentHeatFluxTemperature",                     # ESI v2412 mainline · derived
+    # --- Radiation BCs (CHT extensions) ---
+    "MarshakRadiation",                                 # ESI v2412 mainline · radiationModels
+    "MarshakRadiationFixedTemperature",                 # ESI v2412 mainline · radiationModels
+    "greyDiffusiveRadiation",                           # ESI v2412 mainline · radiationModels
+    "greyDiffusiveRadiationViewFactor",                 # ESI v2412 mainline · radiationModels viewFactor solver
+    "wideBandDiffusiveRadiation",                       # ESI v2412 mainline · fvDOM/wideBand
+    "fixedIncidentRadiation",                           # ESI v2412 mainline · radiationModels
+    # --- Multiphase / VOF / contact-angle ---
+    "alphaContactAngle",                                # ESI v2412 mainline · multiphase contact-angle base
+    "constantAlphaContactAngle",                        # ESI v2412 mainline · multiphase
+    "dynamicAlphaContactAngle",                         # ESI v2412 mainline · multiphase
+    "temperatureDependentContactAngle",                 # ESI v2412 mainline · multiphase
+    "timeVaryingAlphaContactAngle",                     # ESI v2412 mainline · multiphase
+    "waveSurfacePressure",                              # ESI v2412 mainline · waveModels
+    "waveVelocity",                                     # ESI v2412 mainline · waveModels
+    "waveDisplacement",                                 # ESI v2412 mainline · dynamicMesh
     # --- Coded / programmable ---
-    "codedFixedValue",
-    "codedMixed",
+    "codedFixedValue",                                  # ESI v2412 mainline · coded BCs
+    "codedMixed",                                       # ESI v2412 mainline · coded BCs
 })
 """OpenFOAM-ESI mainline patchField type names (subset · v2412 baseline).
 
 Intentionally non-exhaustive (OpenFOAM ships 200+ BCs); the advisor's
 value is catching the foam-extend-vs-ESI mismatch surfaced by V29 plus
 common typos, not enforcing closure over a moving registry.
+
+V63-A Tier 1 catalog audit (sub-DEC DEC-V63-A-sub-M-D10-CATALOG-AUDIT ·
+2026-05-14) expanded this set from 80 → 138 entries (case-evidence from
+case_006 / case_011 v5b / case_016 m219 BC names + ESI v2412 mainline
+documented BCs · wall-velocity / radiation / multiphase / atmospheric
+wall functions / LES inlets / compressible::ns mirrors). Catalog policy
+remains append-only; no entries removed.
 """
 
 
