@@ -39,6 +39,9 @@ Provided artifact             Advisors dispatched
 ``thermo_dict``               A10 ``check_thermo_polynomial_range``
 ``step_path``                 unit_detector ``detect_unit``
 ``thin_wall_inputs``          thin_wall ``detect_thin_wall_patches_at_risk``
+``stl_bbox_set`` (≥1 entry)   D6 ``check_extra_bodies_in_fluid`` (V55 ·
+                              case_016 debris cube class · combines with
+                              parts_manifest when provided)
 ============================  =========================================
 
 ALL applicable advisors run on every call (no opt-out per artifact).
@@ -162,6 +165,7 @@ def _load_advisor(modname: str) -> Any:
 
 
 bc_type_name_validity_advisor = _load_advisor("bc_type_name_validity_advisor")
+extra_body_advisor = _load_advisor("extra_body_advisor")
 face_orientation_advisor = _load_advisor("face_orientation_advisor")
 inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
 shm_dict_validator = _load_advisor("shm_dict_validator")
@@ -177,6 +181,7 @@ virtual_interface_detector = _load_advisor("virtual_interface_detector")
 # Tuples are ordered by sediment-landing date for audit predictability.
 _V_ROWS_PER_ADVISOR: dict[str, tuple[str, ...]] = {
     "bc_type_name_validity_advisor": ("V29",),
+    "extra_body_advisor": ("V55",),
     "face_orientation_advisor": ("V79", "V87"),
     "inlet_outlet_validator": ("V81",),
     "shm_dict_validator": ("V52", "V86", "V99", "V100"),
@@ -385,6 +390,25 @@ def _normalize_face_label(
             code=f.code,
             message=f.detail,
             location=f.location,
+            evidence_v_rows=rows,
+            raw=f,
+        )
+        for f in report.findings
+    )
+
+
+def _normalize_extra_body(
+    report: extra_body_advisor.ExtraBodyReport,
+) -> tuple[Finding, ...]:
+    advisor = "extra_body_advisor"
+    rows = _V_ROWS_PER_ADVISOR[advisor]
+    return tuple(
+        Finding(
+            source_advisor=advisor,
+            severity=f.severity,
+            code=f"d6_{f.finding_type}",
+            message=f.detail,
+            location=f.body_name,
             evidence_v_rows=rows,
             raw=f,
         )
@@ -623,6 +647,8 @@ def assemble_stack(
     thin_wall_inputs: Mapping[str, Any] | None = None,
     bc_specs: Sequence[Mapping[str, Any]] | None = None,
     bc_fork: str = "main",
+    stl_bbox_set: Mapping[str, Any] | None = None,
+    extra_body_containment_tol_mm: float = 0.0,
     **_unused: Any,  # forward-compatible (silently ignored, NOT logged)
 ) -> AdvisorStackReport:
     """Dispatch all applicable advisors based on provided artifacts.
@@ -774,6 +800,38 @@ def assemble_stack(
             ),
             kwargs={},
             normalize=_normalize_face_label,
+            advisor_calls=advisor_calls,
+            findings=findings,
+        )
+
+    # D6 extra_body_advisor dispatch (DEC-V63-A-sub-M-D6-HTTP-WIRE ·
+    # V55 evidence row · case_016 10 mm debris cube class).
+    # Dispatches when ``stl_bbox_set`` carries at least one body — the
+    # advisor performs three detection types (unregistered_body /
+    # body_in_fluid_region / undeclared_inclusion). All three require an
+    # STL inventory; the first additionally produces findings even when
+    # parts_manifest is empty (every STL body becomes
+    # ``unregistered_body``). The advisor itself is dict-pure so
+    # parts_manifest can be ``None`` (mapped to ``{}`` here so the
+    # advisor's ``.get("parts")`` walk stays safe).
+    if isinstance(stl_bbox_set, Mapping) and len(stl_bbox_set) > 0:
+        advisors_dispatched.add("extra_body_advisor")
+        _dispatch(
+            advisor_name="extra_body_advisor",
+            module=extra_body_advisor,
+            input_summary=(
+                f"stl_bbox_set={len(stl_bbox_set)} bodies, "
+                "parts_manifest="
+                f"{None if parts_manifest is None else len(parts_manifest.get('parts') or [])} parts, "
+                f"tol_mm={extra_body_containment_tol_mm}"
+            ),
+            func=extra_body_advisor.check_extra_bodies_in_fluid,
+            args=(
+                dict(parts_manifest) if parts_manifest is not None else {},
+                dict(stl_bbox_set),
+            ),
+            kwargs={"containment_tol_mm": extra_body_containment_tol_mm},
+            normalize=_normalize_extra_body,
             advisor_calls=advisor_calls,
             findings=findings,
         )
