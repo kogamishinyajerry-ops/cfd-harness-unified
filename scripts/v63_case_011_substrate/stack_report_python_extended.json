@@ -1,0 +1,219 @@
+{
+  "advisor_count": 7,
+  "finding_count": 11,
+  "critical_count": 2,
+  "warning_count": 8,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "shm_dict_validator",
+    "stl_face_label_validator",
+    "thin_wall_advisor",
+    "unit_detector",
+    "virtual_interface_detector"
+  ],
+  "evidence_refs": [
+    "V10",
+    "V100",
+    "V20",
+    "V22",
+    "V25",
+    "V33",
+    "V36",
+    "V42",
+    "V43",
+    "V50",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V94",
+    "V96",
+    "V99"
+  ],
+  "findings": [
+    {
+      "code": "d1_unintended_gap",
+      "severity": "critical",
+      "source_advisor": "virtual_interface_detector",
+      "evidence_v_rows": [
+        "V22",
+        "V25",
+        "V33",
+        "V36",
+        "V42",
+        "V43",
+        "V50"
+      ],
+      "message": "separator_3_4_d5_interface: facing-face candidates with sub-mm gap (0.0300 mm) \u2014 D1-class defect",
+      "location": "separator_3_4_d5_interface"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_hot_fluid' declares face label 'hot_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_hot_fluid'].face_labels[0]"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_hot_fluid' declares face label 'hot_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_hot_fluid'].face_labels[1]"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_hot_fluid' declares face label 'hot_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_hot_fluid'].face_labels[2]"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_cold_fluid' declares face label 'cold_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_cold_fluid'].face_labels[0]"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_cold_fluid' declares face label 'cold_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_cold_fluid'].face_labels[1]"
+    },
+    {
+      "code": "orphan_declared_label",
+      "severity": "warning",
+      "source_advisor": "stl_face_label_validator",
+      "evidence_v_rows": [
+        "V94"
+      ],
+      "message": "part 'region_cold_fluid' declares face label 'cold_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+      "location": "parts_manifest.parts['region_cold_fluid'].face_labels[2]"
+    },
+    {
+      "code": "unit_inference",
+      "severity": "warning",
+      "source_advisor": "unit_detector",
+      "evidence_v_rows": [
+        "V20",
+        "V96"
+      ],
+      "message": "Unit could not be inferred from STEP header or bbox magnitude; engineer review required",
+      "location": null
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "critical",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness).",
+      "location": "cold_fin_rear_third"
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "warning",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'hot_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 2 = 0.001 \u2192 1.00 cells per thickness \u2192 is AT RISK of sHM merge. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness).",
+      "location": "hot_fin_base"
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "info",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'cold_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 3 = 0.0005 \u2192 2.00 cells per thickness \u2192 is marginal for sHM resolution. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness).",
+      "location": "cold_fin_base"
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "duration_ms": 0.008082948625087738,
+      "input_summary": "parts_manifest with 3 parts",
+      "version": "face_orientation_advisor.py",
+      "output_summary": "FaceOrientationReport"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "duration_ms": 0.006417045369744301,
+      "input_summary": "parts_manifest with 3 parts",
+      "version": "inlet_outlet_validator.py",
+      "output_summary": "InletOutletValidationReport"
+    },
+    {
+      "advisor_name": "virtual_interface_detector",
+      "status": "ok",
+      "duration_ms": 0.04795799031853676,
+      "input_summary": "2 bodies, 1 specs",
+      "version": "virtual_interface_detector.py",
+      "output_summary": "list"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "duration_ms": 22.394332918338478,
+      "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'debug']",
+      "version": "shm_dict_validator.py",
+      "output_summary": "ShmDictReport"
+    },
+    {
+      "advisor_name": "stl_face_label_validator",
+      "status": "ok",
+      "duration_ms": 0.03600004129111767,
+      "input_summary": "stl_face_normals=3 keys, parts_manifest=3 parts, shm_dict=yes",
+      "version": "stl_face_label_validator.py",
+      "output_summary": "FaceLabelReport"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "duration_ms": 11.218415922485292,
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_011_plate_fin_compact_hx/inputs/cad_codex_v1.step",
+      "version": "unit_detector.py",
+      "output_summary": "UnitDetection"
+    },
+    {
+      "advisor_name": "thin_wall_advisor",
+      "status": "ok",
+      "duration_ms": 0.042584026232361794,
+      "input_summary": "5 patches, cell_size=0.004",
+      "version": "thin_wall_advisor.py",
+      "output_summary": "list"
+    }
+  ],
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}
