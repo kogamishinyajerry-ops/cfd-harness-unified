@@ -61,7 +61,7 @@
 - [x] **M-TRACK-2** Track C session 2 · case_011 · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_2_case_011.md` (2026-05-13 · surfaced V85 + V86)
 - [x] **M-CASE011-V2** case_011 v2 sub-session · V85 + V86 narrow-criterion fix verification · sub-DEC: `2026-05-13_v61_198_sub_case_011_v2_fix_verification.md` (2026-05-13 · V85+V86 → fix-verified · 1 case · surfaces V89 + V90 in dict-orchestration family · solver deferred to v3 sub-session per retention caveats)
 - [x] **M-CASE011-V3** case_011 v3 sub-session · `cellZoneInside inside` heterogeneity (V92) + STL face-label loss (V94) + chtMultiRegionSimpleFoam e2e PASS · commit: `45d046f` · sub-DEC: `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (2026-05-14 · v5b mesh: hot 142% / cold 115% / solid 37% retention · cold retention 3% → 115% via `cellZoneInside inside` empirically validated · solid 37% kept at insidePoint walk (V92 surfaced — `inside` ray-cast fails for fuse_many internal-void STL topology) · chtMultiRegionSimpleFoam **PASS** at 200 SIMPLE iter, no FATAL, residuals reducing 3-5 orders, T fields equilibrated to ~360 K conduction midpoint · physics degenerate caveat per V94 — case_011 STL has no labeled inlet/outlet face-zones so substrate runs sealed-conduction box not the intended flow-through HX)
-- [ ] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `_____`
+- [x] **M-APU-RESTORE** APU bay STL surgery [optional] · commit: `fabfd57` (2026-05-14 · **CLOSED NEGATIVE** · v33 mesh quality regressed (max_skew 6.875→7.966 · concave cells 95→147,036 · 1547×) · apu_intake patch STILL phantom (interior 89 cm³ / fill ratio 0.2% = <1 cell at sHM L3 · below patch-creation threshold) · V95 sedimented "watertightness necessary not sufficient" · V75 status stays `partial` (no fix-verified flip) · sub-DEC `2026-05-14_v61_198_sub_apu_restore_outlet_patch.md`)
 
 ### Tier 2 · advisor 加宽
 
@@ -77,7 +77,7 @@
 - [ ] **M-D9-D10** D9/D10 promotion · harvest-003 实质推进 · commit: `_____`
 - [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · commit: `45d046f` · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
 - [x] **M-TRACK-5** Track C session 5 · case_009 v1.5 reacting-low-Mach · retro: `.planning/retrospectives/2026-05-14_track_c_session_5_case_009_v1_5_reacting.md` (2026-05-14 · 3rd e2e numerics class confirmed · V41 channel-(b) closed · A10 thermo_polynomial_range_advisor promotion gate met by v1 + v1.5 dual-evidence)
-- [ ] **M-TRACK-6** Track C session 6 · retro: `_____`
+- [x] **M-TRACK-6** Track C session 6 · case_003 CRM-HLS external-high-Re-BL · retro: `.planning/retrospectives/2026-05-14_track_c_session_6_case_003_crm_hls.md` (2026-05-14 · commit `bb4f34c` · 4th numerics class added to Track C coverage · V96+V97+V98 sediment all V83 6th cross-application class · A6 unit_detector cross-application surfaced silent fall-through window (V96 max_bytes truncation + V97 100m bbox cap) · A8 shm_dict_validator runtime error on hand-authored dicts (gap registered) · A2-v2/A4/A5/A7 module-load OK on case_003 substrate · solver 411 iter no divergence honest early-stop (killed by docker stop) · advisor land deferred per hard constraint)
 - [ ] **M-V100** V-series ≥ 100 marker · commit: `_____`
 - [ ] **M-RADAR-V2** capability radar v2 重画 · 左半轴 ≥ 7.2 验证 · commit: `_____`
 - [ ] **M-V62** V61-198 close DEC + V62 charter draft · commit: `_____`
@@ -87,15 +87,15 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 Track C session 通过:    5 / 6   (case_010 + case_011 + case_004 + case_009 v1 + case_009 v1.5)
-当前 LANDED advisor:          7 / 8   (A1, A2-v2, A3, A4, A5, A7, A8 · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED · v1+v1.5 dual evidence per session-5 retro · 待 land 决策)
-当前 V-series 行数:          94 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity (cold succeeds 3%→115% · solid regresses 37%→0%) · V93 reacting low-Mach pre-ignition T floor rule (case_009 v1.5 cleanup) · V94 case_011 STL face-label loss through cq.exporters.export — solver runs but in degenerate pure-conduction mode · all in both corpora)
+当前 Track C session 通过:    6 / 6 ✓   (case_010 + case_011 + case_004 + case_009 v1 + case_009 v1.5 + case_003 CRM-HLS · Track C Done dimension MET)
+当前 LANDED advisor:          7 / 8   (A1, A2-v2, A3, A4, A5, A7, A8 · A6 unit_detector silent fall-through V96+V97 surfaced via case_003 — fix candidate emerged (max_bytes raise + bbox cap raise) · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED v1+v1.5 dual evidence per session-5 retro · 待 land 决策)
+当前 V-series 行数:          98 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity · V93 reacting low-Mach pre-ignition T floor · V94 case_011 STL face-label loss · V95 STL surface surgery insufficient when sub-cell-scale feature (case_002a M-APU-RESTORE NEGATIVE) · V96 A6 max_bytes 64KB STEP truncation (case_003) · V97 A6 bbox 100m upper bound cap (case_003) · V98 external-high-Re-BL y+ ≈ 2.1e5 at V20-unresolved geometry · all in both corpora)
 当前 e2e numerics class:     3 / 3 ✓   (compressible-buoyant-RANS APU bay 2026-05-12 F4b · CHT-multi-stream case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter 2026-05-14 (degenerate physics caveat per V94) · reacting-low-Mach case_009 v1.5 ignition 0 limit warnings + Tmax 1880→1968K monotone climb 2026-05-14 (Track C session 5 retro consolidated))
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-14 (B11 + B12 batch land · M-TRACK-5 [x] reacting-low-Mach 3rd e2e numerics class consolidated · M-A8 [x] shm_dict_validator advisor LANDED with V52+V86 cross-topology promotion gate · counters Track C 4→5 · LANDED advisor 6→7 · e2e numerics class 2→3 ✓ first axis Done · 5 Done dimensions now MET: 雷达右半轴 · e2e class · M-DRIFT + M-XCLASS + M-TRACK-5; remaining gaps: Track C 5→6 · LANDED 7→8 · V-series 94→100 · 雷达左半轴 6.5→7.2)` · 更新人：`Claude Code Opus 4.7 session (main · B11/B12 reconcile)`
+最后更新时间：`2026-05-14 (B14 + B15 batch land · M-TRACK-6 [x] case_003 CRM-HLS external-high-Re-BL 4th numerics class Track-C-covered · M-APU-RESTORE [x] CLOSED NEGATIVE — V95 sedimented "watertightness necessary not sufficient" lesson · Track C 5→6 ✓ Done dimension MET · V-series 94→98 (V95+V96+V97+V98) · A6 unit_detector silent fall-through window surfaced as 2-channel fix candidate (max_bytes 64KB + bbox 100m cap) · A8 hand-authored-dict input adapter gap registered · 6 Done dimensions now MET: 雷达右半轴 · e2e class · M-DRIFT + M-XCLASS + M-TRACK-5 + M-TRACK-6; remaining gaps: LANDED 7→8 · V-series 98→100 · 雷达左半轴 6.5→7.2)` · 更新人：`Claude Code Opus 4.7 session (main · B14/B15 reconcile)`
 
 ---
 
