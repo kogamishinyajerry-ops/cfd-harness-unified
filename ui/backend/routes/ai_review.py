@@ -234,7 +234,7 @@ class AIReviewRequest(BaseModel):
     # case_016 debris-cube class). Closes the deferred D6 wire-up that
     # DEC-V62-A-sub-REQ-SCHEMA-EXPAND explicitly carved out of scope
     # (§"this sub-DEC does NOT add") and V63-A carry-over #4.
-    stl_bbox_set: Optional[dict[str, list[float]]] = Field(
+    stl_bbox_set: Optional[dict[str, Any]] = Field(
         default=None,
         description=(
             "STL body-name → 6-element [xmin, ymin, zmin, xmax, ymax, "
@@ -246,11 +246,14 @@ class AIReviewRequest(BaseModel):
             "(warning), or undeclared-inclusion (warning). When "
             "absent AND case_dir is supplied, auto-discovered from "
             "<case_dir>/cad/stl_bbox_set.json OR the ``stl_bbox_set`` "
-            "field inside <case_dir>/manifest.json. Malformed entries "
-            "(non-list, wrong arity) are silently skipped by the "
-            "advisor's _coerce_bbox guard; the route validates only "
-            "the top-level dict shape. See "
-            "DEC-V63-A-sub-M-D6-HTTP-WIRE."
+            "field inside <case_dir>/manifest.json. The value type is "
+            "intentionally ``Any`` (not ``list[float]``) so a single "
+            "malformed entry (wrong type / wrong arity / non-numeric) "
+            "is silently skipped by the advisor's _coerce_bbox guard "
+            "without 422-ing the whole request — mixed-quality STL "
+            "inventories are a routine case_016-class shape (helper "
+            "bodies often arrive partially-typed). See "
+            "DEC-V63-A-sub-M-D6-HTTP-WIRE Codex R0 P2 fix."
         ),
     )
     llm_enhance: bool = Field(

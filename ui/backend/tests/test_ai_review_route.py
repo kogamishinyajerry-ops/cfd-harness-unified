@@ -1124,3 +1124,50 @@ def test_stl_bbox_set_none_falls_back_to_interface_bodies_routing(
     assert "extra_body_advisor" not in advisor_names
 
 
+def test_stl_bbox_set_mixed_quality_inventory_does_not_422(
+    client: TestClient,
+) -> None:
+    """Codex R0 P2 (2026-05-14): the wire field is typed ``dict[str,
+    Any]`` (not ``dict[str, list[float]]``) so a single malformed entry
+    is silently dropped by D6's ``_coerce_bbox`` guard without
+    422-ing the whole request. case_016-class helper bodies routinely
+    arrive partially-typed; the route must tolerate that."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "parts_manifest": {
+                "parts": [
+                    {
+                        "name": "region_air",
+                        "role": "region_air",
+                        "bbox": [0.0, 0.0, 0.0, 100.0, 100.0, 100.0],
+                    },
+                ]
+            },
+            "stl_bbox_set": {
+                "region_air": [0.0, 0.0, 0.0, 100.0, 100.0, 100.0],
+                "good_debris": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0],
+                "malformed_str": "not_a_list",            # silent-skip
+                "malformed_arity": [0.0, 0.0, 0.0],       # silent-skip (len ≠ 6)
+                "malformed_nonnumeric": [
+                    "x", 0.0, 0.0, 1.0, 1.0, 1.0,         # silent-skip
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    d6 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "extra_body_advisor"
+    ]
+    # Only "good_debris" survives _coerce_bbox; it is unregistered.
+    unregistered = [f for f in d6 if f["code"] == "d6_unregistered_body"]
+    locations = {f["location"] for f in unregistered}
+    assert "good_debris" in locations
+    # Malformed entries were silently dropped, not surfaced as findings.
+    assert "malformed_str" not in locations
+    assert "malformed_arity" not in locations
+    assert "malformed_nonnumeric" not in locations
+
+
