@@ -1,0 +1,155 @@
+{
+  "findings": [
+    {
+      "source_advisor": "unit_detector",
+      "severity": "warning",
+      "code": "unit_inference",
+      "message": "Unit could not be inferred from STEP header or bbox magnitude; engineer review required",
+      "location": null,
+      "evidence_v_rows": [
+        "V20",
+        "V96"
+      ],
+      "raw": {
+        "declared_unit": "mm",
+        "bbox_plausible_units": [
+          "m"
+        ],
+        "decision": "unknown",
+        "confidence": 0.0,
+        "evidence": [
+          "STEP header declares SI_UNIT(.MILLI.,.METRE.)",
+          "bbox extent 0.18 (raw) is industrially plausible if unit is one of: m",
+          "WARNING: STEP declares mm but bbox magnitude only matches ['m']. Likely a unit mismatch in the upstream CAD chain."
+        ]
+      }
+    },
+    {
+      "source_advisor": "thin_wall_advisor",
+      "severity": "critical",
+      "code": "thin_wall_at_risk",
+      "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness).",
+      "location": "cold_fin_rear_third",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "raw": {
+        "patch_name": "cold_fin_rear_third",
+        "estimated_thickness": 0.0006,
+        "effective_cell_size": 0.001,
+        "cells_per_thickness": 0.6,
+        "assigned_level": [
+          1,
+          2
+        ],
+        "recommended_level_max": 4,
+        "severity": "critical",
+        "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+      }
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "input_summary": "parts_manifest with 3 parts",
+      "output": {
+        "findings": [],
+        "bodies_checked": 0,
+        "bodies_with_intended_normal": 0,
+        "bodies_skipped": 3
+      },
+      "duration_ms": 0.010125106200575829,
+      "version": "face_orientation_advisor.py"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "input_summary": "parts_manifest with 3 parts",
+      "output": {
+        "findings": [],
+        "fail_count": 0,
+        "warning_count": 0,
+        "pass_count": 0
+      },
+      "duration_ms": 0.007292022928595543,
+      "version": "inlet_outlet_validator.py"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'debug']",
+      "output": {
+        "findings": [],
+        "geometry_names": [
+          "region_hot_fluid.stl",
+          "region_cold_fluid.stl",
+          "region_solid.stl"
+        ],
+        "features_files": [
+          "region_hot_fluid.eMesh",
+          "region_cold_fluid.eMesh",
+          "region_solid.eMesh"
+        ]
+      },
+      "duration_ms": 24.249959038570523,
+      "version": "shm_dict_validator.py"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_011_plate_fin_compact_hx/inputs/cad_codex_v1.step",
+      "output": {
+        "declared_unit": "mm",
+        "bbox_plausible_units": [
+          "m"
+        ],
+        "decision": "unknown",
+        "confidence": 0.0,
+        "evidence": [
+          "STEP header declares SI_UNIT(.MILLI.,.METRE.)",
+          "bbox extent 0.18 (raw) is industrially plausible if unit is one of: m",
+          "WARNING: STEP declares mm but bbox magnitude only matches ['m']. Likely a unit mismatch in the upstream CAD chain."
+        ]
+      },
+      "duration_ms": 10.788167011924088,
+      "version": "unit_detector.py"
+    },
+    {
+      "advisor_name": "thin_wall_advisor",
+      "status": "ok",
+      "input_summary": "1 patches, cell_size=0.004",
+      "output": [
+        {
+          "patch_name": "cold_fin_rear_third",
+          "estimated_thickness": 0.0006,
+          "effective_cell_size": 0.001,
+          "cells_per_thickness": 0.6,
+          "assigned_level": [
+            1,
+            2
+          ],
+          "recommended_level_max": 4,
+          "severity": "critical",
+          "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+        }
+      ],
+      "duration_ms": 0.01837499439716339,
+      "version": "thin_wall_advisor.py"
+    }
+  ],
+  "evidence_refs": [
+    "V10",
+    "V100",
+    "V20",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V96",
+    "V99"
+  ],
+  "stack_duration_ms": 35.25241697207093,
+  "advisor_count": 5
+}
