@@ -1,0 +1,305 @@
+{
+  "advisor_count": 9,
+  "finding_count": 17,
+  "critical_count": 17,
+  "warning_count": 0,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "shm_dict_validator",
+    "solver_block_advisor",
+    "thermo_polynomial_range_advisor",
+    "thin_wall_advisor",
+    "unit_detector",
+    "virtual_interface_detector"
+  ],
+  "evidence_refs": [
+    "V10",
+    "V100",
+    "V20",
+    "V22",
+    "V25",
+    "V27",
+    "V28",
+    "V29",
+    "V33",
+    "V36",
+    "V41",
+    "V42",
+    "V43",
+    "V50",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V93",
+    "V96",
+    "V99"
+  ],
+  "findings": [
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_upstream' field 'U' declares BC type 'characteristicVelocityInletOutletVelocity' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestream' (auto-direction-detecting flow per ESI canonical far-field velocity). See V29 evidence row.",
+      "location": "farfield_upstream.bc.U"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_upstream' field 'p' declares BC type 'characteristicPressureInletOutletPressure' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestreamPressure' (ESI canonical far-field pressure) or 'waveTransmissive' (ESI canonical upwind/downwind transmissive). See V29 evidence row.",
+      "location": "farfield_upstream.bc.p"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_downstream' field 'U' declares BC type 'characteristicVelocityInletOutletVelocity' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestream' (auto-direction-detecting flow per ESI canonical far-field velocity). See V29 evidence row.",
+      "location": "farfield_downstream.bc.U"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_downstream' field 'p' declares BC type 'characteristicPressureInletOutletPressure' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestreamPressure' (ESI canonical far-field pressure) or 'waveTransmissive' (ESI canonical upwind/downwind transmissive). See V29 evidence row.",
+      "location": "farfield_downstream.bc.p"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_top' field 'U' declares BC type 'characteristicVelocityInletOutletVelocity' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestream' (auto-direction-detecting flow per ESI canonical far-field velocity). See V29 evidence row.",
+      "location": "farfield_top.bc.U"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_top' field 'p' declares BC type 'characteristicPressureInletOutletPressure' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestreamPressure' (ESI canonical far-field pressure) or 'waveTransmissive' (ESI canonical upwind/downwind transmissive). See V29 evidence row.",
+      "location": "farfield_top.bc.p"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_bottom' field 'U' declares BC type 'characteristicVelocityInletOutletVelocity' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestream' (auto-direction-detecting flow per ESI canonical far-field velocity). See V29 evidence row.",
+      "location": "farfield_bottom.bc.U"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_bottom' field 'p' declares BC type 'characteristicPressureInletOutletPressure' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestreamPressure' (ESI canonical far-field pressure) or 'waveTransmissive' (ESI canonical upwind/downwind transmissive). See V29 evidence row.",
+      "location": "farfield_bottom.bc.p"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_outboard' field 'U' declares BC type 'characteristicVelocityInletOutletVelocity' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestream' (auto-direction-detecting flow per ESI canonical far-field velocity). See V29 evidence row.",
+      "location": "farfield_outboard.bc.U"
+    },
+    {
+      "code": "bc_type_valid_foam_extend_only",
+      "severity": "critical",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'farfield_outboard' field 'p' declares BC type 'characteristicPressureInletOutletPressure' \u2014 verdict valid_foam_extend_only under fork 'main'; this BC exists in foam-extend but is absent from OpenFOAM-ESI mainline (the project's default Docker image opencfd/openfoam-default:2312). Solver will crash at boundary-field construction time with 'not found in valid types'. Suggested fix: Substitute 'freestreamPressure' (ESI canonical far-field pressure) or 'waveTransmissive' (ESI canonical upwind/downwind transmissive). See V29 evidence row.",
+      "location": "farfield_outboard.bc.p"
+    },
+    {
+      "code": "d1_unintended_gap",
+      "severity": "critical",
+      "source_advisor": "virtual_interface_detector",
+      "evidence_v_rows": [
+        "V22",
+        "V25",
+        "V33",
+        "V36",
+        "V42",
+        "V43",
+        "V50"
+      ],
+      "message": "root_fairing_d1_interface: facing-face candidates with sub-mm gap (0.3500 mm) \u2014 D1-class defect",
+      "location": "root_fairing_d1_interface"
+    },
+    {
+      "code": "v27_adjusttimestep_required",
+      "severity": "critical",
+      "source_advisor": "solver_block_advisor",
+      "evidence_v_rows": [
+        "V27",
+        "V28"
+      ],
+      "message": "rhoCentralFoam requires adjustTimeStep yes (explicit central-upwind flux \u00b7 CFL-bounded); deltaT=1.0; fixed deltaT yields catastrophic first-iter Courant number (Co > 10^4 observed on case_006 v1 2026-05-08)",
+      "location": "controlDict.adjustTimeStep"
+    },
+    {
+      "code": "v28_dilu_on_symmetric",
+      "severity": "critical",
+      "source_advisor": "solver_block_advisor",
+      "evidence_v_rows": [
+        "V27",
+        "V28"
+      ],
+      "message": "rhoCentralFoam routes field 'U' through the symmetric matrix path; preconditioner 'DILU' is asymmetric-only (use DIC / FDIC / GAMG / diagonal, or smoothSolver+symGaussSeidel per canonical rhoCentralFoam tutorial biconic25-55Run35)",
+      "location": "fvSolution.solvers.U.preconditioner"
+    },
+    {
+      "code": "v28_dilu_on_symmetric",
+      "severity": "critical",
+      "source_advisor": "solver_block_advisor",
+      "evidence_v_rows": [
+        "V27",
+        "V28"
+      ],
+      "message": "rhoCentralFoam routes field 'e' through the symmetric matrix path; preconditioner 'DILU' is asymmetric-only (use DIC / FDIC / GAMG / diagonal, or smoothSolver+symGaussSeidel per canonical rhoCentralFoam tutorial biconic25-55Run35)",
+      "location": "fvSolution.solvers.e.preconditioner"
+    },
+    {
+      "code": "v28_dilu_on_symmetric",
+      "severity": "critical",
+      "source_advisor": "solver_block_advisor",
+      "evidence_v_rows": [
+        "V27",
+        "V28"
+      ],
+      "message": "rhoCentralFoam routes field 'k' through the symmetric matrix path; preconditioner 'DILU' is asymmetric-only (use DIC / FDIC / GAMG / diagonal, or smoothSolver+symGaussSeidel per canonical rhoCentralFoam tutorial biconic25-55Run35)",
+      "location": "fvSolution.solvers.k.preconditioner"
+    },
+    {
+      "code": "v28_dilu_on_symmetric",
+      "severity": "critical",
+      "source_advisor": "solver_block_advisor",
+      "evidence_v_rows": [
+        "V27",
+        "V28"
+      ],
+      "message": "rhoCentralFoam routes field 'omega' through the symmetric matrix path; preconditioner 'DILU' is asymmetric-only (use DIC / FDIC / GAMG / diagonal, or smoothSolver+symGaussSeidel per canonical rhoCentralFoam tutorial biconic25-55Run35)",
+      "location": "fvSolution.solvers.omega.preconditioner"
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "critical",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'tip_cap_sliver': thickness \u2248 0.18 (bbox-min); effective cell size at level 2 = 5 \u2192 0.04 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 8 (\u22480.07812 cell size = 2.30 cells per thickness).",
+      "location": "tip_cap_sliver"
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "duration_ms": 0.015166006051003933,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "face_orientation_advisor.py",
+      "output_summary": "FaceOrientationReport"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "duration_ms": 0.00895792618393898,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "inlet_outlet_validator.py",
+      "output_summary": "InletOutletValidationReport"
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "duration_ms": 0.08483300916850567,
+      "input_summary": "12 parts with bc blocks (fork=main)",
+      "version": "bc_type_name_validity_advisor.py",
+      "output_summary": "BcTypeNameReport"
+    },
+    {
+      "advisor_name": "virtual_interface_detector",
+      "status": "ok",
+      "duration_ms": 0.041082967072725296,
+      "input_summary": "2 bodies, 1 specs",
+      "version": "virtual_interface_detector.py",
+      "output_summary": "list"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "duration_ms": 18.573707900941372,
+      "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'geometry']",
+      "version": "shm_dict_validator.py",
+      "output_summary": "ShmDictReport"
+    },
+    {
+      "advisor_name": "thermo_polynomial_range_advisor",
+      "status": "ok",
+      "duration_ms": 0.34566607791930437,
+      "input_summary": "thermo species=['mixture', 'thermoType']",
+      "version": "thermo_polynomial_range_advisor.py",
+      "output_summary": "ThermoPolynomialRangeReport"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "duration_ms": 3.8042909000068903,
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_006_onera_m6_transonic/inputs/cad_codex_v1.step",
+      "version": "unit_detector.py",
+      "output_summary": "UnitDetection"
+    },
+    {
+      "advisor_name": "solver_block_advisor",
+      "status": "ok",
+      "duration_ms": 0.025875051505863667,
+      "input_summary": "solver=rhoCentralFoam, adjustTimeStep=False, preconditioners=4",
+      "version": "solver_block_advisor.py",
+      "output_summary": "SolverBlockReport"
+    },
+    {
+      "advisor_name": "thin_wall_advisor",
+      "status": "ok",
+      "duration_ms": 0.039041973650455475,
+      "input_summary": "5 patches, cell_size=20.0",
+      "version": "thin_wall_advisor.py",
+      "output_summary": "list"
+    }
+  ],
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}

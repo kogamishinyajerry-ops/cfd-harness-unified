@@ -169,6 +169,7 @@ extra_body_advisor = _load_advisor("extra_body_advisor")
 face_orientation_advisor = _load_advisor("face_orientation_advisor")
 inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
 shm_dict_validator = _load_advisor("shm_dict_validator")
+solver_block_advisor = _load_advisor("solver_block_advisor")
 stl_face_label_validator = _load_advisor("stl_face_label_validator")
 thermo_polynomial_range_advisor = _load_advisor("thermo_polynomial_range_advisor")
 thin_wall_advisor = _load_advisor("thin_wall_advisor")
@@ -185,6 +186,7 @@ _V_ROWS_PER_ADVISOR: dict[str, tuple[str, ...]] = {
     "face_orientation_advisor": ("V79", "V87"),
     "inlet_outlet_validator": ("V81",),
     "shm_dict_validator": ("V52", "V86", "V99", "V100"),
+    "solver_block_advisor": ("V27", "V28"),
     "stl_face_label_validator": ("V94",),
     "thermo_polynomial_range_advisor": ("V41", "V93"),
     "thin_wall_advisor": ("V10",),
@@ -435,6 +437,25 @@ def _normalize_thermo(
     )
 
 
+def _normalize_solver_block(
+    report: solver_block_advisor.SolverBlockReport,
+) -> tuple[Finding, ...]:
+    advisor = "solver_block_advisor"
+    rows = _V_ROWS_PER_ADVISOR[advisor]
+    return tuple(
+        Finding(
+            source_advisor=advisor,
+            severity=f.severity,
+            code=f.code,
+            message=f.detail,
+            location=f.location,
+            evidence_v_rows=rows,
+            raw=f,
+        )
+        for f in report.findings
+    )
+
+
 def _normalize_thin_wall(
     warnings: Sequence[thin_wall_advisor.ThinWallWarning],
 ) -> tuple[Finding, ...]:
@@ -649,6 +670,7 @@ def assemble_stack(
     bc_fork: str = "main",
     stl_bbox_set: Mapping[str, Any] | None = None,
     extra_body_containment_tol_mm: float = 0.0,
+    solver_block_snapshot: solver_block_advisor.SolverBlockSnapshot | None = None,
     **_unused: Any,  # forward-compatible (silently ignored, NOT logged)
 ) -> AdvisorStackReport:
     """Dispatch all applicable advisors based on provided artifacts.
@@ -888,6 +910,30 @@ def assemble_stack(
             args=(),
             kwargs={"step_path": step_path, **unit_kwargs},
             normalize=_normalize_unit,
+            advisor_calls=advisor_calls,
+            findings=findings,
+        )
+
+    # solver_block_advisor dispatch (DEC-V64-A-sub-M-V64A-CASE-006-SUBSTRATE-V2 ·
+    # V27 + V28 evidence rows · case_006 ONERA M6 v1 2026-05-08 pre-fix
+    # snapshot). Pure substrate consumer: fires only when caller supplies a
+    # SolverBlockSnapshot. Silently no-op on non-density-based-symmetric
+    # solver classes (the advisor itself returns empty findings; the
+    # dispatch still counts since the advisor was invoked successfully).
+    if solver_block_snapshot is not None:
+        advisors_dispatched.add("solver_block_advisor")
+        _dispatch(
+            advisor_name="solver_block_advisor",
+            module=solver_block_advisor,
+            input_summary=(
+                f"solver={solver_block_snapshot.solver}, "
+                f"adjustTimeStep={solver_block_snapshot.adjust_time_step}, "
+                f"preconditioners={len(solver_block_snapshot.preconditioners)}"
+            ),
+            func=solver_block_advisor.check_solver_block,
+            args=(solver_block_snapshot,),
+            kwargs={},
+            normalize=_normalize_solver_block,
             advisor_calls=advisor_calls,
             findings=findings,
         )
