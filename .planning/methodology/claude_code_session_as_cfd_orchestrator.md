@@ -66,10 +66,13 @@ unless a future non-Claude-Code consumer is identified.
 - Pipeline fail-fast behavior (`Error 1` on naming drift; `Error 2` on mesh verdict FAIL)
 - Main repo schema evolution surfaces clearly at industrial-case integration
 
+**Validated 2026-05-12/13** (F4b session):
+- ✅ Solver execution from Claude Code Bash — Docker step 09 exercised end-to-end: 2689 SIMPLE iters of buoyantSimpleFoam over 10.4 h ExecutionTime / 10.95 h wall clock on v32 polyMesh (3.10M cells, max_skew 6.87). No FATAL / FPE / Killed throughout. User-invoked clean early stop via runtime `controlDict.stopAt writeNow` edit. Full convergence trajectory + diagnosis sedimented as **V84** in `industrial_case_solver_findings.md`
+
 **Not validated** (out of session scope or untested):
-- Solver execution from Claude Code Bash (Docker step 09 not exercised; assumed via existing `09_run_solver.sh` pattern)
 - New industrial case from scratch (only existing case_002a retested)
 - Cross-case generalization (only APU bay; M2.5 sediment hardening items still queued)
+- Steady-state convergence under correct outlet physics (F4b ran with degraded BCs — apu_intake patch missing per V75; full physics validation requires STL surgery on body_1 louver before re-run)
 
 ## Sediment captured by this validation
 
