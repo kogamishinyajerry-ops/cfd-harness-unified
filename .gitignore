@@ -105,3 +105,7 @@ uv.lock
 # (see .planning/dreams/README.md). README itself is tracked.
 .planning/dreams/*_dream.md
 .planning/dreams/archive/
+
+# /api/ai-review audit artifacts produced by test runs (route persistence side-effect)
+# Canonical audit doc v62_stack_4q_audit.md is tracked.
+.planning/audits/anon_*.json
