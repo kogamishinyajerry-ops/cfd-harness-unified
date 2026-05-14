@@ -28,6 +28,27 @@ explicit kwarg is absent):
   * ``shm_dict``          ← ``<case_dir>/inputs/shm_dict.{yaml,yml,json}``
   * ``thermo_dict``       ← ``<case_dir>/inputs/thermo_dict.{yaml,yml,json}``
   * ``thin_wall_inputs``  ← ``<case_dir>/inputs/thin_wall_inputs.{yaml,yml,json}``
+  * ``step_path``         ← first ``*.step``/``*.stp`` under ``<case_dir>``
+                            (root) or ``<case_dir>/cad/``
+  * ``step_bbox`` (6-tuple) /
+    ``step_extents`` (3-tuple)
+                          ← ``<case_dir>/cad/bbox.json`` or fields
+                            ``bbox`` / ``extents`` inside
+                            ``<case_dir>/manifest.json``
+  * ``interface_bodies`` /
+    ``interface_specs``   ← ``<case_dir>/interface_bodies.json`` /
+                            ``<case_dir>/interface_specs.json`` (or
+                            fields with same names inside
+                            ``<case_dir>/manifest.json``)
+
+DEC-V62-A-sub-REQ-SCHEMA-EXPAND (2026-05-14): the five new fields
+unblock ``unit_detector`` (gated on ``step_path``) and the A2-v2
+``virtual_interface_detector`` (gated on ``interface_bodies`` +
+``interface_specs``) in the HTTP path. ``advisor_stack.assemble_stack``
+already supports the corresponding kwargs; this route only adds wire
+plumbing + dataclass rehydration. D6 ``extra_body_advisor`` is NOT
+unblocked by this change (it requires ``stl_bbox_set`` and is not yet
+routed in ``assemble_stack`` — separate follow-up sub-DEC).
 
 Missing files are silently skipped (the absence is observable via
 ``advisor_count`` in the report).
@@ -50,6 +71,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from ui.backend.routes._loopback_guard import require_loopback
 from ui.backend.services.advisor_stack import AdvisorStackReport, assemble_stack
 from ui.backend.services.geometry_ingest.thin_wall_advisor import PatchGeometry
+from ui.backend.services.geometry_ingest.virtual_interface_detector import (
+    BodyGeometry,
+    FaceGeometry,
+    InterfaceSpec,
+)
 from ui.backend.services.v_series_drift_guard import enforce_at_route_boundary
 
 
@@ -93,6 +119,53 @@ class AIReviewRequest(BaseModel):
     shm_dict: Optional[dict[str, Any]] = None
     thermo_dict: Optional[dict[str, Any]] = None
     thin_wall_inputs: Optional[dict[str, Any]] = None
+    # DEC-V62-A-sub-REQ-SCHEMA-EXPAND (2026-05-14) — fields below
+    # unblock unit_detector + A2-v2 in the HTTP path. assemble_stack
+    # already routes these kwargs (see services/advisor_stack.py).
+    step_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path to a CAD STEP/STP file. Gates unit_detector. Path is "
+            "passed through as-is to the advisor; the route does not "
+            "open or write it (V132 advisory-only)."
+        ),
+    )
+    step_bbox: Optional[list[float]] = Field(
+        default=None,
+        description=(
+            "Six-tuple [xmin, ymin, zmin, xmax, ymax, zmax] (raw units) "
+            "for the overall STEP bounding box. Converted to "
+            "step_bbox_max_extent_raw = max(extent_xyz) before dispatch."
+        ),
+    )
+    step_extents: Optional[list[float]] = Field(
+        default=None,
+        description=(
+            "List of per-body max bbox extents (raw units), one float "
+            "per body. Forwarded to unit_detector as body_extents_raw "
+            "for airframe-class filtering (3-tuple is the typical "
+            "single-domain case; lists of any length are accepted)."
+        ),
+    )
+    interface_bodies: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Wire form of virtual_interface_detector.BodyGeometry "
+            "instances. Each item: {name, centroid:[x,y,z], faces:[{"
+            "area, bbox_min:[x,y,z], bbox_max:[x,y,z], normal:[x,y,z], "
+            "centroid:[x,y,z]}, ...]}. Combined with interface_specs "
+            "gates the A2-v2 advisor."
+        ),
+    )
+    interface_specs: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Wire form of virtual_interface_detector.InterfaceSpec. "
+            "Each item: {patch_name, mode: 'shared'|'endcap', body_a?, "
+            "body_b?, body?, axis?}. Combined with interface_bodies "
+            "gates the A2-v2 advisor."
+        ),
+    )
     llm_enhance: bool = Field(
         default=False,
         description=(
@@ -174,6 +247,198 @@ def _autodiscover(case_dir: Path) -> dict[str, dict[str, Any]]:
                     found[kw] = loaded
                 break
     return found
+
+
+def _autodiscover_step(case_dir: Path) -> Optional[str]:
+    """Find the first ``*.step`` / ``*.stp`` under ``case_dir`` or ``case_dir/cad/``.
+
+    Root searched before ``cad/`` so a top-level STEP wins. Returns the
+    absolute path as a string (JSON-safe) or None when nothing found.
+    Missing/empty directories are silently skipped per V130.
+    """
+    for sub in (case_dir, case_dir / "cad"):
+        if not sub.is_dir():
+            continue
+        for suffix in ("*.step", "*.stp", "*.STEP", "*.STP"):
+            for p in sorted(sub.glob(suffix)):
+                if p.is_file():
+                    return str(p)
+    return None
+
+
+def _autodiscover_geometry_metadata(case_dir: Path) -> dict[str, Any]:
+    """Extract ``step_bbox`` / ``step_extents`` / ``interface_bodies`` /
+    ``interface_specs`` from ``case_dir`` artifacts.
+
+    Search order (first hit wins per field):
+
+      * ``<case_dir>/cad/bbox.json``  → ``bbox``, ``extents``
+      * ``<case_dir>/interface_bodies.json`` (list) → ``interface_bodies``
+      * ``<case_dir>/interface_specs.json`` (list)  → ``interface_specs``
+      * ``<case_dir>/manifest.json`` may carry any of the four under
+        keys ``bbox`` / ``extents`` / ``interface_bodies`` /
+        ``interface_specs``
+
+    Returns a dict with only the fields that were successfully resolved.
+    Per V130, missing files / malformed shapes degrade silently.
+    """
+    found: dict[str, Any] = {}
+
+    bbox_path = case_dir / "cad" / "bbox.json"
+    if bbox_path.is_file():
+        bbox_doc = _load_dict_file(bbox_path) or {}
+        if isinstance(bbox_doc.get("bbox"), list):
+            found["step_bbox"] = bbox_doc["bbox"]
+        if isinstance(bbox_doc.get("extents"), list):
+            found["step_extents"] = bbox_doc["extents"]
+
+    for key in ("interface_bodies", "interface_specs"):
+        p = case_dir / f"{key}.json"
+        if p.is_file():
+            try:
+                obj = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                obj = None
+            if isinstance(obj, list):
+                found[key] = obj
+
+    manifest = case_dir / "manifest.json"
+    if manifest.is_file():
+        m = _load_dict_file(manifest) or {}
+        for key in ("bbox", "extents"):
+            mapped = "step_bbox" if key == "bbox" else "step_extents"
+            if mapped not in found and isinstance(m.get(key), list):
+                found[mapped] = m[key]
+        for key in ("interface_bodies", "interface_specs"):
+            if key not in found and isinstance(m.get(key), list):
+                found[key] = m[key]
+
+    return found
+
+
+def _rehydrate_face(raw: dict[str, Any]) -> FaceGeometry:
+    return FaceGeometry(
+        area=float(raw["area"]),
+        bbox_min=tuple(float(x) for x in raw["bbox_min"]),  # type: ignore[arg-type]
+        bbox_max=tuple(float(x) for x in raw["bbox_max"]),  # type: ignore[arg-type]
+        normal=tuple(float(x) for x in raw["normal"]),  # type: ignore[arg-type]
+        centroid=tuple(float(x) for x in raw["centroid"]),  # type: ignore[arg-type]
+    )
+
+
+def _rehydrate_interface_bodies(
+    raw: list[dict[str, Any]],
+) -> dict[str, BodyGeometry]:
+    """Convert wire-form body list into ``{name: BodyGeometry}`` mapping.
+
+    Each item must carry ``name`` (str), ``centroid`` ([x,y,z]), and
+    ``faces`` (list of face dicts). Malformed entries raise 400 — the
+    advisor would otherwise crash into per-call isolation and the
+    finding would be silently lost.
+    """
+    out: dict[str, BodyGeometry] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "interface_body_shape",
+                    "expected": "dict with keys {name, centroid, faces}",
+                    "got": type(item).__name__,
+                },
+            )
+        try:
+            name = str(item["name"])
+            centroid = tuple(float(x) for x in item["centroid"])
+            faces_raw = item.get("faces") or ()
+            faces = tuple(_rehydrate_face(f) for f in faces_raw)
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "interface_body_fields",
+                    "expected": "name: str, centroid: [f,f,f], faces: list",
+                    "error": str(exc),
+                },
+            ) from exc
+        if len(centroid) != 3:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "interface_body_centroid_arity",
+                    "expected_len": 3,
+                    "got_len": len(centroid),
+                },
+            )
+        out[name] = BodyGeometry(name=name, faces=faces, centroid=centroid)  # type: ignore[arg-type]
+    return out
+
+
+def _rehydrate_interface_specs(raw: list[dict[str, Any]]) -> list[InterfaceSpec]:
+    """Convert wire-form spec list into ``InterfaceSpec`` instances."""
+    out: list[InterfaceSpec] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "interface_spec_shape",
+                    "expected": "dict with keys {patch_name, mode, ...}",
+                    "got": type(item).__name__,
+                },
+            )
+        try:
+            patch_name = str(item["patch_name"])
+            mode = str(item["mode"])
+        except (KeyError, TypeError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "interface_spec_fields",
+                    "expected": "patch_name: str, mode: 'shared'|'endcap'",
+                    "error": str(exc),
+                },
+            ) from exc
+        out.append(
+            InterfaceSpec(
+                patch_name=patch_name,
+                mode=mode,
+                body_a=item.get("body_a"),
+                body_b=item.get("body_b"),
+                body=item.get("body"),
+                axis=item.get("axis"),
+            )
+        )
+    return out
+
+
+def _bbox_max_extent(bbox: list[float]) -> float:
+    """Compute ``max(dx, dy, dz)`` from a 6-tuple bbox in raw units.
+
+    Raises HTTPException(400) on arity / type errors so the route
+    surfaces an actionable failure instead of 500-ing inside dispatch.
+    """
+    if len(bbox) != 6:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "step_bbox_arity",
+                "expected_len": 6,
+                "got_len": len(bbox),
+            },
+        )
+    try:
+        vals = [float(x) for x in bbox]
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "step_bbox_fields",
+                "expected": "6 floats [xmin,ymin,zmin,xmax,ymax,zmax]",
+                "error": str(exc),
+            },
+        ) from exc
+    return max(vals[3] - vals[0], vals[4] - vals[1], vals[5] - vals[2])
 
 
 def _resolve_case_dir(case_dir_raw: str) -> Path:
@@ -386,6 +651,12 @@ async def post_ai_review(
         "shm_dict": payload.shm_dict,
         "thermo_dict": payload.thermo_dict,
         "thin_wall_inputs": payload.thin_wall_inputs,
+        # DEC-V62-A-sub-REQ-SCHEMA-EXPAND
+        "step_path": payload.step_path,
+        "step_bbox": payload.step_bbox,
+        "step_extents": payload.step_extents,
+        "interface_bodies": payload.interface_bodies,
+        "interface_specs": payload.interface_specs,
     }
     case_label = "anon"
     if payload.case_dir is not None:
@@ -393,6 +664,14 @@ async def post_ai_review(
         case_label = case_path.name
         discovered = _autodiscover(case_path)
         for kw, value in discovered.items():
+            if explicit_kwargs.get(kw) is None:
+                explicit_kwargs[kw] = value
+        if explicit_kwargs.get("step_path") is None:
+            step = _autodiscover_step(case_path)
+            if step is not None:
+                explicit_kwargs["step_path"] = step
+        geo_meta = _autodiscover_geometry_metadata(case_path)
+        for kw, value in geo_meta.items():
             if explicit_kwargs.get(kw) is None:
                 explicit_kwargs[kw] = value
 
@@ -403,6 +682,34 @@ async def post_ai_review(
     if explicit_kwargs.get("thin_wall_inputs") is not None:
         explicit_kwargs["thin_wall_inputs"] = _rehydrate_thin_wall_inputs(
             explicit_kwargs["thin_wall_inputs"]
+        )
+
+    # DEC-V62-A-sub-REQ-SCHEMA-EXPAND: wire-form lists/six-tuples →
+    # assemble_stack-shaped kwargs. Pop the wire-form keys and replace
+    # with the dataclass / scalar shapes the stack signature expects.
+    step_bbox_wire = explicit_kwargs.pop("step_bbox", None)
+    if step_bbox_wire is not None:
+        explicit_kwargs["step_bbox_max_extent_raw"] = _bbox_max_extent(step_bbox_wire)
+    step_extents_wire = explicit_kwargs.pop("step_extents", None)
+    if step_extents_wire is not None:
+        try:
+            explicit_kwargs["step_body_extents_raw"] = [float(x) for x in step_extents_wire]
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "step_extents_fields",
+                    "expected": "list of floats",
+                    "error": str(exc),
+                },
+            ) from exc
+    if explicit_kwargs.get("interface_bodies") is not None:
+        explicit_kwargs["interface_bodies"] = _rehydrate_interface_bodies(
+            explicit_kwargs["interface_bodies"]
+        )
+    if explicit_kwargs.get("interface_specs") is not None:
+        explicit_kwargs["interface_specs"] = _rehydrate_interface_specs(
+            explicit_kwargs["interface_specs"]
         )
 
     stack_kwargs = {k: v for k, v in explicit_kwargs.items() if v is not None}
