@@ -4,7 +4,7 @@ title: M-STACK-ASSEMBLY · advisor stack assembly layer · dispatch + compositio
 status: Accepted
 parent_dec: V62-A-charter
 phase: V62-A Tier 1 · M-STACK-ASSEMBLY (structural blocker for M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE + M-4Q-AUDIT)
-notion_sync_status: pending (Notion sync deferred to session-end batch · session 2026-05-14 · Status=Accepted will trigger sync per v2.3 round-1 loosen)
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed81cdad05c63273d6ef13)
 ---
 
 # DEC-V62-A-sub-STACK-ASSEMBLY · advisor stack assembly layer

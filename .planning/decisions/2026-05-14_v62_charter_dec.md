@@ -4,7 +4,7 @@ title: V62-A advisor stack closure arc · charter DEC · elevated from plan-file
 status: Accepted
 parent_dec: V61-198
 phase: V62-A charter (Tier 1 unblock + Tier 2 stack validation + Tier 3 close)
-notion_sync_status: pending (Notion sync deferred to session-end batch · session 2026-05-14 · Status=Accepted will trigger sync per v2.3 round-1 loosen)
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed816bb523e8e686c80c14)
 ---
 
 # DEC-V62-A-charter · V62-A advisor stack closure arc
