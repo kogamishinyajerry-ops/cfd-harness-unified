@@ -1,0 +1,155 @@
+{
+  "advisor_count": 6,
+  "finding_count": 6,
+  "critical_count": 3,
+  "warning_count": 3,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "thin_wall_advisor",
+    "unit_detector",
+    "virtual_interface_detector"
+  ],
+  "evidence_refs": [
+    "V10",
+    "V20",
+    "V22",
+    "V25",
+    "V29",
+    "V33",
+    "V36",
+    "V42",
+    "V43",
+    "V50",
+    "V79",
+    "V81",
+    "V87",
+    "V96"
+  ],
+  "findings": [
+    {
+      "code": "bc_type_unknown",
+      "severity": "warning",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'rotor_blade_A' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "rotor_blade_A.bc.U"
+    },
+    {
+      "code": "bc_type_unknown",
+      "severity": "warning",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'rotor_blade_B' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "rotor_blade_B.bc.U"
+    },
+    {
+      "code": "bc_type_unknown",
+      "severity": "warning",
+      "source_advisor": "bc_type_name_validity_advisor",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "message": "part 'hub_spinner' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "hub_spinner.bc.U"
+    },
+    {
+      "code": "d1_unintended_gap",
+      "severity": "critical",
+      "source_advisor": "virtual_interface_detector",
+      "evidence_v_rows": [
+        "V22",
+        "V25",
+        "V33",
+        "V36",
+        "V42",
+        "V43",
+        "V50"
+      ],
+      "message": "nacelle_d1_interface: facing-face candidates with sub-mm gap (0.3000 mm) \u2014 D1-class defect",
+      "location": "nacelle_d1_interface"
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "critical",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'yaw_sensor_shim': thickness \u2248 0.75 (bbox-min); effective cell size at level 2 = 5 \u2192 0.15 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 6 (\u22480.3125 cell size = 2.40 cells per thickness).",
+      "location": "yaw_sensor_shim"
+    },
+    {
+      "code": "thin_wall_at_risk",
+      "severity": "critical",
+      "source_advisor": "thin_wall_advisor",
+      "evidence_v_rows": [
+        "V10"
+      ],
+      "message": "patch 'rotor_blade_trailing_edge_sliver': thickness \u2248 0.5 (bbox-min); effective cell size at level 4 = 1.25 \u2192 0.40 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 7 (\u22480.1562 cell size = 3.20 cells per thickness).",
+      "location": "rotor_blade_trailing_edge_sliver"
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "duration_ms": 0.011749914847314358,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "face_orientation_advisor.py",
+      "output_summary": "FaceOrientationReport"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "duration_ms": 0.0071249669417738914,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "inlet_outlet_validator.py",
+      "output_summary": "InletOutletValidationReport"
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "duration_ms": 0.04362489562481642,
+      "input_summary": "10 parts with bc blocks (fork=main)",
+      "version": "bc_type_name_validity_advisor.py",
+      "output_summary": "BcTypeNameReport"
+    },
+    {
+      "advisor_name": "virtual_interface_detector",
+      "status": "ok",
+      "duration_ms": 0.03800005652010441,
+      "input_summary": "2 bodies, 1 specs",
+      "version": "virtual_interface_detector.py",
+      "output_summary": "list"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "duration_ms": 10.75966702774167,
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_004_nrel_phase_vi_mrf/inputs/cad_codex_v1.step",
+      "version": "unit_detector.py",
+      "output_summary": "UnitDetection"
+    },
+    {
+      "advisor_name": "thin_wall_advisor",
+      "status": "ok",
+      "duration_ms": 0.027374946512281895,
+      "input_summary": "5 patches, cell_size=20.0",
+      "version": "thin_wall_advisor.py",
+      "output_summary": "list"
+    }
+  ],
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}
