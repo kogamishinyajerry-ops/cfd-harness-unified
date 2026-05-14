@@ -770,3 +770,180 @@ def test_r1p2_unmapped_finding_code_does_not_boost(
                 f"R1 P2.2 corollary: {v_id} boosted from unmapped code "
                 f"`brand_new_unmapped_code` (should contribute nothing)"
             )
+
+
+# ---------- Codex R2 (2026-05-14) verbatim-landing regression tests ------
+
+
+def test_r2p2_code_collision_thermo_typo_does_not_boost_shm_v52(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R2 P2.1: ``typo_suspicion`` is emitted by BOTH
+    shm_dict_validator (→ V52) and thermo_polynomial_range_advisor
+    (species-name typo, not V52). The narrow map must key by
+    ``(source_advisor, code)`` so a thermo typo finding does not
+    fabricate sHM V52 provenance."""
+    case_dir = tmp_path / "case_for_r2_collision"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    thermo_typo = Finding(
+        source_advisor="thermo_polynomial_range_advisor",
+        severity="warning",
+        code="typo_suspicion",
+        message="species name typo",
+        location=None,
+        evidence_v_rows=("V41", "V93"),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(thermo_typo,),
+            advisor_calls=(),
+            evidence_refs=("V41", "V93"),
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-no-overlap-yyy",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # V52 is the shm typo V-row — must NOT be boosted when thermo emits typo.
+    v52_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V52"]
+    for m in v52_matches:
+        assert "advisor_stack" not in m["similarity_rationale"], (
+            "R2 P2.1 regression: V52 (shm) boosted from a thermo "
+            "typo_suspicion finding — code collision not disambiguated"
+        )
+
+
+def test_r2p2_real_shm_v99_code_multi_normal_constrained_patch(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R2 P2.2: A8 emits ``multi_normal_constrained_patch`` for
+    V99 (the V99-widening). The narrow map must use the real code, not
+    a phantom name."""
+    case_dir = tmp_path / "case_for_r2_v99"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    v99_finding = Finding(
+        source_advisor="shm_dict_validator",
+        severity="critical",
+        code="multi_normal_constrained_patch",
+        message="V99 widening test",
+        location="patch_foo",
+        evidence_v_rows=("V52", "V86", "V99", "V100"),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(v99_finding,),
+            advisor_calls=(),
+            evidence_refs=(),
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-no-overlap-zzz",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    v99_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V99"]
+    assert v99_matches, (
+        "R2 P2.2 regression: V99 lost because old map used phantom "
+        "`non_planar_symmetry_patch` instead of real "
+        "`multi_normal_constrained_patch`"
+    )
+    assert "advisor_stack" in v99_matches[0]["similarity_rationale"]
+
+
+def test_r2p2_thermo_internal_t_below_tlow_maps_to_v93(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """Codex R2 P2.2: A10 emits ``internal_t_below_tlow`` for the V93
+    companion check. Must be in the narrow map."""
+    case_dir = tmp_path / "case_for_r2_v93_companion"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    from ui.backend.services.advisor_stack import (
+        AdvisorStackReport,
+        Finding,
+    )
+
+    finding = Finding(
+        source_advisor="thermo_polynomial_range_advisor",
+        severity="critical",
+        code="internal_t_below_tlow",
+        message="V93 companion test",
+        location=None,
+        evidence_v_rows=("V41", "V93"),
+        raw=None,
+    )
+
+    def _fake_stack(**_kwargs: Any) -> AdvisorStackReport:
+        return AdvisorStackReport(
+            findings=(finding,),
+            advisor_calls=(),
+            evidence_refs=(),
+            stack_duration_ms=0.1,
+            advisor_count=1,
+        )
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _fake_stack)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "obscure-aaa",
+            "case_dir": str(case_dir),
+            "top_k": 20,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    v93_matches = [m for m in body["v_row_matches"] if m["v_row_id"] == "V93"]
+    assert v93_matches, "R2 P2.2 regression: V93 lost (internal_t_below_tlow missing from map)"
+    assert "advisor_stack" in v93_matches[0]["similarity_rationale"]

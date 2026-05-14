@@ -363,40 +363,58 @@ class AIDiagnoseResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-# Codex R1 P2 lock (2026-05-14): map each advisor finding code to the
+# Codex R1 P2 lock + R2 P2 lock (2026-05-14): map each advisor finding to the
 # narrow V-row(s) that specifically evidence it. Used by the diagnose
 # ranking boost so that an advisor finding only contributes to its
-# precise V-row(s), not to the advisor-wide tuple. Unmapped codes
+# precise V-row(s), not to the advisor-wide tuple. Unmapped keys
 # contribute NOTHING — under-boosting (lost signal) is safer than
-# fabricating provenance. Source for each entry: the corresponding V-row
-# body in ``docs/openfoam_corpus/industrial_solver_findings_v_series.md``
-# + the advisor module that emits the code. Extend cautiously: add a row
-# only when the code → V-row link is documented or test-verified.
-_FINDING_CODE_TO_V_ROWS: dict[str, tuple[str, ...]] = {
+# fabricating provenance.
+#
+# Codex R2 P2 lock (2026-05-14): keyed by ``(source_advisor, code)``,
+# NOT by code alone, because ``typo_suspicion`` is emitted by BOTH
+# ``shm_dict_validator`` (dict-key typo → V52) AND
+# ``thermo_polynomial_range_advisor`` (species-name typo). Keying by
+# code alone would fabricate sHM provenance whenever a thermo typo
+# finding fired. The key tuple is ``(source_advisor, code)`` matching
+# the ``Finding.source_advisor`` and ``Finding.code`` stamped by
+# :mod:`ui.backend.services.advisor_stack`.
+#
+# Source for each entry: the V-row body in
+# ``docs/openfoam_corpus/industrial_solver_findings_v_series.md`` + the
+# advisor module that emits the code. Codes were cross-checked against
+# the live advisor source on 2026-05-14 via ``grep code= ui/backend/
+# services/geometry_ingest/*.py``. Extend cautiously: add a row only
+# when the (advisor, code) → V-row link is documented or test-verified.
+_FINDING_KEY_TO_V_ROWS: dict[tuple[str, str], tuple[str, ...]] = {
     # A4 face_orientation_advisor (advisor_stack._normalize_face_orientation).
-    "face_orientation_deviation": ("V79",),
+    ("face_orientation_advisor", "face_orientation_deviation"): ("V79",),
     # A5 inlet_outlet_validator (advisor_stack._normalize_inlet_outlet).
-    "inlet_outlet_inlet": ("V81",),
-    "inlet_outlet_outlet": ("V81",),
+    ("inlet_outlet_validator", "inlet_outlet_inlet"): ("V81",),
+    ("inlet_outlet_validator", "inlet_outlet_outlet"): ("V81",),
     # A8 shm_dict_validator native codes (passed through unchanged).
-    "typo_suspicion": ("V52",),
-    "non_planar_symmetry_patch": ("V99",),
-    "non_dict_input": ("V100",),
+    # Codex R2 P2 (2026-05-14): the V99-widening code is
+    # ``multi_normal_constrained_patch``; ``non_planar_symmetry_patch``
+    # was an authoring error (not emitted by the live advisor).
+    ("shm_dict_validator", "typo_suspicion"): ("V52",),
+    ("shm_dict_validator", "multi_normal_constrained_patch"): ("V99",),
     # A10 thermo_polynomial_range_advisor: V41 = partial-patch header,
-    # V93 = post-conversion per-species sweep. The native advisor codes
-    # are distinct and map 1:1.
-    "tlow_above_canonical": ("V41",),
-    "t_floor_breach": ("V93",),
+    # V93 = post-conversion per-species sweep. ``internal_t_below_tlow``
+    # is the V93-companion check (added per Codex R2 P2).
+    # ``typo_suspicion`` from this advisor is species-name typo — neither
+    # V41 nor V93 specifically; intentionally NOT mapped.
+    ("thermo_polynomial_range_advisor", "tlow_above_canonical"): ("V41",),
+    ("thermo_polynomial_range_advisor", "t_floor_breach"): ("V93",),
+    ("thermo_polynomial_range_advisor", "internal_t_below_tlow"): ("V93",),
     # thin_wall_advisor (advisor_stack._normalize_thin_wall).
-    "thin_wall_at_risk": ("V10",),
+    ("thin_wall_advisor", "thin_wall_at_risk"): ("V10",),
     # unit_detector (advisor_stack._normalize_unit). Both V20 (cadquery
     # roundtrip unit loss) and V96 (64 KB scan window) apply to unit
     # inference; the route surfaces both.
-    "unit_inference": ("V20", "V96"),
+    ("unit_detector", "unit_inference"): ("V20", "V96"),
     # virtual_interface_detector codes
     # (advisor_stack._normalize_interfaces).
-    "interface_unmatched": ("V22",),
-    "d1_unintended_gap": ("V19", "V25"),
+    ("virtual_interface_detector", "interface_unmatched"): ("V22",),
+    ("virtual_interface_detector", "d1_unintended_gap"): ("V19", "V25"),
 }
 
 
@@ -617,7 +635,9 @@ async def post_ai_diagnose(
         frozenset(
             v_row
             for finding in stack_report.findings
-            for v_row in _FINDING_CODE_TO_V_ROWS.get(finding.code, ())
+            for v_row in _FINDING_KEY_TO_V_ROWS.get(
+                (finding.source_advisor, finding.code), (),
+            )
         )
         if stack_report is not None
         else frozenset()
