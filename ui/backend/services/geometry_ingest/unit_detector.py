@@ -15,7 +15,9 @@ This module surfaces two pure-logic signals:
 1. **Declared unit** from the STEP header (regex over ASCII STEP file). No
    FreeCAD required.
 2. **Plausibility from bbox magnitude** under each candidate unit, against
-   an industrial-CFD-typical extent range (default 1cm-100m).
+   an industrial-CFD-typical extent range (default 1cm-1km; V97 widened
+   the upper bound from 100m to 1000m to cover full-aircraft / ship /
+   civil-structure scale geometries).
 
 The combined decision is **advisory only** (V130 advisor philosophy).
 Decision = UNKNOWN flips the route layer into "engineer must confirm" mode;
@@ -67,7 +69,7 @@ _CONVERSION_FOOT_RE = re.compile(
     r"CONVERSION_BASED_UNIT\s*\(\s*'(FOOT|FT)'", re.IGNORECASE
 )
 
-_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 100.0)
+_INDUSTRIAL_EXTENT_RANGE_M: tuple[float, float] = (0.01, 1000.0)
 _UNIT_TO_METERS: dict[GeometricUnit, float] = {
     GeometricUnit.MM: 1e-3,
     GeometricUnit.CM: 1e-2,
@@ -78,12 +80,16 @@ _UNIT_TO_METERS: dict[GeometricUnit, float] = {
 
 def parse_step_header_unit(
     step_path: Path | str,
-    max_bytes: int = 65536,
+    max_bytes: int = 1_048_576,
 ) -> tuple[Optional[GeometricUnit], list[str]]:
     """Extract the LENGTH unit declared in a STEP file header.
 
-    Reads only the first `max_bytes` (default 64 KB) because STEP UNIT
-    declarations sit in the early DATA section. Returns
+    Reads only the first `max_bytes` (default 1 MB) because STEP UNIT
+    declarations may sit anywhere in the DATA section — ST-Developer /
+    CATIA-V5 AP242 / HLPW6 exporters place GLOBAL_UNIT_ASSIGNED_CONTEXT
+    near end-of-file (V96 sediment: HLPW6 source STEP has INCH decl at
+    byte 707,430 of 716,110). The historical 64 KB default silently
+    truncated industrial Tier-1 files. Returns
     (unit | None, [evidence_line, ...]). UNKNOWN means a recognized
     declaration was found but maps to something we don't handle (e.g.,
     FOOT, MICRO-METRE).
