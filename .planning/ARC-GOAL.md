@@ -65,7 +65,7 @@
 - [x] **M-D6-PROMOTE** D6 extra_body_in_fluid advisor LANDED (closes V61-198 §5.2 D-class waiver) · commit: `f6d5c72` (2026-05-14 · sub-DEC `DEC-V62-A-sub-D6` Accepted · extra_body_advisor.py ~290 LOC · 10-test suite · single-case land per A2 v1 placeholder precedent · V55 case_016 evidence · case_018 cyclone is forward-loaded 2nd-case pending · V55 status [QUESTIONABLE 2026-05-11] → [QUESTIONABLE 2026-05-14] single-case land · LANDED counter 8 → 9 · D-class literal counter 0 → 1 · V62-A Done dim #4 MET ✓)
 - [ ] **M-STACK-TRACK-1** Stack-level Track C session 1 · case_011 v5b re-run with stack routing · retro: `_____`
 - [ ] **M-STACK-TRACK-2** Stack-level Track C session 2 · new numerics class crossover · retro: `_____`
-- [ ] **M-DRIFT-V2** stack-level corpus drift hook (V-series ↔ runtime corpus enforcement at /ai-review boundary) · commit: `_____`
+- [x] **M-DRIFT-V2** stack-level corpus drift hook (V-series ↔ runtime corpus enforcement at /ai-review boundary) · commit: `b10494c` (feat) → `1cda573` (test 8/8 green) · sub-DEC `DEC-V62-A-sub-M-DRIFT-V2` Accepted (2026-05-14 · v_series_drift_guard.py 269 LOC · runtime check complements v1 commit-time check_corpus_sync.py · audit mode default preserves wire contract · ?drift_mode=strict opt-in · 58 combined tests green: 8 new + 50 baseline routes · 4Q gate AST-verified inline · Tier 2 first milestone LANDED)
 
 ### Tier 3 · charter close + V63
 
@@ -87,7 +87,7 @@
 当前左半轴均分:                        7.15 (v3) / 7.20
 ```
 
-最后更新时间：`2026-05-14 (V62-A B24+B25 routes land · M-ROUTE-AI-REVIEW [x] 5abe3f4→943e2cd 3-round Codex chain APPROVE · M-ROUTE-AI-DIAGNOSE [x] fe89321→ed58383 chain APPROVE · stack-level 路由 LANDED 0/2 → 2/2 ✓ Done dim #1 MET · 50/50 route tests + 28/28 advisor tests = 78/78 passing · 4Q gate inline PASS each route · M-4Q-AUDIT cross-feature aggregated audit remaining · 2/6 Done dims now MET: Done #1 (stack routes 2/2) + Done #4 (D-class 1/1) · Tier 1 last milestone M-4Q-AUDIT unblocked)` · 更新人：`Claude Code Opus 4.7 session (main · B24/B25 reconcile)`
+最后更新时间：`2026-05-14 (V62-A B24+B25 routes land · M-ROUTE-AI-REVIEW [x] 5abe3f4→943e2cd 3-round Codex chain APPROVE · M-ROUTE-AI-DIAGNOSE [x] fe89321→ed58383 chain APPROVE · stack-level 路由 LANDED 0/2 → 2/2 ✓ Done dim #1 MET · 50/50 route tests + 28/28 advisor tests = 78/78 passing · 4Q gate inline PASS each route · M-4Q-AUDIT cross-feature aggregated audit remaining · 2/6 Done dims now MET: Done #1 (stack routes 2/2) + Done #4 (D-class 1/1) · Tier 1 last milestone M-4Q-AUDIT unblocked) · Tier 2 first milestone LANDED (M-DRIFT-V2) — DEC-V62-A-sub-M-DRIFT-V2 Accepted · v_series_drift_guard.py 269 LOC + 8 new tests · 58 combined tests green · audit mode default backward compatible)` · 更新人：`Claude Code Opus 4.7 session (main · M-DRIFT-V2 land)`
 
 ---
 
