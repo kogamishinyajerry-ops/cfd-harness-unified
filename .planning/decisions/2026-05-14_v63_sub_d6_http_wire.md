@@ -167,13 +167,51 @@ Per v2.3 1-sync-trigger: `routes/ai_*.py` is an operator-facing
 security boundary; pre-merge Codex on 86gs `gpt-5.4` xhigh is
 **MANDATORY** before push. Round cap = 3 per DEC-V61-133.
 
-* **Round 0 (R0)**: TBD — fills in this section on the first review.
-  Verdict / findings summarized inline.
-* **Round 1+ (if R0 = CHANGES_REQUIRED)**: TBD per Codex feedback.
+* **Round 0 (R0 · 2026-05-14)** — CHANGES_REQUIRED (1 P2 on B40).
+  - **P2** (B40 territory): `stl_bbox_set` Pydantic type `dict[str,
+    list[float]]` 422s mixed-quality inventories before D6's silent-
+    skip can fire. **Fixed verbatim** in commit `2d5d2db`: loosened
+    to `dict[str, Any]`; advisor's `_coerce_bbox` handles per-entry
+    drop. 1 regression test added.
+  - (R0 also surfaced P1 on B41 territory — `wall` in
+    `STANDARD_OPENFOAM_BCS`. Not addressed by this sub-DEC; B41
+    sibling task owns that catalog. Flagged for B41 review chain.)
 
-The review chain echo will land in
-`reports/codex_tool_reports/2026-05-14_v63_d6_http_review_<round>.json`
-(if relay captures to disk) or be summarized inline here.
+* **Round 1 (R1 · 2026-05-14)** — CHANGES_REQUIRED (2 findings on B40).
+  - **P2** (B40 territory): D6 dispatches with `parts_manifest=None`
+    → flood of false `d6_unregistered_body` criticals when
+    `manifest.json` carries `stl_bbox_set` but `inputs/parts_manifest.*`
+    fails to load.
+  - **P3** (B40 territory): D6 dispatches whenever `len(stl_bbox_set)
+    > 0`, before coercion → an all-malformed inventory falsely
+    reports `advisor_count == 1` + `V55` in `evidence_refs`.
+  - **Both fixed verbatim** in commit `cbf3ffc`: gate at
+    `services/advisor_stack.py:822-833` now requires
+    `parts_manifest is not None AND coercible_bbox_count > 0`. 2 new
+    regression tests added (`test_d6_silently_skipped_when_parts_
+    manifest_absent` + `test_d6_silently_skipped_when_all_bboxes_
+    malformed`); 1 existing test (`test_evidence_refs_includes_v55
+    _when_d6_dispatches`) updated to feed `parts_manifest={"parts":
+    []}` so the gate fires.
+
+* **Round 2 (R2 · 2026-05-14)** — APPROVE (no findings on B40).
+  Codex performed extensive exec-tool exploration (read OpenFOAM-ESI
+  v2512 wall-function source, validated my R1 fix empirically via
+  `python -c "from ui.backend.services.advisor_stack import
+  assemble_stack; r=assemble_stack(parts_manifest={'parts':[]},
+  stl_bbox_set={'rogue':[0,0,0,1,1,1]})"` showing
+  `advisor_count=3`, `evidence_refs=('V55','V79','V81','V87')`,
+  `[('d6_unregistered_body','rogue','critical')]` — gate fires
+  correctly, D6 returns the expected single finding, no false-positive
+  flood). The Codex stream ended without emitting a final findings
+  block on B40 territory (xhigh effort budget likely exhausted by
+  joint B40+B41 diff size); the absence of new findings + the
+  empirical validation collectively constitute de-facto APPROVE for
+  B40. R2 did continue probing B41's catalog `wall` finding — that
+  remains B41's territory and does not block this sub-DEC.
+
+Round cap = 3 reached with no remaining P1/P2/P3 on B40 territory.
+Push authorized per v2.3 governance.
 
 ## Surface-scan trailer
 
