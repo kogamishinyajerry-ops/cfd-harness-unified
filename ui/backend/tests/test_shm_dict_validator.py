@@ -1,6 +1,7 @@
 """Tests for ``geometry_ingest.shm_dict_validator`` (A8 advisor).
 
-Coverage (≥9 tests, mirroring A4/A5 layout):
+Coverage (≥13 tests, mirroring A4/A5 layout · widened 2026-05-14 by
+DEC-V61-198-sub-A8-widening-V99-V100 to add V99 + V100 paths):
 
 V52 + V86 regression pins:
   1. V52 typo regression — case_012 ``minMedianAxisAngle`` typo flagged
@@ -30,8 +31,25 @@ Block / sliced-input handling:
      dict still validates without raising).
   9. Geometry referenced by neither refinementSurfaces nor
      refinementRegions → ``geometry_orphan`` warning.
+
+Path (e) V99 widening — STL face-normal vs patchInfo.type cross-check:
+ 10. V99 regression — case_003 v2 symmetry_plane with 5-side closed-box
+     STL (multi-normal) + patchInfo.type=symmetryPlane → critical
+     ``multi_normal_constrained_patch`` with downgrade-to-`patch`-+-slip
+     suggestion.
+ 11. V99 passing — single-normal STL + patchInfo.type=symmetryPlane →
+     no V99 finding (legitimate planar symmetry plane).
+ 12. V99 not-applicable — multi-normal STL + patchInfo.type=patch →
+     no V99 finding (unconstrained patch type, multi-normal is fine).
+
+Path (f) V100 widening — entry-point type-guard:
+ 13. V100 regression — passing a str (path-string-as-input) raises
+     ``TypeError`` with actionable message that names the offending
+     type AND recommends the PyFoam / foamDictionary pre-parse helper.
 """
 from __future__ import annotations
+
+import pytest
 
 from ui.backend.services.geometry_ingest.shm_dict_validator import (
     CANONICAL_KEYS,
@@ -252,3 +270,165 @@ def test_geometry_orphan_warning_when_unreferenced():
         for f in report.findings
         if isinstance(f, ShmFinding)
     )
+
+
+# ---------------------------------------------------------------------------
+# V99 widening (DEC-V61-198-sub-A8-widening-V99-V100, 2026-05-14):
+# STL face-normal vs patchInfo.type cross-check.
+# ---------------------------------------------------------------------------
+
+
+def test_v99_regression_case_003_symmetry_plane_multi_normal_critical():
+    # case_003 v2 ground truth: source STL symmetry_plane.stl is a
+    # closed thin axis-aligned bounding box; sHM captured 5 of 6 sides
+    # and concatenated them into the named patch. With
+    # patchInfo.type=symmetryPlane the patch normals span 0.556 of
+    # unit-vector deviation from the patch mean — checkMesh rejected
+    # the otherwise-valid mesh. A8 must flag this pre-mesh.
+    parsed = {
+        "geometry": {
+            "symmetry_plane": {
+                "type": "triSurfaceMesh",
+                "file": "symmetry_plane.stl",
+            },
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "symmetry_plane": {
+                    "level": [1, 1],
+                    "patchInfo": {"type": "symmetryPlane"},
+                },
+            },
+        },
+    }
+    # 5 of 6 axis-aligned faces of a closed-box STL (matches the
+    # case_003 v2 ground-truth — V99 row in v_series.md L1314).
+    stl_normals = {
+        "symmetry_plane": [
+            (1.0, 0.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ],
+    }
+    report = validate_shm_dict(parsed, stl_face_normals=stl_normals)
+    multi_normal = [
+        f for f in report.findings if f.code == "multi_normal_constrained_patch"
+    ]
+    assert len(multi_normal) == 1, report.findings
+    f = multi_normal[0]
+    assert f.severity == "critical"
+    assert f.location == (
+        "castellatedMeshControls.refinementSurfaces."
+        "symmetry_plane.patchInfo.type"
+    )
+    assert "symmetryPlane" in f.message
+    assert "non-planar" in f.message  # ties to checkMesh failure mode
+    # symmetryPlane-specific suggestion must mention the slip workaround
+    # (the actual case_003 v2 fix applied in session 6).
+    assert f.suggestion is not None
+    assert "patch" in f.suggestion  # downgrade hint
+    assert "slip" in f.suggestion
+
+
+def test_v99_single_normal_symmetry_plane_passes():
+    # A legitimate symmetry-plane STL — a single planar quad (4 facets
+    # all sharing the same +Y normal, modulo tessellation noise within
+    # the 0.05 deviation tolerance). A8 must NOT emit a finding here:
+    # symmetryPlane with a single-normal STL is the correct use case.
+    parsed = {
+        "geometry": {
+            "symmetry_plane": {
+                "type": "triSurfaceMesh",
+                "file": "symmetry_plane.stl",
+            },
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "symmetry_plane": {
+                    "level": [0, 0],
+                    "patchInfo": {"type": "symmetryPlane"},
+                },
+            },
+        },
+    }
+    # 4 triangular facets, all +Y, with sub-tolerance tessellation
+    # perturbation in the third component (1e-3 → deviation ≪ 0.05).
+    stl_normals = {
+        "symmetry_plane": [
+            (0.0, 1.0, 0.0),
+            (0.0, 1.0, 0.001),
+            (0.0, 1.0, -0.001),
+            (0.0, 1.0, 0.0),
+        ],
+    }
+    report = validate_shm_dict(parsed, stl_face_normals=stl_normals)
+    assert not any(
+        f.code == "multi_normal_constrained_patch" for f in report.findings
+    ), report.findings
+
+
+def test_v99_multi_normal_patch_type_not_constrained_no_finding():
+    # Same multi-normal STL as the V99 regression test, but
+    # patchInfo.type is the unconstrained `patch` (the actual case_003
+    # v2 workaround applied in session 6). A8 must NOT flag this — the
+    # `patch` type imposes no normal-uniqueness constraint, so a multi-
+    # face STL is perfectly fine.
+    parsed = {
+        "geometry": {
+            "symmetry_plane": {
+                "type": "triSurfaceMesh",
+                "file": "symmetry_plane.stl",
+            },
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "symmetry_plane": {
+                    "level": [0, 0],
+                    "patchInfo": {"type": "patch"},
+                },
+            },
+        },
+    }
+    stl_normals = {
+        "symmetry_plane": [
+            (1.0, 0.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ],
+    }
+    report = validate_shm_dict(parsed, stl_face_normals=stl_normals)
+    assert not any(
+        f.code == "multi_normal_constrained_patch" for f in report.findings
+    ), report.findings
+
+
+# ---------------------------------------------------------------------------
+# V100 widening (DEC-V61-198-sub-A8-widening-V99-V100, 2026-05-14):
+# entry-point type-guard for non-dict input.
+# ---------------------------------------------------------------------------
+
+
+def test_v100_type_guard_str_input_raises_actionable_typeerror():
+    # case_003 v2 root cause: engineer passed a path string per the
+    # natural "validator on a file path" mental model. Previously this
+    # raised an opaque ``AttributeError: 'str' object has no attribute
+    # 'get'`` deep in _walk_dict_keys. Now must raise a typed,
+    # actionable TypeError at the API boundary that (a) names the
+    # offending type, (b) recommends a caller-side pre-parse helper.
+    with pytest.raises(TypeError) as exc_info:
+        validate_shm_dict("system/snappyHexMeshDict")  # type: ignore[arg-type]
+    msg = str(exc_info.value)
+    # Must NOT be the opaque AttributeError that used to surface.
+    assert "has no attribute 'get'" not in msg
+    # Must name the offending type so caller can fix the call site.
+    assert "str" in msg
+    # Must reference at least one recommended pre-parse helper (per the
+    # V100 fix spec: PyFoam OR foamDictionary, advisor doesn't care
+    # which the caller picks).
+    assert ("PyFoam" in msg) or ("foamDictionary" in msg)
+    # Must restate the contract so caller understands why.
+    assert "dict" in msg.lower()
