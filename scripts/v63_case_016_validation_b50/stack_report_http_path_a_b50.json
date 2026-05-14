@@ -1,0 +1,270 @@
+{
+  "path": "A_http_testclient",
+  "http_status": 200,
+  "advisor_count": 8,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "shm_dict_validator",
+    "stl_face_label_validator",
+    "thermo_polynomial_range_advisor",
+    "unit_detector",
+    "v_series_drift_guard",
+    "virtual_interface_detector"
+  ],
+  "finding_count": 2,
+  "critical_count": 2,
+  "warning_count": 0,
+  "info_count": 0,
+  "failed_advisor_count": 0,
+  "evidence_refs": [
+    "V100",
+    "V20",
+    "V22",
+    "V25",
+    "V29",
+    "V33",
+    "V36",
+    "V41",
+    "V42",
+    "V43",
+    "V50",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V93",
+    "V94",
+    "V96",
+    "V99"
+  ],
+  "stack_duration_ms": 34.20575009658933,
+  "llm_enhanced": false,
+  "audit_artifact_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/audits/case_016_m219_cavity_des_acoustic_ai_review_20260514T183352.913855Z_dc11c07b.json",
+  "timing": {
+    "advisor_dispatch_ms": 34.215,
+    "llm_ms": 0.0,
+    "total_ms": 37.228
+  },
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  },
+  "findings": [
+    {
+      "source_advisor": "inlet_outlet_validator",
+      "severity": "fail",
+      "code": "inlet_outlet_inlet",
+      "message": "inflow (inlet): thin_extrusion bbox max dim 6086.657 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+      "location": "inflow",
+      "evidence_v_rows": [
+        "V81"
+      ],
+      "raw": {
+        "body_name": "inflow",
+        "role": "inlet",
+        "severity": "fail",
+        "reason": "thin_extrusion bbox max dim 6086.657 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+        "emission_pattern": "thin_extrusion"
+      }
+    },
+    {
+      "source_advisor": "inlet_outlet_validator",
+      "severity": "fail",
+      "code": "inlet_outlet_outlet",
+      "message": "outflow (outlet): thin_extrusion bbox max dim 6086.656 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+      "location": "outflow",
+      "evidence_v_rows": [
+        "V81"
+      ],
+      "raw": {
+        "body_name": "outflow",
+        "role": "outlet",
+        "severity": "fail",
+        "reason": "thin_extrusion bbox max dim 6086.656 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+        "emission_pattern": "thin_extrusion"
+      }
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "input_summary": "parts_manifest with 16 parts",
+      "output": {
+        "findings": [],
+        "bodies_checked": 0,
+        "bodies_with_intended_normal": 0,
+        "bodies_skipped": 16
+      },
+      "duration_ms": 0.012334086932241917,
+      "version": "face_orientation_advisor.py"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "input_summary": "parts_manifest with 16 parts",
+      "output": {
+        "findings": [
+          {
+            "body_name": "inflow",
+            "role": "inlet",
+            "severity": "fail",
+            "reason": "thin_extrusion bbox max dim 6086.657 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+            "emission_pattern": "thin_extrusion"
+          },
+          {
+            "body_name": "outflow",
+            "role": "outlet",
+            "severity": "fail",
+            "reason": "thin_extrusion bbox max dim 6086.656 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+            "emission_pattern": "thin_extrusion"
+          }
+        ],
+        "fail_count": 2,
+        "warning_count": 0,
+        "pass_count": 0
+      },
+      "duration_ms": 0.018291990272700787,
+      "version": "inlet_outlet_validator.py"
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "input_summary": "15 parts with bc blocks (fork=main)",
+      "output": {
+        "findings": [],
+        "checked_count": 105,
+        "parts_examined": 15,
+        "fork": "main"
+      },
+      "duration_ms": 0.08866703137755394,
+      "version": "bc_type_name_validity_advisor.py"
+    },
+    {
+      "advisor_name": "virtual_interface_detector",
+      "status": "ok",
+      "input_summary": "0 bodies, 0 specs",
+      "output": [],
+      "duration_ms": 0.0005830079317092896,
+      "version": "virtual_interface_detector.py"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "input_summary": "shm_dict keys=['addLayersControls', 'castellatedMeshControls', 'geometry', 'snapControls']",
+      "output": {
+        "findings": [],
+        "geometry_names": [
+          "flat_plate_upstream",
+          "flat_plate_downstream",
+          "flat_plate_side_port",
+          "flat_plate_side_starboard",
+          "cavity_floor",
+          "cavity_le_wall",
+          "cavity_te_wall",
+          "cavity_side_wall_port",
+          "cavity_side_wall_starboard",
+          "debris_cube",
+          "top_far_field",
+          "far_field_port",
+          "far_field_starboard",
+          "inflow",
+          "outflow",
+          "fwh_porous_surface"
+        ],
+        "features_files": []
+      },
+      "duration_ms": 29.27954203914851,
+      "version": "shm_dict_validator.py"
+    },
+    {
+      "advisor_name": "stl_face_label_validator",
+      "status": "ok",
+      "input_summary": "stl_face_normals=None keys, parts_manifest=16 parts, shm_dict=yes",
+      "output": {
+        "findings": [],
+        "declared_labels": [
+          "flat_plate_upstream",
+          "flat_plate_downstream",
+          "flat_plate_side_port",
+          "flat_plate_side_starboard",
+          "cavity_floor",
+          "cavity_le_wall",
+          "cavity_te_wall",
+          "cavity_side_wall_port",
+          "cavity_side_wall_starboard",
+          "debris_cube",
+          "inflow",
+          "outflow"
+        ],
+        "stl_labels": [],
+        "shm_referenced_labels": []
+      },
+      "duration_ms": 0.026250025257468224,
+      "version": "stl_face_label_validator.py"
+    },
+    {
+      "advisor_name": "thermo_polynomial_range_advisor",
+      "status": "ok",
+      "input_summary": "thermo species=['mixture', 'thermoType']",
+      "output": {
+        "findings": [],
+        "species_coverage": {
+          "at_canonical_floor": 0,
+          "above_canonical_to_300": 0,
+          "above_300": 0,
+          "total_species_with_tlow": 0
+        },
+        "max_species_tlow": 0.0,
+        "min_boundary_t": 0.0
+      },
+      "duration_ms": 0.3345829900354147,
+      "version": "thermo_polynomial_range_advisor.py"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_016_m219_cavity_des_acoustic/inputs/cad_codex_v1.step",
+      "output": {
+        "declared_unit": "mm",
+        "bbox_plausible_units": [
+          "mm",
+          "cm",
+          "m",
+          "inch"
+        ],
+        "decision": "mm",
+        "confidence": 0.85,
+        "evidence": [
+          "STEP header declares SI_UNIT(.MILLI.,.METRE.)",
+          "body-class filter: 0/3 bodies discarded as CFD-domain class (implausible under any common unit). Using largest airframe-class extent 15.24 for unit decision.",
+          "bbox extent 15.24 (raw) is industrially plausible if unit is one of: mm, cm, m, inch",
+          "Declared unit mm agrees with bbox plausibility (confidence 0.85)"
+        ]
+      },
+      "duration_ms": 4.287165938876569,
+      "version": "unit_detector.py"
+    },
+    {
+      "advisor_name": "v_series_drift_guard",
+      "status": "ok",
+      "input_summary": "findings=2 mode=audit corpus=100",
+      "output": {
+        "check_status": "clean",
+        "mode": "audit",
+        "missing_v_rows": [],
+        "findings_flagged": 0,
+        "findings_dropped": 0,
+        "corpus_size": 100
+      },
+      "duration_ms": 0.0,
+      "version": "ui.backend.services.v_series_drift_guard"
+    }
+  ],
+  "v_series_drift_guard": null
+}

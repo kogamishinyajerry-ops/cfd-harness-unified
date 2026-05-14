@@ -1,0 +1,128 @@
+{
+  "path": "B_python_direct",
+  "advisor_count": 8,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "shm_dict_validator",
+    "stl_face_label_validator",
+    "thermo_polynomial_range_advisor",
+    "unit_detector",
+    "virtual_interface_detector"
+  ],
+  "finding_count": 2,
+  "critical_count": 2,
+  "warning_count": 0,
+  "info_count": 0,
+  "failed_advisor_count": 0,
+  "evidence_refs": [
+    "V100",
+    "V20",
+    "V22",
+    "V25",
+    "V29",
+    "V33",
+    "V36",
+    "V41",
+    "V42",
+    "V43",
+    "V50",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V93",
+    "V94",
+    "V96",
+    "V99"
+  ],
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  },
+  "stack_duration_ms": 34.549,
+  "findings": [
+    {
+      "source_advisor": "inlet_outlet_validator",
+      "severity": "fail",
+      "code": "inlet_outlet_inlet",
+      "message": "inflow (inlet): thin_extrusion bbox max dim 6086.657 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+      "location": "inflow",
+      "evidence_v_rows": [
+        "V81"
+      ]
+    },
+    {
+      "source_advisor": "inlet_outlet_validator",
+      "severity": "fail",
+      "code": "inlet_outlet_outlet",
+      "message": "outflow (outlet): thin_extrusion bbox max dim 6086.656 mm exceeds 1.5 mm ceiling \u2014 sHM will likely treat this body as a wall solid (V81 failure mode)",
+      "location": "outflow",
+      "evidence_v_rows": [
+        "V81"
+      ]
+    }
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "input_summary": "parts_manifest with 16 parts",
+      "duration_ms": 0.016,
+      "version": "face_orientation_advisor.py"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "input_summary": "parts_manifest with 16 parts",
+      "duration_ms": 0.026,
+      "version": "inlet_outlet_validator.py"
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "input_summary": "15 parts with bc blocks (fork=main)",
+      "duration_ms": 0.109,
+      "version": "bc_type_name_validity_advisor.py"
+    },
+    {
+      "advisor_name": "virtual_interface_detector",
+      "status": "ok",
+      "input_summary": "0 bodies, 0 specs",
+      "duration_ms": 0.001,
+      "version": "virtual_interface_detector.py"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "input_summary": "shm_dict keys=['addLayersControls', 'castellatedMeshControls', 'geometry', 'snapControls']",
+      "duration_ms": 29.605,
+      "version": "shm_dict_validator.py"
+    },
+    {
+      "advisor_name": "stl_face_label_validator",
+      "status": "ok",
+      "input_summary": "stl_face_normals=None keys, parts_manifest=16 parts, shm_dict=yes",
+      "duration_ms": 0.029,
+      "version": "stl_face_label_validator.py"
+    },
+    {
+      "advisor_name": "thermo_polynomial_range_advisor",
+      "status": "ok",
+      "input_summary": "thermo species=['mixture', 'thermoType']",
+      "duration_ms": 0.367,
+      "version": "thermo_polynomial_range_advisor.py"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_016_m219_cavity_des_acoustic/inputs/cad_codex_v1.step",
+      "duration_ms": 4.13,
+      "version": "unit_detector.py"
+    }
+  ]
+}
