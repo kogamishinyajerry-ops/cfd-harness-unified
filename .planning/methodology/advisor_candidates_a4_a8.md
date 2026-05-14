@@ -89,17 +89,17 @@ def detect_face_orientation_anomalies(
 
 Downstream classifier: `body_has_rotation_defect(anomaly, sibling_consensus_deg) -> bool`.
 
-### D6_advisor · `extra_body_in_fluid_advisor` (A-number pending)
+### D6_advisor · `extra_body_advisor.py` (LANDED 2026-05-14 · DEC-V62-A-sub-D6)
 
 | field | value |
 |---|---|
 | Defect class | D6 — "floating tiny body" (`component_bank.md` L127); generalized to "any disjoint solid fully enclosed by fluid region whose role is not declared" |
-| Signature | A solid body that (a) is fully enclosed by the bounding surfaces of a fluid region and (b) is not declared in parts_manifest with `bc_role: internal_wall` or equivalent role |
+| Signature | Three detection paths in the LANDED advisor: (a) `unregistered_body` (critical) — body in STL set absent from parts_manifest, (b) `body_in_fluid_region` (warning) — solid-role bbox ⊂ fluid-role bbox, (c) `undeclared_inclusion` (warning) — solid ⊂ solid without `declared_inclusions` entry |
 | Engineering symptom | sHM meshes around the extra body as a no-slip wall; engineer sees no warning; flow correctness depends on whether the body's location matters (FOD inspection class problem) |
-| Current evidence | **1 / 2** (V55 case_016 first injection · case_018 dispatched · deferred) |
-| Status | `drafted` — pending case_018 sediment |
-| V-row(s) | V55 (case_016 first injection 2026-05-11) |
-| Sibling | Parallel to V79 (A4 face_orientation / D7) and V56 (D9_advisor) |
+| Current evidence | **1 / 2 · LANDED with [QUESTIONABLE 2026-05-14] pending case_018** (V55 case_016 first injection sedimented 2026-05-11 · case_018 dispatched · single-case land per V61-198 §5.2 + A2 v1 precedent) |
+| Status | **landed 2026-05-14** — `ui/backend/services/geometry_ingest/extra_body_advisor.py` (~290 LOC) + `ui/backend/tests/test_extra_body_advisor.py` (10 tests, 0.05s green) |
+| V-row(s) | V55 (case_016 first injection 2026-05-11 · status [QUESTIONABLE 2026-05-14] · closed by DEC-V62-A-sub-D6 with single-case land marker) |
+| Sibling | Parallel to V79 (A4 face_orientation / D7 · LANDED 2026-05-13) and V56 (D9_advisor · still drafted); pure-dict-consumer pattern shared with A4/A5/A8/A10 |
 
 **Pre-drafted spec**:
 
