@@ -178,6 +178,41 @@ $ ls ~/Desktop/case_006_onera_m6_transonic/inputs/ | grep -E "thin_wall_inputs|i
 3. `_meta` block convention (leading-underscore key in JSON maps) used in
    `interface_bodies.json` + `interface_specs.json`; project-wide schema
    doc deferred until N≥2 cases use the pattern.
+4. **HTTP-path auto-discovery (Codex R0 P2 #2)** — production `/api/ai-review`
+   route probes `case_dir/interface_bodies.json` (root-level) and
+   `case_dir/manifest.json` for substrate inputs. The 3 new files land
+   under `case_dir/inputs/` per dispatch scope, so HTTP-path auto-discovery
+   continues to skip them. Path-b (`assemble_stack` direct call) closes
+   V30 + D1 + D4-marginal as documented; HTTP path remains stranded until
+   a follow-up sub-DEC wires the route loader to additionally probe
+   `case_dir/inputs/{interface_bodies,interface_specs,thin_wall_inputs}.{json,yaml}`
+   (or canonicalizes via the existing `manifest.json` reference list).
+   Recommend the follow-up sub-DEC also re-run the HTTP path on case_006
+   to flip the path-a row count from 6 → 8 in mirror of path-b.
+
+## Codex R0 review (2026-05-15)
+
+Codex (86gs gpt-5.4 xhigh, treaty hook block on 2106-LOC trigger) ran
+`codex-review-relay --base origin/main` against the 3-commit chain on
+this branch. Verdict: **APPROVE_WITH_COMMENTS** (2 P2 findings, 0 P1, 0
+P3+).
+
+- **P2 #1 (out-of-scope)** — `scripts/stack_track_c_case_ext_1/run_http_path.py`
+  case_004 HTTP runner missing `step_path` kwarg. This file is owned by
+  the parallel B43 arc (M-CASE-EXT-1) that landed in commits 0a792da /
+  b5e7802 between this DEC's feat and docs commits. Surfaced to main
+  session as a B43 reconcile item; not modified under this sub-DEC.
+- **P2 #2 (acknowledged · path-scope-correct)** —
+  `scripts/v63_case_006_substrate/run_extended.py` custom loader hands
+  `interface_bodies` + `interface_specs` to `assemble_stack` directly,
+  bypassing the production route's auto-discovery contract. The 3 input
+  files live under `case_dir/inputs/` per dispatch (V63-A Tier 2 task
+  scope explicit: "合成 3 个 input 文件 (case_006/inputs/ 下)"); the
+  HTTP path's discovery probes root-level `case_dir/`. Path-b verification
+  of advisor closure is what this sub-DEC promises; path-a (HTTP)
+  closure is deferred to follow-up §4 above. The 3/9 → 4/9 V-row capture
+  claim holds for path b; path-a remains at 1/9 (V29 only) until the
+  follow-up sub-DEC wires the loader.
 
 ## Commits
 
