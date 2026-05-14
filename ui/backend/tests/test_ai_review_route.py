@@ -491,3 +491,220 @@ def test_explicit_kwargs_override_autodiscovered(
     assert len(fo_findings) == 1, (
         "explicit parts_manifest with face_normal should produce A4 finding"
     )
+
+
+# ---------- DEC-V62-A-sub-REQ-SCHEMA-EXPAND (2026-05-14) -------------------
+# Five new tests verify the wire schema expansion unblocks unit_detector
+# (gated on step_path) and A2-v2 virtual_interface_detector (gated on
+# interface_bodies + interface_specs) in the HTTP path, closes the
+# M-STACK-TRACK-1 §8 / TRACK-2 divergence (Python path 5 advisors vs
+# HTTP path 4 advisors). 25 prior tests remain untouched.
+
+
+def _ifc_body(name: str, *, cx: float, cy: float = 0.0, cz: float = 0.0) -> dict:
+    """Construct a minimal BodyGeometry wire-form dict with one face.
+
+    A single +x-facing endcap face at the centroid is enough to exercise
+    InterfaceSpec(mode='endcap', axis='+x') routing without depending on
+    specific gap thresholds.
+    """
+    return {
+        "name": name,
+        "centroid": [cx, cy, cz],
+        "faces": [
+            {
+                "area": 1.0,
+                "bbox_min": [cx, cy - 0.5, cz - 0.5],
+                "bbox_max": [cx, cy + 0.5, cz + 0.5],
+                "normal": [1.0, 0.0, 0.0],
+                "centroid": [cx, cy, cz],
+            }
+        ],
+    }
+
+
+def test_step_path_routes_to_unit_detector(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """step_path field → unit_detector appears in audit trail."""
+    fake_step = tmp_path / "phantom.step"
+    fake_step.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "step_path": str(fake_step),
+            "step_bbox": [0.0, 0.0, 0.0, 0.180, 0.150, 0.090],
+            "step_extents": [0.180, 0.150, 0.090],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "unit_detector" in names, (
+        f"unit_detector missing from advisors {names} — schema expansion "
+        "did not plumb step_path through to assemble_stack"
+    )
+
+
+def test_interface_bodies_routes_to_a2v2_virtual_interface_detector(
+    client: TestClient,
+) -> None:
+    """interface_bodies + interface_specs → virtual_interface_detector dispatches."""
+    bodies = [_ifc_body("body_a", cx=0.0), _ifc_body("body_b", cx=1.0)]
+    specs = [
+        {
+            "patch_name": "if_ab",
+            "mode": "endcap",
+            "body": "body_a",
+            "axis": "+x",
+        }
+    ]
+    resp = client.post(
+        "/api/ai-review",
+        json={"interface_bodies": bodies, "interface_specs": specs},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "virtual_interface_detector" in names, (
+        f"A2-v2 missing from advisors {names} — schema expansion did not "
+        "plumb interface_bodies/specs through to assemble_stack"
+    )
+    statuses = {c["advisor_name"]: c["status"] for c in body["report"]["advisor_calls"]}
+    assert statuses["virtual_interface_detector"] == "ok"
+
+
+def test_auto_discover_step_path_from_case_dir(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """case_dir/*.step picked up when explicit step_path is absent."""
+    case_dir = tmp_path / "case_auto_step"
+    case_dir.mkdir()
+    (case_dir / "cad").mkdir()
+    step_in_cad = case_dir / "cad" / "geometry.step"
+    step_in_cad.write_text("ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8")
+
+    resp = client.post(
+        "/api/ai-review",
+        json={"case_dir": str(case_dir)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "unit_detector" in names
+    # Confirm the auto-discovered path actually flows into the input_summary
+    unit_call = next(
+        c for c in body["report"]["advisor_calls"]
+        if c["advisor_name"] == "unit_detector"
+    )
+    assert "geometry.step" in unit_call["input_summary"]
+
+
+def test_auto_discover_interface_bodies_from_manifest(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """case_dir/manifest.json carrying interface_bodies/specs lights up A2-v2."""
+    case_dir = tmp_path / "case_auto_ifc"
+    case_dir.mkdir()
+    manifest = {
+        "interface_bodies": [_ifc_body("b1", cx=0.0), _ifc_body("b2", cx=1.0)],
+        "interface_specs": [
+            {"patch_name": "if_12", "mode": "endcap", "body": "b1", "axis": "+x"}
+        ],
+    }
+    (case_dir / "manifest.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    resp = client.post(
+        "/api/ai-review",
+        json={"case_dir": str(case_dir)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "virtual_interface_detector" in names
+
+
+def test_explicit_step_and_interface_override_auto_discover(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Explicit step_path / interface_bodies override case_dir auto-discovery."""
+    case_dir = tmp_path / "case_override_v2"
+    case_dir.mkdir()
+    (case_dir / "cad").mkdir()
+    # Disk file is at one path
+    (case_dir / "cad" / "discovered.step").write_text(
+        "ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8"
+    )
+    # Disk manifest has one body pair
+    (case_dir / "manifest.json").write_text(
+        json.dumps({"interface_bodies": [_ifc_body("disk_body", cx=0.0)]}),
+        encoding="utf-8",
+    )
+    # Explicit payload uses a different STEP path + DIFFERENT body set
+    explicit_step = tmp_path / "explicit.step"
+    explicit_step.write_text(
+        "ISO-10303-21;\nEND-ISO-10303-21;\n", encoding="utf-8"
+    )
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "case_dir": str(case_dir),
+            "step_path": str(explicit_step),
+            "interface_bodies": [
+                _ifc_body("explicit_a", cx=0.0),
+                _ifc_body("explicit_b", cx=1.0),
+            ],
+            "interface_specs": [
+                {
+                    "patch_name": "if_x",
+                    "mode": "endcap",
+                    "body": "explicit_a",
+                    "axis": "+x",
+                }
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # input_summary should reference the EXPLICIT path, not the auto-discovered one
+    unit_call = next(
+        c for c in body["report"]["advisor_calls"]
+        if c["advisor_name"] == "unit_detector"
+    )
+    assert "explicit.step" in unit_call["input_summary"]
+    assert "discovered.step" not in unit_call["input_summary"]
+    # A2-v2 sees 2 bodies (explicit), not 1 (disk)
+    a2 = next(
+        c for c in body["report"]["advisor_calls"]
+        if c["advisor_name"] == "virtual_interface_detector"
+    )
+    assert "2 bodies" in a2["input_summary"]
+
+
+def test_malformed_step_bbox_returns_400(client: TestClient) -> None:
+    """Wrong-arity step_bbox surfaces a 400 instead of 500-ing the route."""
+    resp = client.post(
+        "/api/ai-review",
+        json={"step_path": "/tmp/nope.step", "step_bbox": [0.0, 0.0, 1.0]},
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["failing_check"] == "step_bbox_arity"
+
+
+def test_malformed_interface_body_returns_400(client: TestClient) -> None:
+    """Wire-form body missing required keys surfaces 400, not 500."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "interface_bodies": [{"name": "incomplete"}],  # missing centroid + faces
+            "interface_specs": [
+                {"patch_name": "x", "mode": "endcap", "body": "incomplete"}
+            ],
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["failing_check"] in {
+        "interface_body_fields",
+        "interface_body_centroid_arity",
+    }
