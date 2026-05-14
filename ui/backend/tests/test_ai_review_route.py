@@ -708,3 +708,112 @@ def test_malformed_interface_body_returns_400(client: TestClient) -> None:
         "interface_body_fields",
         "interface_body_centroid_arity",
     }
+
+
+# ---------- DEC-V62-A-sub-D10 (2026-05-14) ---------------------------------
+# Two tests verify the wire-form bc_specs field dispatches the D10
+# bc_type_name_validity_advisor, closing M-STACK-TRACK-3 §gap2 (case_006
+# V29 evidence row: foam-extend-only BC names passing the stack silently).
+
+
+def test_bc_specs_explicit_dispatches_d10_with_v29_evidence(
+    client: TestClient,
+) -> None:
+    """DEC-V62-A-sub-D10: explicit bc_specs over the wire → D10 fires.
+
+    Replays the case_006 V29 ground truth — the farfield_inlet bc block
+    declares two foam-extend-only BC names; D10 must flag both as
+    critical findings carrying ``V29`` in their evidence_v_rows.
+    """
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "bc_specs": [
+                {
+                    "part_name": "farfield_inlet",
+                    "fields": {
+                        "U": "characteristicVelocityInletOutletVelocity",
+                        "p": "characteristicPressureInletOutletPressure",
+                        "T": "freestream",
+                    },
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "bc_type_name_validity_advisor" in advisor_names
+    d10 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "bc_type_name_validity_advisor"
+    ]
+    assert len(d10) == 2, d10  # U + p; T=freestream is valid
+    for f in d10:
+        assert f["severity"] == "critical"
+        assert "V29" in f["evidence_v_rows"]
+
+
+def test_parts_manifest_bc_blocks_auto_extract_to_d10(client: TestClient) -> None:
+    """When parts_manifest carries bc: blocks, the stack auto-extracts
+    bc_specs via extract_bc_specs_from_parts_manifest and D10 fires
+    alongside A4 + A5 (the canonical case_006 path with no explicit
+    bc_specs on the wire)."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "parts_manifest": {
+                "parts": [
+                    {
+                        "name": "farfield_inlet",
+                        "role": "farfield",
+                        "bc": {
+                            "U": "characteristicVelocityInletOutletVelocity",
+                            "p": "fixedValue",
+                        },
+                    }
+                ]
+            }
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "bc_type_name_validity_advisor" in advisor_names
+    d10 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "bc_type_name_validity_advisor"
+    ]
+    assert len(d10) == 1
+    assert d10[0]["severity"] == "critical"
+    assert "V29" in d10[0]["evidence_v_rows"]
+
+
+def test_bc_fork_foam_extend_tolerates_characteristic_family(
+    client: TestClient,
+) -> None:
+    """bc_fork='foam-extend' must reclassify the characteristic* family
+    as info (suppressed from findings), preserving the advisor's fork-
+    aware contract over the wire."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "bc_specs": [
+                {
+                    "part_name": "farfield_inlet",
+                    "fields": {
+                        "U": "characteristicVelocityInletOutletVelocity",
+                        "p": "characteristicPressureInletOutletPressure",
+                    },
+                }
+            ],
+            "bc_fork": "foam-extend",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    d10 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "bc_type_name_validity_advisor"
+    ]
+    assert d10 == []  # no findings on foam-extend fork

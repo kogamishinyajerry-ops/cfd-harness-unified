@@ -153,6 +153,93 @@ def test_parts_manifest_dispatches_a4_and_a5() -> None:
     assert a5_findings[0].severity == "fail"
 
 
+def test_bc_specs_dispatches_d10_with_v29_evidence() -> None:
+    """DEC-V62-A-sub-D10: explicit bc_specs → D10 bc_type_name_validity_advisor.
+
+    Case_006 V29 ground truth: characteristic{Pressure,Velocity}* are
+    foam-extend-only BC names; on the project default fork='main' (ESI
+    v2312) they must surface as critical.
+    """
+    bc_specs = [
+        {
+            "part_name": "farfield_inlet",
+            "fields": {
+                "U": "characteristicVelocityInletOutletVelocity",
+                "p": "characteristicPressureInletOutletPressure",
+                "T": "freestream",
+            },
+        }
+    ]
+    r = assemble_stack(bc_specs=bc_specs)
+    names = {c.advisor_name for c in r.advisor_calls}
+    assert names == {"bc_type_name_validity_advisor"}
+    findings = [f for f in r.findings if f.source_advisor == "bc_type_name_validity_advisor"]
+    assert len(findings) == 2  # U and p; T is freestream (valid_standard)
+    for f in findings:
+        assert f.severity == "critical"
+        assert "V29" in f.evidence_v_rows
+        assert f.location.startswith("farfield_inlet.bc.")
+
+
+def test_parts_manifest_with_bc_blocks_auto_extracts_d10() -> None:
+    """When parts_manifest carries bc: blocks, D10 dispatches alongside A4+A5
+    via the extract_bc_specs_from_parts_manifest adapter (no explicit
+    bc_specs needed)."""
+    manifest = {
+        "parts": [
+            {
+                "name": "farfield_inlet",
+                "role": "farfield",
+                "bc": {
+                    "U": "characteristicVelocityInletOutletVelocity",
+                    "p": "fixedValue",
+                },
+            }
+        ]
+    }
+    r = assemble_stack(parts_manifest=manifest)
+    names = {c.advisor_name for c in r.advisor_calls}
+    assert "bc_type_name_validity_advisor" in names
+    assert "face_orientation_advisor" in names
+    assert "inlet_outlet_validator" in names
+    d10 = [f for f in r.findings if f.source_advisor == "bc_type_name_validity_advisor"]
+    assert len(d10) == 1
+    assert d10[0].severity == "critical"
+
+
+def test_bc_specs_explicit_wins_over_parts_manifest_extraction() -> None:
+    """Explicit bc_specs must override parts_manifest auto-extraction —
+    mirrors the explicit-kwargs-win convention used elsewhere."""
+    manifest = {
+        "parts": [
+            {
+                "name": "decoy",
+                "bc": {"U": "characteristicVelocityInletOutletVelocity"},
+            }
+        ]
+    }
+    # Explicit clean bc_specs should suppress the auto-extracted dirty one
+    explicit: list[dict] = [{"part_name": "real", "fields": {"U": "noSlip"}}]
+    r = assemble_stack(parts_manifest=manifest, bc_specs=explicit)
+    d10 = [f for f in r.findings if f.source_advisor == "bc_type_name_validity_advisor"]
+    assert d10 == []  # explicit had only valid BCs
+
+
+def test_bc_fork_foam_extend_tolerates_characteristic_family() -> None:
+    bc_specs = [
+        {
+            "part_name": "farfield_inlet",
+            "fields": {
+                "U": "characteristicVelocityInletOutletVelocity",
+                "p": "characteristicPressureInletOutletPressure",
+            },
+        }
+    ]
+    r = assemble_stack(bc_specs=bc_specs, bc_fork="foam-extend")
+    d10 = [f for f in r.findings if f.source_advisor == "bc_type_name_validity_advisor"]
+    assert d10 == []  # no findings on foam-extend fork
+
+
 def test_shm_dict_only_dispatches_a8() -> None:
     r = assemble_stack(shm_dict=_shm_dict_with_typo())
     assert r.advisor_count == 1
