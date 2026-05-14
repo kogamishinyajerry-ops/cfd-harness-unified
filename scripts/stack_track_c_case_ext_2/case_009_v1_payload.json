@@ -1,0 +1,389 @@
+{
+  "parts_manifest": {
+    "case_id": "case_009_sandia_flame_d",
+    "cad_source": {
+      "tier": "tier1_reference_derived",
+      "name": "Sandia_TUD_Flame_D_TNF_Workshop",
+      "source_urls": [
+        "https://tnfworkshop.org/data-archives/pilotedjet/ch4-air/",
+        "https://tnfworkshop.org/data-archives/pilotedjet/"
+      ],
+      "source_data_release": "TNF Sandia/TUD Piloted CH4/Air Jet Flames, Data Release 2.0, January 2003",
+      "geometry_basis": "published burner dimensions reconstructed by deterministic CadQuery script",
+      "binary_source_geometry_redistributed": false
+    },
+    "generation_script": "scripts/build_cad.py",
+    "step_file": "inputs/cad_codex_v1.step",
+    "units_in_step": "mm",
+    "numerics_class": "reacting-low-Mach",
+    "solver": {
+      "v1": "reactingFoam",
+      "v1_alternate": "rhoReactingFoam_if_density_coupling_requires_it",
+      "v2_fallback": "reactingPimpleFoam",
+      "model_scope": "steady_piloted_reacting_case_no_ignition_transient",
+      "dimensionality": "axisymmetric_5deg_wedge_single_azimuthal_cell"
+    },
+    "geometry": {
+      "fuel_jet_diameter_mm": 7.2,
+      "pilot_annulus_inner_diameter_mm": 7.7,
+      "pilot_annulus_outer_diameter_mm": 18.2,
+      "burner_outer_diameter_mm": 18.9,
+      "coflow_outer_diameter_mm": 240.0,
+      "domain_radius_mm": 250.0,
+      "domain_length_mm": 576.0,
+      "domain_length_over_D": 80.0,
+      "wedge_angle_deg": 5.0,
+      "axial_coordinate": "z_positive_upward",
+      "radial_coordinate": "r_from_burner_axis"
+    },
+    "combustion": {
+      "primary_mechanism": {
+        "name": "DRM19",
+        "class": "reduced_methane_air_mechanism",
+        "expected_species_count": "19_active_species_plus_inerts_as_supplied",
+        "expected_reaction_count": 84,
+        "chemkin_files": {
+          "chemistry": "constant/chemistry/DRM19/chem.inp",
+          "thermo": "constant/chemistry/DRM19/therm.dat",
+          "transport": "constant/chemistry/DRM19/tran.dat"
+        },
+        "openfoam_conversion_target": "constant/reactions"
+      },
+      "fallback_mechanism": {
+        "name": "westbrook_dryer_2step",
+        "chemkin_files": {
+          "chemistry": "constant/chemistry/westbrook_dryer_2step/chem.inp",
+          "thermo": "constant/chemistry/westbrook_dryer_2step/therm.dat",
+          "transport": "constant/chemistry/westbrook_dryer_2step/tran.dat"
+        },
+        "reactions": [
+          "CH4 + 1.5 O2 => CO + 2 H2O",
+          "CO + 0.5 O2 => CO2"
+        ]
+      },
+      "thermo_type": {
+        "type": "hePsiThermo",
+        "mixture": "reactingMixture",
+        "transport": "sutherland",
+        "thermo": "janaf",
+        "equationOfState": "perfectGas",
+        "specie": "specie",
+        "energy": "sensibleEnthalpy"
+      },
+      "turbulence_chemistry_interaction": {
+        "model": "PaSR",
+        "Cmix": 1.0,
+        "v2_alternate": "EDC"
+      },
+      "turbulence_model_v1": "kEpsilon",
+      "molecular_diffusion": {
+        "Schmidt_number": 0.7,
+        "turbulent_Schmidt_number": 0.7
+      },
+      "radiation": {
+        "v1": false,
+        "v2_if_temperature_overpredicted": "opticallyThin"
+      },
+      "chemistry_startup": {
+        "recommended_sequence": [
+          "cold_flow_without_reactions",
+          "enable_chemistry_with_small_deltaT",
+          "ramp_to_nominal_time_step"
+        ]
+      }
+    },
+    "gravity": {
+      "vector_mps2": [
+        0.0,
+        0.0,
+        -9.81
+      ],
+      "note": "vertical flame axis z is positive upward; buoyancy is important downstream, especially z/D > 30"
+    },
+    "species_inflow": {
+      "fuel_jet": {
+        "role": "central_rich_methane_air_stream",
+        "U_mps": [
+          0.0,
+          0.0,
+          49.6
+        ],
+        "T_K": 294.0,
+        "pressure_atm_reference": 0.993,
+        "mass_fractions": {
+          "CH4": 0.156,
+          "O2": 0.195808,
+          "N2": 0.648192
+        },
+        "air_mass_fraction_total": 0.844,
+        "unspecified_species": 0.0
+      },
+      "pilot_annulus": {
+        "role": "hot_pilot_product_stream",
+        "U_mps": [
+          0.0,
+          0.0,
+          11.4
+        ],
+        "T_K": 1880.0,
+        "composition_note": "equilibrium-product seed for stoichiometric methane-air products with small radical stabilization traces",
+        "mass_fractions": {
+          "CO2": 0.11,
+          "H2O": 0.098,
+          "O2": 0.055,
+          "N2": 0.73449999,
+          "CO": 0.001,
+          "H2": 0.0005,
+          "OH": 0.001,
+          "CH": 1e-08
+        },
+        "unspecified_species": 0.0
+      },
+      "coflow_air": {
+        "role": "low_speed_air_coflow",
+        "U_mps": [
+          0.0,
+          0.0,
+          0.9
+        ],
+        "T_K": 291.0,
+        "mass_fractions": {
+          "O2": 0.232,
+          "N2": 0.768
+        },
+        "unspecified_species": 0.0
+      }
+    },
+    "reference_data": {
+      "dataset": "Barlow_Frank_Sandia_Flame_D_TNF",
+      "url": "https://tnfworkshop.org/data-archives/pilotedjet/ch4-air/",
+      "scalar_archive": "pmCDEF.zip",
+      "long_records_archive": "LongRecordsFlameD.zip",
+      "velocity_archive": "TUD_LDV_DEF.zip",
+      "measured_scalars": [
+        "mixture_fraction",
+        "T",
+        "N2",
+        "O2",
+        "CH4",
+        "CO2",
+        "H2O",
+        "H2",
+        "CO",
+        "OH",
+        false
+      ],
+      "radial_profile_stations_z_over_D": [
+        7.5,
+        15.0,
+        30.0,
+        45.0,
+        60.0
+      ],
+      "radial_profile_stations_z_mm": [
+        54.0,
+        108.0,
+        216.0,
+        324.0,
+        432.0
+      ],
+      "axial_domain_limit_z_over_D": 80.0,
+      "measurement_station_preservation": {
+        "defect_free": true,
+        "no_defect_bodies_at_z_over_D": [
+          7.5,
+          15.0,
+          30.0,
+          45.0,
+          60.0
+        ],
+        "no_defects_in_fuel_jet": true,
+        "no_defects_in_pilot_annulus": true,
+        "no_defects_in_coflow_inlet": true,
+        "no_defects_on_stoichiometric_flame_core": true
+      }
+    },
+    "dimensionless_groups": {
+      "Re_jet": 22400,
+      "Mach_jet_approx": 0.14,
+      "Z_st": 0.351,
+      "central_stream_equivalence_ratio_rich_limit": 3.17,
+      "equivalence_ratio_profile": {
+        "formula": "phi(Z)=Z*(1-Z_st)/(Z_st*(1-Z))",
+        "report_at_z_over_D": [
+          7.5,
+          15.0,
+          30.0,
+          45.0,
+          60.0
+        ],
+        "report_items": [
+          "phi_radial_profile",
+          "radius_where_phi_equals_1",
+          "stoichiometric_contour_length"
+        ]
+      },
+      "Damkohler_number": {
+        "definition": "Da = tau_mix / tau_chem evaluated near Z = Z_st",
+        "expected_order_near_stoich": "1_to_10",
+        "report_items": [
+          "Da_on_stoichiometric_contour",
+          "min_Da_near_local_extinction_pockets"
+        ]
+      },
+      "flame_length": {
+        "expected_L_vis_over_D": 67.0,
+        "expected_L_vis_mm": 482.4,
+        "outlet_margin_over_D": 13.0
+      }
+    },
+    "parts": [
+      {
+        "name": "fuel_jet",
+        "role": "reacting_inlet_fuel_jet",
+        "bc": {
+          "U": "fixedValue",
+          "T": "fixedValue",
+          "species": "fixedValue",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "fuel_nozzle_lip",
+        "role": "wall_nozzle_lip",
+        "bc": {
+          "U": "noSlip",
+          "T": "zeroGradient",
+          "species": "zeroGradient",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "pilot_annulus",
+        "role": "reacting_inlet_hot_pilot",
+        "bc": {
+          "U": "fixedValue",
+          "T": "fixedValue",
+          "species": "fixedValue",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "pilot_housing_exterior",
+        "role": "wall_pilot_outer_sleeve",
+        "include_in_reference_metrics": false,
+        "bc": {
+          "U": "noSlip",
+          "T": "zeroGradient",
+          "species": "zeroGradient",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "coflow_air",
+        "role": "reacting_inlet_coflow_air",
+        "bc": {
+          "U": "fixedValue",
+          "T": "fixedValue",
+          "species": "fixedValue",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "burner_base_wall",
+        "role": "wall_ground_base",
+        "include_in_reference_metrics": false,
+        "bc": {
+          "U": "noSlip",
+          "T": "zeroGradient",
+          "species": "zeroGradient",
+          "p": "zeroGradient"
+        }
+      },
+      {
+        "name": "wedge_front",
+        "role": "wedge_plane",
+        "bc": {
+          "U": "wedge",
+          "p": "wedge",
+          "T": "wedge",
+          "species": "wedge",
+          "turbulence": "wedge"
+        }
+      },
+      {
+        "name": "wedge_back",
+        "role": "wedge_plane",
+        "bc": {
+          "U": "wedge",
+          "p": "wedge",
+          "T": "wedge",
+          "species": "wedge",
+          "turbulence": "wedge"
+        }
+      },
+      {
+        "name": "outer_side",
+        "role": "radial_farfield",
+        "bc": {
+          "U": "pressureInletOutletVelocity",
+          "p": "totalPressure",
+          "T": "inletOutlet_air_291K",
+          "species": "inletOutlet_air",
+          "fallback": "slip"
+        }
+      },
+      {
+        "name": "far_outlet",
+        "role": "pressure_outlet",
+        "bc": {
+          "U": "zeroGradient",
+          "p": {
+            "type": "fixedValue",
+            "value": 0.0
+          },
+          "T": "zeroGradient",
+          "species": "zeroGradient"
+        }
+      },
+      {
+        "name": "coflow_plenum_mount_bracket",
+        "role": "exterior_mount_defect_body",
+        "defect_participation": [
+          "D1"
+        ],
+        "include_in_reference_metrics": false,
+        "bc": "exclude_from_fluid_reference_or_external_wall_if_meshed"
+      },
+      {
+        "name": "coflow_plenum_mount_shim",
+        "role": "exterior_mount_defect_body",
+        "defect_participation": [
+          "D1"
+        ],
+        "include_in_reference_metrics": false,
+        "bc": "exclude_from_fluid_reference_or_external_wall_if_meshed"
+      },
+      {
+        "name": "bracket_lip_thin",
+        "role": "exterior_thin_shell_defect_body",
+        "defect_participation": [
+          "D8"
+        ],
+        "include_in_reference_metrics": false,
+        "bc": "exclude_from_fluid_reference_or_external_wall_if_meshed"
+      }
+    ],
+    "patch_naming_check": {
+      "regex": "^[A-Za-z][A-Za-z0-9_]*$",
+      "all_names_match": true,
+      "no_duplicate_names": true,
+      "no_spaces_or_hyphens": true
+    },
+    "reference_data_preservation": {
+      "published_Z_T_species_profiles_preserved": true,
+      "defect_locations": "exterior_below_inlet_plane_only",
+      "measurement_stations_mesh_clean": true
+    }
+  }
+}

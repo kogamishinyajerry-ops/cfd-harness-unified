@@ -1,0 +1,99 @@
+{
+  "advisor_count": 4,
+  "finding_count": 2,
+  "critical_count": 0,
+  "warning_count": 2,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "unit_detector"
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "input_summary": "parts_manifest with 13 parts",
+      "duration_ms": 0.011499971151351929,
+      "version": "face_orientation_advisor.py"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "input_summary": "parts_manifest with 13 parts",
+      "duration_ms": 0.006541959010064602,
+      "version": "inlet_outlet_validator.py"
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "input_summary": "10 parts with bc blocks (fork=main)",
+      "duration_ms": 0.057875062339007854,
+      "version": "bc_type_name_validity_advisor.py"
+    },
+    {
+      "advisor_name": "unit_detector",
+      "status": "ok",
+      "input_summary": "step_path=/Users/Zhuanz/Desktop/case_009_sandia_flame_d/inputs/cad_codex_v1.step",
+      "duration_ms": 2.2040000185370445,
+      "version": "unit_detector.py"
+    }
+  ],
+  "evidence_refs": [
+    "V20",
+    "V29",
+    "V79",
+    "V81",
+    "V87",
+    "V96"
+  ],
+  "findings": [
+    {
+      "source_advisor": "bc_type_name_validity_advisor",
+      "severity": "warning",
+      "code": "bc_type_unknown",
+      "message": "part 'outer_side' field 'T' declares BC type 'inletOutlet_air_291K' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'inletOutlet_air_291K' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "outer_side.bc.T",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "raw": {
+        "part_name": "outer_side",
+        "field_name": "T",
+        "bc_type_name": "inletOutlet_air_291K",
+        "verdict": "unknown",
+        "severity": "warning",
+        "fork": "main",
+        "suggested_fix": "BC type 'inletOutlet_air_291K' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+        "detail": "part 'outer_side' field 'T' declares BC type 'inletOutlet_air_291K' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'inletOutlet_air_291K' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered."
+      }
+    },
+    {
+      "source_advisor": "bc_type_name_validity_advisor",
+      "severity": "warning",
+      "code": "bc_type_unknown",
+      "message": "part 'outer_side' field 'species' declares BC type 'inletOutlet_air' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'inletOutlet_air' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "outer_side.bc.species",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "raw": {
+        "part_name": "outer_side",
+        "field_name": "species",
+        "bc_type_name": "inletOutlet_air",
+        "verdict": "unknown",
+        "severity": "warning",
+        "fork": "main",
+        "suggested_fix": "BC type 'inletOutlet_air' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+        "detail": "part 'outer_side' field 'species' declares BC type 'inletOutlet_air' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'inletOutlet_air' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered."
+      }
+    }
+  ],
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}
