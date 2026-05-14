@@ -4,7 +4,7 @@ title: case_011 v5b plate-fin compact HX input-manifest substrate extension · t
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 2 supplement · M-CASE-011-SUBSTRATE (cross-case extension #3 · driven by Done dim #6 "≥3/9 on ≥3 cases" cross-case clause · mirror of B42 case_006 + B45 case_004 substrate plays · case_011 is the canonical V94 sediment source per DEC-V63-A-sub-D11)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed81af9c31fb792aa3bae1)
 ---
 
 ## Status
