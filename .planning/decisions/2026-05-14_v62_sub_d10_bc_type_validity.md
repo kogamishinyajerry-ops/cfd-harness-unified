@@ -4,7 +4,7 @@ title: D10 bc_type_name_validity_advisor — fork-aware BC catalog lookup (singl
 status: Accepted
 parent_dec: DEC-V62-A-charter
 phase: V62-A Tier 2 supplement · driven by M-STACK-TRACK-3 §gap2
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8109bc6adb6594450262)
 ---
 
 ## Status
