@@ -1,0 +1,116 @@
+{
+  "status_code": 200,
+  "advisor_count": 3,
+  "finding_count": 3,
+  "critical_count": 0,
+  "warning_count": 3,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "bc_type_name_validity_advisor",
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "v_series_drift_guard"
+  ],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "input_summary": "parts_manifest with 12 parts",
+      "duration_ms": 0.013208016753196716
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "input_summary": "parts_manifest with 12 parts",
+      "duration_ms": 0.006541959010064602
+    },
+    {
+      "advisor_name": "bc_type_name_validity_advisor",
+      "status": "ok",
+      "input_summary": "10 parts with bc blocks (fork=main)",
+      "duration_ms": 0.04329090006649494
+    },
+    {
+      "advisor_name": "v_series_drift_guard",
+      "status": "ok",
+      "input_summary": "findings=3 mode=audit corpus=100",
+      "duration_ms": 0.0
+    }
+  ],
+  "evidence_refs": [
+    "V29",
+    "V79",
+    "V81",
+    "V87"
+  ],
+  "findings": [
+    {
+      "source_advisor": "bc_type_name_validity_advisor",
+      "severity": "warning",
+      "code": "bc_type_unknown",
+      "message": "part 'rotor_blade_A' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "rotor_blade_A.bc.U",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "raw": {
+        "part_name": "rotor_blade_A",
+        "field_name": "U",
+        "bc_type_name": "movingWallVelocity_or_MRF_consistent_noSlip",
+        "verdict": "unknown",
+        "severity": "warning",
+        "fork": "main",
+        "suggested_fix": "BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+        "detail": "part 'rotor_blade_A' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered."
+      }
+    },
+    {
+      "source_advisor": "bc_type_name_validity_advisor",
+      "severity": "warning",
+      "code": "bc_type_unknown",
+      "message": "part 'rotor_blade_B' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "rotor_blade_B.bc.U",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "raw": {
+        "part_name": "rotor_blade_B",
+        "field_name": "U",
+        "bc_type_name": "movingWallVelocity_or_MRF_consistent_noSlip",
+        "verdict": "unknown",
+        "severity": "warning",
+        "fork": "main",
+        "suggested_fix": "BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+        "detail": "part 'rotor_blade_B' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered."
+      }
+    },
+    {
+      "source_advisor": "bc_type_name_validity_advisor",
+      "severity": "warning",
+      "code": "bc_type_unknown",
+      "message": "part 'hub_spinner' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+      "location": "hub_spinner.bc.U",
+      "evidence_v_rows": [
+        "V29"
+      ],
+      "raw": {
+        "part_name": "hub_spinner",
+        "field_name": "U",
+        "bc_type_name": "movingWallVelocity_or_MRF_consistent_noSlip",
+        "verdict": "unknown",
+        "severity": "warning",
+        "fork": "main",
+        "suggested_fix": "BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered.",
+        "detail": "part 'hub_spinner' field 'U' declares BC type 'movingWallVelocity_or_MRF_consistent_noSlip' \u2014 verdict unknown under fork 'main'; BC name does not match any entry in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES) \u2014 likely typo or user-coded BC not yet catalogued. Suggested fix: BC type 'movingWallVelocity_or_MRF_consistent_noSlip' is not in the advisor's catalog (STANDARD_OPENFOAM_BCS + FOAM_EXTEND_ONLY_BCS + SENTINEL_BC_NAMES). Check spelling, or extend the catalog via sub-DEC if this is a legitimate ESI BC not yet covered."
+      }
+    }
+  ],
+  "llm_enhanced": false,
+  "audit_artifact_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/audits/anon_ai_review_20260514T162608.422000Z_68a006db.json",
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}
