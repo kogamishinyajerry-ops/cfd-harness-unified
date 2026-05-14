@@ -374,6 +374,56 @@ def test_thin_wall_malformed_patch_returns_400(client: TestClient) -> None:
     }
 
 
+def test_thin_wall_overflow_bbox_returns_400_not_500(client: TestClient) -> None:
+    """Codex R1 P2: oversized int in bbox raises OverflowError → must be 400, not 500."""
+    huge = 10**400  # well past float overflow
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "thin_wall_inputs": {
+                "patches": [{"name": "p", "bbox_dimensions": [huge, 1.0, 1.0]}],
+                "background_cell_size": 1.0,
+            }
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["failing_check"] == "thin_wall_patch_fields"
+
+
+@pytest.mark.parametrize("bad_patches", ["", 0, {}, 42, "patches_str"])
+def test_thin_wall_non_iterable_patches_returns_400(
+    client: TestClient, bad_patches
+) -> None:
+    """Codex R1 P3: falsey/scalar/non-list ``patches`` must surface as 400,
+    not be silently normalized to an empty tuple."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "thin_wall_inputs": {
+                "patches": bad_patches,
+                "background_cell_size": 1.0,
+            }
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["detail"]["failing_check"] == "thin_wall_patches_type"
+
+
+def test_thin_wall_absent_patches_key_is_not_400(client: TestClient) -> None:
+    """Absent key is still OK — only invalid-non-iterable is 400. Keeps the
+    discrimination Codex R1 P3 asked for: 'absent' vs 'malformed' are different."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "thin_wall_inputs": {"background_cell_size": 1.0},
+        },
+    )
+    assert resp.status_code == 200
+    # No patches → advisor runs with empty input, may produce no findings
+    statuses = {c["advisor_name"]: c["status"] for c in resp.json()["report"]["advisor_calls"]}
+    assert statuses.get("thin_wall_advisor") == "ok"
+
+
 def test_audit_filenames_unique_back_to_back(client: TestClient) -> None:
     """Codex R0 P2: two reviews in the same second must not overwrite each other."""
     paths: set[str] = set()

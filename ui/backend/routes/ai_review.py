@@ -212,8 +212,28 @@ def _rehydrate_thin_wall_inputs(raw: dict[str, Any]) -> dict[str, Any]:
 
     Patches that are already ``PatchGeometry`` instances pass through
     unchanged so in-process callers still work.
+
+    Codex R1 P3 (2026-05-14): a wire-form ``patches`` field that is
+    present but not list-shaped (e.g. ``""``, ``0``, ``{}``) was
+    previously silently normalized to ``()`` by ``or ()``, masking the
+    400 signal. Distinguish absent (``None``, key missing → ``()``)
+    from malformed-non-iterable (raise 400) explicitly.
     """
-    patches_in = raw.get("patches") or ()
+    if "patches" in raw:
+        patches_in = raw["patches"]
+        if patches_in is None:
+            patches_in = ()
+        elif not isinstance(patches_in, (list, tuple)):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "thin_wall_patches_type",
+                    "expected": "list of patch dicts",
+                    "got": type(patches_in).__name__,
+                },
+            )
+    else:
+        patches_in = ()
     patches_out: list[PatchGeometry] = []
     for p in patches_in:
         if isinstance(p, PatchGeometry):
@@ -228,10 +248,15 @@ def _rehydrate_thin_wall_inputs(raw: dict[str, Any]) -> dict[str, Any]:
                     "got": type(p).__name__,
                 },
             )
+        # Codex R1 P2 (2026-05-14): ``float(x)`` on an oversized int
+        # raises ``OverflowError``, which is not a subclass of any of
+        # the previously-caught exceptions. Without explicit handling
+        # the route 500s on malformed bbox values — adding OverflowError
+        # keeps the documented 400-on-bad-bbox contract honest.
         try:
             name = str(p["name"])
             bbox = tuple(float(x) for x in p["bbox_dimensions"])
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
             raise HTTPException(
                 status_code=400,
                 detail={
