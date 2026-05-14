@@ -66,7 +66,7 @@
 ### Tier 2 · advisor 加宽
 
 - [ ] **M-A6** A6 hvac_adpi advisor LANDED · commit: `_____`
-- [ ] **M-A8** A8 shm_dict_validator advisor LANDED · commit: `_____`
+- [x] **M-A8** A8 shm_dict_validator advisor LANDED · commit: `_____` (B12 land · sub-DEC `2026-05-14_v61_198_sub_a8_shm_dict_validator.md` · 9-test suite green · V52 typo-class + V86 orphan-class promotion gate met)
 - [ ] **M-A5** A5 unallocated 填充 · 候选 drafted · commit: `_____`
 - [ ] **M-D6** D6 advisor promotion drafted → ready-to-land · commit: `_____`
 - [x] **M-TRACK-3** Track C session 3 · case_004 NREL MRF · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_3_case_004.md` (2026-05-13 · surfaced V88 compound row — MRF setup advisor coverage gap · 3rd cross-application of V83 across audit surfaces · A6/A8 2nd-evidence NOT produced by case_004 substrate · A9 mrf_setup_advisor candidate registered)
@@ -76,7 +76,7 @@
 
 - [ ] **M-D9-D10** D9/D10 promotion · harvest-003 实质推进 · commit: `_____`
 - [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · commit: `45d046f` · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
-- [ ] **M-TRACK-5** Track C session 5 · retro: `_____`
+- [x] **M-TRACK-5** Track C session 5 · case_009 v1.5 reacting-low-Mach · retro: `.planning/retrospectives/2026-05-14_track_c_session_5_case_009_v1_5_reacting.md` (2026-05-14 · 3rd e2e numerics class confirmed · V41 channel-(b) closed · A10 thermo_polynomial_range_advisor promotion gate met by v1 + v1.5 dual-evidence)
 - [ ] **M-TRACK-6** Track C session 6 · retro: `_____`
 - [ ] **M-V100** V-series ≥ 100 marker · commit: `_____`
 - [ ] **M-RADAR-V2** capability radar v2 重画 · 左半轴 ≥ 7.2 验证 · commit: `_____`
@@ -87,15 +87,15 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 Track C session 通过:    4 / 6   (case_010 + case_011 + case_004 + case_009)
-当前 LANDED advisor:          6 / 8   (A1, A2-v2, A3, A4, A5, A7 · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED post-session-4 awaiting 2nd reacting case)
+当前 Track C session 通过:    5 / 6   (case_010 + case_011 + case_004 + case_009 v1 + case_009 v1.5)
+当前 LANDED advisor:          7 / 8   (A1, A2-v2, A3, A4, A5, A7, A8 · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED · v1+v1.5 dual evidence per session-5 retro · 待 land 决策)
 当前 V-series 行数:          94 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity (cold succeeds 3%→115% · solid regresses 37%→0%) · V93 reacting low-Mach pre-ignition T floor rule (case_009 v1.5 cleanup) · V94 case_011 STL face-label loss through cq.exporters.export — solver runs but in degenerate pure-conduction mode · all in both corpora)
-当前 e2e numerics class:     2 / 3   (compressible-buoyant-RANS · CHT-multi-stream (case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter PASS 2026-05-14 — degenerate physics caveat per V94, procedural e2e demonstrated); case_009 reacting-low-Mach v1.5 ignition 2000-step ran with V93 fix — pending Track C session 5 retro consolidation for 3rd class advance)
+当前 e2e numerics class:     3 / 3 ✓   (compressible-buoyant-RANS APU bay 2026-05-12 F4b · CHT-multi-stream case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter 2026-05-14 (degenerate physics caveat per V94) · reacting-low-Mach case_009 v1.5 ignition 0 limit warnings + Tmax 1880→1968K monotone climb 2026-05-14 (Track C session 5 retro consolidated))
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-14 (M-CASE011-V3 case_011 v3 sub-session · V92 cellZoneInside inside heterogeneity + V94 STL face-label loss landed in both corpora · chtMultiRegionSimpleFoam PASS at 200 SIMPLE iter on v5b mesh · M-XCLASS milestone ticks ✓ · e2e numerics class 1/3 → 2/3 with CHT-multi-stream demonstrated; degenerate physics caveat per V94 documented in REPORT §5.1)` · 更新人：`Claude Code Opus 4.7 session (main · case_011 v3 sub-session DEC-V61-198-sub-case-011-v3-solver-e2e)`
+最后更新时间：`2026-05-14 (B11 + B12 batch land · M-TRACK-5 [x] reacting-low-Mach 3rd e2e numerics class consolidated · M-A8 [x] shm_dict_validator advisor LANDED with V52+V86 cross-topology promotion gate · counters Track C 4→5 · LANDED advisor 6→7 · e2e numerics class 2→3 ✓ first axis Done · 5 Done dimensions now MET: 雷达右半轴 · e2e class · M-DRIFT + M-XCLASS + M-TRACK-5; remaining gaps: Track C 5→6 · LANDED 7→8 · V-series 94→100 · 雷达左半轴 6.5→7.2)` · 更新人：`Claude Code Opus 4.7 session (main · B11/B12 reconcile)`
 
 ---
 
