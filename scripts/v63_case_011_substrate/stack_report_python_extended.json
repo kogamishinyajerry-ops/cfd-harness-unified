@@ -156,7 +156,7 @@
     {
       "advisor_name": "face_orientation_advisor",
       "status": "ok",
-      "duration_ms": 0.008082948625087738,
+      "duration_ms": 0.007084105163812637,
       "input_summary": "parts_manifest with 3 parts",
       "version": "face_orientation_advisor.py",
       "output_summary": "FaceOrientationReport"
@@ -164,7 +164,7 @@
     {
       "advisor_name": "inlet_outlet_validator",
       "status": "ok",
-      "duration_ms": 0.006417045369744301,
+      "duration_ms": 0.005625071935355663,
       "input_summary": "parts_manifest with 3 parts",
       "version": "inlet_outlet_validator.py",
       "output_summary": "InletOutletValidationReport"
@@ -172,7 +172,7 @@
     {
       "advisor_name": "virtual_interface_detector",
       "status": "ok",
-      "duration_ms": 0.04795799031853676,
+      "duration_ms": 0.048208050429821014,
       "input_summary": "2 bodies, 1 specs",
       "version": "virtual_interface_detector.py",
       "output_summary": "list"
@@ -180,7 +180,7 @@
     {
       "advisor_name": "shm_dict_validator",
       "status": "ok",
-      "duration_ms": 22.394332918338478,
+      "duration_ms": 22.95658306684345,
       "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'debug']",
       "version": "shm_dict_validator.py",
       "output_summary": "ShmDictReport"
@@ -188,7 +188,7 @@
     {
       "advisor_name": "stl_face_label_validator",
       "status": "ok",
-      "duration_ms": 0.03600004129111767,
+      "duration_ms": 0.03791600465774536,
       "input_summary": "stl_face_normals=3 keys, parts_manifest=3 parts, shm_dict=yes",
       "version": "stl_face_label_validator.py",
       "output_summary": "FaceLabelReport"
@@ -196,7 +196,7 @@
     {
       "advisor_name": "unit_detector",
       "status": "ok",
-      "duration_ms": 11.218415922485292,
+      "duration_ms": 11.57837500795722,
       "input_summary": "step_path=/Users/Zhuanz/Desktop/case_011_plate_fin_compact_hx/inputs/cad_codex_v1.step",
       "version": "unit_detector.py",
       "output_summary": "UnitDetection"
@@ -204,7 +204,7 @@
     {
       "advisor_name": "thin_wall_advisor",
       "status": "ok",
-      "duration_ms": 0.042584026232361794,
+      "duration_ms": 0.03883300814777613,
       "input_summary": "5 patches, cell_size=0.004",
       "version": "thin_wall_advisor.py",
       "output_summary": "list"

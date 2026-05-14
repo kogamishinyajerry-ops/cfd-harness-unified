@@ -1,0 +1,579 @@
+{
+  "case_label": "anon",
+  "llm_enhanced": false,
+  "report": {
+    "findings": [
+      {
+        "source_advisor": "virtual_interface_detector",
+        "severity": "critical",
+        "code": "d1_unintended_gap",
+        "message": "separator_3_4_d5_interface: facing-face candidates with sub-mm gap (0.0300 mm) \u2014 D1-class defect",
+        "location": "separator_3_4_d5_interface",
+        "evidence_v_rows": [
+          "V22",
+          "V25",
+          "V33",
+          "V36",
+          "V42",
+          "V43",
+          "V50"
+        ],
+        "raw": {
+          "patch_name": "separator_3_4_d5_interface",
+          "matched": true,
+          "body_owner": "separator_plate_3_4_front",
+          "face": {
+            "area": 144.0,
+            "bbox_min": [
+              0.0,
+              80.0,
+              12.4
+            ],
+            "bbox_max": [
+              180.0,
+              80.0,
+              13.2
+            ],
+            "normal": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "centroid": [
+              90.0,
+              80.0,
+              12.8
+            ]
+          },
+          "bbox_overlap_fraction": 0.0,
+          "area_diff_fraction": 0.00016666666666667298,
+          "normal_dot": 1.0,
+          "diagnostic": "shared interface on 'separator_plate_3_4_front' <-> 'separator_plate_3_4_rear_offset' (chosen='separator_plate_3_4_front' area=144 gap_mm=0.03)",
+          "inter_face_gap_mm": 0.030000000000001137
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_hot_fluid' declares face label 'hot_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_hot_fluid'].face_labels[0]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "hot_inlet",
+          "location": "parts_manifest.parts['region_hot_fluid'].face_labels[0]",
+          "detail": "part 'region_hot_fluid' declares face label 'hot_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_inlet' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_hot_fluid' declares face label 'hot_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_hot_fluid'].face_labels[1]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "hot_outlet",
+          "location": "parts_manifest.parts['region_hot_fluid'].face_labels[1]",
+          "detail": "part 'region_hot_fluid' declares face label 'hot_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_outlet' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_hot_fluid' declares face label 'hot_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_hot_fluid'].face_labels[2]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "hot_walls",
+          "location": "parts_manifest.parts['region_hot_fluid'].face_labels[2]",
+          "detail": "part 'region_hot_fluid' declares face label 'hot_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_walls' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_cold_fluid' declares face label 'cold_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_cold_fluid'].face_labels[0]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "cold_inlet",
+          "location": "parts_manifest.parts['region_cold_fluid'].face_labels[0]",
+          "detail": "part 'region_cold_fluid' declares face label 'cold_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_inlet' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_cold_fluid' declares face label 'cold_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_cold_fluid'].face_labels[1]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "cold_outlet",
+          "location": "parts_manifest.parts['region_cold_fluid'].face_labels[1]",
+          "detail": "part 'region_cold_fluid' declares face label 'cold_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_outlet' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "stl_face_label_validator",
+        "severity": "warning",
+        "code": "orphan_declared_label",
+        "message": "part 'region_cold_fluid' declares face label 'cold_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "location": "parts_manifest.parts['region_cold_fluid'].face_labels[2]",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "raw": {
+          "advisor_name": "stl_face_label_validator",
+          "severity": "warning",
+          "code": "orphan_declared_label",
+          "face_label": "cold_walls",
+          "location": "parts_manifest.parts['region_cold_fluid'].face_labels[2]",
+          "detail": "part 'region_cold_fluid' declares face label 'cold_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+          "evidence_v_rows": [
+            "V94"
+          ],
+          "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_walls' (and siblings)."
+        }
+      },
+      {
+        "source_advisor": "unit_detector",
+        "severity": "warning",
+        "code": "unit_inference",
+        "message": "Unit could not be inferred from STEP header or bbox magnitude; engineer review required",
+        "location": null,
+        "evidence_v_rows": [
+          "V20",
+          "V96"
+        ],
+        "raw": {
+          "declared_unit": "mm",
+          "bbox_plausible_units": [
+            "m"
+          ],
+          "decision": "unknown",
+          "confidence": 0.0,
+          "evidence": [
+            "STEP header declares SI_UNIT(.MILLI.,.METRE.)",
+            "body-class filter: 0/1 bodies discarded as CFD-domain class (implausible under any common unit). Using largest airframe-class extent 0.18 for unit decision.",
+            "bbox extent 0.18 (raw) is industrially plausible if unit is one of: m",
+            "WARNING: STEP declares mm but bbox magnitude only matches ['m']. Likely a unit mismatch in the upstream CAD chain."
+          ]
+        }
+      },
+      {
+        "source_advisor": "thin_wall_advisor",
+        "severity": "critical",
+        "code": "thin_wall_at_risk",
+        "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness).",
+        "location": "cold_fin_rear_third",
+        "evidence_v_rows": [
+          "V10"
+        ],
+        "raw": {
+          "patch_name": "cold_fin_rear_third",
+          "estimated_thickness": 0.0006,
+          "effective_cell_size": 0.001,
+          "cells_per_thickness": 0.6,
+          "assigned_level": [
+            1,
+            2
+          ],
+          "recommended_level_max": 4,
+          "severity": "critical",
+          "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+        }
+      },
+      {
+        "source_advisor": "thin_wall_advisor",
+        "severity": "warning",
+        "code": "thin_wall_at_risk",
+        "message": "patch 'hot_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 2 = 0.001 \u2192 1.00 cells per thickness \u2192 is AT RISK of sHM merge. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness).",
+        "location": "hot_fin_base",
+        "evidence_v_rows": [
+          "V10"
+        ],
+        "raw": {
+          "patch_name": "hot_fin_base",
+          "estimated_thickness": 0.001,
+          "effective_cell_size": 0.001,
+          "cells_per_thickness": 1.0,
+          "assigned_level": [
+            1,
+            2
+          ],
+          "recommended_level_max": 3,
+          "severity": "warning",
+          "message": "patch 'hot_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 2 = 0.001 \u2192 1.00 cells per thickness \u2192 is AT RISK of sHM merge. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness)."
+        }
+      },
+      {
+        "source_advisor": "thin_wall_advisor",
+        "severity": "info",
+        "code": "thin_wall_at_risk",
+        "message": "patch 'cold_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 3 = 0.0005 \u2192 2.00 cells per thickness \u2192 is marginal for sHM resolution. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness).",
+        "location": "cold_fin_base",
+        "evidence_v_rows": [
+          "V10"
+        ],
+        "raw": {
+          "patch_name": "cold_fin_base",
+          "estimated_thickness": 0.001,
+          "effective_cell_size": 0.0005,
+          "cells_per_thickness": 2.0,
+          "assigned_level": [
+            2,
+            3
+          ],
+          "recommended_level_max": 3,
+          "severity": "info",
+          "message": "patch 'cold_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 3 = 0.0005 \u2192 2.00 cells per thickness \u2192 is marginal for sHM resolution. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness)."
+        }
+      }
+    ],
+    "advisor_calls": [
+      {
+        "advisor_name": "face_orientation_advisor",
+        "status": "ok",
+        "input_summary": "parts_manifest with 3 parts",
+        "output": {
+          "findings": [],
+          "bodies_checked": 0,
+          "bodies_with_intended_normal": 0,
+          "bodies_skipped": 3
+        },
+        "duration_ms": 0.0068749068304896355,
+        "version": "face_orientation_advisor.py"
+      },
+      {
+        "advisor_name": "inlet_outlet_validator",
+        "status": "ok",
+        "input_summary": "parts_manifest with 3 parts",
+        "output": {
+          "findings": [],
+          "fail_count": 0,
+          "warning_count": 0,
+          "pass_count": 0
+        },
+        "duration_ms": 0.005458015948534012,
+        "version": "inlet_outlet_validator.py"
+      },
+      {
+        "advisor_name": "virtual_interface_detector",
+        "status": "ok",
+        "input_summary": "2 bodies, 1 specs",
+        "output": [
+          {
+            "patch_name": "separator_3_4_d5_interface",
+            "matched": true,
+            "body_owner": "separator_plate_3_4_front",
+            "face": {
+              "area": 144.0,
+              "bbox_min": [
+                0.0,
+                80.0,
+                12.4
+              ],
+              "bbox_max": [
+                180.0,
+                80.0,
+                13.2
+              ],
+              "normal": [
+                0.0,
+                1.0,
+                0.0
+              ],
+              "centroid": [
+                90.0,
+                80.0,
+                12.8
+              ]
+            },
+            "bbox_overlap_fraction": 0.0,
+            "area_diff_fraction": 0.00016666666666667298,
+            "normal_dot": 1.0,
+            "diagnostic": "shared interface on 'separator_plate_3_4_front' <-> 'separator_plate_3_4_rear_offset' (chosen='separator_plate_3_4_front' area=144 gap_mm=0.03)",
+            "inter_face_gap_mm": 0.030000000000001137
+          }
+        ],
+        "duration_ms": 0.04375004209578037,
+        "version": "virtual_interface_detector.py"
+      },
+      {
+        "advisor_name": "shm_dict_validator",
+        "status": "ok",
+        "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'debug']",
+        "output": {
+          "findings": [],
+          "geometry_names": [
+            "region_hot_fluid.stl",
+            "region_cold_fluid.stl",
+            "region_solid.stl"
+          ],
+          "features_files": [
+            "region_hot_fluid.eMesh",
+            "region_cold_fluid.eMesh",
+            "region_solid.eMesh"
+          ]
+        },
+        "duration_ms": 21.985540981404483,
+        "version": "shm_dict_validator.py"
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "status": "ok",
+        "input_summary": "stl_face_normals=3 keys, parts_manifest=3 parts, shm_dict=yes",
+        "output": {
+          "findings": [
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "hot_inlet",
+              "location": "parts_manifest.parts['region_hot_fluid'].face_labels[0]",
+              "detail": "part 'region_hot_fluid' declares face label 'hot_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_inlet' (and siblings)."
+            },
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "hot_outlet",
+              "location": "parts_manifest.parts['region_hot_fluid'].face_labels[1]",
+              "detail": "part 'region_hot_fluid' declares face label 'hot_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_outlet' (and siblings)."
+            },
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "hot_walls",
+              "location": "parts_manifest.parts['region_hot_fluid'].face_labels[2]",
+              "detail": "part 'region_hot_fluid' declares face label 'hot_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'hot_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'hot_walls' (and siblings)."
+            },
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "cold_inlet",
+              "location": "parts_manifest.parts['region_cold_fluid'].face_labels[0]",
+              "detail": "part 'region_cold_fluid' declares face label 'cold_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_inlet' (and siblings)."
+            },
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "cold_outlet",
+              "location": "parts_manifest.parts['region_cold_fluid'].face_labels[1]",
+              "detail": "part 'region_cold_fluid' declares face label 'cold_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_outlet' (and siblings)."
+            },
+            {
+              "advisor_name": "stl_face_label_validator",
+              "severity": "warning",
+              "code": "orphan_declared_label",
+              "face_label": "cold_walls",
+              "location": "parts_manifest.parts['region_cold_fluid'].face_labels[2]",
+              "detail": "part 'region_cold_fluid' declares face label 'cold_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cold_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+              "evidence_v_rows": [
+                "V94"
+              ],
+              "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cold_walls' (and siblings)."
+            }
+          ],
+          "declared_labels": [
+            "hot_inlet",
+            "hot_outlet",
+            "hot_walls",
+            "cold_inlet",
+            "cold_outlet",
+            "cold_walls"
+          ],
+          "stl_labels": [
+            "region_hot_fluid",
+            "region_cold_fluid",
+            "region_solid"
+          ],
+          "shm_referenced_labels": []
+        },
+        "duration_ms": 0.04770909436047077,
+        "version": "stl_face_label_validator.py"
+      },
+      {
+        "advisor_name": "unit_detector",
+        "status": "ok",
+        "input_summary": "step_path=/Users/Zhuanz/Desktop/case_011_plate_fin_compact_hx/inputs/cad_codex_v1.step",
+        "output": {
+          "declared_unit": "mm",
+          "bbox_plausible_units": [
+            "m"
+          ],
+          "decision": "unknown",
+          "confidence": 0.0,
+          "evidence": [
+            "STEP header declares SI_UNIT(.MILLI.,.METRE.)",
+            "body-class filter: 0/1 bodies discarded as CFD-domain class (implausible under any common unit). Using largest airframe-class extent 0.18 for unit decision.",
+            "bbox extent 0.18 (raw) is industrially plausible if unit is one of: m",
+            "WARNING: STEP declares mm but bbox magnitude only matches ['m']. Likely a unit mismatch in the upstream CAD chain."
+          ]
+        },
+        "duration_ms": 10.474125039763749,
+        "version": "unit_detector.py"
+      },
+      {
+        "advisor_name": "thin_wall_advisor",
+        "status": "ok",
+        "input_summary": "5 patches, cell_size=0.004",
+        "output": [
+          {
+            "patch_name": "cold_fin_rear_third",
+            "estimated_thickness": 0.0006,
+            "effective_cell_size": 0.001,
+            "cells_per_thickness": 0.6,
+            "assigned_level": [
+              1,
+              2
+            ],
+            "recommended_level_max": 4,
+            "severity": "critical",
+            "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+          },
+          {
+            "patch_name": "hot_fin_base",
+            "estimated_thickness": 0.001,
+            "effective_cell_size": 0.001,
+            "cells_per_thickness": 1.0,
+            "assigned_level": [
+              1,
+              2
+            ],
+            "recommended_level_max": 3,
+            "severity": "warning",
+            "message": "patch 'hot_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 2 = 0.001 \u2192 1.00 cells per thickness \u2192 is AT RISK of sHM merge. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness)."
+          },
+          {
+            "patch_name": "cold_fin_base",
+            "estimated_thickness": 0.001,
+            "effective_cell_size": 0.0005,
+            "cells_per_thickness": 2.0,
+            "assigned_level": [
+              2,
+              3
+            ],
+            "recommended_level_max": 3,
+            "severity": "info",
+            "message": "patch 'cold_fin_base': thickness \u2248 0.001 (bbox-min); effective cell size at level 3 = 0.0005 \u2192 2.00 cells per thickness \u2192 is marginal for sHM resolution. Recommended: bump refinement to level 3 (\u22480.0005 cell size = 2.00 cells per thickness)."
+          }
+        ],
+        "duration_ms": 0.027957954443991184,
+        "version": "thin_wall_advisor.py"
+      },
+      {
+        "advisor_name": "v_series_drift_guard",
+        "status": "ok",
+        "input_summary": "findings=11 mode=audit corpus=100",
+        "output": {
+          "check_status": "clean",
+          "mode": "audit",
+          "missing_v_rows": [],
+          "findings_flagged": 0,
+          "findings_dropped": 0,
+          "corpus_size": 100
+        },
+        "duration_ms": 0.0,
+        "version": "ui.backend.services.v_series_drift_guard"
+      }
+    ],
+    "evidence_refs": [
+      "V10",
+      "V100",
+      "V20",
+      "V22",
+      "V25",
+      "V33",
+      "V36",
+      "V42",
+      "V43",
+      "V50",
+      "V52",
+      "V79",
+      "V81",
+      "V86",
+      "V87",
+      "V94",
+      "V96",
+      "V99"
+    ],
+    "stack_duration_ms": 32.82258298713714,
+    "advisor_count": 7,
+    "failed_advisor_count": 0,
+    "critical_count": 2,
+    "warning_count": 8
+  }
+}
