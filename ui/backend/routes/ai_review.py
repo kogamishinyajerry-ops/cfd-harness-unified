@@ -40,15 +40,25 @@ explicit kwarg is absent):
                             ``<case_dir>/interface_specs.json`` (or
                             fields with same names inside
                             ``<case_dir>/manifest.json``)
+  * ``stl_bbox_set``      ← ``<case_dir>/cad/stl_bbox_set.json`` (or the
+                            ``stl_bbox_set`` field inside
+                            ``<case_dir>/manifest.json``) —
+                            DEC-V63-A-sub-M-D6-HTTP-WIRE
 
 DEC-V62-A-sub-REQ-SCHEMA-EXPAND (2026-05-14): the five new fields
 unblock ``unit_detector`` (gated on ``step_path``) and the A2-v2
 ``virtual_interface_detector`` (gated on ``interface_bodies`` +
 ``interface_specs``) in the HTTP path. ``advisor_stack.assemble_stack``
 already supports the corresponding kwargs; this route only adds wire
-plumbing + dataclass rehydration. D6 ``extra_body_advisor`` is NOT
-unblocked by this change (it requires ``stl_bbox_set`` and is not yet
-routed in ``assemble_stack`` — separate follow-up sub-DEC).
+plumbing + dataclass rehydration.
+
+DEC-V63-A-sub-M-D6-HTTP-WIRE (2026-05-14): closes the D6 deferred
+wire-up that REQ-SCHEMA-EXPAND explicitly carved out (§"this sub-DEC
+does NOT add"). Adds ``stl_bbox_set`` wire field + auto-discover from
+``<case_dir>/cad/stl_bbox_set.json`` (preferred) or the
+``stl_bbox_set`` field inside ``<case_dir>/manifest.json``.
+``assemble_stack`` registers the new ``stl_bbox_set`` kwarg and a
+matching D6 routing rule.
 
 DEC-V62-A-sub-D10 (2026-05-14): adds ``bc_specs`` + ``bc_fork`` wire
 fields routing into D10 ``bc_type_name_validity_advisor``. Closes
@@ -217,6 +227,30 @@ class AIReviewRequest(BaseModel):
             "geometry alias resolution). When absent AND case_dir is "
             "supplied, auto-discovered from "
             "<case_dir>/cad/face_normals.json. See DEC-V63-A-sub-D11."
+        ),
+    )
+    # DEC-V63-A-sub-M-D6-HTTP-WIRE (2026-05-14) — wire field below
+    # routes STL body bounding boxes into D6 extra_body_advisor (V55
+    # case_016 debris-cube class). Closes the deferred D6 wire-up that
+    # DEC-V62-A-sub-REQ-SCHEMA-EXPAND explicitly carved out of scope
+    # (§"this sub-DEC does NOT add") and V63-A carry-over #4.
+    stl_bbox_set: Optional[dict[str, list[float]]] = Field(
+        default=None,
+        description=(
+            "STL body-name → 6-element [xmin, ymin, zmin, xmax, ymax, "
+            "zmax] AABB in millimetres. Routes into D6 "
+            "extra_body_advisor for case_016-class FOD / debris / "
+            "helper-body detection. The advisor reads parts_manifest "
+            "for declared bodies + roles and flags STL entries that "
+            "are unregistered (critical), solid-inside-fluid-region "
+            "(warning), or undeclared-inclusion (warning). When "
+            "absent AND case_dir is supplied, auto-discovered from "
+            "<case_dir>/cad/stl_bbox_set.json OR the ``stl_bbox_set`` "
+            "field inside <case_dir>/manifest.json. Malformed entries "
+            "(non-list, wrong arity) are silently skipped by the "
+            "advisor's _coerce_bbox guard; the route validates only "
+            "the top-level dict shape. See "
+            "DEC-V63-A-sub-M-D6-HTTP-WIRE."
         ),
     )
     llm_enhance: bool = Field(
@@ -714,6 +748,8 @@ async def post_ai_review(
         "bc_specs": payload.bc_specs,
         # DEC-V63-A-sub-D11
         "stl_face_normals": payload.stl_face_normals,
+        # DEC-V63-A-sub-M-D6-HTTP-WIRE
+        "stl_bbox_set": payload.stl_bbox_set,
     }
     if payload.bc_fork is not None:
         explicit_kwargs["bc_fork"] = payload.bc_fork
@@ -745,6 +781,34 @@ async def post_ai_review(
                     loaded = None
                 if isinstance(loaded, dict):
                     explicit_kwargs["stl_face_normals"] = loaded
+
+        # DEC-V63-A-sub-M-D6-HTTP-WIRE: auto-discover stl_bbox_set when
+        # the wire field is absent. Search order (first hit wins):
+        #   (1) <case_dir>/cad/stl_bbox_set.json   (dedicated file —
+        #       mirrors face_normals.json convention)
+        #   (2) <case_dir>/manifest.json field ``stl_bbox_set``
+        # On-disk format mirrors the wire schema: dict[body_name,
+        # [xmin, ymin, zmin, xmax, ymax, zmax]] in millimetres.
+        # Per V130, missing files / malformed shapes degrade silently —
+        # the route never raises from auto-discover.
+        if explicit_kwargs.get("stl_bbox_set") is None:
+            bbox_set_path = case_path / "cad" / "stl_bbox_set.json"
+            if bbox_set_path.is_file():
+                try:
+                    bbox_set_loaded = json.loads(
+                        bbox_set_path.read_text(encoding="utf-8")
+                    )
+                except (OSError, json.JSONDecodeError):
+                    bbox_set_loaded = None
+                if isinstance(bbox_set_loaded, dict):
+                    explicit_kwargs["stl_bbox_set"] = bbox_set_loaded
+            if explicit_kwargs.get("stl_bbox_set") is None:
+                manifest_path = case_path / "manifest.json"
+                if manifest_path.is_file():
+                    manifest_doc = _load_dict_file(manifest_path) or {}
+                    candidate = manifest_doc.get("stl_bbox_set")
+                    if isinstance(candidate, dict):
+                        explicit_kwargs["stl_bbox_set"] = candidate
 
     # Codex R0 P2 (2026-05-14): thin_wall_inputs arrives as plain dicts
     # over the wire; the advisor expects ``PatchGeometry`` dataclass
@@ -785,6 +849,14 @@ async def post_ai_review(
                     continue
             coerced_normals[label] = triples
         explicit_kwargs["shm_stl_face_normals"] = coerced_normals
+
+    # DEC-V63-A-sub-M-D6-HTTP-WIRE: stl_bbox_set arrives as
+    # dict[body_name, list[float]] — Pydantic's strict dict typing on the
+    # request schema enforces the top-level shape (422 on non-dict). The
+    # D6 advisor accepts ``dict[str, Any]`` and performs its own per-entry
+    # bbox coercion via ``_coerce_bbox`` (drops malformed entries
+    # silently). Nothing further needed at the route boundary — the value
+    # passes through unchanged in ``explicit_kwargs`` to assemble_stack.
 
     # DEC-V62-A-sub-REQ-SCHEMA-EXPAND: wire-form lists/six-tuples →
     # assemble_stack-shaped kwargs. Pop the wire-form keys and replace
