@@ -50,6 +50,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ui.backend.routes._loopback_guard import require_loopback
 from ui.backend.services.advisor_stack import AdvisorStackReport, assemble_stack
 from ui.backend.services.geometry_ingest.thin_wall_advisor import PatchGeometry
+from ui.backend.services.v_series_drift_guard import enforce_at_route_boundary
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,17 @@ class AIReviewRequest(BaseModel):
             "compliance. When True and a provider is importable, the "
             "route adds an `llm_summary` field; on failure it silently "
             "downgrades to llm_enhanced=False."
+        ),
+    )
+    drift_mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "DEC-V62-A-sub-M-DRIFT-V2 enforcement mode. None or 'audit' "
+            "(default) appends a v_series_drift_guard audit entry without "
+            "dropping findings (backward compatible). 'strict' drops "
+            "findings citing V-rows absent from the runtime corpus. The "
+            "request body field is overridden by the `?drift_mode=` "
+            "query param when both are supplied."
         ),
     )
 
@@ -399,6 +411,23 @@ async def post_ai_review(
     t_advisor_start = time.perf_counter()
     report = assemble_stack(**stack_kwargs)
     advisor_ms = (time.perf_counter() - t_advisor_start) * 1000.0
+
+    # ----- 2.5 Apply V-series drift guard (DEC-V62-A-sub-M-DRIFT-V2) -----
+    # Query param wins over request body field; both default to "audit"
+    # so existing 50 route tests see identical wire contract (one extra
+    # advisor_calls entry · zero finding deltas).
+    drift_mode_raw = request.query_params.get("drift_mode") or payload.drift_mode or "audit"
+    drift_mode = drift_mode_raw.strip().lower()
+    if drift_mode not in ("audit", "strict"):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "failing_check": "drift_mode_value",
+                "expected": "audit|strict",
+                "got": drift_mode_raw,
+            },
+        )
+    report = enforce_at_route_boundary(report, mode=drift_mode)  # type: ignore[arg-type]
 
     # ----- 3. Optional LLM augment (best-effort, 4Q-gate-safe) -----
     llm_enhanced = False
