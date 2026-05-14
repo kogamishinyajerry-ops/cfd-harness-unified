@@ -401,3 +401,215 @@ def test_catalogs_are_disjoint() -> None:
     assert STANDARD_OPENFOAM_BCS.isdisjoint(FOAM_EXTEND_ONLY_BCS)
     assert STANDARD_OPENFOAM_BCS.isdisjoint(SENTINEL_BC_NAMES)
     assert FOAM_EXTEND_ONLY_BCS.isdisjoint(SENTINEL_BC_NAMES)
+
+
+# ---- V63-A Tier 1 sub-DEC M-D10-CATALOG-AUDIT (2026-05-14) --------------
+# Tests 14-19: catalog audit · case-driven expansion 80 → ≥100 mainline BCs.
+# Closes V62-A carry-over #2: future case BC names previously risked
+# emitting false unknown-warnings under fork='main'.
+
+
+# Ground-truth BC name sets extracted from the three V62-A LANDED cases'
+# live OpenFOAM 0/ boundaryField type declarations (sedimented 2026-05-14).
+# Sources:
+#   - case_006 ONERA M6 transonic   · ~/Desktop/case_006_onera_m6_transonic/inputs/parts_manifest.yaml
+#   - case_011 plate-fin compact HX · ~/Desktop/case_011_plate_fin_compact_hx/case/0/region_*/{U,T,p,p_rgh}
+#   - case_016 m219 cavity DES      · ~/Desktop/case_016_m219_cavity_des_acoustic/case/0/{U,p,T,k,omega,nut,alphat}
+CASE_006_BC_NAMES = frozenset({
+    "freestream",
+    "kqRWallFunction",
+    "noSlip",
+    "nutUSpaldingWallFunction",
+    "omegaWallFunction",
+    "symmetry",
+    "zeroGradient",
+})  # +2 foam-extend-only (characteristic*) + sentinel none_volume_reference handled separately
+CASE_011_BC_NAMES = frozenset({
+    "calculated",
+    "compressible::turbulentTemperatureCoupledBaffleMixed",
+    "fixedFluxPressure",
+    "fixedValue",
+    "flowRateInletVelocity",
+    "inletOutlet",
+    "pressureInletOutletVelocity",
+    "slip",
+    "zeroGradient",
+})
+CASE_016_BC_NAMES = frozenset({
+    "calculated",
+    "compressible::alphatWallFunction",
+    "freestream",
+    "freestreamPressure",
+    "inletOutlet",
+    "kqRWallFunction",
+    "nutUSpaldingWallFunction",
+    "omegaWallFunction",
+    "waveTransmissive",
+    "zeroGradient",
+})
+
+
+def test_catalog_size_at_least_100() -> None:
+    """V63-A sub-DEC M-D10-CATALOG-AUDIT goal: STANDARD_OPENFOAM_BCS must
+    cover ≥100 ESI v2412 mainline BCs (audited up from the 80-entry
+    pre-V63-A baseline) so industrial case profiles do not emit false
+    unknown-warnings on common mainline BC names. Floor is intentional
+    — future case-driven additions are encouraged but the audit floor
+    holds the line against accidental drift via removal."""
+    assert len(STANDARD_OPENFOAM_BCS) >= 100, (
+        f"STANDARD_OPENFOAM_BCS has {len(STANDARD_OPENFOAM_BCS)} entries; "
+        f"V63-A audit floor is 100. Did someone remove an entry without "
+        f"a sub-DEC? Catalog policy is append-only (see module docstring)."
+    )
+
+
+def test_case_006_onera_m6_bcs_all_recognized() -> None:
+    """case_006 ONERA M6 transonic standard BC names must verdict to
+    ``valid_standard``. The two foam-extend-only characteristic* names
+    are tested separately in ``test_foam_extend_only_bc_flagged_under_main_fork``
+    + the sentinel ``none_volume_reference`` in ``test_sentinel_bc_names_pass``."""
+    for name in CASE_006_BC_NAMES:
+        v = check_bc_type_name_validity(name, fork="main")
+        assert v.verdict == "valid_standard", (
+            f"case_006 BC name '{name}' should be valid_standard but is "
+            f"'{v.verdict}'. Catalog regression?"
+        )
+        assert v.severity == "pass"
+
+
+def test_case_011_v5b_bcs_all_recognized() -> None:
+    """case_011 v5b plate-fin compact HX (steady-laminar-CHT-multi-stream
+    · LANDED 2026-05-14 stack track c session 1). All BCs from 0/region_*/
+    must verdict to ``valid_standard``."""
+    for name in CASE_011_BC_NAMES:
+        v = check_bc_type_name_validity(name, fork="main")
+        assert v.verdict == "valid_standard", (
+            f"case_011 v5b BC name '{name}' should be valid_standard but "
+            f"is '{v.verdict}'. Catalog regression?"
+        )
+        assert v.severity == "pass"
+
+
+def test_case_016_m219_bcs_all_recognized() -> None:
+    """case_016 m219 cavity DES acoustic (compressible-DES-acoustic class
+    · LANDED 2026-05-14 stack track c session 2). All BCs from 0/{U,p,T,
+    k,omega,nut,alphat} boundaryField blocks must verdict to ``valid_standard``."""
+    for name in CASE_016_BC_NAMES:
+        v = check_bc_type_name_validity(name, fork="main")
+        assert v.verdict == "valid_standard", (
+            f"case_016 m219 BC name '{name}' should be valid_standard but "
+            f"is '{v.verdict}'. Catalog regression?"
+        )
+        assert v.severity == "pass"
+
+
+def test_no_overlap_between_standard_and_foam_extend() -> None:
+    """V63-A invariant restated: expanding STANDARD must not collide with
+    the foam-extend-only set. The catalogs would silently produce wrong
+    verdicts if overlap existed (a foam-extend-only name treated as
+    valid_standard would silence the V29 evidence row).
+
+    This duplicates the intent of ``test_catalogs_are_disjoint`` but
+    is named per the V63-A sub-DEC §Tests requirement so a future
+    grep on the carry-over closure can find it directly."""
+    overlap = STANDARD_OPENFOAM_BCS & FOAM_EXTEND_ONLY_BCS
+    assert overlap == set(), (
+        f"V63-A audit invariant violated: STANDARD and FOAM_EXTEND_ONLY "
+        f"share {sorted(overlap)}. A foam-extend-only BC would be "
+        f"falsely passed under fork='main' and the V29 evidence row "
+        f"(case_006 ONERA M6 transonic) silenced."
+    )
+
+
+def test_new_BCs_emit_severity_ok_when_fork_main() -> None:
+    """A representative sample of the V63-A new additions (wall velocity,
+    LES inlet, radiation, multiphase contact-angle, atm wallFunctions,
+    compressible::ns mirrors, prgh*Pressure family). Each must verdict
+    to ``valid_standard`` + severity ``pass`` under fork='main' (the
+    project default). Catches a future maintainer accidentally placing
+    one of these in FOAM_EXTEND_ONLY_BCS instead of STANDARD_OPENFOAM_BCS."""
+    v63_new_sample = [
+        # Wall velocity (moving / rotating / translating)
+        "rotatingWallVelocity",
+        "movingWallVelocity",
+        "translatingWallVelocity",
+        # Slip variants
+        "partialSlip",
+        "fixedNormalSlip",
+        # Inlet/outlet expansions
+        "pressureInletOutletParSlipVelocity",
+        "supersonicFreestream",
+        "turbulentDFSEMInlet",
+        "turbulentDigitalFilterInlet",
+        # prgh* family (multiphase pressure)
+        "prghPressure",
+        "prghTotalPressure",
+        # ABL / atm wall functions
+        "atmAlphatkWallFunction",
+        "atmEpsilonWallFunction",
+        "atmNutkWallFunction",
+        # Radiation
+        "MarshakRadiation",
+        "greyDiffusiveRadiation",
+        "greyDiffusiveRadiationViewFactor",
+        "wideBandDiffusiveRadiation",
+        # Cyclic / coupled extensions
+        "cyclicPeriodicAMI",
+        "nonuniformTransformCyclic",
+        "jumpCyclicAMI",
+        # Compressible::ns mirrors
+        "compressible::nutkWallFunction",
+        "compressible::nutUSpaldingWallFunction",
+        # Multiphase / VOF contact angle
+        "alphaContactAngle",
+        "constantAlphaContactAngle",
+        "dynamicAlphaContactAngle",
+        # Mapping derivatives
+        "mappedFlowRate",
+        "mappedMixed",
+    ]
+    for name in v63_new_sample:
+        assert name in STANDARD_OPENFOAM_BCS, (
+            f"V63-A audit invariant: '{name}' must be in STANDARD_OPENFOAM_BCS"
+        )
+        v = check_bc_type_name_validity(name, fork="main")
+        assert v.verdict == "valid_standard", (
+            f"V63-A new BC '{name}' verdict='{v.verdict}' under fork='main' — "
+            f"should be valid_standard"
+        )
+        assert v.severity == "pass"
+        assert v.suggested_fix is None
+
+    # Detect-side: a mock bc_specs using a mix of new BCs must report clean
+    bc_specs = [
+        {
+            "part_name": "rotor_hub",
+            "fields": {
+                "U": "rotatingWallVelocity",
+                "nut": "compressible::nutUSpaldingWallFunction",
+            },
+        },
+        {
+            "part_name": "atm_inlet",
+            "fields": {
+                "k": "atmBoundaryLayerInletK",
+                "epsilon": "atmEpsilonWallFunction",
+                "nut": "atmNutkWallFunction",
+            },
+        },
+        {
+            "part_name": "rad_wall",
+            "fields": {
+                "G": "greyDiffusiveRadiation",
+                "qr": "MarshakRadiation",
+            },
+        },
+    ]
+    report = detect_invalid_bc_types(bc_specs, fork="main")
+    assert report.is_clean, (
+        f"V63-A new BCs should produce clean report; got findings: "
+        f"{[(f.field_name, f.bc_type_name, f.verdict) for f in report.findings]}"
+    )
+    assert report.checked_count == 7
+    assert report.warning_count == 0
+    assert report.critical_count == 0
