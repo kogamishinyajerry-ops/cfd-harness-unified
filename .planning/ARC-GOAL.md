@@ -56,8 +56,8 @@
 ### Tier 1 · 解锁性（M-STACK-ASSEMBLY 必须先）
 
 - [x] **M-STACK-ASSEMBLY** advisor stack assembly layer · dispatch + composition pattern · commit: `b27c99f` (R0 LANDED) → `5b6c64c` (R1 fix 1 P1 + 2 P2) → `70e7da6` (R2 fix 1 P2 + 1 P3) → `4850683` (R3 fix 1 P1 · V133 round cap final · 2026-05-14 · sub-DEC `DEC-V62-A-sub-STACK-ASSEMBLY` Accepted · charter DEC `DEC-V62-A-charter` Accepted · 18-test suite · advisor_stack.py ~534 LOC · 4 detection paths × 8 advisors composable · 4Q gate verified inline (0 LLM imports, 0 file writes during dispatch) · workbench-env + [ui]-only-env both supported via try-real-first/fallback-placeholder dual path)
-- [ ] **M-ROUTE-AI-REVIEW** `/ai-review` route scaffold + V-series corpus retrieval + 4Q gate · commit: `_____`
-- [ ] **M-ROUTE-AI-DIAGNOSE** `/ai-diagnose` route scaffold + V-series-similarity matching · commit: `_____`
+- [x] **M-ROUTE-AI-REVIEW** `/api/ai-review` route + V-series corpus retrieval + 4Q gate · commit: `5abe3f4` → `ebbe95f` (R1 fix 1 P1 + 3 P2) → `943e2cd` (R2 APPROVE) → `3d7c150` trailer · sub-DEC `DEC-V62-A-sub-ROUTE-AI-REVIEW` Accepted (2026-05-14 · ai_review.py 315 LOC · Pydantic v2 schemas · auto-discover parts_manifest+shm_dict+thermo_dict+thin_wall_inputs from case_dir · crash-isolated advisor dispatch · 25-test suite · 4Q gate inline PASS · Codex MANDATORY APPROVE at R2)
+- [x] **M-ROUTE-AI-DIAGNOSE** `/api/ai-diagnose` route + V-series-similarity matching · commit: `fe89321` → `8f212f2` (R1) → `93342fa` (R2) → `f8b73b3` (R2-verbatim) → `ed58383` (closure record) · sub-DEC `DEC-V62-A-sub-M-ROUTE-AI-DIAGNOSE` Accepted (2026-05-14 · POST /api/ai-diagnose · top-K V-row matches by title-weighted Jaccard · Fix-suggestion extraction · optional advisor_stack cross-reference · 15-test suite · 4Q gate inline PASS · lexical-scan test verified 0 LLM imports · Codex MANDATORY APPROVE)
 - [ ] **M-4Q-AUDIT** 四问门控 stack-level cross-feature audit + LLM-offline acceptance test framework · commit: `_____`
 
 ### Tier 2 · advisor 加宽 + D-class literal closure + stack 验证
@@ -78,8 +78,8 @@
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 stack-level 路由 LANDED:           0 / 2   (M-STACK-ASSEMBLY [x] · 路由依赖 unblocked · M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE 可并行 dispatch)
-当前 4Q audit 状态:                    framework 已 inline 通过 (advisor_stack.py 4Q 验证) · M-4Q-AUDIT stack-level cross-feature audit not started
+当前 stack-level 路由 LANDED:           **2 / 2 ✓**   (M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE · Done dim #1 MET)
+当前 4Q audit 状态:                    framework inline 通过 in advisor_stack.py + ai_review.py + ai_diagnose.py 各自 4Q verified · M-4Q-AUDIT stack-level cross-feature audit (aggregated audit report) not started
 当前 stack-level Track C session:       0 / 3
 当前 D-class advisor LANDED:            **1 / 1 ✓**   (D6 extra_body_advisor LANDED · Done dim #4 MET)
 当前 LANDED advisor 总数:              **9 / 8** ✓   (A1, A2-v2, A3, A4, A5, A7, A8, A10 + D6 extra_body_advisor)
@@ -87,7 +87,7 @@
 当前左半轴均分:                        7.15 (v3) / 7.20
 ```
 
-最后更新时间：`2026-05-14 (V62-A first batch land · M-STACK-ASSEMBLY [x] 4-round Codex chain R0→R3 V133 cap · advisor_stack.py 534 LOC + 18 tests + charter DEC DEC-V62-A-charter Accepted · M-D6-PROMOTE [x] extra_body_advisor LANDED with V55 single-case + V61-198 §5.2 D-class waiver literal closure · D-class counter 0→1 · LANDED counter 8→9 · Done dim #4 MET · 28/28 tests passing · 路由依赖 unblocked → M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE 可并行 dispatch)` · 更新人：`Claude Code Opus 4.7 session (main · B22/B23 reconcile)`
+最后更新时间：`2026-05-14 (V62-A B24+B25 routes land · M-ROUTE-AI-REVIEW [x] 5abe3f4→943e2cd 3-round Codex chain APPROVE · M-ROUTE-AI-DIAGNOSE [x] fe89321→ed58383 chain APPROVE · stack-level 路由 LANDED 0/2 → 2/2 ✓ Done dim #1 MET · 50/50 route tests + 28/28 advisor tests = 78/78 passing · 4Q gate inline PASS each route · M-4Q-AUDIT cross-feature aggregated audit remaining · 2/6 Done dims now MET: Done #1 (stack routes 2/2) + Done #4 (D-class 1/1) · Tier 1 last milestone M-4Q-AUDIT unblocked)` · 更新人：`Claude Code Opus 4.7 session (main · B24/B25 reconcile)`
 
 ---
 
