@@ -59,20 +59,47 @@ needed; that is out of scope for V62-A.
 """
 from __future__ import annotations
 
+import importlib.util
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ui.backend.services.geometry_ingest import (
-    face_orientation_advisor,
-    inlet_outlet_validator,
-    shm_dict_validator,
-    thermo_polynomial_range_advisor,
-    thin_wall_advisor,
-    unit_detector,
-    virtual_interface_detector,
-)
+
+# Codex R0 P1 fix (2026-05-14): bypass ``geometry_ingest/__init__.py``
+# (which eagerly imports ``health_check`` → ``trimesh``) so this stack is
+# importable in base UI environments that install only ``[ui]`` extras
+# (the routes ``/ai-review`` and ``/ai-diagnose`` will run there).
+# The 7 advisor submodules import only stdlib (math / re / dataclasses /
+# pathlib), so loading them by file path is safe and side-effect-free.
+def _load_advisor(modname: str) -> Any:
+    """Load an advisor submodule directly from disk.
+
+    Registers under ``ui.backend.services.geometry_ingest.<modname>`` in
+    ``sys.modules`` so subsequent normal imports (e.g., from test code)
+    pick up the same module object — keeping monkeypatching reliable.
+    """
+    qualified = f"ui.backend.services.geometry_ingest.{modname}"
+    if qualified in sys.modules:
+        return sys.modules[qualified]
+    src = Path(__file__).parent / "geometry_ingest" / f"{modname}.py"
+    spec = importlib.util.spec_from_file_location(qualified, src)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError(f"could not load advisor submodule {qualified}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[qualified] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+face_orientation_advisor = _load_advisor("face_orientation_advisor")
+inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
+shm_dict_validator = _load_advisor("shm_dict_validator")
+thermo_polynomial_range_advisor = _load_advisor("thermo_polynomial_range_advisor")
+thin_wall_advisor = _load_advisor("thin_wall_advisor")
+unit_detector = _load_advisor("unit_detector")
+virtual_interface_detector = _load_advisor("virtual_interface_detector")
 
 
 # V-row evidence per advisor (canonical IDs from
@@ -113,14 +140,32 @@ class Finding:
 
 @dataclass(frozen=True)
 class AdvisorCall:
-    """Audit-trail entry for one dispatched advisor invocation."""
+    """Audit-trail entry for one dispatched advisor invocation.
+
+    Codex R0 P2 fix (2026-05-14): on the error path, ``output`` carries
+    a JSON-serializable dict ``{"exception_type": str, "message": str}``
+    instead of the raw ``Exception`` object. This keeps
+    ``json.dumps(asdict(report))`` reliable on the partial-failure path
+    that crash isolation is supposed to preserve. Callers needing the
+    live exception should re-raise from the calling site or run the
+    advisor directly (the stack does not retain exception tracebacks).
+    """
 
     advisor_name: str         # e.g., "shm_dict_validator"
     status: str               # "ok" | "error"
     input_summary: str        # serialized input description, ≤200 chars
-    output: Any               # native report dataclass, or Exception on error
+    output: Any               # native report dataclass, or {"exception_type", "message"} on error
     duration_ms: float        # wall-clock advisor runtime
     version: str              # source-module identifier (file path proxy)
+
+
+# Codex R0 P2 fix (2026-05-14): treat A5's "fail" severity as blocking
+# alongside "critical". A5 ``inlet_outlet_validator`` is the only LANDED
+# advisor using the "fail" label (V81 protocol violations) and they are
+# at least as actionable as A4/A8/A10 "critical" findings. Prior code
+# silently classified every V81 fail as 0/0, under-reporting blocking
+# findings to any route gate consuming these helpers.
+_BLOCKING_SEVERITIES: frozenset[str] = frozenset({"critical", "fail"})
 
 
 @dataclass(frozen=True)
@@ -139,7 +184,8 @@ class AdvisorStackReport:
 
     @property
     def critical_count(self) -> int:
-        return sum(1 for f in self.findings if f.severity == "critical")
+        """Count of blocking findings (severity in {critical, fail})."""
+        return sum(1 for f in self.findings if f.severity in _BLOCKING_SEVERITIES)
 
     @property
     def warning_count(self) -> int:
@@ -383,12 +429,18 @@ def _dispatch(
         )
     except Exception as exc:  # crash isolation per spec
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
+        # JSON-serializable error payload — see AdvisorCall docstring +
+        # Codex R0 P2 (2026-05-14).
+        error_payload = {
+            "exception_type": type(exc).__name__,
+            "message": str(exc),
+        }
         advisor_calls.append(
             AdvisorCall(
                 advisor_name=advisor_name,
                 status="error",
                 input_summary=input_summary,
-                output=exc,
+                output=error_payload,
                 duration_ms=elapsed_ms,
                 version=_module_version(module),
             )

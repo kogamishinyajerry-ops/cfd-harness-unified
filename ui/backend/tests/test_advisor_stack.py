@@ -257,7 +257,13 @@ def test_multi_artifact_dispatches_six_advisors(tmp_path: Path) -> None:
 
 
 def test_advisor_crash_is_isolated(monkeypatch: pytest.MonkeyPatch) -> None:
-    """If A4 raises, A5 still runs and the stack returns."""
+    """If A4 raises, A5 still runs and the stack returns.
+
+    Codex R0 P2 (2026-05-14): the error payload on AdvisorCall.output is
+    a JSON-serializable dict, not the raw Exception object — see
+    ``test_report_is_json_serializable_on_error_path`` for the round-trip
+    regression.
+    """
     from ui.backend.services.advisor_stack import face_orientation_advisor as fa_mod
 
     def boom(_manifest, **_kwargs):  # pragma: no cover - simulated crash
@@ -269,12 +275,93 @@ def test_advisor_crash_is_isolated(monkeypatch: pytest.MonkeyPatch) -> None:
     # A4 is in calls with status=error; A5 is in calls with status=ok.
     by_name = {c.advisor_name: c for c in r.advisor_calls}
     assert by_name["face_orientation_advisor"].status == "error"
-    assert isinstance(by_name["face_orientation_advisor"].output, RuntimeError)
+    assert by_name["face_orientation_advisor"].output == {
+        "exception_type": "RuntimeError",
+        "message": "simulated A4 crash",
+    }
     assert by_name["inlet_outlet_validator"].status == "ok"
     assert r.failed_advisor_count == 1
     # A4 contributes no findings; A5 still surfaces its V81 fail.
     assert all(f.source_advisor != "face_orientation_advisor" for f in r.findings)
     assert any(f.source_advisor == "inlet_outlet_validator" for f in r.findings)
+
+
+def test_report_is_json_serializable_on_error_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Codex R0 P2 regression: ``json.dumps(asdict(report))`` must succeed
+    even when an advisor raised. Prior code stored the raw Exception
+    object on AdvisorCall.output, which broke audit-trail persistence on
+    exactly the partial-failure path crash isolation is meant to
+    preserve."""
+    import json
+    from dataclasses import asdict
+
+    from ui.backend.services.advisor_stack import face_orientation_advisor as fa_mod
+
+    def boom(_manifest, **_kwargs):  # pragma: no cover - simulated
+        raise RuntimeError("simulated crash")
+
+    monkeypatch.setattr(fa_mod, "check_face_orientation", boom)
+    r = assemble_stack(parts_manifest=_parts_manifest_with_d7_violation())
+    # Round-trip — must not raise:
+    payload = json.dumps(asdict(r))
+    assert "RuntimeError" in payload
+    assert "simulated crash" in payload
+
+
+def test_critical_count_includes_fail_severity() -> None:
+    """Codex R0 P2 regression: A5 ``fail`` findings (V81 protocol
+    violations) must count as blocking in stack-level summaries.
+    Previously ``critical_count`` only counted ``severity='critical'`` so
+    a route gate consuming this helper would silently ignore V81
+    blocking findings from A5."""
+    r = assemble_stack(
+        parts_manifest={
+            "parts": [
+                # A5 fail: through-flow body missing boundary_emission
+                {"name": "supply_inlet", "role": "inlet"},
+            ]
+        }
+    )
+    assert r.advisor_count == 2  # A4 + A5
+    fail_findings = [f for f in r.findings if f.severity == "fail"]
+    assert len(fail_findings) == 1
+    assert r.critical_count == 1  # A5's fail counts as blocking
+    assert r.warning_count == 0
+
+
+def test_stack_importable_without_trimesh(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Codex R0 P1 regression: ``import advisor_stack`` must succeed in
+    base UI environments where the [workbench] extra (and therefore
+    ``trimesh``) is not installed. Prior code did
+    ``from ui.backend.services.geometry_ingest import ...`` which
+    triggered ``geometry_ingest/__init__.py`` and its eager
+    ``health_check.py`` → ``import trimesh`` chain."""
+    import importlib
+
+    # Force a fresh import of advisor_stack with trimesh blocked from sys.path.
+    # We can't actually uninstall trimesh from the test process, so we
+    # validate the structural fix: re-importing the module from disk
+    # should not trigger a trimesh import event.
+    seen: list[str] = []
+    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+
+    def tracer(name, globals=None, locals=None, fromlist=(), level=0):
+        seen.append(name)
+        return real_import(name, globals, locals, fromlist, level)
+
+    # Drop any cached entry so the module reloads fully
+    for cached in list(sys.modules):
+        if cached.startswith("ui.backend.services.advisor_stack"):
+            sys.modules.pop(cached, None)
+
+    monkeypatch.setattr("builtins.__import__", tracer)
+    importlib.import_module("ui.backend.services.advisor_stack")
+    monkeypatch.undo()
+
+    # Confirm the load did not pull trimesh transitively.
+    assert "trimesh" not in seen, (
+        "advisor_stack import pulled trimesh — Codex R0 P1 regression"
+    )
 
 
 def test_audit_call_fields_populated() -> None:
