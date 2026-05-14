@@ -1,7 +1,11 @@
-# V62 Charter · DRAFT (北极星候选 3 选 1)
+# V62 Charter · DRAFT (北极星候选 3 选 1) · SUPERSEDED 2026-05-14
+
+> **SUPERSEDED**: User selected North Star **V62-A (Stack consolidation)** on 2026-05-14.
+> Finalized charter at `.planning/2026-05-14_v62_charter.md` (10-12 milestones · Tier 1/2/3).
+> This DRAFT preserved for retro audit trail.
 
 **Generated**: 2026-05-14 by M-V62 charter preparation session (Claude Code Opus 4.7)
-**Status**: **DRAFT** — main session selects North Star (A/B/C) + finalizes
+**Status**: **SUPERSEDED** (was DRAFT) — V62-A selected
 **Predecessor**: DEC-V61-198 (closed by `.planning/decisions/2026-05-14_v61_198_CLOSE.md` DRAFT · arc 2026-05-07 → 2026-05-14 = 7 days)
 **Successor placeholder**: V63 (TBD post-arc-2)
 **Format**: ROADMAP-style (matches V61-198 arc plan convention · not yet a DEC)
