@@ -98,8 +98,17 @@ Commit trailer: `Surface-scan-found: ui/backend/routes/ai_advisor.py
   public route, FastAPI surface, dispatches to LANDED advisor stack
   whose blast radius depends on caller-controlled inputs).
 - Backend: 86gs `gpt-5.4` (xhigh) — governance baseline
-- Round cap: 3 per v2.3 (DEC-V61-133)
-- Commit trailer: `Codex-verified: <verdict>` after relay returns
+- Round cap: 3 per v2.3 (DEC-V61-133) — used 3/3
+
+### Review arc
+
+| Round | Commit  | Verdict           | Findings closed                                                                                         |
+|-------|---------|-------------------|---------------------------------------------------------------------------------------------------------|
+| R0    | 5abe3f4 | CHANGES_REQUIRED  | 1 P1 (loopback gate) · 3 P2 (thin_wall rehydration · audit filename uniqueness · property serialization) |
+| R1    | ebbe95f | CHANGES_REQUIRED  | 1 P2 (OverflowError on oversized bbox) · 1 P3 (falsey non-list patches) — both scoped to R1's new rehydrator |
+| R2    | 943e2cd | **APPROVE**       | No actionable regressions identified                                                                    |
+
+Final: `Codex-verified: APPROVE on R2 (943e2cd) · 86gs gpt-5.4 xhigh`
 
 ## Tests
 
