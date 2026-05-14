@@ -1,0 +1,401 @@
+{
+  "parts_manifest": {
+    "case_id": "case_006_onera_m6_transonic",
+    "cad_source": "tier1_reference_derived_onera_m6_wing",
+    "cad_source_tier": "Tier_1",
+    "cad_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/m6wing.html",
+    "source_geometry_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/foilmod.txt",
+    "raw_geometry_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/airfoil.txt",
+    "agard_reference": "Schmitt, V. and Charpin, F., AGARD AR-138, 1979",
+    "license": "NASA_public_validation_archive_AGARD_reference_verify_before_external_redistribution",
+    "generation_script": "scripts/build_cad.py",
+    "step_file": "inputs/cad_codex_v1.step",
+    "units_in_step": "mm",
+    "solver_target_v1": "rhoCentralFoam",
+    "solver_target_v2": "rhoPimpleFoam_if_lambda_shock_is_over_smoothed",
+    "numerics_class": "compressible_shock_density_based",
+    "freestream": {
+      "M_inf": 0.8395,
+      "alpha_deg": 3.06,
+      "Re_chord": 11720000.0,
+      "T_inf_K": 288.0,
+      "p_inf_Pa": 93600.0,
+      "T_total_inf_K": 328.5,
+      "p_total_inf_Pa": 148400.0,
+      "rho_inf_kg_m3": 1.133,
+      "U_inf_mps": 285.6,
+      "notes": "Reference-equivalent values derived from the published M/Re point using standard air properties."
+    },
+    "geometry_reference": {
+      "span_mm": 1196.3,
+      "mac_mm": 646.07,
+      "aspect_ratio": 3.8,
+      "taper_ratio": 0.562,
+      "leading_edge_sweep_deg": 30.0,
+      "trailing_edge_sweep_deg": 15.8,
+      "no_twist": true,
+      "published_pressure_stations_eta": [
+        0.2,
+        0.44,
+        0.65,
+        0.8,
+        0.9,
+        0.95,
+        0.99
+      ]
+    },
+    "validation_stations": [
+      {
+        "eta": 0.2,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp1l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp1u.ex"
+      },
+      {
+        "eta": 0.44,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp2l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp2u.ex"
+      },
+      {
+        "eta": 0.65,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp3l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp3u.ex"
+      },
+      {
+        "eta": 0.8,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp4l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp4u.ex"
+      },
+      {
+        "eta": 0.9,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp5l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp5u.ex"
+      },
+      {
+        "eta": 0.95,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp6l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp6u.ex"
+      },
+      {
+        "eta": 0.99,
+        "cp_lower_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp7l.ex",
+        "cp_upper_source_url": "https://www.grc.nasa.gov/WWW/wind/valid/m6wing/cp7u.ex"
+      }
+    ],
+    "parts": [
+      {
+        "name": "wing_surface_reference",
+        "role": "wall",
+        "bc": {
+          "U": "noSlip",
+          "p": "zeroGradient",
+          "T": "zeroGradient",
+          "nut": "nutUSpaldingWallFunction",
+          "k": "kqRWallFunction",
+          "omega": "omegaWallFunction"
+        },
+        "notes": "Primary ONERA M6 wing wall, published Cp stations must remain untouched."
+      },
+      {
+        "name": "root_fairing_pad",
+        "role": "auxiliary_wall_defect",
+        "defect_id": "D1",
+        "bc": {
+          "U": "noSlip",
+          "p": "zeroGradient",
+          "T": "zeroGradient",
+          "nut": "nutUSpaldingWallFunction",
+          "k": "kqRWallFunction",
+          "omega": "omegaWallFunction"
+        },
+        "notes": "Root-side auxiliary body, outside published pressure stations."
+      },
+      {
+        "name": "root_fairing_cover",
+        "role": "auxiliary_wall_defect",
+        "defect_id": "D1",
+        "bc": {
+          "U": "noSlip",
+          "p": "zeroGradient",
+          "T": "zeroGradient",
+          "nut": "nutUSpaldingWallFunction",
+          "k": "kqRWallFunction",
+          "omega": "omegaWallFunction"
+        },
+        "notes": "Intentional sub-mm gap partner for the root-side D1 defect."
+      },
+      {
+        "name": "tip_cap",
+        "role": "tip_cap_wall",
+        "bc": {
+          "U": "noSlip",
+          "p": "zeroGradient",
+          "T": "zeroGradient",
+          "nut": "nutUSpaldingWallFunction",
+          "k": "kqRWallFunction",
+          "omega": "omegaWallFunction"
+        },
+        "notes": "Separate tip closure body, isolated from the eta=0.99 pressure station."
+      },
+      {
+        "name": "tip_cap_sliver",
+        "role": "auxiliary_wall_defect",
+        "defect_id": "D4",
+        "bc": {
+          "U": "noSlip",
+          "p": "zeroGradient",
+          "T": "zeroGradient",
+          "nut": "nutUSpaldingWallFunction",
+          "k": "kqRWallFunction",
+          "omega": "omegaWallFunction"
+        },
+        "notes": "Tiny sliver on the tip-cap edge / fillet transition, outside published Cp stations."
+      },
+      {
+        "name": "symmetry_plane_root",
+        "role": "symmetry",
+        "bc": {
+          "U": "symmetry",
+          "p": "symmetry",
+          "T": "symmetry"
+        },
+        "notes": "Explicit half-wing symmetry patch at the wing root, standard transonic practice."
+      },
+      {
+        "name": "farfield_box",
+        "role": "farfield_domain_reference",
+        "bc": {
+          "U": "none_volume_reference",
+          "p": "none_volume_reference",
+          "T": "none_volume_reference"
+        },
+        "notes": "Outer-domain reference body, sized beyond 25 chords in all directions."
+      },
+      {
+        "name": "farfield_upstream",
+        "role": "farfield",
+        "bc": {
+          "U": "characteristicVelocityInletOutletVelocity",
+          "p": "characteristicPressureInletOutletPressure",
+          "T": "freestream"
+        },
+        "notes": "Upstream open boundary."
+      },
+      {
+        "name": "farfield_downstream",
+        "role": "farfield",
+        "bc": {
+          "U": "characteristicVelocityInletOutletVelocity",
+          "p": "characteristicPressureInletOutletPressure",
+          "T": "freestream"
+        },
+        "notes": "Downstream open boundary."
+      },
+      {
+        "name": "farfield_top",
+        "role": "farfield",
+        "bc": {
+          "U": "characteristicVelocityInletOutletVelocity",
+          "p": "characteristicPressureInletOutletPressure",
+          "T": "freestream"
+        },
+        "notes": "Upper farfield boundary."
+      },
+      {
+        "name": "farfield_bottom",
+        "role": "farfield",
+        "bc": {
+          "U": "characteristicVelocityInletOutletVelocity",
+          "p": "characteristicPressureInletOutletPressure",
+          "T": "freestream"
+        },
+        "notes": "Lower farfield boundary."
+      },
+      {
+        "name": "farfield_outboard",
+        "role": "farfield",
+        "bc": {
+          "U": "characteristicVelocityInletOutletVelocity",
+          "p": "characteristicPressureInletOutletPressure",
+          "T": "freestream"
+        },
+        "notes": "Outboard spanwise farfield boundary."
+      }
+    ],
+    "numerics_hints": {
+      "fluxScheme": "Kurganov",
+      "ddtSchemes": "localEuler",
+      "shock_limiter": {
+        "rho": "venkatakrishnan",
+        "rhoU": "venkatakrishnan",
+        "rhoE": "venkatakrishnan"
+      },
+      "divSchemes": {
+        "div_phi_rho": "Gauss Kurganov",
+        "div_phi_rhoU": "Gauss Kurganov",
+        "div_phi_rhoE": "Gauss Kurganov"
+      },
+      "notes": [
+        "If the lambda shock disappears, reduce limiter aggressiveness before falling back to rhoPimpleFoam.",
+        "Use forceCoeffs and Cp cuts at the seven published eta stations."
+      ]
+    },
+    "shock_detection": {
+      "primary_metric": "max_abs_dnM_upper_surface",
+      "primary_locations_eta": [
+        0.65,
+        0.95
+      ],
+      "secondary_metric": "lambda_shock_pattern_from_Cp_and_M_isolines",
+      "report_outputs": [
+        "upper_surface_Cp_vs_xc",
+        "upper_surface_Mach_vs_xc",
+        "spanwise_shock_foot_xc",
+        "max_upper_surface_Mach",
+        "forceCoeffs_Cl_Cd_Cm"
+      ]
+    },
+    "patch_naming_check": [
+      {
+        "all_names_match_regex": "^[A-Za-z][A-Za-z0-9_]*$"
+      },
+      {
+        "no_duplicate_names": true
+      },
+      {
+        "no_spaces_or_hyphens": true
+      }
+    ]
+  },
+  "shm_dict": {
+    "castellatedMesh": true,
+    "snap": true,
+    "addLayers": false,
+    "geometry": {
+      "wing_surface_reference": {
+        "type": "triSurfaceMesh",
+        "file": "wing_surface_reference.stl"
+      },
+      "tip_cap": {
+        "type": "triSurfaceMesh",
+        "file": "tip_cap.stl"
+      },
+      "root_fairing_pad": {
+        "type": "triSurfaceMesh",
+        "file": "root_fairing_pad.stl"
+      },
+      "root_fairing_cover": {
+        "type": "triSurfaceMesh",
+        "file": "root_fairing_cover.stl"
+      },
+      "tip_cap_sliver": {
+        "type": "triSurfaceMesh",
+        "file": "tip_cap_sliver.stl"
+      }
+    },
+    "castellatedMeshControls": {
+      "maxLocalCells": 4000000,
+      "maxGlobalCells": 6000000,
+      "minRefinementCells": 0,
+      "nCellsBetweenLevels": 3,
+      "resolveFeatureAngle": 30,
+      "allowFreeStandingZoneFaces": true,
+      "features": [],
+      "refinementSurfaces": {
+        "wing_surface_reference": {
+          "level": [
+            4,
+            5
+          ],
+          "patchInfo": {
+            "type": "wall"
+          }
+        },
+        "tip_cap": {
+          "level": [
+            4,
+            5
+          ],
+          "patchInfo": {
+            "type": "wall"
+          }
+        },
+        "root_fairing_pad": {
+          "level": [
+            3,
+            4
+          ],
+          "patchInfo": {
+            "type": "wall"
+          }
+        },
+        "root_fairing_cover": {
+          "level": [
+            3,
+            4
+          ],
+          "patchInfo": {
+            "type": "wall"
+          }
+        },
+        "tip_cap_sliver": {
+          "level": [
+            1,
+            2
+          ],
+          "patchInfo": {
+            "type": "wall"
+          }
+        }
+      },
+      "refinementRegions": {},
+      "locationInMesh": [
+        -5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "snapControls": {
+      "nSmoothPatch": 3,
+      "tolerance": 2.0,
+      "nSolveIter": 30,
+      "nRelaxIter": 5,
+      "nFeatureSnapIter": 10,
+      "implicitFeatureSnap": false,
+      "explicitFeatureSnap": true,
+      "multiRegionFeatureSnap": false
+    },
+    "addLayersControls": {
+      "relativeSizes": true,
+      "layers": {},
+      "expansionRatio": 1.2,
+      "finalLayerThickness": 0.4,
+      "minThickness": 0.05
+    },
+    "meshQualityControls": {},
+    "mergeTolerance": 1e-06
+  },
+  "thermo_dict": {
+    "thermoType": {
+      "type": "hePsiThermo",
+      "mixture": "pureMixture",
+      "transport": "const",
+      "thermo": "eConst",
+      "equationOfState": "perfectGas",
+      "specie": "specie",
+      "energy": "sensibleInternalEnergy"
+    },
+    "mixture": {
+      "specie": {
+        "molWeight": 28.96
+      },
+      "thermodynamics": {
+        "Cv": 717.5,
+        "Hf": 0
+      },
+      "transport": {
+        "mu": 1.7894e-05,
+        "Pr": 0.71
+      }
+    }
+  }
+}

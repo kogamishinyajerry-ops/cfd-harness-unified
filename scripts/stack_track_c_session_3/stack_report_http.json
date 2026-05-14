@@ -1,0 +1,72 @@
+{
+  "status_code": 200,
+  "advisor_count": 4,
+  "finding_count": 0,
+  "critical_count": 0,
+  "warning_count": 0,
+  "failed_advisor_count": 0,
+  "advisors_dispatched": [
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "shm_dict_validator",
+    "thermo_polynomial_range_advisor",
+    "v_series_drift_guard"
+  ],
+  "evidence_refs": [
+    "V100",
+    "V41",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V93",
+    "V99"
+  ],
+  "findings": [],
+  "advisor_calls": [
+    {
+      "advisor_name": "face_orientation_advisor",
+      "status": "ok",
+      "duration_ms": 0.012750038877129555,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "face_orientation_advisor.py"
+    },
+    {
+      "advisor_name": "inlet_outlet_validator",
+      "status": "ok",
+      "duration_ms": 0.027416041120886803,
+      "input_summary": "parts_manifest with 12 parts",
+      "version": "inlet_outlet_validator.py"
+    },
+    {
+      "advisor_name": "shm_dict_validator",
+      "status": "ok",
+      "duration_ms": 18.813124974258244,
+      "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'geometry']",
+      "version": "shm_dict_validator.py"
+    },
+    {
+      "advisor_name": "thermo_polynomial_range_advisor",
+      "status": "ok",
+      "duration_ms": 0.378916971385479,
+      "input_summary": "thermo species=['mixture', 'thermoType']",
+      "version": "thermo_polynomial_range_advisor.py"
+    },
+    {
+      "advisor_name": "v_series_drift_guard",
+      "status": "ok",
+      "duration_ms": 0.0,
+      "input_summary": "findings=0 mode=audit corpus=100",
+      "version": "ui.backend.services.v_series_drift_guard"
+    }
+  ],
+  "audit_artifact_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/audits/anon_ai_review_20260514T115122.983786Z_e5a9c4c0.json",
+  "llm_enhanced": false,
+  "env_keys_present": {
+    "ANTHROPIC_API_KEY": false,
+    "OPENAI_API_KEY": false,
+    "GOOGLE_API_KEY": false,
+    "DEEPSEEK_API_KEY": false
+  }
+}
