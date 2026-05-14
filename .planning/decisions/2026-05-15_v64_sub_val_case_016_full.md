@@ -4,7 +4,7 @@ title: V64-A first sub-DEC · case_016 m219 cavity DES acoustic PARTIAL → FULL
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 1 · M-VAL-CASE-016-FULL (PARTIAL → FULL conversion attempt · charter named this the "cheapest unblock" path)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed81b181c0cc43a53db095)
 authored_by: Claude Code Opus 4.7 (1M context) · main session B53
 authored_at: 2026-05-15
 confidence: med

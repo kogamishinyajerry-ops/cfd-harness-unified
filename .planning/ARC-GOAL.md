@@ -69,7 +69,8 @@
 
 - [ ] **M-V64A-VAL-FULL-1** case_004 NREL Phase VI MRF FULL validation report · mesh v2 + solver convergence + NREL UAE Sequence S 实验对比 (≥3 wind speed points) · commit: `_____`
 - [ ] **M-V64A-VAL-FULL-2** case_011 (or non-degenerate substitute) FULL validation report · solver convergence + plate-fin HX literature/handbook 对比 · commit: `_____`
-- [ ] **M-V64A-VAL-FULL-3** 3rd FULL report · **candidate (cheapest path)**: case_016 window extension + Heller-Bliss SPL comparison (solver already converged 8.5e-8 · only on-disk window extension needed) · alternative: case_009 Sandia Flame D vs Sandia experimental DB · or case_016 ONERA M6 shock-position · commit: `_____`
+- [x] **M-V64A-VAL-CASE-016-FULL** (B53 · charter §3 "cheapest unblock" attempt · **PARTIAL v2 verdict · charter premise refuted**) · commit chain `356be51` (feat controlDict 0.5→40ms) → `4e8522d` (validation report v2 PARTIAL · crash forensics) → `a7eb58c` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-VAL-CASE-016-FULL` Accepted (2026-05-15 · rhoPimpleFoam crashed t=1.24ms sigFpe FE_DIVBYZERO in libfluidThermophysicalModels · likely T-domain violation in shock startup · 2-axis problem [thermo stability + window extension] not 1-axis · NOT counted toward Done #1 FULL · Done #1 stays 0/3 · M-V64A-VAL-FULL-3 candidate path now reconsidered: case_009 Sandia Flame D OR case_006 ONERA M6 shock-position as fallback · confidence: med · 4Q gate inline PASS · briefing explicitly authorized "PARTIAL v2 · 不掩盖")
+- [ ] **M-V64A-VAL-FULL-3** 3rd FULL report · **candidate path (case_016 charter-cheapest refuted via B53)**: case_009 Sandia Flame D vs Sandia experimental DB OR case_006 ONERA M6 shock-position OR case_016 with thermo-FPE bounding (sutherland T-clamps) · commit: `_____`
 - [ ] **M-V64A-MESH-CONV-STUDY** mesh convergence study (h/2 + h/4) 在 ≥1 case 上 monotonic convergence trend · commit: `_____`
 
 ### Tier 3 · close
@@ -84,7 +85,7 @@
 
 ```
 当前 FULL validation reports (real solver convergence + literature delta):
-                                                  0 / 3 (start) · PARTIAL-to-FULL conversion 0/3 起点
+                                                  **0 / 3 strict** (B53 case_016 PARTIAL v2 attempted · charter premise refuted · NOT FULL · 待 M-V64A-MESH-GEN-V2 + M-V64A-CASE-006-SUBSTRATE-V2 + M-V64A-VAL-FULL-3 new candidate path)
 当前 canonical literature comparisons:            0 / 3 (start)
 当前 mesh convergence study (h/2 + h/4 monotonic): 0 / 1 (start · case TBD)
 当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (start · target 2/3 · over-met 3/3)

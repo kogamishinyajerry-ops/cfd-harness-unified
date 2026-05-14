@@ -4,7 +4,7 @@ title: V64-A Validation Maturity Arc · charter DEC · elevated from plan-file a
 status: Accepted
 parent_dec: V63-A-close
 phase: V64-A charter (Validation Maturity · ratified 2026-05-15)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed810f8d44e3ec681755cb)
 authored_by: Claude Code Opus 4.7 (1M context) · main session B52
 authored_at: 2026-05-15
 confidence: med
