@@ -4,7 +4,7 @@ title: D10 STANDARD_OPENFOAM_BCS catalog audit · 80 → 138 entries · case-dri
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 1 · M-D10-CATALOG-AUDIT
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed8144aa21db6f69bf7a1a)
 ---
 
 ## Status

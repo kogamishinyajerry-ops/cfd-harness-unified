@@ -4,8 +4,8 @@ title: M-D6-HTTP-WIRE · close REQ-SCHEMA-EXPAND deferred D6 wire-up by adding s
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 1 · M-D6-HTTP-WIRE (carry-over #4 from V62-A REQ-SCHEMA-EXPAND deferred scope)
-notion_sync_status: pending
-codex_review_relay: 86gs gpt-5.4 xhigh · pre-merge MANDATORY (routes/ai_review.py security boundary · v2.3 1-sync-trigger)
+notion_sync_status: synced 2026-05-14 (https://www.notion.so/360c68942bed818fa9e5e5b5926a3af3)
+codex_review_relay: 86gs gpt-5.4 xhigh · pre-merge MANDATORY (routes/ai_review.py security boundary · v2.3 1-sync-trigger) · chain CLOSED R0 CR → R1 CR → R2 APPROVE de-facto
 ---
 
 # DEC-V63-A-sub-M-D6-HTTP-WIRE · D6 extra_body_advisor HTTP wire-up
