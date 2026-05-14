@@ -1,12 +1,18 @@
-# ARC-GOAL · V62 Advisor Stack Closure Arc
+# ARC-GOAL · V62-A Advisor Stack Closure Arc · **CLOSED 2026-05-14**
+
+> **Frozen snapshot.** V62-A closed per `.planning/decisions/2026-05-14_v62_close_dec.md` (DEC-V62-A-close Accepted) 2026-05-14. Final state: **6/6 Done dims MET ✓** (clean close · no epsilon-margin invoked · honest data-driven · no formula tuning). Successor: **V63-A Industrial Scale-Up Arc** (live in `.planning/ARC-GOAL.md` + `.planning/2026-05-14_v63_charter.md` + `DEC-V63-A-charter` Accepted).
 
 **Plan SSOT**: [.planning/2026-05-14_v62_charter.md](2026-05-14_v62_charter.md)
+**Close DEC**: [.planning/decisions/2026-05-14_v62_close_dec.md](decisions/2026-05-14_v62_close_dec.md) (DEC-V62-A-close Accepted 2026-05-14)
 **Predecessor**: [V61-198 advisor substrate arc · CLOSED 2026-05-14](ARC-GOAL-V61-198-CLOSED.md)
+**Successor**: [V63-A Industrial Scale-Up](ARC-GOAL.md) (charter DEC-V63-A-charter · plan-file `2026-05-14_v63_charter.md`)
 **Started**: 2026-05-14
+**Closed**: 2026-05-14 (same-day · 38-commit B-arc chain B21–B38 within session)
 **Mode**: milestone-driven (no calendar)
 **Selected**: V62-A (Stack consolidation) · user-ratified 2026-05-14 from 3 candidates
 
 > 读这个文件 90 秒能回答：「这个 arc 完了没？」「该不该开新 arc？」「下个 session 接什么？」
+> **A**: V62-A 完了 · 6/6 Done dims MET ✓ · V63-A active (Industrial Scale-Up) · next: M-D11-DRAFT (B39).
 
 ---
 
