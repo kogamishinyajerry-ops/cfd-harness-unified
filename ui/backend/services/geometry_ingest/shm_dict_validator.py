@@ -12,6 +12,15 @@ v2 entry-point type-guard gap · passing a non-dict raised an opaque
 ``'str' object has no attribute 'get'`` deep in ``_walk_dict_keys``
 instead of a typed, actionable error at the API boundary).
 
+V99-WIDEN (case_011 v5b · 2026-05-14 · M-STACK-TRACK-1 §8 enh #1):
+geometry entries may key off the source ``.stl`` filename and carry a
+``name:`` alias that is the canonical patch token referenced by
+``refinementSurfaces`` / ``refinementRegions``. The Path (b)/(b')/(c)
+cross-reference checks resolve those aliases (plus a defensive V100
+parens-stripping for ``name (token)`` wordList-output convention) before
+emitting ``missing_geometry_ref`` / ``missing_region_ref`` /
+``geometry_orphan`` so 6 case_011 v5b false-positives → 0.
+
 Design choice — pure dict consumer (mirrors A4 :mod:`face_orientation_advisor`
 and A5 :mod:`inlet_outlet_validator`):
 
@@ -39,7 +48,9 @@ References:
   (case_003 v2 STL/dict cross-consistency + API type-guard sediments)
 - Draft patch ``.planning/patches/draft_a8_shm_dict_validator_2026-05-09.md``
 - Parent sub-DECs: V61-198-sub-A8 (2026-05-14, V52+V86) ·
-  V61-198-sub-A8-widening-V99-V100 (2026-05-14, V99+V100)
+  V61-198-sub-A8-widening-V99-V100 (2026-05-14, V99+V100) ·
+  DEC-V62-A-sub-A8-V99-WIDEN (2026-05-14, V99/V100 ``name:`` alias +
+  parens-stripping · closes M-STACK-TRACK-1 §8 enh #1)
 - Sibling validator pattern: ``face_orientation_advisor.py`` (A4),
   ``inlet_outlet_validator.py`` (A5)
 """
@@ -217,6 +228,77 @@ def _suggestion_for_constrained_patch(patch_type: str, surf_name: str) -> str:
     )
 
 
+def _strip_geometry_alias(raw: str) -> str:
+    """Strip whitespace and a single layer of OpenFOAM list-form
+    parentheses from a geometry-entry ``name:`` alias value (V100-WIDEN).
+
+    ``foamDictionary -value -entry`` can wrap single-word tokens in
+    ``(...)`` when round-tripping through wordList parsers; strip one
+    outer paren-pair so ``name (region_hot_fluid)`` resolves to the same
+    canonical identifier as ``name region_hot_fluid``. Empty-after-strip
+    returns ``""`` so the caller can drop the alias.
+    """
+    s = raw.strip()
+    if len(s) >= 2 and s.startswith("(") and s.endswith(")"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _resolve_geometry_aliases(
+    geometry: dict[str, Any],
+) -> tuple[tuple[str, ...], dict[str, frozenset[str]], frozenset[str]]:
+    """Map each geometry literal key to its effective canonical name(s).
+
+    V99-WIDEN (case_011 v5b · M-STACK-TRACK-1 §8 enh #1): native
+    snappyHexMeshDict idiom uses the source ``.stl`` filename as the
+    geometry key and aliases it to the canonical patch token via a
+    ``name:`` attribute, e.g.::
+
+        geometry {
+            region_hot_fluid.stl { type triSurfaceMesh; name region_hot_fluid; }
+        }
+        castellatedMeshControls {
+            refinementSurfaces { region_hot_fluid { ... } }
+        }
+
+    The Path (b)/(b')/(c) cross-reference checks must accept either the
+    literal key or the ``name:`` alias (parens-stripped per
+    :func:`_strip_geometry_alias`) as a match. ``name:`` keys outside
+    the ``geometry`` block are NOT consumed — alias resolution is scoped
+    to geometry entries only.
+
+    Returns
+    -------
+    literal_keys: tuple[str, ...]
+        Original ``geometry.keys()`` order (preserved for
+        :class:`ShmDictReport.geometry_names` backward compatibility).
+    alias_map: dict[str, frozenset[str]]
+        Literal key → set of effective canonical names {literal_key,
+        alias_if_present}. Always contains at least the literal key.
+    all_effective_names: frozenset[str]
+        Union of every effective name across the geometry block, used
+        for O(1) ``in``-membership checks during Path (b)/(c).
+    """
+    if not isinstance(geometry, dict):
+        return (), {}, frozenset()
+    literal_keys: list[str] = []
+    alias_map: dict[str, frozenset[str]] = {}
+    union: set[str] = set()
+    for gkey, gval in geometry.items():
+        key_str = str(gkey)
+        literal_keys.append(key_str)
+        effective: set[str] = {key_str}
+        if isinstance(gval, dict):
+            alias = gval.get("name")
+            if isinstance(alias, str):
+                stripped = _strip_geometry_alias(alias)
+                if stripped:
+                    effective.add(stripped)
+        alias_map[key_str] = frozenset(effective)
+        union.update(effective)
+    return tuple(literal_keys), alias_map, frozenset(union)
+
+
 def _walk_dict_keys(node: Any, path: str, out: list[tuple[str, str, str]]) -> None:
     """Recursively collect (key, parent_block, full_path) triples.
 
@@ -326,7 +408,14 @@ def validate_shm_dict(
 
     findings: list[ShmFinding] = []
     geometry = parsed_dict.get("geometry") or {}
-    geometry_names = tuple(geometry.keys()) if isinstance(geometry, dict) else ()
+    # V99-WIDEN (M-STACK-TRACK-1 §8 enh #1): resolve geometry entry
+    # `name:` aliases (with V100-WIDEN parens-stripping) so Path (b)/
+    # (b')/(c) cross-reference checks honor native OpenFOAM idiom.
+    # ``geometry_names`` tuple stays as literal keys for backward-compat
+    # with ShmDictReport consumers.
+    geometry_names, geometry_alias_map, all_effective_names = (
+        _resolve_geometry_aliases(geometry if isinstance(geometry, dict) else {})
+    )
 
     cmc = parsed_dict.get("castellatedMeshControls") or {}
     if not isinstance(cmc, dict):
@@ -384,10 +473,12 @@ def validate_shm_dict(
             )
 
     # --- Path (b): refinementSurfaces references geometry --------------
+    # V99-WIDEN: match against the union of literal keys + `name:`
+    # aliases instead of literal keys only.
     rs = cmc.get("refinementSurfaces") or {}
     if isinstance(rs, dict):
         for surf_name in rs.keys():
-            if surf_name not in geometry_names:
+            if surf_name not in all_effective_names:
                 findings.append(
                     ShmFinding(
                         code="missing_geometry_ref",
@@ -405,10 +496,11 @@ def validate_shm_dict(
                 )
 
     # --- Path (c): refinementRegions references geometry ---------------
+    # V99-WIDEN: same alias-aware lookup as Path (b).
     rr = cmc.get("refinementRegions") or {}
     if isinstance(rr, dict):
         for reg_name in rr.keys():
-            if reg_name not in geometry_names:
+            if reg_name not in all_effective_names:
                 findings.append(
                     ShmFinding(
                         code="missing_region_ref",
@@ -426,13 +518,17 @@ def validate_shm_dict(
                 )
 
     # --- Path (b'): geometry orphan (no refinement reference at all) ---
+    # V99-WIDEN: an entry counts as referenced if ANY of its effective
+    # names (literal key OR `name:` alias) appears in refed; orphan
+    # finding still reports the literal key for actionable location.
     refed = set()
     if isinstance(rs, dict):
         refed.update(rs.keys())
     if isinstance(rr, dict):
         refed.update(rr.keys())
     for gname in geometry_names:
-        if gname not in refed:
+        effective = geometry_alias_map.get(gname, frozenset({gname}))
+        if effective.isdisjoint(refed):
             findings.append(
                 ShmFinding(
                     code="geometry_orphan",
