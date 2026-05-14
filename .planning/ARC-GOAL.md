@@ -58,7 +58,7 @@
 - [x] **M-STACK-ASSEMBLY** advisor stack assembly layer · dispatch + composition pattern · commit: `b27c99f` (R0 LANDED) → `5b6c64c` (R1 fix 1 P1 + 2 P2) → `70e7da6` (R2 fix 1 P2 + 1 P3) → `4850683` (R3 fix 1 P1 · V133 round cap final · 2026-05-14 · sub-DEC `DEC-V62-A-sub-STACK-ASSEMBLY` Accepted · charter DEC `DEC-V62-A-charter` Accepted · 18-test suite · advisor_stack.py ~534 LOC · 4 detection paths × 8 advisors composable · 4Q gate verified inline (0 LLM imports, 0 file writes during dispatch) · workbench-env + [ui]-only-env both supported via try-real-first/fallback-placeholder dual path)
 - [x] **M-ROUTE-AI-REVIEW** `/api/ai-review` route + V-series corpus retrieval + 4Q gate · commit: `5abe3f4` → `ebbe95f` (R1 fix 1 P1 + 3 P2) → `943e2cd` (R2 APPROVE) → `3d7c150` trailer · sub-DEC `DEC-V62-A-sub-ROUTE-AI-REVIEW` Accepted (2026-05-14 · ai_review.py 315 LOC · Pydantic v2 schemas · auto-discover parts_manifest+shm_dict+thermo_dict+thin_wall_inputs from case_dir · crash-isolated advisor dispatch · 25-test suite · 4Q gate inline PASS · Codex MANDATORY APPROVE at R2)
 - [x] **M-ROUTE-AI-DIAGNOSE** `/api/ai-diagnose` route + V-series-similarity matching · commit: `fe89321` → `8f212f2` (R1) → `93342fa` (R2) → `f8b73b3` (R2-verbatim) → `ed58383` (closure record) · sub-DEC `DEC-V62-A-sub-M-ROUTE-AI-DIAGNOSE` Accepted (2026-05-14 · POST /api/ai-diagnose · top-K V-row matches by title-weighted Jaccard · Fix-suggestion extraction · optional advisor_stack cross-reference · 15-test suite · 4Q gate inline PASS · lexical-scan test verified 0 LLM imports · Codex MANDATORY APPROVE)
-- [ ] **M-4Q-AUDIT** 四问门控 stack-level cross-feature audit + LLM-offline acceptance test framework · commit: `_____`
+- [x] **M-4Q-AUDIT** 四问门控 stack-level cross-feature audit + LLM-offline acceptance test framework · commit: `ae4500e` (acceptance test) → `94d0221` (audit doc + sub-DEC) → this commit (ARC-GOAL reconcile) · sub-DEC `DEC-V62-A-sub-M-4Q-AUDIT` Accepted 2026-05-14 · `.planning/audits/v62_stack_4q_audit.md` 3×4 matrix signed by Opus 4.7 · `test_4q_gate_stack_acceptance.py` 4 acceptance tests Q1-Q4 PASS via `monkeypatch.delenv` LLM keys + sha256 case_dir invariant · 4/4 isolation + 72/72 full V62-A suite green · Tier 1 CLOSED · Done dim #2 MET ✓
 
 ### Tier 2 · advisor 加宽 + D-class literal closure + stack 验证
 
@@ -79,7 +79,7 @@
 
 ```
 当前 stack-level 路由 LANDED:           **2 / 2 ✓**   (M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE · Done dim #1 MET)
-当前 4Q audit 状态:                    framework inline 通过 in advisor_stack.py + ai_review.py + ai_diagnose.py 各自 4Q verified · M-4Q-AUDIT stack-level cross-feature audit (aggregated audit report) not started
+当前 4Q audit 状态:                    **MET ✓**   stack-level cross-feature audit signed-off (`.planning/audits/v62_stack_4q_audit.md` + `test_4q_gate_stack_acceptance.py` 4-test acceptance suite · sub-DEC `DEC-V62-A-sub-M-4Q-AUDIT` Accepted · Done dim #2 MET)
 当前 stack-level Track C session:       0 / 3
 当前 D-class advisor LANDED:            **1 / 1 ✓**   (D6 extra_body_advisor LANDED · Done dim #4 MET)
 当前 LANDED advisor 总数:              **9 / 8** ✓   (A1, A2-v2, A3, A4, A5, A7, A8, A10 + D6 extra_body_advisor)
@@ -87,7 +87,7 @@
 当前左半轴均分:                        7.15 (v3) / 7.20
 ```
 
-最后更新时间：`2026-05-14 (V62-A B24+B25 routes land · M-ROUTE-AI-REVIEW [x] 5abe3f4→943e2cd 3-round Codex chain APPROVE · M-ROUTE-AI-DIAGNOSE [x] fe89321→ed58383 chain APPROVE · stack-level 路由 LANDED 0/2 → 2/2 ✓ Done dim #1 MET · 50/50 route tests + 28/28 advisor tests = 78/78 passing · 4Q gate inline PASS each route · M-4Q-AUDIT cross-feature aggregated audit remaining · 2/6 Done dims now MET: Done #1 (stack routes 2/2) + Done #4 (D-class 1/1) · Tier 1 last milestone M-4Q-AUDIT unblocked) · Tier 2 first milestone LANDED (M-DRIFT-V2) — DEC-V62-A-sub-M-DRIFT-V2 Accepted · v_series_drift_guard.py 269 LOC + 8 new tests · 58 combined tests green · audit mode default backward compatible)` · 更新人：`Claude Code Opus 4.7 session (main · M-DRIFT-V2 land)`
+最后更新时间：`2026-05-14 (V62-A B24+B25 routes land · M-ROUTE-AI-REVIEW [x] 5abe3f4→943e2cd 3-round Codex chain APPROVE · M-ROUTE-AI-DIAGNOSE [x] fe89321→ed58383 chain APPROVE · stack-level 路由 LANDED 0/2 → 2/2 ✓ Done dim #1 MET · 50/50 route tests + 28/28 advisor tests = 78/78 passing · 4Q gate inline PASS each route · M-4Q-AUDIT cross-feature aggregated audit remaining · 2/6 Done dims now MET: Done #1 (stack routes 2/2) + Done #4 (D-class 1/1) · Tier 1 last milestone M-4Q-AUDIT unblocked) · B26 (Tier 1 CLOSE · M-4Q-AUDIT [x] · sub-DEC DEC-V62-A-sub-M-4Q-AUDIT Accepted · audit doc .planning/audits/v62_stack_4q_audit.md 3×4 matrix signed · test_4q_gate_stack_acceptance.py 4-test Q1-Q4 suite green via monkeypatch.delenv + sha256 case_dir invariant · 4/4 isolation + 72/72 V62-A bundle PASS · Done dim #2 partial → MET ✓ · 3/6 Done dims now MET: #1 + #2 + #4 · Tier 1 fully closed · Tier 2 stack-level Track C unblocked) · Tier 2 first milestone LANDED (M-DRIFT-V2) — DEC-V62-A-sub-M-DRIFT-V2 Accepted · v_series_drift_guard.py 269 LOC + 8 new tests · 58 combined tests green · audit mode default backward compatible)` · 更新人：`Claude Code Opus 4.7 session (main · M-DRIFT-V2 land + B26 M-4Q-AUDIT close)`
 
 ---
 
