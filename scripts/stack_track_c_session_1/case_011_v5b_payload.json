@@ -1,0 +1,187 @@
+{
+  "case_label": "case_011_v5b",
+  "parts_manifest": {
+    "parts": [
+      {
+        "name": "region_hot_fluid",
+        "role": "cellZone",
+        "boundary_emission": "sealed_room_natural_convection",
+        "bbox": [
+          0.0,
+          0.0,
+          0.0,
+          0.18,
+          0.118,
+          0.09
+        ]
+      },
+      {
+        "name": "region_cold_fluid",
+        "role": "cellZone",
+        "boundary_emission": "sealed_room_natural_convection",
+        "bbox": [
+          0.0,
+          0.0,
+          0.0,
+          0.18,
+          0.118,
+          0.09
+        ]
+      },
+      {
+        "name": "region_solid",
+        "role": "cellZone",
+        "boundary_emission": "sealed_room_natural_convection",
+        "bbox": [
+          0.0,
+          0.0,
+          0.0,
+          0.18,
+          0.118,
+          0.09
+        ]
+      }
+    ],
+    "boundary_zones": []
+  },
+  "shm_dict": {
+    "castellatedMesh": true,
+    "snap": true,
+    "addLayers": false,
+    "geometry": {
+      "region_hot_fluid.stl": {
+        "type": "triSurfaceMesh",
+        "name": "region_hot_fluid"
+      },
+      "region_cold_fluid.stl": {
+        "type": "triSurfaceMesh",
+        "name": "region_cold_fluid"
+      },
+      "region_solid.stl": {
+        "type": "triSurfaceMesh",
+        "name": "region_solid"
+      }
+    },
+    "castellatedMeshControls": {
+      "maxLocalCells": 200000,
+      "maxGlobalCells": 8000000,
+      "minRefinementCells": 10,
+      "nCellsBetweenLevels": 2,
+      "resolveFeatureAngle": 30,
+      "features": [
+        {
+          "file": "region_hot_fluid.eMesh",
+          "level": 2
+        },
+        {
+          "file": "region_cold_fluid.eMesh",
+          "level": 2
+        },
+        {
+          "file": "region_solid.eMesh",
+          "level": 2
+        }
+      ],
+      "refinementSurfaces": {
+        "region_hot_fluid": {
+          "level": [
+            1,
+            2
+          ],
+          "cellZone": "region_hot_fluid",
+          "faceZone": "region_hot_fluid",
+          "cellZoneInside": "insidePoint",
+          "insidePoint": [
+            0.09,
+            0.05825,
+            0.045
+          ]
+        },
+        "region_cold_fluid": {
+          "level": [
+            2,
+            3
+          ],
+          "cellZone": "region_cold_fluid",
+          "faceZone": "region_cold_fluid",
+          "cellZoneInside": "inside"
+        },
+        "region_solid": {
+          "level": [
+            3,
+            4
+          ],
+          "cellZone": "region_solid",
+          "faceZone": "region_solid",
+          "cellZoneInside": "insidePoint",
+          "insidePoint": [
+            0.09,
+            0.06,
+            0.0191
+          ]
+        }
+      },
+      "refinementRegions": {},
+      "locationInMesh": [
+        0.09,
+        0.06175,
+        0.045
+      ],
+      "allowFreeStandingZoneFaces": true
+    },
+    "snapControls": {
+      "nSmoothPatch": 3,
+      "tolerance": 2.0,
+      "nSolveIter": 30,
+      "nRelaxIter": 5,
+      "nFeatureSnapIter": 10,
+      "implicitFeatureSnap": true,
+      "explicitFeatureSnap": false,
+      "multiRegionFeatureSnap": true
+    },
+    "addLayersControls": {
+      "relativeSizes": true,
+      "layers": {},
+      "expansionRatio": 1.2,
+      "finalLayerThickness": 0.5,
+      "minThickness": 0.1,
+      "nGrow": 0,
+      "featureAngle": 180,
+      "nRelaxIter": 3,
+      "nSmoothSurfaceNormals": 1,
+      "nSmoothNormals": 3,
+      "nSmoothThickness": 10,
+      "maxFaceThicknessRatio": 0.5,
+      "maxThicknessToMedialRatio": 0.3,
+      "minMedialAxisAngle": 90,
+      "nBufferCellsNoExtrude": 0,
+      "nLayerIter": 50
+    },
+    "meshQualityControls": {
+      "#include": "meshQualityDict"
+    },
+    "debug": 0,
+    "mergeTolerance": 1e-06
+  },
+  "thin_wall_inputs": {
+    "patches": [
+      {
+        "name": "cold_fin_rear_third",
+        "bbox_dimensions": [
+          0.0006,
+          0.016,
+          0.18
+        ]
+      }
+    ],
+    "refinement_levels": {
+      "cold_fin_rear_third": [
+        1,
+        2
+      ]
+    },
+    "background_cell_size": 0.004
+  },
+  "step_path": "/Users/Zhuanz/Desktop/case_011_plate_fin_compact_hx/inputs/cad_codex_v1.step",
+  "step_bbox_max_extent_raw": 0.18
+}

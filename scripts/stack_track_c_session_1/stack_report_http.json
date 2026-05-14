@@ -1,0 +1,299 @@
+{
+  "report": {
+    "findings": [
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "critical",
+        "code": "missing_geometry_ref",
+        "message": "refinementSurfaces entry 'region_hot_fluid' has no matching geometry{} entry",
+        "location": "castellatedMeshControls.refinementSurfaces.region_hot_fluid",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "missing_geometry_ref",
+          "severity": "critical",
+          "location": "castellatedMeshControls.refinementSurfaces.region_hot_fluid",
+          "message": "refinementSurfaces entry 'region_hot_fluid' has no matching geometry{} entry",
+          "suggestion": "add geometry.region_hot_fluid block OR remove the refinementSurfaces entry"
+        }
+      },
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "critical",
+        "code": "missing_geometry_ref",
+        "message": "refinementSurfaces entry 'region_cold_fluid' has no matching geometry{} entry",
+        "location": "castellatedMeshControls.refinementSurfaces.region_cold_fluid",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "missing_geometry_ref",
+          "severity": "critical",
+          "location": "castellatedMeshControls.refinementSurfaces.region_cold_fluid",
+          "message": "refinementSurfaces entry 'region_cold_fluid' has no matching geometry{} entry",
+          "suggestion": "add geometry.region_cold_fluid block OR remove the refinementSurfaces entry"
+        }
+      },
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "critical",
+        "code": "missing_geometry_ref",
+        "message": "refinementSurfaces entry 'region_solid' has no matching geometry{} entry",
+        "location": "castellatedMeshControls.refinementSurfaces.region_solid",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "missing_geometry_ref",
+          "severity": "critical",
+          "location": "castellatedMeshControls.refinementSurfaces.region_solid",
+          "message": "refinementSurfaces entry 'region_solid' has no matching geometry{} entry",
+          "suggestion": "add geometry.region_solid block OR remove the refinementSurfaces entry"
+        }
+      },
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "warning",
+        "code": "geometry_orphan",
+        "message": "geometry 'region_hot_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+        "location": "geometry.region_hot_fluid.stl",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "geometry_orphan",
+          "severity": "warning",
+          "location": "geometry.region_hot_fluid.stl",
+          "message": "geometry 'region_hot_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+          "suggestion": null
+        }
+      },
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "warning",
+        "code": "geometry_orphan",
+        "message": "geometry 'region_cold_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+        "location": "geometry.region_cold_fluid.stl",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "geometry_orphan",
+          "severity": "warning",
+          "location": "geometry.region_cold_fluid.stl",
+          "message": "geometry 'region_cold_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+          "suggestion": null
+        }
+      },
+      {
+        "source_advisor": "shm_dict_validator",
+        "severity": "warning",
+        "code": "geometry_orphan",
+        "message": "geometry 'region_solid.stl' is not referenced by refinementSurfaces or refinementRegions",
+        "location": "geometry.region_solid.stl",
+        "evidence_v_rows": [
+          "V52",
+          "V86",
+          "V99",
+          "V100"
+        ],
+        "raw": {
+          "code": "geometry_orphan",
+          "severity": "warning",
+          "location": "geometry.region_solid.stl",
+          "message": "geometry 'region_solid.stl' is not referenced by refinementSurfaces or refinementRegions",
+          "suggestion": null
+        }
+      },
+      {
+        "source_advisor": "thin_wall_advisor",
+        "severity": "critical",
+        "code": "thin_wall_at_risk",
+        "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness).",
+        "location": "cold_fin_rear_third",
+        "evidence_v_rows": [
+          "V10"
+        ],
+        "raw": {
+          "patch_name": "cold_fin_rear_third",
+          "estimated_thickness": 0.0006,
+          "effective_cell_size": 0.001,
+          "cells_per_thickness": 0.6,
+          "assigned_level": [
+            1,
+            2
+          ],
+          "recommended_level_max": 4,
+          "severity": "critical",
+          "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+        }
+      }
+    ],
+    "advisor_calls": [
+      {
+        "advisor_name": "face_orientation_advisor",
+        "status": "ok",
+        "input_summary": "parts_manifest with 3 parts",
+        "output": {
+          "findings": [],
+          "bodies_checked": 0,
+          "bodies_with_intended_normal": 0,
+          "bodies_skipped": 3
+        },
+        "duration_ms": 0.01795799471437931,
+        "version": "face_orientation_advisor.py"
+      },
+      {
+        "advisor_name": "inlet_outlet_validator",
+        "status": "ok",
+        "input_summary": "parts_manifest with 3 parts",
+        "output": {
+          "findings": [],
+          "fail_count": 0,
+          "warning_count": 0,
+          "pass_count": 0
+        },
+        "duration_ms": 0.009041046723723412,
+        "version": "inlet_outlet_validator.py"
+      },
+      {
+        "advisor_name": "shm_dict_validator",
+        "status": "ok",
+        "input_summary": "shm_dict keys=['addLayers', 'addLayersControls', 'castellatedMesh', 'castellatedMeshControls', 'debug']",
+        "output": {
+          "findings": [
+            {
+              "code": "missing_geometry_ref",
+              "severity": "critical",
+              "location": "castellatedMeshControls.refinementSurfaces.region_hot_fluid",
+              "message": "refinementSurfaces entry 'region_hot_fluid' has no matching geometry{} entry",
+              "suggestion": "add geometry.region_hot_fluid block OR remove the refinementSurfaces entry"
+            },
+            {
+              "code": "missing_geometry_ref",
+              "severity": "critical",
+              "location": "castellatedMeshControls.refinementSurfaces.region_cold_fluid",
+              "message": "refinementSurfaces entry 'region_cold_fluid' has no matching geometry{} entry",
+              "suggestion": "add geometry.region_cold_fluid block OR remove the refinementSurfaces entry"
+            },
+            {
+              "code": "missing_geometry_ref",
+              "severity": "critical",
+              "location": "castellatedMeshControls.refinementSurfaces.region_solid",
+              "message": "refinementSurfaces entry 'region_solid' has no matching geometry{} entry",
+              "suggestion": "add geometry.region_solid block OR remove the refinementSurfaces entry"
+            },
+            {
+              "code": "geometry_orphan",
+              "severity": "warning",
+              "location": "geometry.region_hot_fluid.stl",
+              "message": "geometry 'region_hot_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+              "suggestion": null
+            },
+            {
+              "code": "geometry_orphan",
+              "severity": "warning",
+              "location": "geometry.region_cold_fluid.stl",
+              "message": "geometry 'region_cold_fluid.stl' is not referenced by refinementSurfaces or refinementRegions",
+              "suggestion": null
+            },
+            {
+              "code": "geometry_orphan",
+              "severity": "warning",
+              "location": "geometry.region_solid.stl",
+              "message": "geometry 'region_solid.stl' is not referenced by refinementSurfaces or refinementRegions",
+              "suggestion": null
+            }
+          ],
+          "geometry_names": [
+            "region_hot_fluid.stl",
+            "region_cold_fluid.stl",
+            "region_solid.stl"
+          ],
+          "features_files": [
+            "region_hot_fluid.eMesh",
+            "region_cold_fluid.eMesh",
+            "region_solid.eMesh"
+          ]
+        },
+        "duration_ms": 20.861333003267646,
+        "version": "shm_dict_validator.py"
+      },
+      {
+        "advisor_name": "thin_wall_advisor",
+        "status": "ok",
+        "input_summary": "1 patches, cell_size=0.004",
+        "output": [
+          {
+            "patch_name": "cold_fin_rear_third",
+            "estimated_thickness": 0.0006,
+            "effective_cell_size": 0.001,
+            "cells_per_thickness": 0.6,
+            "assigned_level": [
+              1,
+              2
+            ],
+            "recommended_level_max": 4,
+            "severity": "critical",
+            "message": "patch 'cold_fin_rear_third': thickness \u2248 0.0006 (bbox-min); effective cell size at level 2 = 0.001 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00025 cell size = 2.40 cells per thickness)."
+          }
+        ],
+        "duration_ms": 0.03954197745770216,
+        "version": "thin_wall_advisor.py"
+      },
+      {
+        "advisor_name": "v_series_drift_guard",
+        "status": "ok",
+        "input_summary": "findings=7 mode=audit corpus=100",
+        "output": {
+          "check_status": "clean",
+          "mode": "audit",
+          "missing_v_rows": [],
+          "findings_flagged": 0,
+          "findings_dropped": 0,
+          "corpus_size": 100
+        },
+        "duration_ms": 0.0,
+        "version": "ui.backend.services.v_series_drift_guard"
+      }
+    ],
+    "evidence_refs": [
+      "V10",
+      "V100",
+      "V52",
+      "V79",
+      "V81",
+      "V86",
+      "V87",
+      "V99"
+    ],
+    "stack_duration_ms": 21.09591697808355,
+    "advisor_count": 4,
+    "failed_advisor_count": 0,
+    "critical_count": 4,
+    "warning_count": 3
+  },
+  "audit_artifact_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/.planning/audits/anon_ai_review_20260514T112442.090707Z_f58ae4f9.json",
+  "llm_enhanced": false,
+  "timing": {
+    "advisor_dispatch_ms": 21.109,
+    "llm_ms": 0.0,
+    "total_ms": 23.832
+  }
+}
