@@ -1,0 +1,346 @@
+# V64 Arc · Charter Plan-File **DRAFT**
+
+**Status**: `Draft (awaiting user ratification)`
+**Plan SSOT (this file)**: `.planning/2026-05-15_v64_charter_draft.md`
+**Predecessor**: V63-A "Industrial Scale-Up" (close pending B50 · 5/6 Done dims MET + Done #4 PARTIAL-credit 2/3 awaiting M-VAL-REPORT-3 + user ratification of PARTIAL semantics)
+**Successor placeholder**: V65 (TBD post-V64)
+**Mode**: milestone-driven (no calendar · sustains V61-198 / V62-A / V63-A precedent)
+**Drafted**: 2026-05-15 (B51 · parallel with B50 M-VAL-REPORT-3 land)
+**Author**: Claude Code Opus 4.7 session main
+**Ratified**: _pending user selection_
+
+> This is a **plan-file** (no frontmatter · per v2.3 spike-class vs DEC rules). The governance anchor for the selected candidate will be a charter DEC drafted **only after user ratification** (sub-DEC chain begins at first milestone of selected candidate · per V63-A precedent B38/B39).
+>
+> v2.3 round-1 rule: only Status=Accepted DECs sync to Notion · this plan-file does NOT sync (the future charter DEC will, post-ratification).
+>
+> All three candidates below are presented at equal weight. The plan-author observation in §6 is **non-prescriptive** — the user picks, not the planner. Un-selected candidates move to an Alternatives Appendix in the ratified plan-file (per V63 precedent).
+
+---
+
+## §1 · Why a 3-candidate plan-file (V64 fork)
+
+V63-A demonstrated **scale-up on the case axis** (3 distinct numerics classes → 5 · advisor LANDED 10 → 11 · V-row corpus V51+ → V100 · case substrate extension 1/9 → 7/9). The next arc has **three structurally different strategic directions**, each non-overlapping in payoff shape, each consuming different parts of the V62/V63 asset base. The user, not the planning author, picks the direction.
+
+Comparison table at §5 narrows the trade-off; recommendation at §6 is one to two sentences, deliberately non-prescriptive.
+
+---
+
+## §2 · V63-A 未尽事项 (carry-over deferred items · 8 surfaced)
+
+These were surfaced during V63-A but explicitly deferred. Each candidate addresses a different subset:
+
+| # | Item | Source | V63-A disposition | Natural V64 candidate |
+|---|---|---|---|---|
+| 1 | **M-VAL-REPORT-1 case_011 PARTIAL → FULL** (V93 degenerate-physics: case substrate is conduction-dominated boundary-equilibration; need non-degenerate substrate replacement OR documented PARTIAL re-classification) | B48+B49 reconcile · Done #4 strict 0/3 FULL · PARTIAL-credit 1/3 | deferred · validation-maturity scope | V64-A |
+| 2 | **M-VAL-REPORT-2 case_004 PARTIAL → FULL** (solver + postp DEFERRED to v2 · mesh gen gated · NREL UAE Sequence S experimental comparison gated by solver execution) | B48+B49 reconcile · Done #4 strict 0/3 FULL · PARTIAL-credit 2/3 | deferred · mesh gen v2 + solver + experimental comparison | V64-A |
+| 3 | **V62-A carry-over #5 Frontend wiring of `/api/ai-review` + `/api/ai-diagnose`** (still open · V63-A didn't close · originally from V63-B candidate scope) | V62-A B24/B25 deferred · V63-A Done #5 4/≥4 MET counted around it | deferred · workbench UX scope | V64-B |
+| 4 | **V62-A carry-over #6 M-DRIFT-V2 `/api/ai-diagnose` route integration v2** (audit-mode-default · still open) | DRIFT-V2 sub-DEC §deferred · V62-A originally | deferred · UX-tier scope | V64-B |
+| 5 | **D11 stl_face_label_validator cross-validation** (LANDED on case_011 single-case · V94 regression green · awaits case_018/019/020 cross-validation) | M-D11-DRAFT sub-DEC single-case-land per A2 v1 / D6 / D10 precedent | deferred · single-case-land discipline | V64-A or V64-C |
+| 6 | **D10 STANDARD_OPENFOAM_BCS catalog 138 → ~200 ESI BCs** (~62 BCs remaining · case-driven extension policy) | M-D10-CATALOG-AUDIT sub-DEC · case-driven not spec-audit-driven | deferred · case-driven · only extend when case evidence demands | V64-A (when new case demands) |
+| 7 | **case_006 V-row 3/9 → 5/9 (or higher)** (6/9 uncovered: V26-V28/V31/V32 + D4) | M-CASE-006-SUBSTRATE sub-DEC · zero case_dir CAD/STL/manifest modification policy | deferred · further substrate iteration | V64-A or V64-C |
+| 8 | **Commercial CAE AI competitive scan · OSS readiness · README/LICENSE/contributor guide** | not started · external pressure not yet acute | deferred · OSS prep scope | V64-C |
+
+Whichever candidate is chosen, **un-chosen items stay in their natural homes** for future arcs — none are dropped.
+
+---
+
+## §3 · Candidate V64-A · "Validation Maturity"
+
+### North Star (一句话)
+
+> **把 V63-A 的 2/3 PARTIAL validation reports 真正推到 FULL · 实际跑 OpenFOAM solver 到收敛 · case_004 mesh gen v2 + NREL UAE Sequence S 实验对比 · case_006 substrate full e2e · case_011 用 non-degenerate substrate 重做 · ≥3 篇工业级 FULL validation reports 真实验证收敛 + 文献对比 + V-row attribution · 让 V62/V63 advisor stack 第一次"经实验数据验证过"而不只是"advisor 自审 PASS".**
+
+### Done Definition (6 dims · all must hit)
+
+| # | 维度 | 起点 (V63-A close) | Done 阈值 | 验证方式 |
+|---|---|---|---|---|
+| 1 | FULL validation reports (real solver convergence + experimental/literature delta) | strict 0 / 3 FULL · PARTIAL-credit 2/3 | **≥ 3 FULL validation reports (solver 真实收敛 + experimental/literature delta < 文献声明 tolerance + V-row attribution)** | `ls .planning/validation_reports/v64_*_FULL.md \| wc -l` 且每篇含 (a) solver 收敛 residual plot (b) experimental/literature comparison delta table (c) V-row attribution |
+| 2 | Numerical comparison vs canonical literature | 0 (V63-A 未做实验对比) | **≥ 3 canonical literature comparisons · 1 per FULL report (NREL UAE Sequence S / Heller-Bliss SPL / ONERA M6 shock-position / Sandia Flame D / 等)** | each FULL report §experimental comparison cites canonical reference + reports delta |
+| 3 | Convergence stability test | implicit (V63-A 单跑) | **≥ 1 case 在 ≥2 mesh refinement levels (h/2 + h/4) 跑出 monotonic convergence trend** | mesh convergence study log in 1 FULL report |
+| 4 | V63-A PARTIAL upgrade closure | 2 PARTIAL (case_011 + case_004) | **≥ 2 / 2 PARTIAL upgraded to FULL OR explicitly re-classified with documented rationale** | sub-DEC chain `DEC-V64-A-sub-VAL-UPGRADE-*` |
+| 5 | V63-A carry-over closure | 8 items deferred | **≥ 4 / 8 closed (#1 + #2 + ≥2 of {#5 / #7 / #6})** | each closed via sub-DEC with V-row + retro chain |
+| 6 | V-row truth-capture rate (sub-DEC scope) | clause 1: ≥5/9 over-met 2/1 · clause 2: ≥3/9 on ≥3 cases 3/3 MET | **≥ 1 case 拿到 ≥7/9 · ≥2 cases 拿到 ≥5/9 · 不准 alias 灌水** | retro §V-row attribution counter |
+
+### 反命题 (anti-Done · failure modes)
+
+- ❌ FULL report 跑 solver 但 residual oscillating / 不收敛 → 失败 (real convergence required)
+- ❌ Literature comparison cherry-picks query point 使 delta 看上去小 → 失败 (须 canonical baseline · 1 standard experimental sequence)
+- ❌ PARTIAL → FULL upgrade 通过"重写 PARTIAL semantics"绕过实际收敛 → 失败 (semantics revision must be user-ratified · not unilateral)
+- ❌ Mesh convergence study 跑了但 trend 非 monotonic 仍标 PASS → 失败
+- ❌ V-row alias 灌水 → 失败 (distinct signature required · per V62/V63 precedent)
+
+### Triggered redirect (命中 → 修改 plan)
+
+| 条件 | 动作 |
+|---|---|
+| case_011 substrate 永远 V93 degenerate · 无可换 non-degenerate substrate 路径 | 重新 classify PARTIAL semantics + 用户裁决 |
+| Mesh gen v2 (case_004) STEP 准备难度 ≥ 3 周 | 切到 case_009 Sandia Flame D / 其他 Tier 2 case 验证 |
+| 商业 CAE AI 拿到工业 case validation 证据 ≥3 篇 ship | OSS 准备拉前 (切到 V64-C 或合并) |
+| 任一 milestone 卡 ≥ 3 周 | 跳过 + retro · 不死等 |
+
+### Tier 状态板
+
+#### Tier 1 · 解锁性 (mesh gen + substrate prep · parallel · independent)
+
+- [ ] **M-V64A-MESH-GEN-V2** case_004 NREL Phase VI MRF mesh gen v2 · 解锁 solver execution
+- [ ] **M-V64A-CASE-011-NONDEGEN** case_011 plate-fin HX non-degenerate substrate 替换 (非 conduction-dominated · 真正能 PASS convergence) OR PARTIAL semantics 用户裁决路径
+- [ ] **M-V64A-CASE-006-SUBSTRATE-V2** case_006 substrate iteration 2 · V-row 3/9 → 5/9 (V26-V28/V31/V32 + D4 中 ≥2 个 captured)
+
+#### Tier 2 · solver run + experimental comparison
+
+- [ ] **M-V64A-VAL-FULL-1** case_004 NREL Phase VI MRF FULL validation report · mesh v2 + solver convergence + NREL UAE Sequence S 实验对比 (≥3 wind speed points)
+- [ ] **M-V64A-VAL-FULL-2** case_011 (or non-degenerate substitute) FULL validation report · solver convergence + plate-fin HX literature/handbook 对比
+- [ ] **M-V64A-VAL-FULL-3** 第 3 篇 FULL report · candidate: case_009 Sandia Flame D · reacting-low-Mach · vs Sandia experimental database; OR case_016 transonic shock · vs ONERA M6 shock-position
+- [ ] **M-V64A-MESH-CONV-STUDY** mesh convergence study (h/2 + h/4) 在 ≥1 case 上 monotonic convergence trend
+
+#### Tier 3 · close
+
+- [ ] **M-V64A-D11-CROSS-VAL** D11 cross-validation on case_018/019/020 (V63-A carry-over #5)
+- [ ] **M-RADAR-V6-A** Capability radar v6 · validation maturity signals (FULL report count / literature delta / mesh convergence stability)
+- [ ] **M-V65-A** V64-A close DEC + V65 charter draft
+
+### 关键依赖图 (V64-A)
+
+```
+M-V64A-MESH-GEN-V2         ─┐
+M-V64A-CASE-011-NONDEGEN   ─┤  Tier 1 (parallel · independent prep work)
+M-V64A-CASE-006-SUBSTRATE-V2 ┘
+       │
+       ↓
+M-V64A-VAL-FULL-1 ──→ M-V64A-VAL-FULL-2 ──→ M-V64A-VAL-FULL-3
+       │                      │                      │
+       └──→ M-V64A-MESH-CONV-STUDY ──→ M-V64A-D11-CROSS-VAL
+                                              │
+                                              ↓
+                                       M-RADAR-V6-A ──→ M-V65-A
+```
+
+---
+
+## §4 · Candidate V64-B · "Frontend Activation"
+
+### North Star (一句话)
+
+> **`/api/ai-review` + `/api/ai-diagnose` 真正接到 workbench UI · 用户能在浏览器里跑 stack-driven CFD prep · workbench 五步主线 (per blueprint v3) feature coverage ≥80% · advisor stack 第一次成为"用户可见的 advisor" · stack-driven dogfood loop 跑通 1 个工业 case e2e prep flow.**
+>
+> _(从 V63-B 候选直接 forward · V63-A 期间未启动 · 此 arc 是 dogfood 距离最近的方向)_
+
+### Done Definition (6 dims · all must hit)
+
+| # | 维度 | 起点 (V63-A close) | Done 阈值 | 验证方式 |
+|---|---|---|---|---|
+| 1 | Frontend route wiring | 0 (routes LANDED · UI 未消费) | **2/2 routes consumed by ≥1 workbench page each** | `grep -rE "fetch.*ai-(review\|diagnose)" ui/frontend/src/ \| wc -l ≥ 2` |
+| 2 | Workbench 5-step coverage (blueprint v3) | unknown%, baseline scan required | **≥ 80% feature coverage** | `.planning/audits/v64_workbench_coverage.md` 5-step matrix signed |
+| 3 | 4Q gate at UI boundary | per-route LLM-offline OK · UI 未审 | **UI 整链路 4Q gate audit + sign-off · LLM-offline 时所有路径仍可达** | `.planning/audits/v64_ui_4q_audit.md` signed |
+| 4 | Dogfood walkthrough | 0 (no user-driven e2e prep flow on record) | **≥ 1 完整 dogfood log: 浏览器 e2e 跑通 prep flow · 含 screenshot 序列 + V-row 引用 + advisor finding 触发记录** | `.planning/dogfood/v64_workbench_dogfood_1.md` exists |
+| 5 | Industrial-tier UI polish (per Apple-tier feedback) | unknown baseline | **5-step spine + Engineer Control Rail + Artifacts panel 通过 6-pillar audit ≥80%** | `/gsd-ui-review` UI-REVIEW.md ≥80% per-pillar |
+| 6 | V62-A + V63-A carry-over closure | 8 items deferred | **≥ 2/8 closed (#3 frontend wiring + #4 ai_diagnose drift v2 · 都是 V62-A 老 carry-over)** | sub-DEC chain |
+
+### 反命题
+
+- ❌ UI 加按钮但调 advisor 是 fake / mock → 失败 (V130 advisor-not-driver: AI must actually advise · not stub)
+- ❌ 5-step spine rendered but workbench can't run a real industrial case in browser e2e → 失败
+- ❌ /api/ai-diagnose 接进 UI 但 LLM-offline 时 UI 报错 → 失败 (违反 V130 四问门控)
+- ❌ Apple-tier polish without functional dogfood (能跑通 ≠ 可交付)
+- ❌ Dogfood log 是 Claude Code session 自演不是真用户操作 → 失败 (须真实操作 trail)
+
+### Triggered redirect
+
+| 条件 | 动作 |
+|---|---|
+| Frontend pull effort 失控 (>3 weeks single milestone) | 切到 V64-A 或 V64-C |
+| Workbench parity build-out 与 N2-N6 (blueprint v3 collapse) overlap ≥50% | 合并 V64-B 与 blueprint v3 roadmap (single SSOT) |
+| 商业 CAE AI demo polish ship → 战略压力上 UX | V64-B 加速 / 维持当前节奏 |
+| Codex 1-sync-trigger 命中 (routes/ pages/ 新建) round cap = 3 仍 P1 | 用户裁决 |
+
+### Tier 状态板
+
+#### Tier 1 · 解锁性 (frontend baseline)
+
+- [ ] **M-V64B-FRONTEND-BASELINE** 当前 workbench UI baseline 量化 audit · 5-step coverage / route consumption / UX gap 三维量化
+- [ ] **M-V64B-ROUTE-WIRE-REVIEW** Wire `/api/ai-review` to ≥1 workbench page · advisor finding rendering · V-row evidence rendering
+- [ ] **M-V64B-ROUTE-WIRE-DIAGNOSE** Wire `/api/ai-diagnose` to ≥1 workbench page · similarity match rendering
+- [ ] **M-V64B-UI-4Q-AUDIT** UI 整链路 4Q gate audit (LLM-offline 时所有路径仍可达)
+
+#### Tier 2 · workbench parity + dogfood
+
+- [ ] **M-V64B-5STEP-SPINE-1** 5-step spine renderable + 80% feature coverage on Step 1-2 (geometry + meshing)
+- [ ] **M-V64B-5STEP-SPINE-2** Step 3-5 (physics + BC + solver/postp) coverage
+- [ ] **M-V64B-CONTROL-RAIL** Engineer Control Rail (per blueprint v3 region 4) functional
+- [ ] **M-V64B-ARTIFACTS-PANEL** Artifacts panel (per blueprint v3) renderable from real workbench output
+- [ ] **M-V64B-UI-POLISH-1** Apple-tier polish round 1 · 6-pillar audit ≥75%
+- [ ] **M-V64B-DRIFT-V2-DIAGNOSE** M-DRIFT-V2 audit-mode wire into /api/ai-diagnose (V62-A carry-over #6 / V63-A deferred)
+
+#### Tier 3 · dogfood + close
+
+- [ ] **M-V64B-DOGFOOD-1** Real user (NOT Claude Code session proxy) e2e workbench walkthrough · 1 industrial case · browser screenshot sequence
+- [ ] **M-V64B-UI-POLISH-2** 6-pillar audit ≥80%
+- [ ] **M-RADAR-V6-B** Capability radar v6 · workbench UX axis activation
+- [ ] **M-V65-B** V64-B close DEC + V65 charter draft
+
+### 关键依赖图 (V64-B)
+
+```
+M-V64B-FRONTEND-BASELINE  ──┐
+                            ├──→  M-V64B-ROUTE-WIRE-REVIEW    ──┐
+                            │                                   ├──→  M-V64B-UI-4Q-AUDIT
+                            └──→  M-V64B-ROUTE-WIRE-DIAGNOSE  ──┘            │
+                                                                              ↓
+M-V64B-5STEP-SPINE-1  ──→  M-V64B-5STEP-SPINE-2  ──→  M-V64B-CONTROL-RAIL  ──→  M-V64B-ARTIFACTS-PANEL
+                                                                              │
+M-V64B-UI-POLISH-1  ──→  M-V64B-DRIFT-V2-DIAGNOSE  ──→  M-V64B-DOGFOOD-1  ──→ │
+                                                                              ↓
+                                                                M-V64B-UI-POLISH-2  ──→  M-RADAR-V6-B ──→ M-V65-B
+```
+
+---
+
+## §5 · Candidate V64-C · "OSS Readiness + M6 Operationalization" (双轨)
+
+### North Star (一句话)
+
+> **把 cfd-harness-unified 公开发布 (README + LICENSE + contributor guide + GitHub repo polish + 商业 CAE AI 竞品对照 Siemens Star-CCM+ GA / ANSYS GenAI / Ansys+OpenFOAM) · 同时把 [feedback_claude_code_is_the_advisor] thesis 操作化 — Claude Code session 本身是 M6 advisor · ≥3 工业级 case e2e completion via session-as-advisor + V-series corpus retrieval recall@5 ≥80% · OSS readiness 与 M6 operationalization 双轨并行 · 不依赖 frontend · 不依赖 workbench UI · 战略价值最高 · session-as-advisor thesis 与 OSS 公开度同时验证.**
+
+### Done Definition (6 dims · all must hit)
+
+| # | 维度 | 起点 (V63-A close) | Done 阈值 | 验证方式 |
+|---|---|---|---|---|
+| 1 | OSS readiness package | 0 (private repo · 无 README 顶层 / LICENSE / CONTRIBUTING.md) | **README · LICENSE · CONTRIBUTING.md · CODE_OF_CONDUCT · 仓库 polish 通过 OSS readiness 自查 ≥80%** | `.planning/audits/v64_oss_readiness.md` checklist signed |
+| 2 | Commercial CAE AI competitive scan | 0 | **≥ 3 competitor (Siemens Star-CCM+ GA / ANSYS GenAI / Ansys+OpenFOAM) feature delta documented · ≥ 1 cfd-harness-unique moat identified** | `.planning/research/v64_commercial_cae_ai_scan.md` |
+| 3 | Claude Code session-as-advisor e2e | 0 (V63-A Track C 只到 advisor 推 finding · 未到 solver 收敛 + postp validation by session-as-driver) | **≥ 3 cases · session 主导 prep → solver → postp 全链路 · 留完整工件** | `ls .planning/dogfood/claude_session_e2e_*.md \| wc -l ≥ 3` 且每篇含 solver log + 收敛图 + V-row attribution |
+| 4 | V-series corpus session-tier retrieval recall | 未测 (现状 lookup 靠 grep) | **≥ 80% recall@5 on ≥20 canonical query · canonical query set 必须非 cherry-pick** | `.planning/evals/v_series_recall_test.md` 含 20 query + expected V-row + actual top-5 |
+| 5 | Death-pattern detection catalog | implicit (无显式 dataset) | **≥ 10 distinct death-pattern V-row signatures explicitly catalogued · ≥ 3 detected in live session** | `.planning/methodology/death_patterns.md` 含 10 patterns + detection trail |
+| 6 | LLM-offline gate at session-tier | per-advisor OK · session-tier 未审 | **session-tier 4Q gate audit: LLM 可调时 session 不退化 · LLM offline 时 ≥1 graceful-degradation 路径** | `.planning/audits/v64_session_tier_4q_audit.md` signed |
+
+### 反命题
+
+- ❌ OSS 公开但仓库 polish 是表面工作 (README 不实用 / CONTRIBUTING 是模板复制) → 失败
+- ❌ 竞品对照 cherry-picks 弱点 / 忽视对手强项 → 失败 (须诚实)
+- ❌ Session "完成" 一个 case 但没 solver 收敛 (跑了 mesh 没跑 solver) → 失败
+- ❌ 10 death-pattern 都是已有 V-row 的 rename / alias → 失败 (须 net-new)
+- ❌ Session-tier 4Q gate 假设 LLM 必须可调 → 失败 (违反 V130)
+- ❌ Recall@5 通过 cherry-pick query 集 → 失败 (须 canonical query · 非为 metric 而设计)
+
+### Triggered redirect
+
+| 条件 | 动作 |
+|---|---|
+| Claude Code CLI 单 session 跑不完 1 case 工业级 e2e (context exhausted) | retro · 评估 1M ctx 是否真够 · 可能需 multi-session chain via /resume |
+| Death-pattern detection 退化为 V-row 标签 game (无新洞察) | 切到 V64-A scale-up |
+| OSS 公开后引来不期 PR / issue 拉力 | 加 maintainer triage policy 或 暂停 OSS 公开 |
+| 商业 CAE AI 竞品迅速跟进 advisor 概念 | OSS 加速 · 抢先建立 community |
+| Frontend 拉力变强 (用户压力) | 切到 V64-B 或合并 |
+
+### Tier 状态板
+
+#### Tier 1 · 解锁性 (双轨基础 · parallel)
+
+- [ ] **M-V64C-OSS-AUDIT** OSS readiness audit · README / LICENSE / CONTRIBUTING gap 三维量化
+- [ ] **M-V64C-COMMERCIAL-SCAN** 商业 CAE AI 竞品对照 · Siemens / ANSYS / Ansys+OpenFOAM · feature delta
+- [ ] **M-V64C-SESSION-PROTOCOL** Claude Code session-as-advisor 协议草稿 · 含 stage 切分 / advisor 调用 / V-row attribution / artifact 留痕规则
+- [ ] **M-V64C-V-SERIES-RECALL-EVAL** V-series corpus recall@5 测试集 (20 canonical query) · 建立 baseline
+
+#### Tier 2 · OSS polish + session e2e + death-pattern
+
+- [ ] **M-V64C-OSS-POLISH** README / LICENSE / CONTRIBUTING.md / CODE_OF_CONDUCT · 仓库公开 polish
+- [ ] **M-V64C-SESSION-E2E-1** Claude Code session e2e CFD case 1 · 全链路工件 + retro
+- [ ] **M-V64C-SESSION-E2E-2** session e2e case 2
+- [ ] **M-V64C-DEATH-PATTERN-CATALOG** ≥10 distinct death-pattern V-row signatures catalogued
+- [ ] **M-V64C-SESSION-4Q-AUDIT** session-tier 4Q gate · LLM-offline degradation path 设计 + sign-off
+
+#### Tier 3 · close
+
+- [ ] **M-V64C-SESSION-E2E-3** session e2e case 3
+- [ ] **M-V64C-V-SERIES-RECALL-PASS** Recall@5 ≥80% on 20 canonical query
+- [ ] **M-V64C-OSS-PUBLIC** 仓库公开发布 (GitHub repo public toggle · or staged release)
+- [ ] **M-RADAR-V6-C** Capability radar v6 · OSS + session-as-advisor 双轴
+- [ ] **M-V65-C** V64-C close DEC + V65 charter draft
+
+### 关键依赖图 (V64-C)
+
+```
+M-V64C-OSS-AUDIT  ──→  M-V64C-COMMERCIAL-SCAN  ──→  M-V64C-OSS-POLISH  ──→  M-V64C-OSS-PUBLIC
+                                                                                   │
+M-V64C-SESSION-PROTOCOL  ──→  M-V64C-V-SERIES-RECALL-EVAL                          │
+       │                              │                                            │
+       ↓                              ↓                                            │
+M-V64C-SESSION-E2E-1  ──→  M-V64C-SESSION-E2E-2  ──→  M-V64C-DEATH-PATTERN-CATALOG │
+                                              │                  │                 │
+                                              │                  ↓                 │
+                                              │           M-V64C-SESSION-4Q-AUDIT  │
+                                              │                  │                 │
+                                              ↓                  ↓                 │
+                                       M-V64C-SESSION-E2E-3 ──→ M-V64C-V-SERIES-RECALL-PASS
+                                                                       │           │
+                                                                       └──→ M-RADAR-V6-C ──→ M-V65-C
+```
+
+---
+
+## §6 · 4-dim comparison table (selection evidence)
+
+| 维度 | V64-A Validation Maturity | V64-B Frontend Activation | V64-C OSS + M6 Operationalization |
+|---|---|---|---|
+| **工程实现风险** (1 低 · 5 高) | **3** | **5** | **4** |
+| narrative | OpenFOAM solver 跑收敛是 deterministic 工作但 case_011 V93 degenerate + case_004 mesh gen v2 是真实工程不确定性 · 实验对比 delta 可能暴露 advisor stack 隐含 bug · NREL UAE / Heller-Bliss / ONERA M6 数据获取本身可能 gated | 全新前端工作 + workbench parity + Apple-tier polish + 5-step spine 集成 · UI 失控 risk 高 · 多 LANDED 但孤立的前端组件可能拖累集成 · Codex 1-sync-trigger 命中 (routes/ pages/ 新建) round cap = 3 风险 · 真实用户 dogfood 距离最远的 deliverable | OSS 公开后未知 community pull · session-as-advisor 是新协议 · V-series recall eval 是新 infrastructure · 1M ctx 单 session 跑工业 case 是真实工程不确定性 · 双轨拉扯 risk |
+| **战略价值** (1 incremental · 5 transform) | **4** | **3** | **5** |
+| narrative | 商业 CAE AI 对手最难追的 demonstrability moat — Siemens GA / ANSYS GenAI 都暂未拿到 ≥3 篇工业 case FULL convergence + 实验对比 ship 证据 · 是 advisor stack 第一次"经实验数据验证" · 但仍 incremental on case-axis (V63-A 已立 base) | 用户可见性 transform (advisor stack 第一次"用户能 dogfood") · 但仍 module-level (UI is wrapper around 已有 advisor) · workbench parity 解锁 OSS 准备 · 战略价值中等 | 双轨 transform · OSS readiness 解锁 community + 公开战略定位 · M6 operationalization 把"AI = advisor 不是 driver" thesis 推到极限 · 把 product 从"工作台" → "session-tier AI engineer" · 商业 CAE AI 最难复制方向 (stack 不在 Claude/Codex 上) |
+| **用户 dogfood 距离** (1 近 · 5 远) | **3** | **1** | **2** |
+| narrative | 用户能 dogfood 工业 case 报告 (validation report PDF/MD) 但不能在浏览器或 conversation 里直接操作 · 距离 = .planning/ + 命令行 + validation report 阅读 | 用户能直接浏览器 dogfood (最近 distance) · 1 个工业 case e2e prep flow 在浏览器跑通是核心 deliverable | 用户在 Claude Code conversation 内 dogfood (近 · 但限于 conversation form factor · 不是浏览器) · OSS 公开后外部用户可 git clone + 本地跑 (远期 distance 增加) |
+| **V63-A 资产复用度** (1 低 · 5 高) | **5** | **3** | **4** |
+| narrative | advisor stack + V-series corpus V100 + 4Q gate + case_004/006/011 substrate 全部直接复用 · 是 V63-A PARTIAL → FULL 的自然下半场 · 资产复用度最高 | 复用 routes (M-D6-HTTP-WIRE + V62-A M-ROUTE-AI-REVIEW + M-ROUTE-AI-DIAGNOSE) 但需要前端层新代码 · advisor stack 间接复用 (通过 route) · 资产复用中等 | 复用 V-series corpus + advisor stack + Track C 方法 (session = 新型 Track C runner) · 不依赖 frontend · 高复用但需新 protocol layer + OSS infrastructure layer |
+
+---
+
+## §7 · Recommendation (plan-author observation · non-prescriptive)
+
+**Plan-author observation** (authored 2026-05-15 pre-ratification · 1-2 sentence · 用户决定): V64-A 是 V63-A 的自然下半场 · PARTIAL → FULL 是诚实承诺 · 商业 CAE AI 最难追的 demonstrability moat (实验对比 + 真实收敛); V64-B 用户可见性最强但工程风险翻倍 + dogfood 距离最近; V64-C OSS readiness + session-as-advisor 双轨 · 战略价值最高但 thesis 验证不确定性也最高 + 双轨拉扯风险。三个都可行 · 选择取决于用户当下战略权重 (validation 诚实下半场 vs 用户可见性 vs OSS + thesis 操作化)。
+
+> 不硬推任何 candidate · 选择主权 100% 在用户。
+
+---
+
+## §8 · 沿用 V62-A + V63-A 不变规则 (V64 active · regardless of candidate)
+
+- LLM offline 四问门控 (V130 thesis · 每个新功能 PR/DEC/UI 改动必答四问: LLM 离线可跑? artifacts 输出? TrustGate 解释? AI 仅 advisory?)
+- advisor 不是 driver · 只 advise · engineer (or Claude Code session) 最终决策
+- 双 corpus drift-prevention hook (M-DRIFT v1 + V62 v2) 保留
+- session-end Notion sync (仅 Status=Accepted DECs · v2.3 round-1 rule)
+- DEC scope-driven (≥3 共享代码路径 / governance-rule-change → full charter; 否则 sub-DEC 6 字段最小 schema)
+- Spike-class 一等 scope class (≤30 LOC + 1 test + commit `confidence: <h/m/l>` · 不调 DEC / Codex / Kogami / Notion)
+- Codex 1-sync-trigger (auth / signing / security boundary) · round cap = 3
+- Kogami opt-in (用户主动召唤 only · auto-trigger 全废 per v2.3)
+- pre-implementation surface-scan (per DEC-V61-088) optional except new routes/ / pages/
+- counter 纯遥测
+- V-row distinct-signature enforcement (不准 alias 灌水)
+
+---
+
+## §9 · v2.3 governance 合规 (V64 scope · candidate-conditional)
+
+| Candidate | 跨 ≥3 共享代码路径? | Charter-level DEC required? | Codex 1-sync-trigger 命中? |
+|---|---|---|---|
+| V64-A Validation Maturity | YES (solver config + mesh gen + substrate prep + validation_reports/) | YES · `DEC-V64-A-charter` to be drafted post-ratification | LOW (validation reports / mesh gen 不命中 1-sync-trigger 默认 · 除非 routes/ 改动) |
+| V64-B Frontend Activation | YES (routes/ + pages/ + ui/frontend/src/ + advisor stack 接 UI) | YES · `DEC-V64-B-charter` to be drafted post-ratification | HIGH (routes/ pages/ 新建 + 修改 · Codex pre-merge 必走 · round cap = 3 风险) |
+| V64-C OSS + M6 | YES (README/LICENSE/CONTRIBUTING + V-series eval infra + session protocol + death-pattern catalog) | YES · `DEC-V64-C-charter` to be drafted post-ratification | LOW (session protocol / eval / catalog 不命中 · 除非 OSS infra 改 routes/) |
+
+Each candidate has its own charter DEC drafted only after user ratification. Sub-DEC chain follows V63-A precedent (first sub-DEC sets `parent_dec: V64-{A|B|C}-charter`).
+
+Kogami opt-in (per v2.3 DEC-V61-133): user may invoke `bash scripts/governance/kogami_invoke.sh <artifact> <topic>` on any milestone per their judgment · auto-trigger 全废 unchanged.
+
+Notion sync: session-end batch · only Status=Accepted DECs (this plan-file as plan-file does NOT sync; the future charter DEC will after ratification).
+
+---
+
+## §10 · 下一步建议 (V64 active 之前)
+
+1. **用户选择 candidate** (V64-A / V64-B / V64-C) · plan-author 不预设
+2. **B50 land first** (M-VAL-REPORT-3 + V63-A close prerequisites) — 任何 V64 candidate 都需要 V63-A close 之后才能 activate (per V63 precedent B38 同 commit chain 顶部转换)
+3. **Post-ratification**: 起草选中 candidate 的 charter DEC (DEC-V64-{A|B|C}-charter) · 移 un-selected candidates 到本 plan-file Alternatives Appendix · rename `_draft.md` → ratified plan-file (per V63 precedent)
+4. **First sub-DEC**: 选中 candidate 的 Tier 1 第一 milestone (e.g., V64-A 选则 `M-V64A-MESH-GEN-V2` 候选 first sub-DEC; V64-B 选则 `M-V64B-FRONTEND-BASELINE`; V64-C 选则 `M-V64C-OSS-AUDIT` 或 `M-V64C-SESSION-PROTOCOL`)
+5. **Codex review baseline**: 各 candidate 第一个 1-sync-trigger milestone 由 charter DEC §"v2.3 governance compliance" 节定义
+6. **Kogami opt-in**: 用户可在 ratification 时主动召唤 strategic 层独立审视 (per V63-A 未召唤的 precedent · 也可不召唤)
+
+---
+
+**End of V64 charter plan-file DRAFT.** 三 candidate 平权呈现 · 用户决定方向 · 不写 V63 close DEC (那是 V64 activate 前 V63 close commit chain 的工作 · 与本 plan-file 解耦)。
