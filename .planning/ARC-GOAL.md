@@ -80,8 +80,8 @@
 - [x] **M-XCLASS** 跨 numerics-class 第二案例 · CHT-multi-stream (chtMultiRegionSimpleFoam on case_011 v5b mesh) · 200 SIMPLE iter PASS · commit: `45d046f` · sub-DEC `2026-05-14_v61_198_sub_case_011_v3_solver_e2e.md` (degenerate physics caveat per V94 documented; procedural e2e demonstrated)
 - [x] **M-TRACK-5** Track C session 5 · case_009 v1.5 reacting-low-Mach · retro: `.planning/retrospectives/2026-05-14_track_c_session_5_case_009_v1_5_reacting.md` (2026-05-14 · 3rd e2e numerics class confirmed · V41 channel-(b) closed · A10 thermo_polynomial_range_advisor promotion gate met by v1 + v1.5 dual-evidence)
 - [x] **M-TRACK-6** Track C session 6 · case_003 CRM-HLS external-high-Re-BL · retro: `.planning/retrospectives/2026-05-14_track_c_session_6_case_003_crm_hls.md` (2026-05-14 · commit `bb4f34c` · 4th numerics class added to Track C coverage · V96+V97+V98 sediment all V83 6th cross-application class · A6 unit_detector cross-application surfaced silent fall-through window (V96 max_bytes truncation + V97 100m bbox cap) · A8 shm_dict_validator runtime error on hand-authored dicts (gap registered) · A2-v2/A4/A5/A7 module-load OK on case_003 substrate · solver 411 iter no divergence honest early-stop (killed by docker stop) · advisor land deferred per hard constraint)
-- [ ] **M-V100** V-series ≥ 100 marker · commit: `_____`
-- [ ] **M-RADAR-V2** capability radar v2 重画 · 左半轴 ≥ 7.2 验证 · commit: `_____`
+- [x] **M-V100** V-series ≥ 100 marker · commit: `b1303d2` (2026-05-14 · V99 STL-driven symmetryPlane non-planar gap (A8 widening territory) + V100 A8 validate_shm_dict input-type-guard gap · 双 corpus sediment · Done dim 4 MET)
+- [x] **M-RADAR-V2** capability radar v2 重画 · 左半轴 ≥ 7.2 验证 · commit: `483a144` (2026-05-14 · left half 6.40 → **7.10** ACTUAL · Done dim 5 **NOT MET · gap 0.1** · primary bottleneck = 网格生成 (6.5) per V85 connected-component cap + V92 multi-region fragility · secondary = 后处理 (7.0) no substrate work this arc · path to close: A8 widening per V99+V100 → mesh axis 6.5→7.0 → left half 7.10→7.20 ✓)
 - [ ] **M-V62** V61-198 close DEC + V62 charter draft · commit: `_____`
 
 ---
@@ -91,13 +91,13 @@
 ```
 当前 Track C session 通过:    6 / 6 ✓   (case_010 + case_011 + case_004 + case_009 v1 + case_009 v1.5 + case_003 CRM-HLS · Track C Done dimension MET)
 当前 LANDED advisor:          8 / 8 ✓   (A1, A2-v2, A3, A4, A5, A7, A8, A10 · LANDED Done dimension MET · A6 hvac_adpi still drafted awaiting 2nd HVAC case · A9 mrf_setup_advisor REGISTERED awaiting 2nd MRF case · unit_detector concrete advisor hardened by B16 (V96+V97 [VALIDATED]) but not promoted to LANDED counter since pre-existing module)
-当前 V-series 行数:          98 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity · V93 reacting low-Mach pre-ignition T floor · V94 case_011 STL face-label loss · V95 STL surface surgery insufficient when sub-cell-scale feature (case_002a M-APU-RESTORE NEGATIVE) · V96 A6 max_bytes 64KB STEP truncation (case_003) · V97 A6 bbox 100m upper bound cap (case_003) · V98 external-high-Re-BL y+ ≈ 2.1e5 at V20-unresolved geometry · all in both corpora)
+当前 V-series 行数:          100 / 100 ✓   (Done dim 4 MET 2026-05-14 · methodology + runtime 同步 · V88-V98 列见上版 · V99 STL-driven symmetryPlane non-planar gap (A8 widening territory) · V100 A8 validate_shm_dict input-type-guard gap (both case_003 session 6 retro § derived))
 当前 e2e numerics class:     3 / 3 ✓   (compressible-buoyant-RANS APU bay 2026-05-12 F4b · CHT-multi-stream case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter 2026-05-14 (degenerate physics caveat per V94) · reacting-low-Mach case_009 v1.5 ignition 0 limit warnings + Tmax 1880→1968K monotone climb 2026-05-14 (Track C session 5 retro consolidated))
-当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
-当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
+当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal) → **7.10 (v2 ACTUAL · 2026-05-14)** / 7.2  ⚠ gap 0.1 · primary bottleneck 网格 (6.5) · close path = A8 widening per V99+V100 → mesh 6.5→7.0
+当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal) → **9.17 (v2 ACTUAL · 2026-05-14)** / 8.7 ✓ (+0.47 margin)
 ```
 
-最后更新时间：`2026-05-14 (B16 + B17 batch land · A6 unit_detector hardening (V96 max_bytes 64KB→1MB + V97 bbox cap 100m→1000m) commit 83e2793 + A10 thermo_polynomial_range_advisor LANDED commit 25eea7a · V41 [QUESTIONABLE]→[VALIDATED] · V96+V97 status flipped · LANDED advisor 7→8 ✓ Done dimension MET · 4/6 Done dimensions now MET: Track C ≥6 ✓ · LANDED ≥8 ✓ · e2e class ≥3 ✓ · 右半轴 ≥8.7 ✓ · remaining gaps: V-series 98→100 (2 rows) · 左半轴 6.5→7.2 (substrate-bound))` · 更新人：`Claude Code Opus 4.7 session (main · B16/B17 reconcile)`
+最后更新时间：`2026-05-14 (B18 + B19 batch land · M-RADAR-V2 [x] commit 483a144 · 左半轴 6.40 → **7.10 ACTUAL** · Done dim 5 NOT MET gap 0.1 · primary bottleneck 网格 6.5 (V85+V92 mesh-debug-loop barriers) · M-V100 [x] commit b1303d2 · V99+V100 双 corpus · Done dim 4 MET · **5/6 Done dimensions now MET**: Track C ≥6 ✓ · LANDED ≥8 ✓ · V-series ≥100 ✓ · e2e class ≥3 ✓ · 右半轴 ≥8.7 ✓ · last remaining gap: 左半轴 7.10→7.20 (gap 0.1 · A8 widening per V99+V100 是直接 close path))` · 更新人：`Claude Code Opus 4.7 session (main · B18/B19 reconcile)`
 
 ---
 
