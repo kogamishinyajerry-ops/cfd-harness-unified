@@ -432,3 +432,179 @@ def test_v100_type_guard_str_input_raises_actionable_typeerror():
     assert ("PyFoam" in msg) or ("foamDictionary" in msg)
     # Must restate the contract so caller understands why.
     assert "dict" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# V99-WIDEN (DEC-V62-A-sub-A8-V99-WIDEN, 2026-05-14):
+# native OpenFOAM ``name:`` alias resolution + V100-WIDEN parens-stripping.
+# Closes M-STACK-TRACK-1 §8 enhancement #1 (case_011 v5b 6/8 false-positives).
+# ---------------------------------------------------------------------------
+
+
+def test_v99_widening_recognizes_name_alias_form_case_011_v5b():
+    # case_011 v5b verbatim shape: geometry keyed by .stl filename + a
+    # `name:` alias that is the canonical patch token referenced by
+    # refinementSurfaces. Pre-widening this produced 6 false-positives
+    # (3 missing_geometry_ref + 3 geometry_orphan). After widening:
+    # 0 findings.
+    parsed = {
+        "geometry": {
+            "region_hot_fluid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "region_hot_fluid",
+            },
+            "region_cold_fluid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "region_cold_fluid",
+            },
+            "region_solid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "region_solid",
+            },
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "region_hot_fluid": {"level": [1, 2]},
+                "region_cold_fluid": {"level": [2, 3]},
+                "region_solid": {"level": [3, 4]},
+            },
+            "refinementRegions": {},
+        },
+    }
+    report = validate_shm_dict(parsed)
+    assert not any(
+        f.code == "missing_geometry_ref" for f in report.findings
+    ), report.findings
+    assert not any(
+        f.code == "geometry_orphan" for f in report.findings
+    ), report.findings
+    # geometry_names tuple is preserved as literal keys for backward compat.
+    assert set(report.geometry_names) == {
+        "region_hot_fluid.stl",
+        "region_cold_fluid.stl",
+        "region_solid.stl",
+    }
+
+
+def test_v99_widening_strips_parentheses_v100_widen():
+    # V100-WIDEN: foamDictionary -value -entry may wrap single-word
+    # tokens in `(...)` (wordList round-trip). `name (region_hot_fluid)`
+    # must resolve to the same canonical identifier as
+    # `name region_hot_fluid` so refinementSurfaces references match.
+    parsed = {
+        "geometry": {
+            "region_hot_fluid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "(region_hot_fluid)",
+            },
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {"region_hot_fluid": {"level": [1, 2]}},
+        },
+    }
+    report = validate_shm_dict(parsed)
+    assert not any(
+        f.code == "missing_geometry_ref" for f in report.findings
+    ), report.findings
+    assert not any(
+        f.code == "geometry_orphan" for f in report.findings
+    ), report.findings
+
+
+def test_v99_widening_backward_compat_literal_form():
+    # The pre-V99-WIDEN literal-key form (no `name:` attribute) must
+    # continue to work unchanged — V52/V86 regression suite and the
+    # majority of internally authored fixtures use this shape.
+    parsed = {
+        "geometry": {
+            "region_hot_fluid": {"type": "triSurfaceMesh"},
+            "ghost_surface_unknown_in_geometry": {"type": "triSurfaceMesh"},
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "region_hot_fluid": {"level": [2, 2]},
+                "ghost_surface_unknown_in_refsurf": {"level": [3, 3]},
+            },
+        },
+    }
+    report = validate_shm_dict(parsed)
+    # ghost_surface_unknown_in_refsurf has no matching geometry entry →
+    # still emits missing_geometry_ref (literal-form check intact).
+    missing = [f for f in report.findings if f.code == "missing_geometry_ref"]
+    assert len(missing) == 1
+    assert "ghost_surface_unknown_in_refsurf" in missing[0].message
+    # ghost_surface_unknown_in_geometry is unreferenced → still emits
+    # geometry_orphan (Path b' literal-form behavior intact).
+    orphans = [f for f in report.findings if f.code == "geometry_orphan"]
+    assert len(orphans) == 1
+    assert orphans[0].location == "geometry.ghost_surface_unknown_in_geometry"
+
+
+def test_v99_widening_mixed_form_in_same_dict():
+    # Heterogeneous dict: one geometry entry uses alias form, one uses
+    # literal form. Both flavours must resolve correctly within the same
+    # validation pass (no all-or-nothing branch).
+    parsed = {
+        "geometry": {
+            "region_hot_fluid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "region_hot_fluid",  # alias form
+            },
+            "region_solid": {"type": "triSurfaceMesh"},  # literal form
+        },
+        "castellatedMeshControls": {
+            "refinementSurfaces": {
+                "region_hot_fluid": {"level": [1, 2]},  # matches alias
+                "region_solid": {"level": [3, 4]},  # matches literal
+            },
+        },
+    }
+    report = validate_shm_dict(parsed)
+    assert not any(
+        f.code == "missing_geometry_ref" for f in report.findings
+    ), report.findings
+    assert not any(
+        f.code == "geometry_orphan" for f in report.findings
+    ), report.findings
+
+
+def test_v99_widening_does_not_consume_unrelated_name_keys():
+    # `name:` keys outside the geometry block (e.g. inside patchInfo,
+    # inside thin_wall input shapes, inside features entries) must NOT
+    # be consumed as geometry aliases. Path (b)/(b')/(c) only inspect
+    # geometry.*.name; anything else is left to its own validator.
+    parsed = {
+        "geometry": {
+            "region_hot_fluid.stl": {
+                "type": "triSurfaceMesh",
+                "name": "region_hot_fluid",
+            },
+        },
+        "castellatedMeshControls": {
+            # ghost_via_features should NOT become a valid geometry name
+            # just because it appears as a `name` value inside a feature.
+            "features": [
+                {"file": "region_hot_fluid.eMesh", "level": 2,
+                 "name": "ghost_via_features"},
+            ],
+            "refinementSurfaces": {
+                "region_hot_fluid": {
+                    "level": [1, 2],
+                    "patchInfo": {
+                        "type": "patch",
+                        # `name` inside patchInfo: must NOT alias geometry.
+                        "name": "ghost_via_patchinfo",
+                    },
+                },
+                "ghost_via_features": {"level": [2, 2]},
+            },
+        },
+    }
+    report = validate_shm_dict(parsed)
+    # ghost_via_features in refinementSurfaces has no matching geometry
+    # alias and no literal geometry key → must still emit
+    # missing_geometry_ref (proves alias resolution did not bleed into
+    # the features/patchInfo `name` keys).
+    missing = [f for f in report.findings if f.code == "missing_geometry_ref"]
+    assert len(missing) == 1
+    assert "ghost_via_features" in missing[0].message
