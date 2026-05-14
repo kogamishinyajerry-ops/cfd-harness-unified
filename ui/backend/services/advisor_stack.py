@@ -165,6 +165,7 @@ bc_type_name_validity_advisor = _load_advisor("bc_type_name_validity_advisor")
 face_orientation_advisor = _load_advisor("face_orientation_advisor")
 inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
 shm_dict_validator = _load_advisor("shm_dict_validator")
+stl_face_label_validator = _load_advisor("stl_face_label_validator")
 thermo_polynomial_range_advisor = _load_advisor("thermo_polynomial_range_advisor")
 thin_wall_advisor = _load_advisor("thin_wall_advisor")
 unit_detector = _load_advisor("unit_detector")
@@ -179,6 +180,7 @@ _V_ROWS_PER_ADVISOR: dict[str, tuple[str, ...]] = {
     "face_orientation_advisor": ("V79", "V87"),
     "inlet_outlet_validator": ("V81",),
     "shm_dict_validator": ("V52", "V86", "V99", "V100"),
+    "stl_face_label_validator": ("V94",),
     "thermo_polynomial_range_advisor": ("V41", "V93"),
     "thin_wall_advisor": ("V10",),
     "unit_detector": ("V20", "V96"),
@@ -371,6 +373,25 @@ def _normalize_shm(
     )
 
 
+def _normalize_face_label(
+    report: stl_face_label_validator.FaceLabelReport,
+) -> tuple[Finding, ...]:
+    advisor = "stl_face_label_validator"
+    rows = _V_ROWS_PER_ADVISOR[advisor]
+    return tuple(
+        Finding(
+            source_advisor=advisor,
+            severity=f.severity,
+            code=f.code,
+            message=f.detail,
+            location=f.location,
+            evidence_v_rows=rows,
+            raw=f,
+        )
+        for f in report.findings
+    )
+
+
 def _normalize_thermo(
     report: thermo_polynomial_range_advisor.ThermoPolynomialRangeReport,
 ) -> tuple[Finding, ...]:
@@ -485,6 +506,55 @@ def _normalize_interfaces(
                 )
             )
     return tuple(out)
+
+
+def _should_dispatch_face_label_validator(
+    *,
+    shm_stl_face_normals: Mapping[str, Any] | None,
+    parts_manifest: Mapping[str, Any] | None,
+    shm_dict: Mapping[str, Any] | None,
+) -> bool:
+    """Decide whether D11 has anything meaningful to validate.
+
+    Returns True iff at least one of:
+
+    1. ``shm_stl_face_normals`` is provided with at least one entry —
+       the STL inventory exists, so the orphan path (a) can fire.
+    2. ``parts_manifest`` declares ``face_labels:`` on at least one
+       part — manifest-internal paths (b)/(c) precondition.
+    3. ``shm_dict`` carries either ``castellatedMeshControls.refinementSurfaces.<surf>.regions``
+       or ``castellatedMeshControls.patches`` entries — path (c) reads
+       these as the source of face-label references.
+
+    The gate exists to keep advisor_count stable on legacy callers that
+    pass parts_manifest without face_labels (the typical V62-A test
+    fixture shape); dispatching D11 there would inflate ``advisor_count``
+    by 1 on every existing test for no informational gain.
+    """
+    if isinstance(shm_stl_face_normals, Mapping) and len(shm_stl_face_normals) > 0:
+        return True
+    if isinstance(parts_manifest, Mapping):
+        parts = parts_manifest.get("parts") or []
+        if isinstance(parts, list):
+            for entry in parts:
+                if isinstance(entry, dict):
+                    labels = entry.get("face_labels")
+                    if isinstance(labels, list) and len(labels) > 0:
+                        return True
+    if isinstance(shm_dict, Mapping):
+        cmc = shm_dict.get("castellatedMeshControls")
+        if isinstance(cmc, Mapping):
+            refsurfs = cmc.get("refinementSurfaces")
+            if isinstance(refsurfs, Mapping):
+                for surf_body in refsurfs.values():
+                    if isinstance(surf_body, Mapping):
+                        regions = surf_body.get("regions")
+                        if isinstance(regions, Mapping) and len(regions) > 0:
+                            return True
+            patches = cmc.get("patches")
+            if isinstance(patches, list) and len(patches) > 0:
+                return True
+    return False
 
 
 def _dispatch(
@@ -664,6 +734,46 @@ def assemble_stack(
             args=(dict(shm_dict),),
             kwargs=shm_kwargs,
             normalize=_normalize_shm,
+            advisor_calls=advisor_calls,
+            findings=findings,
+        )
+
+    # D11 stl_face_label_validator dispatch (DEC-V63-A-sub-D11 ·
+    # M-STACK-TRACK-1 §8 enhancement #3 · V94 evidence row).
+    # Dispatches when there is face-label data to validate against:
+    #   (1) explicit shm_stl_face_normals provided (STL inventory in
+    #       hand — all 3 detection paths can fire), OR
+    #   (2) parts_manifest declares face_labels on any part (paths
+    #       (b) and (c) still meaningful without the STL contrast), OR
+    #   (3) shm_dict carries refinementSurfaces.<surf>.regions or
+    #       castellatedMeshControls.patches[] (path (c) requires only
+    #       the shm reference walk + the parts_manifest declared union).
+    # Otherwise silently skipped per V130. The advisor returns empty
+    # when nothing to validate (no key-side polution).
+    if _should_dispatch_face_label_validator(
+        shm_stl_face_normals=shm_stl_face_normals,
+        parts_manifest=parts_manifest,
+        shm_dict=shm_dict,
+    ):
+        advisors_dispatched.add("stl_face_label_validator")
+        _dispatch(
+            advisor_name="stl_face_label_validator",
+            module=stl_face_label_validator,
+            input_summary=(
+                "stl_face_normals="
+                f"{None if shm_stl_face_normals is None else len(shm_stl_face_normals)} keys, "
+                "parts_manifest="
+                f"{None if parts_manifest is None else len(parts_manifest.get('parts') or [])} parts, "
+                f"shm_dict={'yes' if shm_dict is not None else 'no'}"
+            ),
+            func=stl_face_label_validator.validate_face_label_consistency,
+            args=(
+                dict(shm_stl_face_normals) if shm_stl_face_normals is not None else None,
+                dict(parts_manifest) if parts_manifest is not None else None,
+                dict(shm_dict) if shm_dict is not None else None,
+            ),
+            kwargs={},
+            normalize=_normalize_face_label,
             advisor_calls=advisor_calls,
             findings=findings,
         )

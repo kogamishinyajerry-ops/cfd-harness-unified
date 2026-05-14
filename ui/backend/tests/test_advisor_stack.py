@@ -240,6 +240,107 @@ def test_bc_fork_foam_extend_tolerates_characteristic_family() -> None:
     assert d10 == []  # no findings on foam-extend fork
 
 
+# DEC-V63-A-sub-D11 — stl_face_label_validator routing (V94 face-label-loss).
+# Four tests covering: explicit stl_face_normals happy path, silent-skip on
+# no-face-label-data, crash isolation, and evidence_refs union containing V94.
+
+
+def test_stl_face_normals_dispatches_d11_with_v94_evidence() -> None:
+    """DEC-V63-A-sub-D11: shm_stl_face_normals + manifest face_labels → D11 fires.
+
+    Replays the case_011 V94 ground truth — manifest declares hot_inlet
+    but the STL inventory only contains the parent body label; D11 must
+    flag the orphan with V94 in evidence_v_rows.
+    """
+    r = assemble_stack(
+        parts_manifest={
+            "parts": [
+                {
+                    "name": "region_hot_fluid",
+                    "role": "region_fluid",
+                    "face_labels": ["hot_inlet", "hot_outlet"],
+                }
+            ]
+        },
+        shm_stl_face_normals={
+            "region_hot_fluid": [(0.0, 1.0, 0.0)],   # only parent label
+        },
+    )
+    names = {c.advisor_name for c in r.advisor_calls}
+    assert "stl_face_label_validator" in names
+    d11_findings = [
+        f for f in r.findings if f.source_advisor == "stl_face_label_validator"
+    ]
+    assert len(d11_findings) == 2   # hot_inlet + hot_outlet orphan
+    for f in d11_findings:
+        assert f.severity == "warning"
+        assert "V94" in f.evidence_v_rows
+        assert f.code == "orphan_declared_label"
+
+
+def test_d11_silently_skipped_when_no_face_label_data() -> None:
+    """V130 silent-skip: parts_manifest without face_labels and no STL
+    inventory → D11 does not dispatch (advisor_count stable for legacy
+    test fixtures that pre-date the face_labels schema)."""
+    r = assemble_stack(
+        parts_manifest={
+            "parts": [
+                {"name": "louver_vane_2", "role": "wall"},   # no face_labels
+            ]
+        },
+    )
+    names = {c.advisor_name for c in r.advisor_calls}
+    assert "stl_face_label_validator" not in names
+
+
+def test_d11_crash_is_isolated(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If D11 raises, A4 + A5 still run and the stack returns (mirrors
+    A4-crash-isolation contract for V63-A's new dispatch path)."""
+    from ui.backend.services.advisor_stack import stl_face_label_validator as d11_mod
+
+    def boom(*_args, **_kwargs):   # pragma: no cover - simulated crash
+        raise RuntimeError("simulated D11 crash")
+
+    monkeypatch.setattr(d11_mod, "validate_face_label_consistency", boom)
+
+    r = assemble_stack(
+        parts_manifest={
+            "parts": [
+                {
+                    "name": "supply_inlet",
+                    "role": "inlet",
+                    "face_labels": ["inlet_face"],   # triggers D11 dispatch
+                }
+            ]
+        },
+    )
+    by_name = {c.advisor_name: c for c in r.advisor_calls}
+    assert by_name["stl_face_label_validator"].status == "error"
+    assert by_name["stl_face_label_validator"].output == {
+        "exception_type": "RuntimeError",
+        "message": "simulated D11 crash",
+    }
+    # A5 still ran and produced its V81 fail
+    assert by_name["inlet_outlet_validator"].status == "ok"
+    assert r.failed_advisor_count == 1
+    # D11 contributed no findings (crash isolated); other advisors did.
+    assert all(f.source_advisor != "stl_face_label_validator" for f in r.findings)
+
+
+def test_evidence_refs_includes_v94_when_d11_dispatches() -> None:
+    """V62-A drift_guard contract: evidence_refs aggregates dispatched
+    advisors' V-rows. D11 dispatch must surface V94 in the union."""
+    r = assemble_stack(
+        shm_stl_face_normals={"region_hot_fluid": [(0.0, 1.0, 0.0)]},
+    )
+    assert r.advisor_count == 1
+    assert r.advisor_calls[0].advisor_name == "stl_face_label_validator"
+    assert "V94" in r.evidence_refs
+    # Other advisors' V-rows are NOT in the union because they didn't run.
+    assert "V79" not in r.evidence_refs
+    assert "V52" not in r.evidence_refs
+
+
 def test_shm_dict_only_dispatches_a8() -> None:
     r = assemble_stack(shm_dict=_shm_dict_with_typo())
     assert r.advisor_count == 1

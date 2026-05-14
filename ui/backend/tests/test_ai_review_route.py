@@ -817,3 +817,100 @@ def test_bc_fork_foam_extend_tolerates_characteristic_family(
         if f["source_advisor"] == "bc_type_name_validity_advisor"
     ]
     assert d10 == []  # no findings on foam-extend fork
+
+
+# ---------- DEC-V63-A-sub-D11 — stl_face_label_validator wire ----------
+# Two tests covering: explicit stl_face_normals → D11 fires with V94 evidence;
+# case_dir auto-discovery from <case_dir>/cad/face_normals.json.
+
+
+def test_stl_face_normals_explicit_dispatches_d11_with_v94_evidence(
+    client: TestClient,
+) -> None:
+    """DEC-V63-A-sub-D11: explicit stl_face_normals + manifest face_labels
+    over the wire → D11 fires.
+
+    Replays the case_011 V94 canonical evidence — manifest claims face
+    labels hot_inlet / hot_outlet but the STL inventory only contains
+    the parent body label (cq.exporters single-shell behaviour).
+    """
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "parts_manifest": {
+                "parts": [
+                    {
+                        "name": "region_hot_fluid",
+                        "role": "region_fluid",
+                        "face_labels": ["hot_inlet", "hot_outlet"],
+                    }
+                ]
+            },
+            "stl_face_normals": {
+                "region_hot_fluid": [[0.0, 1.0, 0.0]],
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "stl_face_label_validator" in advisor_names
+    d11 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "stl_face_label_validator"
+    ]
+    # Both declared labels orphan-fire (neither in stl_face_normals keys)
+    assert len(d11) == 2
+    orphan_labels = {f["raw"]["face_label"] for f in d11}
+    assert orphan_labels == {"hot_inlet", "hot_outlet"}
+    for f in d11:
+        assert f["severity"] == "warning"
+        assert "V94" in f["evidence_v_rows"]
+
+
+def test_stl_face_normals_autodiscovered_from_case_dir(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """case_dir auto-discovery: when stl_face_normals is absent on the
+    wire but ``<case_dir>/cad/face_normals.json`` exists, the route
+    loads it and plumbs to D11."""
+    case_dir = tmp_path / "case_d11_autodisc"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    cad = case_dir / "cad"
+    cad.mkdir()
+    (inputs / "parts_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "parts": [
+                    {
+                        "name": "region_cold_fluid",
+                        "role": "region_fluid",
+                        "face_labels": ["cold_inlet"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    # face_normals.json contains only the parent body label — cold_inlet
+    # is absent so D11 will orphan-fire on it.
+    (cad / "face_normals.json").write_text(
+        json.dumps({"region_cold_fluid": [[0.0, -1.0, 0.0]]}),
+        encoding="utf-8",
+    )
+    resp = client.post(
+        "/api/ai-review",
+        json={"case_dir": str(case_dir)},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "stl_face_label_validator" in advisor_names
+    d11 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "stl_face_label_validator"
+    ]
+    assert len(d11) == 1
+    assert d11[0]["raw"]["face_label"] == "cold_inlet"
+    assert "V94" in d11[0]["evidence_v_rows"]

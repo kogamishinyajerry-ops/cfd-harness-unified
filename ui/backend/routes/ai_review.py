@@ -201,6 +201,24 @@ class AIReviewRequest(BaseModel):
             "Defaults to 'main' when None."
         ),
     )
+    # DEC-V63-A-sub-D11 (2026-05-14) — wire field below routes STL face-
+    # label inventory into D11 stl_face_label_validator (V94 face-label-
+    # loss class). Same physical input that A8 V99-widening already
+    # consumes via the stack's shm_stl_face_normals kwarg; the wire
+    # field unifies them under a single payload entry.
+    stl_face_normals: Optional[dict[str, list[list[float]]]] = Field(
+        default=None,
+        description=(
+            "STL solid-label → list of facet-normal 3-vectors. Each "
+            "key is an STL solid block name (the face-label inventory "
+            "the engineer's CAD pipeline emitted); each value is a "
+            "list of [nx, ny, nz] floats. Routes into both D11 "
+            "(face-label consistency) and A8 V99-widening (shm dict "
+            "geometry alias resolution). When absent AND case_dir is "
+            "supplied, auto-discovered from "
+            "<case_dir>/cad/face_normals.json. See DEC-V63-A-sub-D11."
+        ),
+    )
     llm_enhance: bool = Field(
         default=False,
         description=(
@@ -694,6 +712,8 @@ async def post_ai_review(
         "interface_specs": payload.interface_specs,
         # DEC-V62-A-sub-D10
         "bc_specs": payload.bc_specs,
+        # DEC-V63-A-sub-D11
+        "stl_face_normals": payload.stl_face_normals,
     }
     if payload.bc_fork is not None:
         explicit_kwargs["bc_fork"] = payload.bc_fork
@@ -713,6 +733,18 @@ async def post_ai_review(
         for kw, value in geo_meta.items():
             if explicit_kwargs.get(kw) is None:
                 explicit_kwargs[kw] = value
+        # DEC-V63-A-sub-D11: auto-discover stl_face_normals from
+        # <case_dir>/cad/face_normals.json when the wire field is absent.
+        # On-disk format mirrors the wire schema: dict[label, list[[nx,ny,nz]]].
+        if explicit_kwargs.get("stl_face_normals") is None:
+            normals_path = case_path / "cad" / "face_normals.json"
+            if normals_path.is_file():
+                try:
+                    loaded = json.loads(normals_path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    loaded = None
+                if isinstance(loaded, dict):
+                    explicit_kwargs["stl_face_normals"] = loaded
 
     # Codex R0 P2 (2026-05-14): thin_wall_inputs arrives as plain dicts
     # over the wire; the advisor expects ``PatchGeometry`` dataclass
@@ -722,6 +754,37 @@ async def post_ai_review(
         explicit_kwargs["thin_wall_inputs"] = _rehydrate_thin_wall_inputs(
             explicit_kwargs["thin_wall_inputs"]
         )
+
+    # DEC-V63-A-sub-D11: stl_face_normals arrives as dict[label,
+    # list[list[float]]] (JSON-compatible). The stack's
+    # shm_stl_face_normals kwarg expects dict[label, list[tuple[float,
+    # float, float]]]. Coerce + plumb to the stack-side name; 400 on
+    # malformed normals shape.
+    stl_face_normals_wire = explicit_kwargs.pop("stl_face_normals", None)
+    if stl_face_normals_wire is not None:
+        if not isinstance(stl_face_normals_wire, dict):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "stl_face_normals_type",
+                    "expected": "dict[str, list[[float, float, float]]]",
+                    "got": type(stl_face_normals_wire).__name__,
+                },
+            )
+        coerced_normals: dict[str, list[tuple[float, float, float]]] = {}
+        for label, normals in stl_face_normals_wire.items():
+            if not isinstance(label, str) or not isinstance(normals, list):
+                continue
+            triples: list[tuple[float, float, float]] = []
+            for normal in normals:
+                if not isinstance(normal, (list, tuple)) or len(normal) != 3:
+                    continue
+                try:
+                    triples.append((float(normal[0]), float(normal[1]), float(normal[2])))
+                except (TypeError, ValueError, OverflowError):
+                    continue
+            coerced_normals[label] = triples
+        explicit_kwargs["shm_stl_face_normals"] = coerced_normals
 
     # DEC-V62-A-sub-REQ-SCHEMA-EXPAND: wire-form lists/six-tuples →
     # assemble_stack-shaped kwargs. Pop the wire-form keys and replace
