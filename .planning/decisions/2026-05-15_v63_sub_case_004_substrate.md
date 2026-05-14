@@ -4,7 +4,7 @@ title: case_004 NREL Phase VI MRF input-manifest substrate extension · thin_wal
 status: Accepted
 parent_dec: DEC-V63-A-charter
 phase: V63-A Tier 2 supplement · M-CASE-004-SUBSTRATE (cross-case extension #2 · driven by Done dim #6 "≥3/9 on ≥3 cases" cross-case clause · mirror of B42 case_006 substrate)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/360c68942bed8109be99cdf3a09d8440)
 ---
 
 ## Status
