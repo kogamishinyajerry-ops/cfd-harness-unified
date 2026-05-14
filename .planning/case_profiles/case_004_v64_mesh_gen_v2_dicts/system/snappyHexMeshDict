@@ -1,0 +1,197 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-gen-v2                            |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-GEN-V2                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// NREL Phase VI MRF mesh — castellated + snap + addLayers off (v2 baseline).
+// Cell-zone extraction for `rotating_cellzone` drives MRFProperties hook.
+// Refinement levels are calibrated to land 5-15 M cells (Tier-1 reference
+// rotor / NREL UAE Sequence S baseline) per V64-A charter mesh budget.
+
+castellatedMesh true;
+snap            true;
+addLayers       false;   // boundary-layer addition deferred to v3 (Tier 2)
+
+geometry
+{
+    rotor_blade_a.stl       { type triSurfaceMesh; name rotor_blade_A; }
+    rotor_blade_b.stl       { type triSurfaceMesh; name rotor_blade_B; }
+    hub_spinner.stl         { type triSurfaceMesh; name hub_spinner_1; }
+    hub_spinner001.stl      { type triSurfaceMesh; name hub_spinner_2; }
+    nacelle_body.stl        { type triSurfaceMesh; name nacelle_body; }
+    nacelle_service_cover.stl { type triSurfaceMesh; name nacelle_service_cover; }
+    tower_body.stl          { type triSurfaceMesh; name tower_body; }
+    yaw_sensor_shim.stl     { type triSurfaceMesh; name yaw_sensor_shim; }
+    rotating_cellzone.stl
+    {
+        type    triSurfaceMesh;
+        name    rotating_cellzone;
+    }
+};
+
+castellatedMeshControls
+{
+    maxLocalCells       4000000;
+    maxGlobalCells      15000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 3;
+    resolveFeatureAngle 30;
+    allowFreeStandingZoneFaces true;
+
+    features
+    (
+        { file "rotor_blade_a.eMesh";        level 5; }
+        { file "rotor_blade_b.eMesh";        level 5; }
+        { file "hub_spinner.eMesh";          level 4; }
+        { file "hub_spinner001.eMesh";       level 4; }
+        { file "nacelle_body.eMesh";         level 3; }
+        { file "nacelle_service_cover.eMesh"; level 4; }
+        { file "tower_body.eMesh";           level 3; }
+        { file "yaw_sensor_shim.eMesh";      level 2; }
+    );
+
+    refinementSurfaces
+    {
+        rotor_blade_A
+        {
+            // Blade surface; level (4,5) gives effective 31.25/15.6 mm.
+            level (4 5);
+            patchInfo { type wall; }
+        }
+        rotor_blade_B
+        {
+            level (4 5);
+            patchInfo { type wall; }
+        }
+        hub_spinner_1
+        {
+            level (3 4);
+            patchInfo { type wall; }
+        }
+        hub_spinner_2
+        {
+            level (3 4);
+            patchInfo { type wall; }
+        }
+        nacelle_body
+        {
+            level (2 3);
+            patchInfo { type wall; }
+        }
+        nacelle_service_cover
+        {
+            // Thin auxiliary wall + D1 0.30 mm gap with nacelle_body.
+            // Finer level chosen to keep gap resolvable above merge floor.
+            // thin_wall_advisor flagged this as critical-merge-likely at
+            // background 500 mm; refinement 4 brings local cell to 31 mm
+            // which is still > 0.30 mm gap → sHM will merge the gap.
+            // This is the documented v2 limitation; v3 needs surfaceMesh
+            // refinement region of size 1-5 mm to preserve the gap.
+            level (3 4);
+            patchInfo { type wall; }
+        }
+        tower_body
+        {
+            level (2 3);
+            patchInfo { type wall; }
+        }
+        yaw_sensor_shim
+        {
+            // 0.75 mm thin shim — per V23/V30 thin_wall_advisor warning,
+            // merging is expected at refinement levels ≤ 11. Level 2 here
+            // documents the deliberate trade (shim not blade-relevant for
+            // primary thrust/torque metric).
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        rotating_cellzone
+        {
+            // Zone marker — not a wall. cellZone naming matches MRFProperties.
+            level (1 2);
+            faceZone    rotating_cellzone_faces;
+            cellZone    rotating_cellzone;
+            cellZoneInside  inside;
+        }
+    };
+
+    refinementRegions
+    {
+        rotating_cellzone
+        {
+            // Bring interior of MRF cellzone to level 2 → effective 125 mm.
+            // Enough headroom for rotor surfaces to land their level-5 cells
+            // without being constrained by background.
+            mode    inside;
+            levels  ((1e15 2));
+        }
+    };
+
+    // Inside the kept fluid region but outside any cellZone-delimiter STL.
+    // Tunnel ranges x[-30k, 60k] mm; rotating cylinder spans x[-1100, 700] mm.
+    // Point at x=3000, y=0, z=0 is well downstream of the rotor, inside
+    // the tunnel walls, and outside the rotating cellzone.
+    locationInMesh (3000 0 0);
+
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      30;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap true;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    // Disabled at top; values kept for v3 reference only.
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.5;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        60;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+    nSmoothScale 4;
+    errorReduction 0.75;
+}
+
+writeFlags
+(
+    scalarLevels
+    layerSets
+    layerFields
+);
+
+mergeTolerance 1e-6;
+
+// ************************************************************************* //

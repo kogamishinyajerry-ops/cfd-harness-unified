@@ -1,0 +1,83 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-gen-v2                            |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-GEN-V2                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Feature edge extraction for snappyHexMesh (OF ESI 2312 per-surface schema).
+
+rotor_blade_a.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+rotor_blade_b.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+hub_spinner.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+hub_spinner001.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+nacelle_body.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+nacelle_service_cover.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+tower_body.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+yaw_sensor_shim.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs { includedAngle 150; }
+    subsetFeatures      { nonManifoldEdges yes; openEdges yes; }
+    writeObj            no;
+    writeFeatureEdgeMesh yes;
+}
+
+// ************************************************************************* //

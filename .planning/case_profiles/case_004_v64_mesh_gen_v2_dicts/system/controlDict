@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-gen-v2                            |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-GEN-V2                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Minimal controlDict so blockMesh / snappyHexMesh / checkMesh have a valid
+// time-loop context. Solver fields (deltaT/startTime/endTime/writeInterval)
+// will be re-tuned in M-V64A-VAL-FULL-1 (solver execution scope, not here).
+
+application     simpleFoam;
+
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         1;
+deltaT          1;
+writeControl    timeStep;
+writeInterval   1;
+purgeWrite      0;
+writeFormat      ascii;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+// ************************************************************************* //
