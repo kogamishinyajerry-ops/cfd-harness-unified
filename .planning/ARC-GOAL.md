@@ -66,7 +66,9 @@
 ### Tier 2 · advisor 加宽
 
 - [ ] **M-A6** A6 hvac_adpi advisor LANDED · commit: `_____`
-- [x] **M-A8** A8 shm_dict_validator advisor LANDED · commit: `_____` (B12 land · sub-DEC `2026-05-14_v61_198_sub_a8_shm_dict_validator.md` · 9-test suite green · V52 typo-class + V86 orphan-class promotion gate met)
+- [x] **M-A8** A8 shm_dict_validator advisor LANDED · commit: `18e0ee7` (2026-05-14 · sub-DEC `2026-05-14_v61_198_sub_a8_shm_dict_validator.md` · 9-test suite green · V52 typo-class + V86 orphan-class promotion gate met)
+- [x] **M-A10** A10 thermo_polynomial_range_advisor LANDED · commit: `25eea7a` (2026-05-14 · sub-DEC `2026-05-14_v61_198_sub_a10_thermo_polynomial_range_advisor.md` · 14-test suite green · V41 channel-(b) closed [QUESTIONABLE]→[VALIDATED] · V93 codified · LANDED counter 7→8 ✓ Done dim MET)
+- [x] **M-A6-HARDEN** A6 unit_detector hardening · commit: `83e2793` (2026-05-14 · sub-DEC `2026-05-14_v61_198_sub_a6_unit_detector_hardening.md` · spike-class · V96 max_bytes 64KB→1MB + V97 bbox cap 100m→1000m · both [VALIDATED] · pre-existing unit_detector module, not advisor #9)
 - [ ] **M-A5** A5 unallocated 填充 · 候选 drafted · commit: `_____`
 - [ ] **M-D6** D6 advisor promotion drafted → ready-to-land · commit: `_____`
 - [x] **M-TRACK-3** Track C session 3 · case_004 NREL MRF · retro: `.planning/retrospectives/2026-05-13_track_c_advisor_e2e_session_3_case_004.md` (2026-05-13 · surfaced V88 compound row — MRF setup advisor coverage gap · 3rd cross-application of V83 across audit surfaces · A6/A8 2nd-evidence NOT produced by case_004 substrate · A9 mrf_setup_advisor candidate registered)
@@ -88,14 +90,14 @@
 
 ```
 当前 Track C session 通过:    6 / 6 ✓   (case_010 + case_011 + case_004 + case_009 v1 + case_009 v1.5 + case_003 CRM-HLS · Track C Done dimension MET)
-当前 LANDED advisor:          7 / 8   (A1, A2-v2, A3, A4, A5, A7, A8 · A6 unit_detector silent fall-through V96+V97 surfaced via case_003 — fix candidate emerged (max_bytes raise + bbox cap raise) · A9 mrf_setup_advisor REGISTERED post-session-3 awaiting 2nd MRF case · A10 thermo_polynomial_range_advisor REGISTERED v1+v1.5 dual evidence per session-5 retro · 待 land 决策)
+当前 LANDED advisor:          8 / 8 ✓   (A1, A2-v2, A3, A4, A5, A7, A8, A10 · LANDED Done dimension MET · A6 hvac_adpi still drafted awaiting 2nd HVAC case · A9 mrf_setup_advisor REGISTERED awaiting 2nd MRF case · unit_detector concrete advisor hardened by B16 (V96+V97 [VALIDATED]) but not promoted to LANDED counter since pre-existing module)
 当前 V-series 行数:          98 / 100   (methodology + runtime 同步 · V88 case_004 MRF · V89 case_011 fluid-insidePoint-in-fin · V90 locationsInMesh-syntax-vs-separate-STL · V91 V41 sediment-state correction (case_009 v1) · V92 case_011 v5 `cellZoneInside inside` heterogeneity · V93 reacting low-Mach pre-ignition T floor · V94 case_011 STL face-label loss · V95 STL surface surgery insufficient when sub-cell-scale feature (case_002a M-APU-RESTORE NEGATIVE) · V96 A6 max_bytes 64KB STEP truncation (case_003) · V97 A6 bbox 100m upper bound cap (case_003) · V98 external-high-Re-BL y+ ≈ 2.1e5 at V20-unresolved geometry · all in both corpora)
 当前 e2e numerics class:     3 / 3 ✓   (compressible-buoyant-RANS APU bay 2026-05-12 F4b · CHT-multi-stream case_011 v5b chtMultiRegionSimpleFoam 200 SIMPLE iter 2026-05-14 (degenerate physics caveat per V94) · reacting-low-Mach case_009 v1.5 ignition 0 limit warnings + Tmax 1880→1968K monotone climb 2026-05-14 (Track C session 5 retro consolidated))
 当前左半轴均分:             6.4 (v1) → 6.5 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 7.2  ⚠ +0.1Δ · advisor-only path 不够 · 需 substrate
 当前右半轴均分:             8.7 (v1) → 9.0 (v1.5 early-signal · SCORE-DELTA · 雷达图未重画) / 8.7 ✓ (+0.3 margin)
 ```
 
-最后更新时间：`2026-05-14 (B14 + B15 batch land · M-TRACK-6 [x] case_003 CRM-HLS external-high-Re-BL 4th numerics class Track-C-covered · M-APU-RESTORE [x] CLOSED NEGATIVE — V95 sedimented "watertightness necessary not sufficient" lesson · Track C 5→6 ✓ Done dimension MET · V-series 94→98 (V95+V96+V97+V98) · A6 unit_detector silent fall-through window surfaced as 2-channel fix candidate (max_bytes 64KB + bbox 100m cap) · A8 hand-authored-dict input adapter gap registered · 6 Done dimensions now MET: 雷达右半轴 · e2e class · M-DRIFT + M-XCLASS + M-TRACK-5 + M-TRACK-6; remaining gaps: LANDED 7→8 · V-series 98→100 · 雷达左半轴 6.5→7.2)` · 更新人：`Claude Code Opus 4.7 session (main · B14/B15 reconcile)`
+最后更新时间：`2026-05-14 (B16 + B17 batch land · A6 unit_detector hardening (V96 max_bytes 64KB→1MB + V97 bbox cap 100m→1000m) commit 83e2793 + A10 thermo_polynomial_range_advisor LANDED commit 25eea7a · V41 [QUESTIONABLE]→[VALIDATED] · V96+V97 status flipped · LANDED advisor 7→8 ✓ Done dimension MET · 4/6 Done dimensions now MET: Track C ≥6 ✓ · LANDED ≥8 ✓ · e2e class ≥3 ✓ · 右半轴 ≥8.7 ✓ · remaining gaps: V-series 98→100 (2 rows) · 左半轴 6.5→7.2 (substrate-bound))` · 更新人：`Claude Code Opus 4.7 session (main · B16/B17 reconcile)`
 
 ---
 
