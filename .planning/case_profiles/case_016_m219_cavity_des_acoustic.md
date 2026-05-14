@@ -131,3 +131,34 @@ after HPC v2 to ensure the FFT path is exercised by real Rossiter peaks.
 ## Boundaries respected (per kickoff brief)
 - CAN: end-to-end run on sandbox · sediment commits · ≤250 LOC artifact extraction (4 candidates listed)
 - CANNOT: redesign case · modify other cases · 2D simplification · rhoCentralFoam (we use rhoPimpleFoam transient) · exceed 14 h (used ~2 h)
+
+---
+
+## V64-A B53 (2026-05-15) · v2 PARTIAL → FULL conversion attempt
+
+> See `.planning/validation_reports/v64_case_016_m219_cavity_des_acoustic_full_v2.md`
+> for the full 12-section v2 report. See
+> `.planning/decisions/2026-05-15_v64_sub_val_case_016_full.md` for the
+> Accepted sub-DEC (`DEC-V64-A-sub-M-VAL-CASE-016-FULL`). v1 PARTIAL
+> retro at `.planning/validation_reports/v63_case_016_m219_cavity_des_acoustic_validation_report.md`
+> is **untouched** as the diff baseline.
+
+**Substrate change** (in sandbox, not in repo):
+- `case/system/controlDict::endTime`: `0.0005` → `0.040` (intent · sed-patched to `0.020` by `scripts/08_run_solver.sh::run_of` before solver start)
+- v1 evidence directories archived in-sandbox as `case/log.v1/` + `case/postProcessing.v1/` before v2 run
+
+**v2 run result**: **crashed at simulated `t = 0.0012422023 s`** (26 timesteps · 46.92 s wall · ExecutionTime) with `sigFpe` (FE_DIVBYZERO / FE_INVALID) in `libfluidThermophysicalModels.so` (frame #4 of stack trace through `libm.so.6` — consistent with `pow/exp/log/sqrt` domain violation during `sutherlandTransport::μ(T)` or `hConst::H(T)` evaluation, likely T ≤ 0 or extreme T from a local energy-solver overshoot). Cumulative continuity at last successful step = 1.2403e-07. All 26 probe samples at K05 + K09 locked at freestream 101,325 Pa (no cavity acoustic content captured — flow-through time L/U ≈ 1.75 ms, achieved ~70% of one flow-through before crash). Docker container `gifted_galileo`, `opencfd/openfoam-default:2312` arm64-native, no Rosetta. Sustained rate ~26 μs sim / s wall.
+
+**Verdict**: PARTIAL v2 (NOT FULL). V64-A Done dim #1 stays 0/3 FULL.
+
+**Charter premise refutation**: `DEC-V64-A-charter`'s claim "solver already converged 8.5e-8, only window extension needed" was based on v1's 0.5 ms-window endpoint. v2 evidence at 1.24 ms shows the substrate has a SECOND compound gating mechanism beyond window-too-short: thermo-FPE instability the v1 window never reached. Charter "cheapest unblock" framing for case_016 is empirically refuted; main session should re-tier M-V64A-VAL-CASE-016-FULL or defer case_016 to a later V64-A tier in favor of case_004 / case_006 / case_011 v5b candidates.
+
+**Compound FULL requirements** (revised vs v1 retro §6):
+1. (NEW) Stabilize solver past `t ≈ 1.24 ms` — candidate fixes (none validated in B53): smaller initial deltaT ramp, tighter PISO pressure tolerance, polynomialTransport instead of sutherland over wider T range, Tmin/Tmax limiter, fallback IDDES → DDES, LE mesh refinement.
+2. (unchanged) After stability, extend window to ≥35.2 ms (Welch 5-period minimum for mode 1) or ≥70.4 ms (10-period robust) or ≥0.12 s (HANDOFF v1 minimum) or ≥0.75 s (full 100-cycle spectrum per Codex kickoff brief).
+3. Wall budget at observed v2 rate (26 μs sim / s wall, 273k cells, serial, arm64): 35.2 ms → ~22 min · 70.4 ms → ~45 min · 0.12 s → ~77 min · 0.75 s → ~8 h. Assumes stability fix doesn't slow run.
+
+**V-candidates surfaced** (all `[QUESTIONABLE 2026-05-15]` — single-case substrate, need second-case corroboration before LANDED):
+- v2-new-1: `case_016-class compressible-DES-acoustic substrate: rhoPimpleFoam+sutherland+kOmegaSSTIDDES m219 produces solver-FPE in libfluidThermophysicalModels at t > 1.24 ms under v1 controlDict`
+- v2-new-2: `Heller-Bliss canonical (α=0.25, κ=0.57) overpredicts m219 mode 1 by +15.8%; m219 spectrum does not admit single (α, κ) pair across 4 modes — shock-phase regime at M ≥ 0.8`
+- v2-new-3: `Charter elevation discipline: "convergence at v1 window" ≠ "convergence at target window"; future charter drafts naming a "cheapest unblock" must verify convergence-at-target before claiming`
