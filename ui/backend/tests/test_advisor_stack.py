@@ -341,6 +341,89 @@ def test_evidence_refs_includes_v94_when_d11_dispatches() -> None:
     assert "V52" not in r.evidence_refs
 
 
+# DEC-V63-A-sub-M-D6-HTTP-WIRE — extra_body_advisor routing (V55 case_016
+# debris cube class). Three tests covering: happy path (case_016-style
+# unregistered_body sighting), silent-skip when stl_bbox_set absent /
+# empty, and evidence_refs union containing V55 on dispatch.
+
+
+def test_stl_bbox_set_dispatches_d6_with_v55_evidence() -> None:
+    """DEC-V63-A-sub-M-D6-HTTP-WIRE: parts_manifest + stl_bbox_set with
+    an extra body unregistered in the manifest → D6 fires.
+
+    Replays the case_016 V55 ground truth: cavity declared as
+    region_air; STL inventory exposes a 10 mm debris cube that the
+    manifest never declared. D6 must surface ``unregistered_body``
+    with V55 in evidence_v_rows.
+    """
+    r = assemble_stack(
+        parts_manifest={
+            "parts": [
+                {
+                    "name": "region_air",
+                    "role": "region_air",
+                    "bbox": [0.0, -200.0, -200.0, 600.0, 200.0, 200.0],
+                },
+            ]
+        },
+        stl_bbox_set={
+            "region_air": [0.0, -200.0, -200.0, 600.0, 200.0, 200.0],
+            # 10 mm debris cube at (320, 18, -79) mm — case_016 sighting
+            "debris_cube_10mm": [315.0, 13.0, -84.0, 325.0, 23.0, -74.0],
+        },
+    )
+    names = {c.advisor_name for c in r.advisor_calls}
+    assert "extra_body_advisor" in names
+    d6_findings = [
+        f for f in r.findings if f.source_advisor == "extra_body_advisor"
+    ]
+    # debris_cube_10mm → unregistered_body (critical), advisor only
+    # flags STL members not in manifest_role.
+    assert any(
+        f.code == "d6_unregistered_body" and f.location == "debris_cube_10mm"
+        for f in d6_findings
+    )
+    unregistered = next(
+        f for f in d6_findings if f.code == "d6_unregistered_body"
+    )
+    assert unregistered.severity == "critical"
+    assert "V55" in unregistered.evidence_v_rows
+
+
+def test_d6_silently_skipped_when_stl_bbox_set_empty() -> None:
+    """V130 silent-skip: empty / absent stl_bbox_set → D6 not dispatched
+    (advisor_count stable for legacy callers that pre-date this wire)."""
+    r_none = assemble_stack(
+        parts_manifest={"parts": [{"name": "wall", "role": "wall"}]},
+    )
+    r_empty = assemble_stack(
+        parts_manifest={"parts": [{"name": "wall", "role": "wall"}]},
+        stl_bbox_set={},
+    )
+    assert "extra_body_advisor" not in {
+        c.advisor_name for c in r_none.advisor_calls
+    }
+    assert "extra_body_advisor" not in {
+        c.advisor_name for c in r_empty.advisor_calls
+    }
+
+
+def test_evidence_refs_includes_v55_when_d6_dispatches() -> None:
+    """V62-A drift_guard contract: evidence_refs aggregates dispatched
+    advisors' V-rows. D6 dispatch must surface V55 in the union."""
+    r = assemble_stack(
+        stl_bbox_set={
+            "rogue_body": [0.0, 0.0, 0.0, 5.0, 5.0, 5.0],
+        },
+    )
+    assert r.advisor_count == 1
+    assert r.advisor_calls[0].advisor_name == "extra_body_advisor"
+    assert "V55" in r.evidence_refs
+    # Other advisors' V-rows are NOT in the union because they didn't run.
+    assert "V79" not in r.evidence_refs
+    assert "V94" not in r.evidence_refs
+
+
 def test_shm_dict_only_dispatches_a8() -> None:
     r = assemble_stack(shm_dict=_shm_dict_with_typo())
     assert r.advisor_count == 1

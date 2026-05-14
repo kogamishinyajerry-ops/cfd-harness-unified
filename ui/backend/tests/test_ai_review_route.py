@@ -914,3 +914,213 @@ def test_stl_face_normals_autodiscovered_from_case_dir(
     assert len(d11) == 1
     assert d11[0]["raw"]["face_label"] == "cold_inlet"
     assert "V94" in d11[0]["evidence_v_rows"]
+
+
+# ---------- DEC-V63-A-sub-M-D6-HTTP-WIRE — extra_body_advisor wire ----------
+# Five tests covering: explicit stl_bbox_set → D6 fires with V55 evidence,
+# auto-discover from <case_dir>/cad/stl_bbox_set.json, auto-discover from
+# <case_dir>/manifest.json stl_bbox_set field, explicit overrides auto-
+# discover, and backward-compat (interface_bodies-only payload does NOT
+# accidentally dispatch D6 — the new field must be the sole D6 trigger).
+
+
+def test_stl_bbox_set_routes_to_d6(client: TestClient) -> None:
+    """DEC-V63-A-sub-M-D6-HTTP-WIRE: explicit stl_bbox_set + manifest →
+    D6 fires with V55 evidence and the case_016 debris-cube finding.
+    """
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "parts_manifest": {
+                "parts": [
+                    {
+                        "name": "region_air",
+                        "role": "region_air",
+                        "bbox": [0.0, -200.0, -200.0, 600.0, 200.0, 200.0],
+                    },
+                ]
+            },
+            "stl_bbox_set": {
+                "region_air": [0.0, -200.0, -200.0, 600.0, 200.0, 200.0],
+                "debris_cube_10mm": [
+                    315.0, 13.0, -84.0, 325.0, 23.0, -74.0,
+                ],
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "extra_body_advisor" in advisor_names
+    d6 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "extra_body_advisor"
+    ]
+    debris = [f for f in d6 if f["location"] == "debris_cube_10mm"]
+    assert len(debris) == 1
+    assert debris[0]["code"] == "d6_unregistered_body"
+    assert debris[0]["severity"] == "critical"
+    assert "V55" in debris[0]["evidence_v_rows"]
+
+
+def test_auto_discover_stl_bbox_set_from_case_dir(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """case_dir auto-discovery (path 1): when stl_bbox_set is absent on
+    the wire but ``<case_dir>/cad/stl_bbox_set.json`` exists, the route
+    loads it and plumbs to D6."""
+    case_dir = tmp_path / "case_d6_autodisc_cad"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    cad = case_dir / "cad"
+    cad.mkdir()
+    (inputs / "parts_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "parts": [
+                    {
+                        "name": "region_air",
+                        "role": "region_air",
+                        "bbox": [0.0, 0.0, 0.0, 600.0, 200.0, 200.0],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (cad / "stl_bbox_set.json").write_text(
+        json.dumps(
+            {
+                "region_air": [0.0, 0.0, 0.0, 600.0, 200.0, 200.0],
+                "rogue_debris": [10.0, 10.0, 10.0, 20.0, 20.0, 20.0],
+            }
+        ),
+        encoding="utf-8",
+    )
+    resp = client.post("/api/ai-review", json={"case_dir": str(case_dir)})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "extra_body_advisor" in advisor_names
+    d6 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "extra_body_advisor"
+    ]
+    assert any(
+        f["code"] == "d6_unregistered_body" and f["location"] == "rogue_debris"
+        for f in d6
+    )
+
+
+def test_auto_discover_stl_bbox_set_from_manifest_field(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """case_dir auto-discovery (path 2): manifest.json ``stl_bbox_set``
+    field is consulted when the dedicated cad/stl_bbox_set.json is absent.
+    """
+    case_dir = tmp_path / "case_d6_autodisc_manifest"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (inputs / "parts_manifest.yaml").write_text(
+        yaml.safe_dump({"parts": [{"name": "shell", "role": "wall"}]}),
+        encoding="utf-8",
+    )
+    (case_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "stl_bbox_set": {
+                    "stowaway_inclusion": [
+                        1.0, 1.0, 1.0, 2.0, 2.0, 2.0,
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    resp = client.post("/api/ai-review", json={"case_dir": str(case_dir)})
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    assert "extra_body_advisor" in advisor_names
+    d6 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "extra_body_advisor"
+    ]
+    assert any(
+        f["code"] == "d6_unregistered_body"
+        and f["location"] == "stowaway_inclusion"
+        for f in d6
+    )
+
+
+def test_explicit_stl_bbox_set_overrides_auto_discover(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """Auto-discover only fills *missing* slots — when both an explicit
+    wire field and an on-disk file are present, the wire value wins."""
+    case_dir = tmp_path / "case_d6_explicit_wins"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    cad = case_dir / "cad"
+    cad.mkdir()
+    (inputs / "parts_manifest.yaml").write_text(
+        yaml.safe_dump({"parts": [{"name": "shell", "role": "wall"}]}),
+        encoding="utf-8",
+    )
+    # On-disk file claims a body named "disk_only" — the explicit wire
+    # payload omits it entirely and claims "wire_only" instead. After
+    # dispatch, only "wire_only" should surface as unregistered.
+    (cad / "stl_bbox_set.json").write_text(
+        json.dumps({"disk_only": [0.0, 0.0, 0.0, 1.0, 1.0, 1.0]}),
+        encoding="utf-8",
+    )
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "case_dir": str(case_dir),
+            "stl_bbox_set": {
+                "wire_only": [5.0, 5.0, 5.0, 6.0, 6.0, 6.0],
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    d6 = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "extra_body_advisor"
+    ]
+    locations = {f["location"] for f in d6}
+    assert "wire_only" in locations
+    assert "disk_only" not in locations
+
+
+def test_stl_bbox_set_none_falls_back_to_interface_bodies_routing(
+    client: TestClient,
+) -> None:
+    """Backward-compat: an interface_bodies-only payload (no
+    stl_bbox_set) must NOT accidentally dispatch D6. The wire field is
+    the sole D6 trigger; A2-v2 keeps owning interface_bodies."""
+    body_a = _ifc_body("body_a", cx=0.0)
+    body_b = _ifc_body("body_b", cx=20.0)
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "interface_bodies": [body_a, body_b],
+            "interface_specs": [
+                {
+                    "patch_name": "iface_ab",
+                    "mode": "shared",
+                    "body_a": "body_a",
+                    "body_b": "body_b",
+                },
+            ],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    advisor_names = {c["advisor_name"] for c in body["report"]["advisor_calls"]}
+    # A2-v2 fires (the legacy path) but D6 does not (no STL inventory).
+    assert "virtual_interface_detector" in advisor_names
+    assert "extra_body_advisor" not in advisor_names
+
+
