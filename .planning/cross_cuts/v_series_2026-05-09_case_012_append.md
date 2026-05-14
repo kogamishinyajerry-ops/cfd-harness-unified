@@ -133,7 +133,7 @@ are cadquery/OCP STEP-export sediment.
 
 ## V52 · snappyHexMeshDict key `minMedialAxisAngle` (NOT `minMedianAxisAngle`) in OpenFOAM 2312 (case_012)
 
-**Status**: confirmed (case_012 v1 sHM crash on first run; recovered after key rename)
+**Status**: **[VALIDATED] 2026-05-14** — A8 `shm_dict_validator` landed (DEC-V61-198-sub-A8). `ui/backend/services/geometry_ingest/shm_dict_validator.py` ships with 9-test suite; `test_v52_typo_regression_case_012` pins the case_012 v1 typo (parsed dict `addLayersControls.minMedianAxisAngle 90` → `typo_suspicion` warning, suggestion `minMedialAxisAngle`, edit-distance ≤ 2). Pre-flight check now catches the typo class before sHM consumes wall-clock minutes. Promotion gate met by V52 (typo) + V86 (orphan) cross-topology pair (V25→A2-v2 convention). Previously: confirmed (case_012 v1 sHM crash on first run; recovered after key rename).
 **Numerics class**: tooling (NOT solver-numerics)
 
 **Observation**: Writing `addLayersControls.minMedianAxisAngle 90;`
@@ -244,7 +244,7 @@ includes V53 in the harvest cycle 003.
 | V49 | open (PASS) | A2 advisor | 9th cross-topology PASS for `_run_shared`; field-validation pending V25 |
 | V50 | open (advisor gap) | D7 face-orientation | first D7 injection; no LANDED advisor; A4 candidate flagged |
 | V51 | confirmed | tooling | STEP timestamp canonicalization for byte-determinism |
-| V52 | confirmed | tooling | sHM `minMedialAxisAngle` (NOT MedianAxis) in OF 2312 |
+| V52 | **[VALIDATED] 2026-05-14** (A8 landed) | tooling | sHM `minMedialAxisAngle` (NOT MedianAxis) in OF 2312 |
 | V53 | **confirmed** | **CAD-protocol** | **Codex 3D-solid supply/return → sHM walls; inlet/outlet patches not realized; sealed-room v1** |
 
 ## S-series candidates (post-case_012)

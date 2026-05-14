@@ -22,7 +22,7 @@
 | **A2-v2** — gap-distance API + classifier | V25 (closed 2026-05-12 by DEC-V61-198-sub-A2v2) | **LANDED** | 174 LOC source+test; under 250 sub-DEC ceiling | **DONE — was #1; closed by Claude Code main session 2026-05-12** |
 | **A6** — `hvac_adpi.py` ADPI/throw/dumping post-processor | case_012 v1 sediment | 1 sediment + N dispatched (012/015 likely) | 1 × MED / 150 LOC = LOW | DEFER until 2nd HVAC-class case |
 | **A7** — `step_canonicalizer.py` | V80 (case_012 backfill 2026-05-13 + cross-cuts case_002a / case_005 / case_011) | **4 sediment · LANDED 2026-05-12** | ~115 LOC source + 10-test suite | **DONE — was #3; closed by Claude Code main session 2026-05-12 by DEC-V61-198-sub-A7** |
-| **A8** — `shm_dict_validator.py` | V52 (case_012) | 1 sediment + N dispatched (HVAC-class + porous filter likely) | 1 × MED / 120 LOC = LOW | DEFER until 2nd typo-class case |
+| **A8** — `shm_dict_validator.py` | V52 (case_012 typo) + V86 (case_011 features-list orphan) sedimented 2026-05-09 | **2 sediment · LANDED 2026-05-14** | ~310 LOC source + 9-test suite (0.07s) | **DONE — closes V52 + V86 [QUESTIONABLE]/[deferred] markers; M-A8 Tier 2 milestone met (DEC-V61-198-sub-A8); promotion gate satisfied by V52 (typo class) + V86 (orchestration class) cross-topology pair per V25→A2-v2 convention** |
 | **A4** — face-orientation advisor | V79/case_012 + V87/case_013 sedimented 2026-05-13 | **2 sediment · LANDED 2026-05-13** | ~260 LOC source + 9-test suite | **DONE — closes V79 + V87 [QUESTIONABLE] markers; M-A4 Tier 1 milestone met (DEC-V61-198-sub-A4-face-orientation-advisor)** |
 | **A5** — `inlet_outlet_validator.py` | V81 (case_012 backfill 2026-05-13) closure | 1 sediment + 6 dispatched at risk · **LANDED 2026-05-13** | ~210 LOC source + 9-test suite | **DONE — closes V81 partial; M-V81 milestone met (DEC-V61-198-sub-A5-inlet-outlet-validator)** |
 | **A1** — `cad_ingest_freecad.py` (CATIA + unit-context) | V1, V20, V24 | 3 sediment | 3 × MED / 100 LOC = MED | DEFER until A2-v2 lands (queued) |
@@ -40,7 +40,7 @@ Harvest 002 said:
 Harvest 003 reality (1 sub-session cycle later):
 - A2-v2: **STILL DRAFTED, NOT LANDED**. Compounded evidence grew from 5 → 15 (10 sediment + 5 dispatched). Now blocking 17 [QUESTIONABLE 2026-05-08] markers across 11 case kickoffs from upgrading.
 - A1: still pending; harvest 003 surfaces no new pressure.
-- A6/A7/A8: NEW candidates surfaced via case_012 sediment; drafted but not landed.
+- A6: still drafted (deferred to 2nd HVAC-class case); A7 LANDED 2026-05-12; A8 LANDED 2026-05-14 (V52+V86 cross-topology pair met promotion gate).
 
 **Loop-closure verdict**: top-1 actionable from harvest 002 did NOT land. This is the harvest 003 #2 (re-list as compounded escalation).
 
