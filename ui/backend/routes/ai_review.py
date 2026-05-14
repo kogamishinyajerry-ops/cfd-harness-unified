@@ -38,15 +38,18 @@ import dataclasses
 import json
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from ui.backend.routes._loopback_guard import require_loopback
 from ui.backend.services.advisor_stack import AdvisorStackReport, assemble_stack
+from ui.backend.services.geometry_ingest.thin_wall_advisor import PatchGeometry
 
 
 logger = logging.getLogger(__name__)
@@ -180,29 +183,95 @@ def _resolve_case_dir(case_dir_raw: str) -> Path:
 def _report_to_dict(report: AdvisorStackReport) -> dict[str, Any]:
     """Convert AdvisorStackReport to a JSON-serializable dict.
 
-    ``dataclasses.asdict`` handles nested frozen dataclasses recursively.
-    A second ``json.dumps(..., default=str)`` round-trip catches any
-    non-serializable leaves (e.g., ``Path`` objects that surfaced via
-    advisor inputs / outputs).
+    ``dataclasses.asdict`` handles nested frozen dataclasses recursively
+    but drops ``@property`` fields. Codex R0 P2 (2026-05-14): explicitly
+    fold ``failed_advisor_count``, ``critical_count``, and
+    ``warning_count`` in so clients never have to re-derive them and the
+    route's "crashes surface as failed_advisor_count" contract holds in
+    the wire payload.
     """
     raw = dataclasses.asdict(report)
+    raw["failed_advisor_count"] = report.failed_advisor_count
+    raw["critical_count"] = report.critical_count
+    raw["warning_count"] = report.warning_count
     # Round-trip through JSON to coerce any stray Path/Enum leaves into
     # primitives the FastAPI serializer can handle.
     return json.loads(json.dumps(raw, default=str))
+
+
+def _rehydrate_thin_wall_inputs(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert wire-form ``thin_wall_inputs`` into the dataclass shape
+    ``thin_wall_advisor.detect_thin_wall_patches_at_risk`` expects.
+
+    Codex R0 P2 (2026-05-14): the advisor takes a sequence of
+    ``PatchGeometry`` (frozen dataclass with ``name`` + ``bbox_dimensions``).
+    Over HTTP/YAML, callers supply plain dicts — without rehydration the
+    advisor crashes inside the stack and the finding is lost to crash-
+    isolation. ``bbox_dimensions`` is coerced to a 3-tuple of floats so
+    the dataclass's frozen hash stays stable.
+
+    Patches that are already ``PatchGeometry`` instances pass through
+    unchanged so in-process callers still work.
+    """
+    patches_in = raw.get("patches") or ()
+    patches_out: list[PatchGeometry] = []
+    for p in patches_in:
+        if isinstance(p, PatchGeometry):
+            patches_out.append(p)
+            continue
+        if not isinstance(p, dict):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "thin_wall_patch_shape",
+                    "expected": "dict with keys {name, bbox_dimensions}",
+                    "got": type(p).__name__,
+                },
+            )
+        try:
+            name = str(p["name"])
+            bbox = tuple(float(x) for x in p["bbox_dimensions"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "thin_wall_patch_fields",
+                    "expected": "name: str, bbox_dimensions: [float, float, float]",
+                    "error": str(exc),
+                },
+            ) from exc
+        if len(bbox) != 3:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "failing_check": "thin_wall_bbox_arity",
+                    "expected_len": 3,
+                    "got_len": len(bbox),
+                },
+            )
+        patches_out.append(PatchGeometry(name=name, bbox_dimensions=bbox))
+    rehydrated = dict(raw)
+    rehydrated["patches"] = tuple(patches_out)
+    return rehydrated
 
 
 def _persist_audit(payload: dict[str, Any], case_label: str) -> Path:
     """Write the report JSON under ``<repo>/.planning/audits/``.
 
     The audit dir is created on demand (idempotent). The filename is
-    ``<case_label>_ai_review_<ISO-UTC-ts>.json`` with ``:`` replaced by
-    ``-`` for cross-platform safety.
+    ``<case_label>_ai_review_<ISO-UTC-ts-micros>_<uuid8>.json``.
+
+    Codex R0 P2 (2026-05-14): including microseconds + an 8-hex UUID4
+    slice guarantees per-request uniqueness even under concurrent
+    workers or back-to-back retries inside the same second, preserving
+    the route's audit-trail-is-additive contract.
     """
     audits_dir = _REPO_ROOT / _AUDITS_DIR_NAME
     audits_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    nonce = uuid.uuid4().hex[:8]
     safe_label = "".join(c if c.isalnum() or c in {"_", "-"} else "_" for c in case_label) or "anon"
-    out_path = audits_dir / f"{safe_label}_ai_review_{ts}.json"
+    out_path = audits_dir / f"{safe_label}_ai_review_{ts}_{nonce}.json"
     out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
     return out_path
 
@@ -242,11 +311,20 @@ def _try_llm_enhance(report_dict: dict[str, Any]) -> tuple[bool, float]:
     response_model=AIReviewResponse,
     tags=["ai-review"],
 )
-async def post_ai_review(payload: AIReviewRequest) -> AIReviewResponse:
+async def post_ai_review(
+    payload: AIReviewRequest, request: Request
+) -> AIReviewResponse:
     """Run the V62-A advisor stack against the supplied artifacts.
 
     Behavior contract:
 
+      * **Loopback-only by default** (Codex R0 P1 · 2026-05-14). The
+        route accepts caller-controlled ``case_dir`` and discovers
+        ``inputs/*.{yaml,json}`` underneath, which would turn the
+        endpoint into an arbitrary host-file probe if exposed to
+        non-loopback callers. Operators with a trusted reverse proxy
+        + auth in front set ``AI_CHAT_ALLOW_NON_LOOPBACK=1`` to opt
+        in, matching the sibling AI routes' guard semantics.
       * Read-only against ``case_dir`` (V132 advisory-only)
       * Persists a JSON audit artifact under ``.planning/audits/``
       * Per-advisor crashes are isolated by ``assemble_stack`` and
@@ -257,7 +335,12 @@ async def post_ai_review(payload: AIReviewRequest) -> AIReviewResponse:
 
       * 400 when ``case_dir`` is provided but does not resolve to a
         directory on disk
+      * 400 when ``thin_wall_inputs.patches`` cannot be rehydrated to
+        ``PatchGeometry`` (missing or malformed name / bbox_dimensions)
+      * 403 when the caller is non-loopback and the override env-var
+        is not set
     """
+    require_loopback(request, route_label="/api/ai-review")
     t_start = time.perf_counter()
 
     # ----- 1. Resolve inputs (explicit > auto-discover) -----
@@ -275,6 +358,15 @@ async def post_ai_review(payload: AIReviewRequest) -> AIReviewResponse:
         for kw, value in discovered.items():
             if explicit_kwargs.get(kw) is None:
                 explicit_kwargs[kw] = value
+
+    # Codex R0 P2 (2026-05-14): thin_wall_inputs arrives as plain dicts
+    # over the wire; the advisor expects ``PatchGeometry`` dataclass
+    # instances. Rehydrate here before dispatch so the documented input
+    # actually produces findings (instead of failing into crash isolation).
+    if explicit_kwargs.get("thin_wall_inputs") is not None:
+        explicit_kwargs["thin_wall_inputs"] = _rehydrate_thin_wall_inputs(
+            explicit_kwargs["thin_wall_inputs"]
+        )
 
     stack_kwargs = {k: v for k, v in explicit_kwargs.items() if v is not None}
 

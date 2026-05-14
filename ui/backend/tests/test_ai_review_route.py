@@ -298,6 +298,120 @@ def test_llm_enhance_true_with_importable_provider_records_enhanced(
     assert body["timing"]["llm_ms"] >= 0.0
 
 
+def test_non_loopback_request_rejected_with_403(
+    client: TestClient,
+) -> None:
+    """Codex R0 P1: x-forwarded-for header marks a proxy → 403 unless override env set."""
+    resp = client.post(
+        "/api/ai-review",
+        json={"parts_manifest": _parts_manifest_basic()},
+        headers={"x-forwarded-for": "203.0.113.7"},
+    )
+    assert resp.status_code == 403
+    detail = resp.json()["detail"]
+    assert "loopback" in detail.lower()
+    assert "AI_CHAT_ALLOW_NON_LOOPBACK" in detail
+
+
+def test_non_loopback_override_env_allows_request(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When AI_CHAT_ALLOW_NON_LOOPBACK=1, proxy-fronted callers pass."""
+    monkeypatch.setenv("AI_CHAT_ALLOW_NON_LOOPBACK", "1")
+    resp = client.post(
+        "/api/ai-review",
+        json={"parts_manifest": _parts_manifest_basic()},
+        headers={"x-forwarded-for": "203.0.113.7"},
+    )
+    assert resp.status_code == 200
+
+
+def test_thin_wall_inputs_dict_form_rehydrates_and_dispatches(
+    client: TestClient,
+) -> None:
+    """Codex R0 P2: dict-form patches must rehydrate to PatchGeometry."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "thin_wall_inputs": {
+                "patches": [
+                    {"name": "thin_plate", "bbox_dimensions": [100.0, 50.0, 0.5]}
+                ],
+                "refinement_levels": {"thin_plate": [0, 0]},
+                "background_cell_size": 1.0,
+            }
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # thin_wall_advisor should have run (not crashed into isolation)
+    statuses = {c["advisor_name"]: c["status"] for c in body["report"]["advisor_calls"]}
+    assert statuses.get("thin_wall_advisor") == "ok"
+    assert body["report"]["failed_advisor_count"] == 0
+    # 0.5 mm patch in 1.0 mm cell → at-risk warning expected
+    tw_findings = [
+        f for f in body["report"]["findings"]
+        if f["source_advisor"] == "thin_wall_advisor"
+    ]
+    assert len(tw_findings) >= 1
+
+
+def test_thin_wall_malformed_patch_returns_400(client: TestClient) -> None:
+    """Bad thin_wall_inputs surfaces an actionable 400, not a 500."""
+    resp = client.post(
+        "/api/ai-review",
+        json={
+            "thin_wall_inputs": {
+                "patches": [{"name": "bad", "bbox_dimensions": [1.0, 2.0]}],
+                "background_cell_size": 1.0,
+            }
+        },
+    )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["failing_check"] in {
+        "thin_wall_bbox_arity",
+        "thin_wall_patch_fields",
+    }
+
+
+def test_audit_filenames_unique_back_to_back(client: TestClient) -> None:
+    """Codex R0 P2: two reviews in the same second must not overwrite each other."""
+    paths: set[str] = set()
+    for _ in range(5):
+        resp = client.post(
+            "/api/ai-review",
+            json={"parts_manifest": _parts_manifest_basic()},
+        )
+        assert resp.status_code == 200
+        paths.add(resp.json()["audit_artifact_path"])
+    assert len(paths) == 5, f"audit filenames collided: {paths}"
+    # All 5 files must exist on disk
+    for p in paths:
+        assert Path(p).is_file()
+
+
+def test_response_includes_computed_property_counts(client: TestClient) -> None:
+    """Codex R0 P2: failed_advisor_count + critical_count + warning_count
+    must be in the wire payload (not dropped by dataclasses.asdict)."""
+    resp = client.post(
+        "/api/ai-review",
+        json={"parts_manifest": _parts_manifest_basic()},
+    )
+    body = resp.json()
+    assert "failed_advisor_count" in body["report"]
+    assert "critical_count" in body["report"]
+    assert "warning_count" in body["report"]
+    # Hand-derive the expected values to lock the serialization fidelity
+    expected_failed = sum(
+        1 for c in body["report"]["advisor_calls"] if c["status"] == "error"
+    )
+    assert body["report"]["failed_advisor_count"] == expected_failed
+    expected_critical = sum(
+        1 for f in body["report"]["findings"] if f["severity"] in {"critical", "fail"}
+    )
+    assert body["report"]["critical_count"] == expected_critical
+
+
 def test_explicit_kwargs_override_autodiscovered(
     client: TestClient, tmp_path: Path
 ) -> None:
