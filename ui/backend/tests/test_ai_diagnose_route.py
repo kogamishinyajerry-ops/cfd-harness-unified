@@ -1,0 +1,415 @@
+"""Route-level tests for POST /api/ai-diagnose (DEC-V62-A-sub-M-ROUTE-AI-DIAGNOSE).
+
+Coverage (matches sub-DEC §test spec · ≥10 tests):
+
+  1. V41-like symptom ('janafThermo limit warnings') → V41 in top-3
+  2. V92-like symptom ('cellZoneInside inside solid region missing') → V92 in top-3
+  3. LLM offline + llm_match=True → 200, llm_match_used=False, base ranking works
+  4. Audit artifact JSON round-trips
+  5. TrustGate: every match has v_row_id + similarity_rationale
+  6. Crash isolation: V-series load failure → 500 structured detail + audit logged
+  7. 4Q gate compliance: route does not write inside case_dir
+  8. ≥3 top matches when corpus has hits; ranking strictly descending
+  9. case_dir provided → assemble_stack invoked + stack_report populated
+ 10. Empty symptom → 400 with actionable error
+ 11. case_dir provided but missing → 400 with actionable error
+ 12. solver_log_excerpt boosts otherwise-low-scoring rows
+ 13. top_k clamps response length
+"""
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from ui.backend.routes import ai_diagnose as ai_diagnose_route
+from ui.backend.services import advisor_stack as advisor_stack_module
+
+
+# ---------- Helpers / fixtures --------------------------------------------
+
+
+_REAL_CORPUS_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "docs" / "openfoam_corpus" / "industrial_solver_findings_v_series.md"
+)
+
+
+@pytest.fixture
+def app(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FastAPI:
+    """Build a FastAPI app with /api/ai-diagnose mounted; audit dir → tmp.
+
+    The V-series corpus path is left pointing at the real repo file so
+    similarity-matching tests exercise the real corpus content. Audit
+    output is redirected into ``tmp_path`` so tests are hermetic.
+    """
+    monkeypatch.setattr(
+        ai_diagnose_route, "_AUDIT_DIR", tmp_path / ".planning" / "audits" / "ai_diagnose",
+    )
+    # Invalidate the module-level corpus cache so prior tests in this
+    # session do not leak a monkeypatched fixture into this one.
+    monkeypatch.setattr(ai_diagnose_route, "_corpus_cache", None, raising=False)
+    monkeypatch.setattr(ai_diagnose_route, "_corpus_cache_mtime", None, raising=False)
+
+    a = FastAPI()
+    a.include_router(ai_diagnose_route.router, prefix="/api")
+    return a
+
+
+@pytest.fixture
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app)
+
+
+def _parts_manifest_basic() -> dict[str, Any]:
+    """A4 V79 D7 case + A5 V81 violation (shared with test_ai_review_route)."""
+    return {
+        "parts": [
+            {
+                "name": "louver_vane_2",
+                "actual_face_normal": [0.7880, -0.6157, 0.0],
+                "expected_face_normal": [0.0, -1.0, 0.0],
+                "tolerance_deg": 4.0,
+            },
+            {"name": "supply_inlet", "role": "inlet"},
+        ]
+    }
+
+
+def _top_v_ids(body: dict[str, Any], k: int = 3) -> list[str]:
+    return [m["v_row_id"] for m in body["v_row_matches"][:k]]
+
+
+# ---------- Tests ----------------------------------------------------------
+
+
+def test_v41_symptom_top_3_match(client: TestClient) -> None:
+    """V41 fires on 'janafThermo limit warnings'."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "janafThermo out of temperature range warnings flood, Tlow=300 species",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    top_ids = _top_v_ids(body, k=3)
+    assert "V41" in top_ids, f"V41 missing from top-3: {top_ids}"
+
+
+def test_v92_symptom_top_3_match(client: TestClient) -> None:
+    """V92 fires on 'cellZoneInside inside solid region missing'."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": (
+                "cellZoneInside inside fails on complex internal void STL "
+                "with fuse_many union, empty cellZone for plate+fin"
+            ),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    top_ids = _top_v_ids(body, k=3)
+    assert "V92" in top_ids, f"V92 missing from top-3: {top_ids}"
+
+
+def test_llm_match_true_returns_llm_match_used_false_offline(
+    client: TestClient,
+) -> None:
+    """4Q gate (1): LLM provider not wired → base ranking still works,
+    llm_match_used=False."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "janafThermo Tlow species range",
+            "llm_match": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["llm_match_used"] is False
+    # base ranking should still surface something (corpus has ≥1 match)
+    assert len(body["v_row_matches"]) >= 1
+
+
+def test_audit_artifact_round_trips(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """Persisted audit JSON is round-trip deserializable."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={"symptom_text": "kOmegaSST wall function NaN at iter 3"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    audit_path = Path(body["audit_artifact_path"])
+    assert audit_path.is_file(), f"audit not persisted: {audit_path}"
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert payload["request_id"] == body["request_id"]
+    assert payload["schema_version"] == "v62-a-ai-diagnose-v1"
+    assert "matches" in payload
+    assert "timing" in payload
+    assert "corpus" in payload
+    assert payload["corpus"]["size"] >= 80  # corpus has ~100 rows
+
+
+def test_trust_gate_every_match_carries_v_row_id_and_rationale(
+    client: TestClient,
+) -> None:
+    """TrustGate per 4Q (3): every surfaced match must carry v_row_id +
+    similarity_rationale so engineers can audit."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "GAMG p_rgh agglomeration fails on prism layers thin walls",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["v_row_matches"], "expected at least one match"
+    for m in body["v_row_matches"]:
+        assert re.match(r"^V\d+$", m["v_row_id"]), m
+        assert m["v_row_title"]
+        assert m["similarity_rationale"]
+        assert 0.0 <= m["similarity_score"] <= 1.0
+
+
+def test_corpus_load_failure_crash_isolated_with_500(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """V-series corpus missing → structured 500 with audit_artifact_path."""
+    bogus = tmp_path / "nonexistent_v_series.md"
+    monkeypatch.setattr(
+        ai_diagnose_route, "_V_SERIES_CORPUS_PATH", bogus,
+    )
+    monkeypatch.setattr(ai_diagnose_route, "_corpus_cache", None, raising=False)
+    monkeypatch.setattr(ai_diagnose_route, "_corpus_cache_mtime", None, raising=False)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={"symptom_text": "anything"},
+    )
+    assert resp.status_code == 500, resp.text
+    detail = resp.json()["detail"]
+    assert detail["failing_check"] == "v_series_corpus_unavailable"
+    assert "request_id" in detail
+    # Audit was still attempted before raising
+    assert "audit_artifact_path" in detail
+
+
+def test_4q_gate_route_does_not_write_inside_case_dir(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """V130 advisor-not-driver: route reads from case_dir but does not write."""
+    case_dir = tmp_path / "case_readonly"
+    inputs = case_dir / "inputs"
+    inputs.mkdir(parents=True)
+    (case_dir / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    before = {
+        p: p.read_bytes()
+        for p in case_dir.rglob("*")
+        if p.is_file()
+    }
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "face orientation deviation D7 louver vane",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    after = {
+        p: p.read_bytes()
+        for p in case_dir.rglob("*")
+        if p.is_file()
+    }
+    assert before == after, f"4Q gate violated: case_dir modified."
+
+
+def test_at_least_3_matches_ranking_descending(client: TestClient) -> None:
+    """top_k>=3 + ranking strictly non-increasing by similarity_score."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": (
+                "mesh quality skewness GAMG preconditioner SIGFPE wall function NaN "
+                "thermo Tlow species cellZone"
+            ),
+            "top_k": 5,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    matches = body["v_row_matches"]
+    assert len(matches) >= 3, f"expected ≥3 matches, got {len(matches)}"
+    scores = [m["similarity_score"] for m in matches]
+    assert scores == sorted(scores, reverse=True), (
+        f"ranking not descending: {scores}"
+    )
+
+
+def test_case_dir_provided_invokes_assemble_stack(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    """case_dir + parts_manifest.json → stack_report populated."""
+    case_dir = tmp_path / "case_with_parts"
+    case_dir.mkdir()
+    (case_dir / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "face orientation D7 deviation",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stack_report"] is not None, "stack should have run"
+    assert body["stack_report"]["advisor_count"] >= 1
+
+
+def test_empty_symptom_returns_400_with_actionable_error(
+    client: TestClient,
+) -> None:
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={"symptom_text": "   "},
+    )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert detail["failing_check"] == "empty_symptom_text"
+    assert "actionable" in detail
+
+
+def test_missing_case_dir_returns_400(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "test",
+            "case_dir": str(tmp_path / "does_not_exist"),
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert detail["failing_check"] == "case_dir_not_found"
+
+
+def test_solver_log_excerpt_contributes_to_matching(
+    client: TestClient,
+) -> None:
+    """Adding solver_log_excerpt should at minimum not reduce signal;
+    typically increases relevant token overlap."""
+    # Vague symptom with no V-row keywords by itself
+    bare = client.post(
+        "/api/ai-diagnose",
+        json={"symptom_text": "solver crashed unexpectedly"},
+    )
+    assert bare.status_code == 200
+    bare_body = bare.json()
+
+    # Same symptom + solver-log-shaped excerpt that names a specific failure
+    augmented = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "solver crashed unexpectedly",
+            "solver_log_excerpt": (
+                "GAMG: cannot reduce residual below tolerance for p_rgh\n"
+                "prism layer non-orthogonal cells thin wall agglomeration\n"
+            ),
+        },
+    )
+    assert augmented.status_code == 200
+    aug_body = augmented.json()
+
+    # Augmented call should yield at least as many matches as the bare one.
+    assert len(aug_body["v_row_matches"]) >= len(bare_body["v_row_matches"])
+    # Augmented top match score should be >= bare top match score (more
+    # tokens in query → no fewer overlaps possible).
+    if bare_body["v_row_matches"] and aug_body["v_row_matches"]:
+        assert (
+            aug_body["v_row_matches"][0]["similarity_score"]
+            >= bare_body["v_row_matches"][0]["similarity_score"]
+            or aug_body["v_row_matches"][0]["v_row_id"]
+            != bare_body["v_row_matches"][0]["v_row_id"]
+        )
+
+
+def test_top_k_clamps_response_length(client: TestClient) -> None:
+    """top_k=2 → response carries ≤ 2 matches even if more would qualify."""
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": (
+                "mesh skewness GAMG preconditioner thermo Tlow cellZone "
+                "face orientation thin wall"
+            ),
+            "top_k": 2,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["v_row_matches"]) <= 2
+
+
+def test_4q_gate_no_llm_imports_in_route_module() -> None:
+    """4Q (1) inline: route source contains no LLM provider / corpus_loader
+    imports. Lexical scan defends against future regressions where a
+    well-intentioned refactor wires in an LLM dependency."""
+    src = Path(ai_diagnose_route.__file__).read_text(encoding="utf-8")
+    forbidden_tokens = (
+        "from anthropic",
+        "import anthropic",
+        "from openai",
+        "import openai",
+        "from ui.backend.services.llm_provider",
+        "from ui.backend.services.ai_advisor",
+        "corpus_loader",
+    )
+    hits = [tok for tok in forbidden_tokens if tok in src]
+    assert not hits, f"4Q (1) violation: forbidden imports found: {hits}"
+
+
+def test_stack_crash_isolation_route_still_returns_200(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """If assemble_stack raises, the route swallows the exception and
+    returns 200 with stack_report=None (crash isolation per V62-A spec)."""
+    case_dir = tmp_path / "case_for_crash"
+    case_dir.mkdir()
+    (case_dir / "parts_manifest.json").write_text(
+        json.dumps(_parts_manifest_basic()), encoding="utf-8",
+    )
+
+    def _boom(**kwargs: Any) -> None:
+        raise RuntimeError("simulated advisor stack failure")
+
+    monkeypatch.setattr(ai_diagnose_route, "assemble_stack", _boom)
+
+    resp = client.post(
+        "/api/ai-diagnose",
+        json={
+            "symptom_text": "anything",
+            "case_dir": str(case_dir),
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["stack_report"] is None
+    # Audit captures the failure
+    audit = json.loads(Path(body["audit_artifact_path"]).read_text())
+    assert audit["stack"]["error"] is not None
+    assert "simulated advisor stack failure" in audit["stack"]["error"]

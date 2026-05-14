@@ -52,6 +52,7 @@ from ui.backend.routes import (
     ai_advisor,
     ai_chat,
     ai_coach,
+    ai_diagnose,
     ai_review,
     audit_package,
     batch_matrix,
@@ -235,6 +236,7 @@ app.include_router(ai_chat.router, prefix="/api", tags=["ai-chat"])
 app.include_router(ai_coach.router, prefix="/api", tags=["ai-coach"])
 app.include_router(ai_advisor.router, prefix="/api", tags=["ai-advisor"])
 app.include_router(ai_review.router, prefix="/api", tags=["ai-review"])
+app.include_router(ai_diagnose.router, prefix="/api", tags=["ai-diagnose"])
 if import_geometry is not None:
     app.include_router(import_geometry.router, prefix="/api", tags=["import-geometry"])
 if demo_fixtures is not None:
