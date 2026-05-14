@@ -50,6 +50,15 @@ plumbing + dataclass rehydration. D6 ``extra_body_advisor`` is NOT
 unblocked by this change (it requires ``stl_bbox_set`` and is not yet
 routed in ``assemble_stack`` — separate follow-up sub-DEC).
 
+DEC-V62-A-sub-D10 (2026-05-14): adds ``bc_specs`` + ``bc_fork`` wire
+fields routing into D10 ``bc_type_name_validity_advisor``. Closes
+M-STACK-TRACK-3 §gap2 (V29 evidence row) — case_006 ONERA M6 farfield
+parts declaring foam-extend-only BC names would previously pass the
+stack silently because A5 short-circuits on ``role`` outside
+``THROUGH_FLOW_ROLES`` and never inspects ``bc:`` blocks. The stack
+also auto-extracts ``bc_specs`` from ``parts_manifest`` when the
+explicit field is absent.
+
 Missing files are silently skipped (the absence is observable via
 ``advisor_count`` in the report).
 """
@@ -164,6 +173,32 @@ class AIReviewRequest(BaseModel):
             "Each item: {patch_name, mode: 'shared'|'endcap', body_a?, "
             "body_b?, body?, axis?}. Combined with interface_bodies "
             "gates the A2-v2 advisor."
+        ),
+    )
+    # DEC-V62-A-sub-D10 (2026-05-14) — fields below explicitly route
+    # bc_specs into the D10 bc_type_name_validity_advisor without
+    # requiring parts_manifest. When absent AND parts_manifest carries
+    # bc: blocks, the stack auto-extracts via
+    # extract_bc_specs_from_parts_manifest, so this field is purely
+    # for callers that lack a full parts_manifest but DO have BC
+    # declarations to validate (e.g., a partial config-validate flow).
+    bc_specs: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        description=(
+            "Explicit D10 input. Each item: {part_name: str, "
+            "fields: {<bc_field_name>: <bc_type_name>, ...}}. When "
+            "absent, the stack auto-extracts from parts_manifest "
+            "(parts[i].bc blocks). Explicit value wins over auto-"
+            "extraction. See DEC-V62-A-sub-D10."
+        ),
+    )
+    bc_fork: Optional[str] = Field(
+        default=None,
+        description=(
+            "Which OpenFOAM fork the case targets — 'main' (ESI v2312, "
+            "project default), 'foam-extend', or 'unknown'. Selects the "
+            "severity D10 assigns to characteristic*-family BC names. "
+            "Defaults to 'main' when None."
         ),
     )
     llm_enhance: bool = Field(
@@ -657,7 +692,11 @@ async def post_ai_review(
         "step_extents": payload.step_extents,
         "interface_bodies": payload.interface_bodies,
         "interface_specs": payload.interface_specs,
+        # DEC-V62-A-sub-D10
+        "bc_specs": payload.bc_specs,
     }
+    if payload.bc_fork is not None:
+        explicit_kwargs["bc_fork"] = payload.bc_fork
     case_label = "anon"
     if payload.case_dir is not None:
         case_path = _resolve_case_dir(payload.case_dir)

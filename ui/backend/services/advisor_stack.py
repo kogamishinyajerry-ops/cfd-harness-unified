@@ -27,7 +27,11 @@ Routing rules (pure dict-consumer dispatch, 0 LLM):
 Provided artifact             Advisors dispatched
 ============================  =========================================
 ``parts_manifest``            A4 ``check_face_orientation`` +
-                              A5 ``validate_inlet_outlet_emission``
+                              A5 ``validate_inlet_outlet_emission`` +
+                              D10 ``detect_invalid_bc_types`` (when
+                              ``parts[i].bc`` blocks are present)
+``bc_specs`` (explicit)       D10 ``detect_invalid_bc_types`` (wins over
+                              parts_manifest auto-extraction)
 ``interface_bodies`` +        A2-v2 ``detect_virtual_interfaces`` +
 ``interface_specs``           ``should_have_been_shared_with_unintended_gap``
 ``shm_dict``                  A8 ``validate_shm_dict``
@@ -157,6 +161,7 @@ def _load_advisor(modname: str) -> Any:
     return module
 
 
+bc_type_name_validity_advisor = _load_advisor("bc_type_name_validity_advisor")
 face_orientation_advisor = _load_advisor("face_orientation_advisor")
 inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
 shm_dict_validator = _load_advisor("shm_dict_validator")
@@ -170,6 +175,7 @@ virtual_interface_detector = _load_advisor("virtual_interface_detector")
 # `docs/openfoam_corpus/industrial_solver_findings_v_series.md`).
 # Tuples are ordered by sediment-landing date for audit predictability.
 _V_ROWS_PER_ADVISOR: dict[str, tuple[str, ...]] = {
+    "bc_type_name_validity_advisor": ("V29",),
     "face_orientation_advisor": ("V79", "V87"),
     "inlet_outlet_validator": ("V81",),
     "shm_dict_validator": ("V52", "V86", "V99", "V100"),
@@ -277,6 +283,25 @@ def _summarize(value: Any, *, max_chars: int = 200) -> str:
     if len(s) <= max_chars:
         return s
     return s[: max_chars - 3] + "..."
+
+
+def _normalize_bc_type_name(
+    report: bc_type_name_validity_advisor.BcTypeNameReport,
+) -> tuple[Finding, ...]:
+    advisor = "bc_type_name_validity_advisor"
+    rows = _V_ROWS_PER_ADVISOR[advisor]
+    return tuple(
+        Finding(
+            source_advisor=advisor,
+            severity=f.severity,
+            code=f"bc_type_{f.verdict}",
+            message=f.detail,
+            location=f"{f.part_name}.bc.{f.field_name}",
+            evidence_v_rows=rows,
+            raw=f,
+        )
+        for f in report.findings
+    )
 
 
 def _normalize_face_orientation(
@@ -526,6 +551,8 @@ def assemble_stack(
     step_bbox_max_extent_raw: float | None = None,
     step_body_extents_raw: list[float] | None = None,
     thin_wall_inputs: Mapping[str, Any] | None = None,
+    bc_specs: Sequence[Mapping[str, Any]] | None = None,
+    bc_fork: str = "main",
     **_unused: Any,  # forward-compatible (silently ignored, NOT logged)
 ) -> AdvisorStackReport:
     """Dispatch all applicable advisors based on provided artifacts.
@@ -573,6 +600,36 @@ def assemble_stack(
             args=(parts_manifest,),
             kwargs={},
             normalize=_normalize_inlet_outlet,
+            advisor_calls=advisor_calls,
+            findings=findings,
+        )
+
+    # D10 bc_type_name_validity dispatch (DEC-V62-A-sub-D10 · M-STACK-TRACK-3
+    # §gap2 · V29 evidence row): explicit bc_specs win; else auto-extract from
+    # parts_manifest['parts'][*]['bc'] blocks. Either path → dispatch when
+    # there is at least one entry to check.
+    bc_specs_resolved: list[dict[str, Any]] | None = None
+    if bc_specs is not None:
+        bc_specs_resolved = [dict(s) for s in bc_specs if isinstance(s, Mapping)]
+    elif parts_manifest is not None:
+        extracted = bc_type_name_validity_advisor.extract_bc_specs_from_parts_manifest(
+            dict(parts_manifest)
+        )
+        if extracted:
+            bc_specs_resolved = extracted
+    if bc_specs_resolved:
+        advisors_dispatched.add("bc_type_name_validity_advisor")
+        _dispatch(
+            advisor_name="bc_type_name_validity_advisor",
+            module=bc_type_name_validity_advisor,
+            input_summary=(
+                f"{len(bc_specs_resolved)} parts with bc blocks "
+                f"(fork={bc_fork})"
+            ),
+            func=bc_type_name_validity_advisor.detect_invalid_bc_types,
+            args=(bc_specs_resolved,),
+            kwargs={"fork": bc_fork},
+            normalize=_normalize_bc_type_name,
             advisor_calls=advisor_calls,
             findings=findings,
         )
