@@ -329,38 +329,86 @@ def test_critical_count_includes_fail_severity() -> None:
     assert r.warning_count == 0
 
 
-def test_stack_importable_without_trimesh(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Codex R0 P1 regression: ``import advisor_stack`` must succeed in
-    base UI environments where the [workbench] extra (and therefore
-    ``trimesh``) is not installed. Prior code did
-    ``from ui.backend.services.geometry_ingest import ...`` which
-    triggered ``geometry_ingest/__init__.py`` and its eager
-    ``health_check.py`` → ``import trimesh`` chain."""
-    import importlib
+def test_stack_importable_without_trimesh(tmp_path: Path) -> None:
+    """Codex R0 P1 + R1 P3 regression: a *cold-start* `import
+    advisor_stack` must succeed in base UI environments where the
+    ``[workbench]`` extra (and therefore ``trimesh``) is not installed.
 
-    # Force a fresh import of advisor_stack with trimesh blocked from sys.path.
-    # We can't actually uninstall trimesh from the test process, so we
-    # validate the structural fix: re-importing the module from disk
-    # should not trigger a trimesh import event.
-    seen: list[str] = []
-    real_import = __builtins__["__import__"] if isinstance(__builtins__, dict) else __builtins__.__import__
+    R0 P1 (2026-05-14): the prior ``from ui.backend.services.geometry_ingest
+    import ...`` triggered ``geometry_ingest/__init__.py`` and its eager
+    ``health_check.py`` → ``import trimesh`` chain.
 
-    def tracer(name, globals=None, locals=None, fromlist=(), level=0):
-        seen.append(name)
-        return real_import(name, globals, locals, fromlist, level)
+    R1 P3 (2026-05-14): in-process tracer test could not exercise cold-
+    start because ``advisor_stack`` and all 7 leaf advisor modules were
+    already cached at the time the test ran. This subprocess-based test
+    spawns a fresh Python with ``trimesh`` blocked at the ``sys.meta_path``
+    layer *before* any user import, so the cold-start path is actually
+    exercised. The subprocess also verifies the parent-package placeholder
+    fix (R1 P2): a *second* normal import via the package path must
+    resolve to the cached leaf without triggering the real ``__init__.py``.
+    """
+    import subprocess
+    import textwrap
 
-    # Drop any cached entry so the module reloads fully
-    for cached in list(sys.modules):
-        if cached.startswith("ui.backend.services.advisor_stack"):
-            sys.modules.pop(cached, None)
+    # Repo root = ui/backend/services/advisor_stack.py → up 4 levels
+    repo_root = Path(__file__).resolve().parents[3]
+    script = textwrap.dedent(
+        """
+        import sys
 
-    monkeypatch.setattr("builtins.__import__", tracer)
-    importlib.import_module("ui.backend.services.advisor_stack")
-    monkeypatch.undo()
+        class _BlockTrimesh:
+            def find_module(self, name, path=None):
+                if name == "trimesh" or name.startswith("trimesh."):
+                    return self
+                return None
 
-    # Confirm the load did not pull trimesh transitively.
-    assert "trimesh" not in seen, (
-        "advisor_stack import pulled trimesh — Codex R0 P1 regression"
+            def load_module(self, name):
+                raise ImportError(
+                    f"simulated [ui]-only env: no module named {name}"
+                )
+
+        sys.meta_path.insert(0, _BlockTrimesh())
+
+        # Cold start 1: importing advisor_stack must succeed without trimesh.
+        from ui.backend.services.advisor_stack import assemble_stack
+
+        # Cold start 2 (R1 P2 regression): a subsequent *normal* package-
+        # path import of an advisor leaf must also work without triggering
+        # the real geometry_ingest/__init__.py.
+        from ui.backend.services.geometry_ingest import (
+            face_orientation_advisor,
+        )
+        from ui.backend.services.geometry_ingest.shm_dict_validator import (
+            validate_shm_dict,
+        )
+
+        # Smoke dispatch: emit V81 fail finding without any trimesh involvement.
+        r = assemble_stack(
+            parts_manifest={
+                "parts": [{"name": "supply_inlet", "role": "inlet"}]
+            }
+        )
+        assert r.advisor_count == 2
+        assert r.critical_count == 1, "A5 fail should count as blocking"
+        assert "trimesh" not in sys.modules
+        print("COLD_START_OK")
+        """
+    ).strip()
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        cwd=str(repo_root),
+        timeout=30,
+    )
+    assert result.returncode == 0, (
+        "cold-start subprocess failed.\n"
+        f"stdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
+    )
+    assert "COLD_START_OK" in result.stdout, (
+        f"missing success marker.\nstdout:\n{result.stdout}\n"
+        f"stderr:\n{result.stderr}"
     )
 
 

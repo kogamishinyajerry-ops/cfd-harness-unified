@@ -62,27 +62,65 @@ from __future__ import annotations
 import importlib.util
 import sys
 import time
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-# Codex R0 P1 fix (2026-05-14): bypass ``geometry_ingest/__init__.py``
-# (which eagerly imports ``health_check`` → ``trimesh``) so this stack is
-# importable in base UI environments that install only ``[ui]`` extras
-# (the routes ``/ai-review`` and ``/ai-diagnose`` will run there).
-# The 7 advisor submodules import only stdlib (math / re / dataclasses /
-# pathlib), so loading them by file path is safe and side-effect-free.
+_PARENT_PKG = "ui.backend.services.geometry_ingest"
+
+
+def _ensure_parent_package_placeholder() -> types.ModuleType:
+    """Pre-populate ``ui.backend.services.geometry_ingest`` in
+    ``sys.modules`` with a placeholder that skips the real
+    ``__init__.py``.
+
+    Codex R1 P2 fix (2026-05-14): without this, my R0 fix only handled the
+    initial ``import advisor_stack`` — any *subsequent* normal import like
+    ``from ui.backend.services.geometry_ingest import face_orientation_advisor``
+    still triggers Python to import the parent package first, which runs
+    the real ``__init__.py`` → ``health_check.py`` → ``import trimesh``
+    chain and crashes in ``[ui]``-only environments.
+
+    The placeholder is a stdlib ``ModuleType`` with ``__path__`` set to
+    the package directory so Python's import machinery can still resolve
+    sub-module file lookups against it. If the real package has already
+    been loaded (workbench env or test runner), we leave the cached
+    real-module untouched.
+    """
+    existing = sys.modules.get(_PARENT_PKG)
+    if existing is not None:
+        return existing
+    pkg_dir = Path(__file__).parent / "geometry_ingest"
+    placeholder = types.ModuleType(_PARENT_PKG)
+    placeholder.__path__ = [str(pkg_dir)]
+    placeholder.__file__ = str(pkg_dir / "__init__.py")
+    sys.modules[_PARENT_PKG] = placeholder
+    return placeholder
+
+
 def _load_advisor(modname: str) -> Any:
     """Load an advisor submodule directly from disk.
 
     Registers under ``ui.backend.services.geometry_ingest.<modname>`` in
-    ``sys.modules`` so subsequent normal imports (e.g., from test code)
-    pick up the same module object — keeping monkeypatching reliable.
+    ``sys.modules`` AND attaches as an attribute on the parent placeholder
+    so that:
+
+    1. ``import ui.backend.services.geometry_ingest.<modname>`` finds the
+       cached entry without re-running ``__init__.py``;
+    2. ``from ui.backend.services.geometry_ingest import <modname>``
+       resolves the attribute on the placeholder;
+    3. test-time ``monkeypatch.setattr(<advisor_mod>, "fn", ...)`` patches
+       the same module object the stack dispatches against.
     """
-    qualified = f"ui.backend.services.geometry_ingest.{modname}"
+    parent = _ensure_parent_package_placeholder()
+    qualified = f"{_PARENT_PKG}.{modname}"
     if qualified in sys.modules:
-        return sys.modules[qualified]
+        cached = sys.modules[qualified]
+        if not hasattr(parent, modname):
+            setattr(parent, modname, cached)
+        return cached
     src = Path(__file__).parent / "geometry_ingest" / f"{modname}.py"
     spec = importlib.util.spec_from_file_location(qualified, src)
     if spec is None or spec.loader is None:  # pragma: no cover - defensive
@@ -90,6 +128,7 @@ def _load_advisor(modname: str) -> Any:
     module = importlib.util.module_from_spec(spec)
     sys.modules[qualified] = module
     spec.loader.exec_module(module)
+    setattr(parent, modname, module)
     return module
 
 
