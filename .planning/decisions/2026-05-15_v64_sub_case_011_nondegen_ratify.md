@@ -4,7 +4,7 @@ title: case_011 plate-fin HX V93/V94 degenerate-substrate disposition ratificati
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 1 · M-V64A-CASE-011-NONDEGEN-RATIFY (V63-A carry-over #1 disposition · per V63-A close §3.1 user-ratification precedent · Path A ratified 2026-05-15)
-notion_sync_status: pending session-end batch (Accepted · v2.3 round-1 loosen rule: Status=Accepted DECs sync at session-end)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed8171b6aeecfe3e5fbd14)
 authored_by: Claude Code Opus 4.7 (1M context) · main session B62
 authored_at: 2026-05-15
 confidence: med

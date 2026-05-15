@@ -4,7 +4,7 @@ title: V64-A Tier 2 · case_016 + case_006 systemic thermo-FPE substrate fix · 
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-THERMO-FPE-FIX
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed816b8bd3dfe3cce79752)
 autonomous_governance: true
 confidence: med
 codex_review_relay: skipped (v2.3 1-sync-trigger not crossed · no security/auth/signing boundary)
