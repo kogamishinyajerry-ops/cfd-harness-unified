@@ -1,0 +1,84 @@
+# D11 cross-val substrate · case_020 porous-media filter Darcy-Forchheimer
+# Derived from .planning/methodology/kickoff/case_020_codex_response.md
+# (Deliverable 2 CAD script — cq.Assembly emits 9 separate bodies one per
+# patch + Deliverable 4 parts manifest).
+# Additive only — case_020 has no materialized substrate; this file is the
+# synthetic D11 input set per V63-A close DEC §8 carry-over #4 scope.
+#
+# Archetype: V94 counter-example. Each patch (inlet / outlet / housing_wall
+# / filter_element_face_upstream / filter_element_face_downstream /
+# filter_edge_seal / filter_edge_open_d10) is emitted by the CAD script as
+# its OWN cq.Assembly body, so the STL inventory carries each patch as a
+# distinct parent label. The engineer authored zero face_labels (because
+# every patch IS its own body); shm refines per-body without nested
+# regions. D11 should run (gate fires on stl_face_normals presence) but
+# emit zero findings — the cleanest possible V94 signal: the case was
+# authored in a way that does NOT trigger face-label loss.
+# Expected D11 behavior: 0 findings · advisor runs · correctly silent.
+
+case_id: case_020_porous_media_filter_darcy_forchheimer
+source: .planning/methodology/kickoff/case_020_codex_response.md
+substrate_type: synthetic_from_kickoff_spec
+
+parts_manifest:
+  # Per kickoff Deliverable 4: region region_fluid + cellZone
+  # porous_zone_filter_element + 7 named patches as separate bodies.
+  # NO face_labels block on any part — each part IS the patch.
+  parts:
+    - { name: region_fluid, role: region_fluid }
+    - { name: porous_zone_filter_element, role: cell_zone }
+    - { name: inlet, role: boundary_patch }
+    - { name: outlet, role: boundary_patch }
+    - { name: housing_wall, role: boundary_patch }
+    - { name: filter_element_face_upstream, role: boundary_patch }
+    - { name: filter_element_face_downstream, role: boundary_patch }
+    - { name: filter_edge_seal, role: boundary_patch }
+    - { name: filter_edge_open_d10, role: boundary_patch }
+
+# cq.Assembly.add per body (9 bodies per kickoff script lines 189-198) →
+# 9 STL parent labels, one per patch + region + cellZone.
+stl_face_normals:
+  region_fluid: [[1.0, 0.0, 0.0]]
+  porous_zone_filter_element: [[1.0, 0.0, 0.0]]
+  inlet: [[-1.0, 0.0, 0.0]]
+  outlet: [[1.0, 0.0, 0.0]]
+  housing_wall: [[0.0, 1.0, 0.0]]
+  filter_element_face_upstream: [[-1.0, 0.0, 0.0]]
+  filter_element_face_downstream: [[1.0, 0.0, 0.0]]
+  filter_edge_seal: [[0.0, 1.0, 0.0]]
+  filter_edge_open_d10: [[0.0, 1.0, 0.0]]
+
+# Engineer-authored shm: per-body refinementSurfaces with NO nested
+# regions (each body IS a patch — no sub-regions to declare). This is
+# the V94-immune authoring pattern.
+shm_dict:
+  castellatedMeshControls:
+    refinementSurfaces:
+      region_fluid: { level: [2, 3] }
+      porous_zone_filter_element: { level: [3, 4] }
+      inlet: { level: [3, 3] }
+      outlet: { level: [3, 3] }
+      housing_wall: { level: [2, 3] }
+      filter_element_face_upstream: { level: [3, 4] }
+      filter_element_face_downstream: { level: [3, 4] }
+      filter_edge_seal: { level: [3, 4] }
+      filter_edge_open_d10: { level: [4, 4] }
+    # No castellatedMeshControls.patches[] block either — each STL
+    # parent label is its own patch via refinementSurfaces.
+
+# Expected D11 outcome:
+#   - Path (a) orphan_declared_label: 0 fires (no face_labels declared
+#     anywhere → no orphan candidates).
+#   - Path (b) duplicate_face_label_in_manifest: 0 (no face_labels at all).
+#   - Path (c) shm_reference_undeclared_in_manifest: 0 (no nested
+#     regions or patches[] block → zero shm references walked).
+#   - Dispatch gate STILL fires (stl_face_normals has 9 entries) so the
+#     advisor IS dispatched — it just returns a clean report. This
+#     distinguishes "D11 correctly silent" from "D11 not dispatched".
+expected_findings:
+  orphan_declared_label: 0
+  duplicate_face_label_in_manifest: 0
+  shm_reference_undeclared_in_manifest: 0
+  total: 0
+  archetype: v94_counter_example_patches_emitted_as_bodies
+  v94_attribution: counter_example_proves_d11_does_not_false_positive

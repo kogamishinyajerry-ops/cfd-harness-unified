@@ -1,0 +1,77 @@
+# D11 cross-val substrate · case_018 Stairmand cyclone separator
+# Derived from .planning/methodology/kickoff/case_018_codex_response.md
+# (Deliverable 2 CAD script + Deliverable 4 parts manifest).
+# Additive only — case_018 has no materialized substrate; this file is the
+# synthetic D11 input set per V63-A close DEC §8 carry-over #4 scope.
+#
+# Archetype: canonical V94 (cq.exporters single-shell STL emits 1 body
+# label per region; engineer authors 4 face-label patches on region_air).
+# Expected D11 behavior: 4× orphan_declared_label findings.
+
+case_id: case_018_stairmand_cyclone_separator
+source: .planning/methodology/kickoff/case_018_codex_response.md
+substrate_type: synthetic_from_kickoff_spec
+
+parts_manifest:
+  parts:
+    - name: region_air
+      role: region_fluid
+      # face_labels authored per BC plan (4 patches on the fluid region surface)
+      face_labels:
+        - inlet_tangential
+        - overflow_outlet
+        - underflow_outlet
+        - cyclone_walls
+    - name: debris_cube_d6
+      role: defect_body
+      # No face_labels — defect body, surface treated uniformly per
+      # kickoff defect-manifest §expected_advisor=NONE.
+
+# cq.Assembly.add(region_air) + cq.Assembly.add(debris_cube_d6) →
+# cq.exporters single-watertight-shell behaviour emits exactly 2 STL
+# parent body labels. Face-zone metadata is lost (V94 archetype).
+stl_face_normals:
+  region_air: [[0.0, 1.0, 0.0]]
+  debris_cube_d6: [[0.0, 0.0, 1.0]]
+
+# Engineer-authored sHM dict mirrors the 4 face labels under
+# refinementSurfaces.region_air.regions (canonical OpenFOAM convention
+# for named sub-patches under a parent triSurfaceMesh).
+shm_dict:
+  castellatedMeshControls:
+    refinementSurfaces:
+      region_air:
+        level: [2, 3]
+        regions:
+          inlet_tangential:
+            level: [3, 3]
+            patchInfo: { type: patch }
+          overflow_outlet:
+            level: [3, 3]
+            patchInfo: { type: patch }
+          underflow_outlet:
+            level: [3, 3]
+            patchInfo: { type: patch }
+          cyclone_walls:
+            level: [2, 3]
+            patchInfo: { type: wall }
+      debris_cube_d6:
+        level: [4, 4]
+        # No nested regions — defect body cell-zoned, not patch-zoned.
+
+# Expected D11 outcome (used as cross-val ground truth for the matrix).
+# Per stl_face_label_validator.py:
+#   - Path (a) orphan_declared_label fires for each face_label not in
+#     stl_face_normals keys → 4 fires (all 4 region_air face_labels are
+#     orphaned vs the 2-key STL inventory).
+#   - Path (b) duplicate_face_label_in_manifest: 0 (each label is on
+#     exactly one part — region_air).
+#   - Path (c) shm_reference_undeclared_in_manifest: 0 (the 4 shm
+#     references match the 4 declared face_labels exactly).
+expected_findings:
+  orphan_declared_label: 4
+  duplicate_face_label_in_manifest: 0
+  shm_reference_undeclared_in_manifest: 0
+  total: 4
+  archetype: canonical_v94_single_region_with_orphaned_face_labels
+  v94_attribution: firm_match

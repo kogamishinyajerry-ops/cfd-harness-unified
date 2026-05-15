@@ -1,0 +1,96 @@
+# D11 cross-val substrate · case_019 Kenics static mixer
+# Derived from .planning/methodology/kickoff/case_019_codex_response.md
+# (Deliverable 2 CAD script + Deliverable 4 parts manifest).
+# Additive only — case_019 has no materialized substrate; this file is the
+# synthetic D11 input set per V63-A close DEC §8 carry-over #4 scope.
+#
+# Archetype: partial V94 (CAD emits region_fluid + 8 mixer_element_i as
+# separate cq.Assembly bodies → STL inventory has 9 parent labels; engineer
+# authors 3 face-labels [pipe_inlet/outlet/wall] on region_fluid because
+# those are pipe-surface sub-patches sharing region_fluid's STL).
+# Expected D11 behavior: 3× orphan_declared_label findings.
+
+case_id: case_019_kenics_static_mixer
+source: .planning/methodology/kickoff/case_019_codex_response.md
+substrate_type: synthetic_from_kickoff_spec
+
+parts_manifest:
+  parts:
+    - name: region_fluid
+      role: region_fluid
+      # 3 pipe-surface face_labels — sub-patches of the region_fluid STL.
+      face_labels:
+        - pipe_inlet
+        - pipe_outlet
+        - pipe_wall
+    # 8 mixer_element_i bodies — each is its OWN STL parent label; the
+    # patch name IS the body name (per kickoff CAD PART_NAMES = [region_fluid]
+    # + [f"mixer_element_{i}" for i in 1..8]). No face_labels needed because
+    # the body's entire surface IS the patch.
+    - { name: mixer_element_1, role: solid_body }
+    - { name: mixer_element_2, role: solid_body }
+    - { name: mixer_element_3, role: solid_body }
+    - { name: mixer_element_4, role: solid_body }
+    - { name: mixer_element_5, role: solid_body }
+    - { name: mixer_element_6, role: solid_body }
+    - { name: mixer_element_7, role: solid_body }
+    - { name: mixer_element_8, role: solid_body }
+
+# cq.Assembly.add per body → 9 STL parent labels. mixer_element_i keys
+# match body names; region_fluid key matches the fluid region body.
+stl_face_normals:
+  region_fluid: [[1.0, 0.0, 0.0]]
+  mixer_element_1: [[1.0, 0.0, 0.0]]
+  mixer_element_2: [[1.0, 0.0, 0.0]]
+  mixer_element_3: [[1.0, 0.0, 0.0]]
+  mixer_element_4: [[1.0, 0.0, 0.0]]
+  mixer_element_5: [[1.0, 0.0, 0.0]]
+  mixer_element_6: [[1.0, 0.0, 0.0]]
+  mixer_element_7: [[1.0, 0.0, 0.0]]
+  mixer_element_8: [[1.0, 0.0, 0.0]]
+
+# Engineer-authored shm: 3 pipe face labels under region_fluid regions;
+# mixer_element_i refined per-body without nested regions (they ARE the
+# patch — no sub-regions to declare).
+shm_dict:
+  castellatedMeshControls:
+    refinementSurfaces:
+      region_fluid:
+        level: [2, 3]
+        regions:
+          pipe_inlet:
+            level: [3, 3]
+            patchInfo: { type: patch }
+          pipe_outlet:
+            level: [3, 3]
+            patchInfo: { type: patch }
+          pipe_wall:
+            level: [2, 3]
+            patchInfo: { type: wall }
+      # 8 mixer elements — refined as whole bodies (no nested regions).
+      mixer_element_1: { level: [3, 4] }
+      mixer_element_2: { level: [3, 4] }
+      mixer_element_3: { level: [4, 5] }  # D2 over-dense element per kickoff
+      mixer_element_4: { level: [3, 4] }
+      mixer_element_5: { level: [3, 4] }
+      mixer_element_6: { level: [3, 4] }
+      mixer_element_7: { level: [3, 4] }
+      mixer_element_8: { level: [3, 4] }
+
+# Expected D11 outcome:
+#   - Path (a) orphan_declared_label: 3 fires (pipe_inlet/outlet/wall
+#     declared on region_fluid but not in stl_face_normals keys; the
+#     mixer_element_i bodies ARE in stl keys so their patches are matched
+#     via path-(c) walk via body-as-surface).
+#   - Path (b) duplicate: 0 (each face_label on exactly one part).
+#   - Path (c) shm_reference_undeclared_in_manifest: 0 (the 3 shm-
+#     referenced face_labels = the 3 declared face_labels exactly; the
+#     8 mixer_element_i refinementSurfaces entries have NO nested
+#     regions block so contribute zero references to path-(c) walk).
+expected_findings:
+  orphan_declared_label: 3
+  duplicate_face_label_in_manifest: 0
+  shm_reference_undeclared_in_manifest: 0
+  total: 3
+  archetype: partial_v94_mixed_bodies_and_face_labels
+  v94_attribution: firm_match
