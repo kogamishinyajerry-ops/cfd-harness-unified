@@ -4,7 +4,7 @@ title: case_004 v5 F-NEW-3.1 LE/TE tangential fix attempt · FAIL verdict · 3 s
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed8135bf63e6a82671b5bd)
 predecessor: DEC-V64-A-sub-M-V64A-CASE-004-BLADE-CAD-FIX
 batch: B80
 confidence: low
