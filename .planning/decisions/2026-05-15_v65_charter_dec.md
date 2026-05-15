@@ -4,7 +4,7 @@ title: V65-A Industrial Coverage Deepening Arc · charter DEC · user-selected f
 status: Accepted
 parent_dec: V64-A-close
 phase: V65-A charter (Industrial Coverage Deepening · user-ratified 2026-05-15)
-notion_sync_status: pending (session-end batch · only Accepted DECs · v2.3 round-1)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81629efffc725103e94b)
 authored_by: Claude Code Opus 4.7 (1M context) · main session B72
 authored_at: 2026-05-15
 confidence: med
