@@ -1,0 +1,67 @@
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+// case_028 APU bay ventilation · simpleFoam steady-state
+// Target: residuals < 1e-4 on U/p/k/omega OR 3000 iter cap (B74 first-pass)
+
+application     simpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         3000;       // iter cap (B74 first-pass · brief 5000 → 3000 reduce time budget)
+deltaT          1;
+writeControl    timeStep;
+writeInterval   500;        // write every 500 iter (5 snapshots + final)
+purgeWrite      3;          // keep 3 most recent
+writeFormat     ascii;
+writePrecision  7;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+functions
+{
+    // Mass conservation monitor (Δṁ at inlet vs outlet)
+    inlet_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          (phi);
+    }
+    outlet_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            outlet;
+        operation       sum;
+        fields          (phi);
+    }
+
+    // Probe velocity at 3 representative bay interior points
+    probes
+    {
+        type            probes;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        fields          (U p);
+        probeLocations
+        (
+            (64.5 0.5 0.0)   // upstream of APU core
+            (65.5 0.5 0.0)   // bay center (APU core region)
+            (66.5 0.5 0.0)   // downstream of APU core
+        );
+    }
+}

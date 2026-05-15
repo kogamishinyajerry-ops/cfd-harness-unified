@@ -1,0 +1,46 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object nut; }
+
+// case_028 ventilation · turbulent viscosity
+// Calculated everywhere · nutkWallFunction on walls (high-Re wall function · no near-wall layers)
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bay_top
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bay_bottom
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bay_side_p
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bay_side_n
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+}

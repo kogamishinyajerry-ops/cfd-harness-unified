@@ -1,0 +1,40 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object p; }
+
+// case_028 ventilation · kinematic pressure (Pa / rho)
+// outlet fixed reference p=0 · all other surfaces zeroGradient
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            zeroGradient;
+    }
+    outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    bay_top
+    {
+        type            slip;
+    }
+    bay_bottom
+    {
+        type            slip;
+    }
+    bay_side_p
+    {
+        type            slip;
+    }
+    bay_side_n
+    {
+        type            slip;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            zeroGradient;
+    }
+}

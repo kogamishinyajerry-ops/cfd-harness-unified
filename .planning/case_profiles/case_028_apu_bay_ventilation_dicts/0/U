@@ -1,0 +1,40 @@
+FoamFile { version 2.0; format ascii; class volVectorField; location "0"; object U; }
+
+// case_028 ventilation flow · U_inlet = 5 m/s along +x
+// All 29 STL components → noSlip walls (defined wildcard at end · sHM will create them)
+
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (5 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (5 0 0);
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bay_top
+    {
+        type            slip;
+    }
+    bay_bottom
+    {
+        type            slip;
+    }
+    bay_side_p
+    {
+        type            slip;
+    }
+    bay_side_n
+    {
+        type            slip;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            noSlip;
+    }
+}

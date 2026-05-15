@@ -1,0 +1,5 @@
+FoamFile { version 2.0; format ascii; class dictionary; object transportProperties; }
+
+// Air at 20°C · incompressible Newtonian
+transportModel  Newtonian;
+nu              1.5e-05;    // kinematic viscosity m²/s (air @ 293 K)

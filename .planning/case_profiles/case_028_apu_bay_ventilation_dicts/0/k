@@ -1,0 +1,42 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object k; }
+
+// case_028 ventilation · TKE
+// U_inlet = 5 m/s · turbulence intensity I = 5% (typical ventilation flow)
+// k = 1.5 · (U · I)² = 1.5 · (5 · 0.05)² = 0.09375 m²/s²
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0.09375;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 0.09375;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bay_top
+    {
+        type            slip;
+    }
+    bay_bottom
+    {
+        type            slip;
+    }
+    bay_side_p
+    {
+        type            slip;
+    }
+    bay_side_n
+    {
+        type            slip;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+}
