@@ -1,0 +1,194 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// case_022 · Driver-Seegmiller backward-facing step · 2D · ≈116k cells
+//
+// Geometry (NASA TM 86658 Driver & Seegmiller 1985, p. 4):
+//   Step height h = 0.0127 m (12.7 mm)
+//   Inlet channel height H_in = 8·h = 0.1016 m
+//   Downstream channel height H_in + h = 9·h = 0.1143 m
+//   Expansion ratio ER = 1.125
+//
+// Domain layout:
+//   x: 0 → 0.254 (inlet section, 20·h) → 0.508 (outlet, 20·h downstream)
+//   y: 0 → 0.0127 (step level h) → 0.1143 (top wall)
+//   z: 0 → 0.01 (single-layer 2D wedge, empty patches)
+//
+// 3-block topology:
+//   Block 1 (upstream channel above step): nx=200, ny=140, nz=1 = 28,000 cells
+//   Block 2 (downstream upper): nx=400, ny=140, nz=1 = 56,000 cells
+//   Block 3 (recirculation below step level): nx=400, ny=80, nz=1 = 32,000 cells
+//   TOTAL: 116,000 hexahedra
+//
+// Grading rationale:
+//   x: Block 1 simpleGrading 0.1 (cells shrink 10× from inlet to step,
+//      δx_first ≈ 3.2 mm at x=0, δx_last ≈ 0.32 mm at x=0.254)
+//      Block 2 simpleGrading 5 (fine just past step δx_first ≈ 0.26 mm,
+//      coarse at outlet δx_last ≈ 1.3 mm) — ~24% size jump at step interface
+//      Block 3 simpleGrading 5 (matches Block 2 x grading at shared face)
+//   y: bilinear via multi-region grading: fine near both top and bottom walls
+//      Block 1 & 2: ((0.5 0.5 1000) (0.5 0.5 0.001)) targets δy_first ≈ 5e-6 m
+//      Block 3: ((0.5 0.5 200) (0.5 0.5 0.005)) targets δy_first ≈ 5e-6 m on
+//               both bottom-downstream wall and step-shear-layer interface
+//   z: 1 (uniform single layer, empty patches → no flux)
+//
+// Target y+ ≈ 1 on all noSlip walls (bottomUpstream, stepWall, bottomDownstream,
+// topWall). For U_ref=44.2 m/s, ν=1.5e-5 m²/s, estimated u_τ ≈ 2.2 m/s,
+// δy(y+=1) ≈ 6.8e-6 m. δy_first ≈ 5e-6 m gives y+ ≈ 0.7-1.0.
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+vertices
+(
+    // z = 0 (back face)
+    ( 0       0.0127  0     )   // 0  upstream-bottom-left (step top level)
+    ( 0.254   0.0127  0     )   // 1  step-top corner (interface block 1/2/3)
+    ( 0.508   0.0127  0     )   // 2  downstream-right at step-top level
+    ( 0       0.1143  0     )   // 3  upstream-top-left (top wall LE)
+    ( 0.254   0.1143  0     )   // 4  upstream-top-right (block 1/2 interface top)
+    ( 0.508   0.1143  0     )   // 5  downstream-top-right (top wall TE)
+    ( 0.254   0       0     )   // 6  step-bottom corner (block 3 LE-bottom)
+    ( 0.508   0       0     )   // 7  downstream-bottom-outlet
+    // z = 0.01 (front face)
+    ( 0       0.0127  0.01  )   // 8
+    ( 0.254   0.0127  0.01  )   // 9
+    ( 0.508   0.0127  0.01  )   // 10
+    ( 0       0.1143  0.01  )   // 11
+    ( 0.254   0.1143  0.01  )   // 12
+    ( 0.508   0.1143  0.01  )   // 13
+    ( 0.254   0       0.01  )   // 14
+    ( 0.508   0       0.01  )   // 15
+);
+
+blocks
+(
+    // Block 1: upstream channel (x ∈ [0, 0.254], y ∈ [h, H_in+h])
+    // x grading 0.1: cells shrink 10× from inlet (x=0) to step (x=0.254)
+    // y bilinear: fine near both bottom wall (y=h) and top wall (y=H_in+h)
+    hex (0 1 4 3 8 9 12 11) (200 140 1)
+        simpleGrading
+        (
+            0.1
+            (
+                (0.5 0.5 1000)
+                (0.5 0.5 0.001)
+            )
+            1
+        )
+
+    // Block 2: downstream upper (x ∈ [0.254, 0.508], y ∈ [h, H_in+h])
+    // x grading 5: fine cells near step (upstream end of block)
+    // y bilinear: same as Block 1 (matching at x=0.254 interface)
+    hex (1 2 5 4 9 10 13 12) (400 140 1)
+        simpleGrading
+        (
+            5
+            (
+                (0.5 0.5 1000)
+                (0.5 0.5 0.001)
+            )
+            1
+        )
+
+    // Block 3: recirculation below step level (x ∈ [0.254, 0.508], y ∈ [0, h])
+    // x grading 5: matches Block 2 x grading at y=h shared face
+    // y bilinear: fine near bottom (y=0) and shear-layer interface (y=h)
+    hex (6 7 2 1 14 15 10 9) (400 80 1)
+        simpleGrading
+        (
+            5
+            (
+                (0.5 0.5 200)
+                (0.5 0.5 0.005)
+            )
+            1
+        )
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 3 11 8)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (2 5 13 10)
+            (7 2 10 15)
+        );
+    }
+    topWall
+    {
+        type wall;
+        faces
+        (
+            (3 4 12 11)
+            (4 5 13 12)
+        );
+    }
+    bottomUpstream
+    {
+        type wall;
+        faces
+        (
+            (0 1 9 8)
+        );
+    }
+    stepWall
+    {
+        type wall;
+        faces
+        (
+            (6 1 9 14)
+        );
+    }
+    bottomDownstream
+    {
+        type wall;
+        faces
+        (
+            (6 7 15 14)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 1 4 3)
+            (1 2 5 4)
+            (6 7 2 1)
+            (8 11 12 9)
+            (9 12 13 10)
+            (14 9 10 15)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

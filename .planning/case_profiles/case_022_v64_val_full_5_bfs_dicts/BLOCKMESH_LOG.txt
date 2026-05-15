@@ -1,0 +1,94 @@
+blockMesh: error while loading shared libraries: libblockMesh.so: cannot open shared object file: No such file or directory
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : blockMesh
+Date   : May 15 2026
+Time   : 07:55:28
+Host   : 5f30d6f19c77
+PID    : 232
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Creating block mesh from "system/blockMeshDict"
+--> FOAM IOWarning :
+    Found [v1012] 'convertToMeters' entry instead of 'scale' in dictionary "system/blockMeshDict"
+
+    This keyword is 156 months old.
+
+Creating block edges
+No non-planar block faces defined
+Creating topology blocks
+
+Creating topology patches - from boundary section
+
+Creating block mesh topology
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 2
+		Number of boundary faces : 14
+		Number of defined boundary faces : 14
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list (topological search)...
+
+Creating polyMesh from blockMesh
+Creating points with scale (1 1 1)
+    Block 0 cell size :
+        i : 0.003242566596 .. 0.0003242566596
+        j : 4.843807575e-06 .. 4.843807575e-06
+        k : 0.01 .. 0.01
+
+    Block 1 cell size :
+        i : 0.0002553657214 .. 0.001276828607
+        j : 4.843807575e-06 .. 4.843807575e-06
+        k : 0.01 .. 0.01
+
+    Block 2 cell size :
+        i : 0.0002553657214 .. 0.001276828607
+        j : 4.050889661e-06 .. 4.050889661e-06
+        k : 0.01 .. 0.01
+
+Creating cells
+Creating patches
+No patch pairs to merge
+
+Writing polyMesh with 0 cellZones
+----------------
+Mesh Information
+----------------
+  boundingBox: (0 0 0) (0.508 0.1143 0.01)
+  nPoints: 233642
+  nCells: 116000
+  nFaces: 464820
+  nInternalFaces: 231180
+----------------
+Patches
+----------------
+  patch 0 (start: 231180 size: 140) name: inlet
+  patch 1 (start: 231320 size: 220) name: outlet
+  patch 2 (start: 231540 size: 600) name: topWall
+  patch 3 (start: 232140 size: 200) name: bottomUpstream
+  patch 4 (start: 232340 size: 80) name: stepWall
+  patch 5 (start: 232420 size: 400) name: bottomDownstream
+  patch 6 (start: 232820 size: 232000) name: frontAndBack
+
+End
+

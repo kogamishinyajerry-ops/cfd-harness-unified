@@ -1,0 +1,27 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Incompressible Newtonian air · ν = 1.5e-5 m²/s (per briefing target)
+// → Re_h = U·h/ν = 44.2 × 0.0127 / 1.5e-5 = 37,419 ≈ 37,500 ✓
+//
+// Note: ν differs slightly from case_021 (1.4612e-5 @ 15°C ρ=1.225) — using
+// 1.5e-5 here to match briefing's stated Re_h = 37,500 target exactly.
+// Equivalent to air @ ~25°C or to ρ-normalized condition with effective ν.
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+
+transportModel  Newtonian;
+
+nu              1.5e-05;
+
+// ************************************************************************* //

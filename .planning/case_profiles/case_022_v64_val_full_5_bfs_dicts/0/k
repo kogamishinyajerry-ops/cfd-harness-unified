@@ -1,0 +1,61 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// k_inlet = 1.5·(I·U_ref)² = 1.5·(0.005·44.2)² = 0.07326 m²/s²
+// I = 0.5% (per briefing) · L_t = h/10 = 1.27e-3 m
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0.07326;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 0.07326;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.07326;
+        value           uniform 0.07326;
+    }
+    topWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.07326;
+    }
+    bottomUpstream
+    {
+        type            kqRWallFunction;
+        value           uniform 0.07326;
+    }
+    stepWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.07326;
+    }
+    bottomDownstream
+    {
+        type            kqRWallFunction;
+        value           uniform 0.07326;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

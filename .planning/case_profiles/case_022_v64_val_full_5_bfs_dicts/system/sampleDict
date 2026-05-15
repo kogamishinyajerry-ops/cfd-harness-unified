@@ -1,0 +1,92 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Sample p, U, wallShearStress, yPlus on bottomDownstream wall at 5 canonical
+// x/h stations. Also sample U along bottom-downstream wall-parallel line at
+// y=δy_first for x_R/h detection via U_streamwise sign change.
+//
+// Run as: postProcess -func sampleDict -latestTime -dict system/sampleDict
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+
+type sets;
+libs (sampling);
+writeControl onEnd;
+
+interpolationScheme cellPoint;
+
+setFormat raw;
+
+fields (p U wallShearStress yPlus);
+
+sets
+(
+    // x_R/h detection line: sample U_x at y just above bottomDownstream wall
+    // along x ∈ [0.254, 0.508] (post-step floor); reattachment = first x where
+    // U_x changes sign from negative (reverse) to positive (downstream flow)
+    xR_detection_line
+    {
+        type        midPoint;
+        axis        x;
+        start       (0.254  1e-5  0.005);
+        end         (0.508  1e-5  0.005);
+    }
+
+    // 5 Cp/Cf query stations on bottomDownstream wall (y just above wall)
+    s1_xh1
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.2667  1e-5  0);
+        end         (0.2667  1e-5  0.01);
+    }
+    s2_xh4
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.3048  1e-5  0);
+        end         (0.3048  1e-5  0.01);
+    }
+    s3_xh8
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.3556  1e-5  0);
+        end         (0.3556  1e-5  0.01);
+    }
+    s4_xh12
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.4064  1e-5  0);
+        end         (0.4064  1e-5  0.01);
+    }
+    s5_xh16
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.4572  1e-5  0);
+        end         (0.4572  1e-5  0.01);
+    }
+
+    // Reference pressure station for Cp normalization (canonical p_ref at
+    // x just upstream of step, mid-channel)
+    p_ref_station
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.2400  0.0635  0);
+        end         (0.2400  0.0635  0.01);
+    }
+);
+
+// ************************************************************************* //

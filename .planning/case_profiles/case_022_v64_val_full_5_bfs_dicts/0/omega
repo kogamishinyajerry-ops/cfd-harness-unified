@@ -1,0 +1,65 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// ω_inlet = √k / (C_μ^0.25 · L_t)
+//         = √0.07326 / (0.09^0.25 · 1.27e-3)
+//         = 0.27067 / (0.54772 · 1.27e-3)
+//         = 0.27067 / 6.9560e-4
+//         = 389.1 1/s
+// Convention: C_μ = 0.09 (k-ε / kOmegaSST consistent) · L_t = h/10 = 1.27e-3 m
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 389.1;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 389.1;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 389.1;
+        value           uniform 389.1;
+    }
+    topWall
+    {
+        type            omegaWallFunction;
+        value           uniform 389.1;
+    }
+    bottomUpstream
+    {
+        type            omegaWallFunction;
+        value           uniform 389.1;
+    }
+    stepWall
+    {
+        type            omegaWallFunction;
+        value           uniform 389.1;
+    }
+    bottomDownstream
+    {
+        type            omegaWallFunction;
+        value           uniform 389.1;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
