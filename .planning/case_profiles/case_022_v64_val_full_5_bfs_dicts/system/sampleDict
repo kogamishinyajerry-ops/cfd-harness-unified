@@ -67,8 +67,11 @@ sets
     {
         type        midPoint;
         axis        z;
-        start       (0.4064  1e-5  0);
-        end         (0.4064  1e-5  0.01);
+        // x_target 0.4064 (x/h=12) landed exactly at face 304 in Block 3
+        // simpleGrading 5 (empty coordSet); offset to 0.4080 lands in cell 305
+        // (x/h_actual = 12.126, Δ from canonical 1.05% — within noise)
+        start       (0.4080  1e-5  0);
+        end         (0.4080  1e-5  0.01);
     }
     s5_xh16
     {
@@ -78,14 +81,16 @@ sets
         end         (0.4572  1e-5  0.01);
     }
 
-    // Reference pressure station for Cp normalization (canonical p_ref at
-    // x just upstream of step, mid-channel)
-    p_ref_station
+    // Reference pressure line: sample upstream-of-step at mid-channel
+    // along x axis to get p_kin spatial trace; canonical p_ref = average
+    // of values at x ∈ [0.15, 0.20] (far enough from step to be undisturbed
+    // by step-front pressure rise, far enough from inlet for BL to develop)
+    p_ref_line
     {
         type        midPoint;
-        axis        z;
-        start       (0.2400  0.0635  0);
-        end         (0.2400  0.0635  0.01);
+        axis        x;
+        start       (0.10  0.0500  0.005);
+        end         (0.25  0.0500  0.005);
     }
 );
 
