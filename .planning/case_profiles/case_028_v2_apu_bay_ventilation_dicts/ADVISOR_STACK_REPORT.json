@@ -1,0 +1,60 @@
+{
+  "advisor_calls": [
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "bc_type_name_validity_advisor",
+    "shm_dict_validator",
+    "stl_face_label_validator",
+    "extra_body_advisor",
+    "solver_block_advisor",
+    "thin_wall_advisor"
+  ],
+  "advisor_count": 8,
+  "evidence_refs": [
+    "V10",
+    "V100",
+    "V27",
+    "V28",
+    "V29",
+    "V52",
+    "V55",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V94",
+    "V99"
+  ],
+  "finding_count": 5,
+  "findings_by_advisor": {
+    "thin_wall_advisor": [
+      {
+        "code": "thin_wall_at_risk",
+        "message": "patch 'firewall_front': thickness \u2248 0.02 (bbox-min); effective cell size at level 1 = 0.05 \u2192 0.40 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00625 cell si",
+        "severity": "critical"
+      },
+      {
+        "code": "thin_wall_at_risk",
+        "message": "patch 'firewall_behind': thickness \u2248 0.02 (bbox-min); effective cell size at level 1 = 0.05 \u2192 0.40 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00625 cell s",
+        "severity": "critical"
+      },
+      {
+        "code": "thin_wall_at_risk",
+        "message": "patch 'vent_door': thickness \u2248 0.02 (bbox-min); effective cell size at level 1 = 0.05 \u2192 0.40 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 4 (\u22480.00625 cell size = ",
+        "severity": "critical"
+      },
+      {
+        "code": "thin_wall_at_risk",
+        "message": "patch 'door': thickness \u2248 0.03 (bbox-min); effective cell size at level 1 = 0.05 \u2192 0.60 cells per thickness \u2192 WILL be merged by sHM. Recommended: bump refinement to level 3 (\u22480.0125 cell size = 2.40 c",
+        "severity": "critical"
+      },
+      {
+        "code": "thin_wall_at_risk",
+        "message": "patch 'Plane_Outer_Surf': thickness \u2248 0.05 (bbox-min); effective cell size at level 1 = 0.05 \u2192 1.00 cells per thickness \u2192 is AT RISK of sHM merge. Recommended: bump refinement to level 2 (\u22480.025 cell ",
+        "severity": "warning"
+      }
+    ]
+  },
+  "stl_bbox_count": 29,
+  "thin_wall_patch_count": 5
+}

@@ -1,0 +1,120 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : simpleFoam
+Date   : May 15 2026
+Time   : 19:40:11
+Host   : 5ca9c7d38135
+PID    : 792
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 0.0001
+    field U	 tolerance 0.0001
+    field k	 tolerance 0.0001
+    field omega	 tolerance 0.0001
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.5555556;
+    gamma2          0.44;
+    beta1           0.075;
+    beta2           0.0828;
+    betaStar        0.09;
+    a1              0.31;
+    b1              1;
+    c1              10;
+    F3              false;
+    decayControl    false;
+    kInf            0;
+    omegaInf        0;
+}
+
+No MRF models present
+
+No finite volume options present
+
+Starting time loop
+
+surfaceFieldValue inlet_mass_flow:
+    operation     = sum
+
+
+surfaceFieldValue outlet_mass_flow:
+    operation     = sum
+
+
+--> FOAM Warning : 
+    From virtual void Foam::probes::findElements(const Foam::fvMesh&)
+    in file probes/probes.C at line 227
+    Did not find location (65.5 0.5 0) in any cell. Skipping location.
+Time = 1
+
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.01831001, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.02067391, No Iterations 4
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 0.01770197, No Iterations 4
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.008855193, No Iterations 7
+GAMG:  Solving for p, Initial residual = 0.0749331, Final residual = 0.0004498497, No Iterations 3
+time step continuity errors : sum local = 0.01344676, global = -0.001525099, cumulative = -0.001525099
+smoothSolver:  Solving for omega, Initial residual = 0.06692717, Final residual = 0.002065291, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 1, Final residual = 0.06258827, No Iterations 2
+ExecutionTime = 1.37 s  ClockTime = 2 s
+
+Time = 2
+
+smoothSolver:  Solving for Ux, Initial residual = 0.3527086, Final residual = 0.01836269, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.3348735, Final residual = 0.01414569, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.3354578, Final residual = 0.01481427, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.2108331, Final residual = 0.001190677, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.04288185, Final residual = 0.0002952644, No Iterations 3
+time step continuity errors : sum local = 0.007918667, global = -0.0004753236, cumulative = -0.002000423
+smoothSolver:  Solving for omega, Initial residual = 0.03508383, Final residual = 0.001154828, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 0.7947761, Final residual = 0.02588632, No Iterations 2
+ExecutionTime = 1.57 s  ClockTime = 2 s
+
+Time = 3
+
+smoothSolver:  Solving for Ux, Initial residual = 0.1490619, Final residual = 0.006327744, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.240393, Final residual = 0.008893746, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.2399487, Final residual = 0.009433364, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.4377647, Final residual = 0.002873362, No Iterations 5
+GAMG:  Solving for p, Initial residual = 0.141247, Final residual = 0.0008315517, No Iterations 3
+time step continuity errors : sum local = 0.0184388, global = -0.00412852, cumulative = -0.006128943
+smoothSolver:  Solving for omega, Initial residual = 0.04674409, Final residual = 0.001237002, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 0.2932083, Final residual = 0.007355917, No Iterations 2
+ExecutionTime = 1.77 s  ClockTime = 2 s
+
