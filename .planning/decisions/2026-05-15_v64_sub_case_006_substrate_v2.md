@@ -4,7 +4,7 @@ title: case_006 ONERA M6 substrate iteration 2 · solver_block_advisor LANDED (V
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 1 · M-V64A-CASE-006-SUBSTRATE-V2 (V63-A close DEC §8 carry-over #6)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81539184f80e396436b2)
 confidence: med
 ---
 

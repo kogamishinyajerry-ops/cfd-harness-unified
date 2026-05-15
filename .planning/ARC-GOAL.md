@@ -63,11 +63,11 @@
 
 - [x] **M-V64A-MESH-GEN-V2** case_004 NREL Phase VI MRF mesh gen v2 · commit chain `a45214a` (feat 7 system dicts) → `f8c8024` (run log + checkMesh) → `f52d5df` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-V64A-MESH-GEN-V2` Accepted (B54 · 2026-05-15 · **919k cells · checkMesh PASS-with-1-flag** · rotor + stator regions + MRF zone via topoSet · 2 advisor F-NEW findings surfaced · V63-A carry-over #2 first half CLOSED · M-V64A-VAL-FULL-1 directly unblocked · solver execution NOT in scope here · confidence: med · Notion synced)
 - [ ] **M-V64A-CASE-011-NONDEGEN** case_011 plate-fin HX non-degenerate substrate 替换 · OR PARTIAL semantics 用户裁决 rebadge · commit: `_____` · V63-A carry-over #1
-- [ ] **M-V64A-CASE-006-SUBSTRATE-V2** case_006 substrate iteration 2 · V-row 3/9 → 5/9 (V26-V28/V31/V32 + D4 ≥2 captured) · commit: `_____` · V63-A carry-over #6
+- [x] **M-V64A-CASE-006-SUBSTRATE-V2** case_006 substrate iteration 2 · V-row 3/9 → **5/9 firm** (V27 + V28 captured via solver_block_advisor LANDED · #11 advisor stack-wide) · commit chain `1729e97` (feat advisor + stack wire + substrate) → `bafa188` (retro V-row 3/9→5/9 firm verified) → `fbae48d` (sub-DEC) → `54a6d87` (Codex round-1 fix · 2× P2: V27 partial-fix branch + V28 symmetric-path field whitelist) · sub-DEC `DEC-V64-A-sub-M-V64A-CASE-006-SUBSTRATE-V2` Accepted (B55 · 2026-05-15 · Notion synced 361c68942bed81539184f80e396436b2 · stack advisor_count 8→9 · finding_count 12→17 · evidence_refs 20→22 V-rows · 10 new tests green · pure-function design · V130 advisory-only · V63-A carry-over #6 CLOSED · Done #6 over-met 3/2 [case_011 7/9 + case_004 5/9 + case_006 5/9] · confidence: med)
 
 ### Tier 2 · solver run + experimental comparison
 
-- [ ] **M-V64A-VAL-FULL-1** case_004 NREL Phase VI MRF FULL validation report · mesh v2 + solver convergence + NREL UAE Sequence S 实验对比 (≥3 wind speed points) · commit: `_____`
+- [x] **M-V64A-VAL-FULL-1** (B56 · first FULL attempt · **PARTIAL v2 verdict · Done #2 0→1 advanced**) · commit chain `cc8fc10` (feat simpleFoam + MRFProperties · 7 m/s baseline · 11 dicts) → `e5c5e78` (solver run + convergence + NREL UAE Seq S delta + V-row v2) → `f2ebdad` (sub-DEC Accepted) · sub-DEC `DEC-V64-A-sub-M-V64A-VAL-FULL-1` Accepted (2026-05-15 · Notion synced 361c68942bed8100b87dd21bafa8080e · simpleFoam force-stable quasi-steady iter ~200 但 0/6 residuals < 1e-4 across 2 URF settings · Cp ≈ 4.5 EXCEEDS Betz 0.59 → case-spec issue [rotation direction + 3° pitch vs Sequence S 0°] not solver/mesh · 7 m/s 选择 disclosed §3.1 over briefing 10 m/s · 10 V-rows witness · 3 rows newly upgraded "caught" → "field-validated load-bearing" [V29 BC-name validity · V30 thin-wall TE-sliver merged · V94 manifest-bridge] · 2 F-NEW rows surfaced [MRF torque sign-convention doc · blockMesh mm-native post-mesh unit-scale] · Done #1 stays 0/3 strict · Done #2 0→1/3 canonical comparison · confidence: med · briefing explicitly authorized "PARTIAL v2 不掩盖")
 - [ ] **M-V64A-VAL-FULL-2** case_011 (or non-degenerate substitute) FULL validation report · solver convergence + plate-fin HX literature/handbook 对比 · commit: `_____`
 - [x] **M-V64A-VAL-CASE-016-FULL** (B53 · charter §3 "cheapest unblock" attempt · **PARTIAL v2 verdict · charter premise refuted**) · commit chain `356be51` (feat controlDict 0.5→40ms) → `4e8522d` (validation report v2 PARTIAL · crash forensics) → `a7eb58c` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-VAL-CASE-016-FULL` Accepted (2026-05-15 · rhoPimpleFoam crashed t=1.24ms sigFpe FE_DIVBYZERO in libfluidThermophysicalModels · likely T-domain violation in shock startup · 2-axis problem [thermo stability + window extension] not 1-axis · NOT counted toward Done #1 FULL · Done #1 stays 0/3 · M-V64A-VAL-FULL-3 candidate path now reconsidered: case_009 Sandia Flame D OR case_006 ONERA M6 shock-position as fallback · confidence: med · 4Q gate inline PASS · briefing explicitly authorized "PARTIAL v2 · 不掩盖")
 - [ ] **M-V64A-VAL-FULL-3** 3rd FULL report · **candidate path (case_016 charter-cheapest refuted via B53)**: case_009 Sandia Flame D vs Sandia experimental DB OR case_006 ONERA M6 shock-position OR case_016 with thermo-FPE bounding (sutherland T-clamps) · commit: `_____`
@@ -85,16 +85,16 @@
 
 ```
 当前 FULL validation reports (real solver convergence + literature delta):
-                                                  **0 / 3 strict** (B53 case_016 PARTIAL v2 attempted · charter premise refuted · NOT FULL · 待 M-V64A-MESH-GEN-V2 + M-V64A-CASE-006-SUBSTRATE-V2 + M-V64A-VAL-FULL-3 new candidate path)
-当前 canonical literature comparisons:            0 / 3 (start)
-当前 mesh convergence study (h/2 + h/4 monotonic): 0 / 1 (start · case TBD)
-当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (start · target 2/3 · over-met 3/3)
-当前 V63-A carry-over closure:                    **1 / ≥4** (#2 first half mesh gen v2 closed B54 ✓ · 待 #2 second half [solver run] + #1/#3/#4/#6 中 ≥2)
-当前 V-row truth-capture rate:                    clause-1 baseline V63-A 2/1 (case_011 7/9 + case_004 5/9) · 起点 carry-forward · V64-A 自身 capture 0/9 cases (start)
-当前 Done dims MET:                               0 / 6 (V64-A active · M-V64A-VAL-CASE-016-FULL B53 first sub-DEC candidate cheapest unblock)
+                                                  **0 / 3 strict** (B53 case_016 + B56 case_004 PARTIAL v2 · 2 honest attempts · NO inflation · M-V64A-VAL-FULL-2 + M-V64A-VAL-FULL-3 path 重选 [case_009 / case_006 ONERA M6 / case_011 non-degen / case_004 case-spec fix sub-DEC])
+当前 canonical literature comparisons:            **1 / 3** (B56 case_004 NREL UAE Sequence S 7 m/s comparison performed · Δ Cp +1051% honestly reported · Done #2 dim 要求 comparison made not Δ within tolerance)
+当前 mesh convergence study (h/2 + h/4 monotonic): 0 / 1 (start · case TBD · M-V64A-MESH-CONV-STUDY)
+当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (case_004 V63-A PARTIAL → V64-A PARTIAL v2 NOT upgraded · case_016 V63-A PARTIAL → V64-A PARTIAL v2 NOT upgraded · target 2/3 over-met 3/3)
+当前 V63-A carry-over closure:                    **2 / ≥4** (#2 first half mesh gen v2 closed B54 ✓ · #6 case_006 substrate v2 closed B55 ✓ · 待 #2 second half [case_004 solver case-spec fix] + #1/#3/#4 中 ≥2)
+当前 V-row truth-capture rate:                    clause-1 over-met 3/2 (case_011 7/9 + case_004 5/9 + case_006 5/9 firm · B55 V27+V28 LANDED solver_block_advisor) · clause-2 ≥3/9 on ≥3 cases over-met 3/3 carry-forward · ≥7/9 on 1 case carry-forward case_011 7/9
+当前 Done dims MET:                               0 / 6 (V64-A active · Tier 1 全部 closed [B53 + B54 + B55] · Tier 2 first FULL B56 attempted PARTIAL v2 · 待 strict FULL × 3 + mesh conv + PARTIAL→FULL upgrade)
 ```
 
-最后更新时间：`2026-05-15 (V64-A arc 初始化 · ARC-GOAL.md fresh skeleton from V63-A close · 6 Done dims set per V64-A charter DEC · DEC-V64-A-charter Accepted · plan-file ratified 2026-05-15 · V63-A ARC-GOAL frozen at ARC-GOAL-V63-A-CLOSED.md · V64-A Tier 1 dispatch unblocked · M-V64A-VAL-CASE-016-FULL B53 candidate per task brief · ARC-GOAL 协议: B52/B53 双方都改 ARC-GOAL 需手动合并 · 更新人：Claude Code Opus 4.7 session main · B52 V63→V64 governance transition)`
+最后更新时间：`2026-05-15 (V64-A B55 + B56 dual-dispatch landed · B55 case_006 substrate v2 5/9 firm · solver_block_advisor LANDED #11 advisor stack-wide + Codex round-1 fix verbatim 2× P2 closed · B56 case_004 first FULL attempt PARTIAL v2 · Done #2 0→1 canonical literature comparison · Done #1 stays 0/3 strict no inflation · 2 sub-DECs Notion synced 361c68942bed81539184f80e396436b2 + 361c68942bed8100b87dd21bafa8080e · 更新人：Claude Code Opus 4.7 session main)`
 
 ---
 
@@ -167,12 +167,13 @@ V64-A is the "Validation Maturity" choice precisely because V63-A asset reuse is
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-15 V63-A CLOSE + V64-A charter Accepted** · V64-A North Star ratified · plan-file `2026-05-15_v64_charter.md` (renamed from `_draft`) + charter DEC `2026-05-15_v64_charter_dec.md` Accepted.
+> **2026-05-15 B55 + B56 dual-dispatch landed** · Tier 1 全部 closed (B53 case_016 PARTIAL v2 · B54 mesh gen v2 · B55 case_006 substrate v2 5/9 firm) · Tier 2 first FULL attempt B56 case_004 PARTIAL v2 verdict · 2 sub-DECs Notion synced. **关键经验**: Done #1 strict FULL 不能靠 cheapest-path 拿到 — case_016 thermo-FPE 阻、case_004 case-spec 阻 (rotation direction + 3° pitch 错配) · 必须真正修 case-spec 才能 push 0→1/3 strict FULL.
 >
-> **下一会话候选** (按 cheapest-path-first 排序):
-> 1. **M-V64A-VAL-CASE-016-FULL** (Tier 2 · cheapest unblock · solver already converged 8.5e-8 · only on-disk window extension + FW-H FFT to compute SPL + Heller-Bliss canonical comparison · 实验数据可文献获取 · 可能 1 milestone 直接拿到 1 FULL report)
-> 2. **M-V64A-CASE-006-SUBSTRATE-V2** (Tier 1 · 中等成本 · V-row 3/9 → 5/9 capture from V26-V28/V31/V32 + D4 · 已有 evidence/v1/face_geometry.json 可衍生)
-> 3. **M-V64A-MESH-GEN-V2** (Tier 1 · 中等成本 · case_004 unblock · 需 STEP roundtrip + sHM tuning · NREL UAE 实验数据公开)
-> 4. **M-V64A-CASE-011-NONDEGEN** (Tier 1 · 高成本 · 须 substrate 选择 + 物理替换 · 或 PARTIAL 用户裁决 rebadge)
+> **下一会话候选** (按推进 Done #1 strict FULL · ROI 排序):
 >
-> **推荐**：**M-V64A-VAL-CASE-016-FULL** (B53) — cheapest unblock per task brief · solver 已 converged 8.5e-8 · 仅 window 延长 · 单 sub-DEC 即可拿到 1 FULL report + 1 literature comparison + 推进 Done #1 0/3 → 1/3 + Done #2 0/3 → 1/3 · 起点最高 ROI。
+> 1. **M-V64A-CASE-004-CASE-SPEC-FIX** (Tier 2 · NEW sub-DEC · B56 follow-up · 高 ROI · 修 case_004 rotation direction + 3° → 0° pitch · 重跑 simpleFoam · 拿 Done #1 0→1/3 strict FULL · NREL UAE Seq S 实验数据已经 ready · 阻力：需要 case.yaml 编辑 + 重跑 solver · 成本中等)
+> 2. **M-V64A-MESH-CONV-STUDY** (Tier 2 · 推 Done #3 0→1 · case_004 mesh v2 919k 已经 ready · 再 sHM 跑 h/2 (≈460k) + h/4 (≈230k) refinement · case_004 是天然候选因为 mesh v2 LANDED · 副产品: 推进 Done #5 carry-over #2 second half [solver run] 或 reframe 为 mesh sensitivity)
+> 3. **M-V64A-VAL-FULL-2** (Tier 2 · 第二次 FULL 尝试 · candidate substitution: case_009 Sandia Flame D vs Sandia experimental DB · 或 case_011 non-degen substrate swap · 或 case_006 ONERA M6 shock-position vs canonical M6 wing data · 成本最高但 Done #1 strict 必经)
+> 4. **M-V64A-D11-CROSS-VAL** (Tier 3 · parallel-safe · D11 stl_face_label_validator 上 case_018/019/020 · V63-A carry-over #4 closure · 不阻 Tier 2 FULL path)
+>
+> **推荐并行**：**B57 = M-V64A-CASE-004-CASE-SPEC-FIX**（修 case_004 拿 strict FULL · Done #1 唯一近期可达路径）+ **B58 = M-V64A-MESH-CONV-STUDY**（case_004 mesh v2 + sHM h/2 + h/4 · 推 Done #3 0→1 · 副产品验证 mesh 不是 case_004 不收敛 root cause）。两个 milestone 共享 case_004 ready state · 但 B57 编辑 case.yaml + 重跑 solver · B58 跑 sHM refinement levels · scope-disjoint · 可真并行.
