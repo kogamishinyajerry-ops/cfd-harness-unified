@@ -1,0 +1,45 @@
+==== case_026 · Plane Couette validation ====
+
+Solver terminated at iter 5000 (endTime · NOT SIMPLE-converged · see §residuals)
+n y-points (exit / mid): 40 / 40
+
+--- u(y) exit station x=0.4995 ---
+  max |Δu| = 0.00000000% (of U_top=0.1 m/s)
+  strict (<1%) pass: 40/40
+  gate: PASS
+
+--- u(y) mid station x=0.25 (cross-check) ---
+  max |Δu| = 0.00000000%
+  strict pass: 40/40
+
+--- τ_w (strict trifecta · replaces dp/dx for pure shear Couette) ---
+  τ_w bottomWall sampled = 1.500000e-04 m²/s²
+  τ_w topWall sampled    = 1.500000e-04 m²/s²
+  τ_w analytical (ν·U_top/H) = 1.500000e-04 m²/s²
+  Δ_bottom/Δ_top/Δ_mean = -0.000000% / -0.000000% / -0.000000%
+  gate (<1%): PASS
+
+--- dp/dx sanity (pure shear Couette · expect ≈ 0) ---
+  slope_fit_kin       = +3.182621e-16 m²/s²/m
+  slope_analytical_kin = +0.000000e+00 m²/s²/m
+  |fit| / threshold 1e-4 = 3.1826e-16 / 1e-04
+  sanity: PASS (machine-precision zero)
+
+--- Residuals (LITERAL relative vs PHYSICAL absolute reading) ---
+  LITERAL (OpenFOAM relative residual):
+    Ux:  3.14e-16 ✓ (over-PASS by ×3e7)
+    Uy:  ~1e-3 ✗   (relative-residual artifact · zero-analytical-field)
+    p:   ~5e-4 ✗   (relative-residual artifact · zero-analytical-field)
+    cont: 3.6e-15 ✓
+    literal 4/4 < 1e-8: False
+  PHYSICAL (sampled field absolute max):
+    Ux: matches U_top·y/H to 6 sig figs (machine precision)
+    Uy field max abs: 5.502e-17 m/s (machine precision)
+    p field max abs:  4.610e-18 m²/s² (machine precision)
+    continuity:       3.6e-15 ✓
+    physical 4/4 at machine precision: True
+
+--- VERDICT ---
+  LITERAL reading: MARGINAL (2/4 residual gates fail in relative-residual form)
+  PHYSICAL reading: FULL (all 4 residual quantities at machine precision)
+  Recommendation: PHYSICAL reading FULL with transparency · same family as B68 'field-count transparency'
