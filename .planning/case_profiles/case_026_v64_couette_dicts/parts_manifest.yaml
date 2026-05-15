@@ -67,6 +67,9 @@ tolerance_policy:
     canonical_source: "Schlichting H. (2017) §5.1.0; pure Couette is dp/dx = 0 (Couette–Poiseuille hybrid is out of scope)"
     tolerance_strict_full: "abs(slope_fit) < 1e-4 · effectively zero · sanity cross-check, not strict trifecta"
   wall_shear_stress_kinematic:
-    canonical: 1.5e-5  # m²/s²  · = ν · U_top / H · constant gradient analytical
-    canonical_source: "Schlichting H. (2017) §5.1.0 (du/dy = U_top/H constant → τ_w = μ·U_top/H = ν·U_top/H kinematic)"
+    # CORRECTED post-run: original value was 1.5e-5 (arithmetic error · forgot /H division)
+    # Walk-through: ν · U_top / H = 1.5e-5 m²/s · 0.1 m/s / 0.01 m = 1.5e-6 / 0.01 = 1.5e-4 m²/s²
+    # simpleFoam wallShearStress output ±1.5e-4 confirmed corrected value · see validation report §3.1
+    canonical: 1.5e-4  # m²/s²  · = ν · U_top / H · constant gradient analytical (CORRECTED)
+    canonical_source: "Schlichting H. (2017) §5.1.0 (du/dy = U_top/H constant → τ_w = μ·U_top/H = ν·U_top/H kinematic = 1.5e-4 m²/s²)"
     tolerance_strict_full: 0.01   # |Δ| < 1% on τ_w (strict trifecta cross-check)

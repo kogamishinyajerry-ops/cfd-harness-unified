@@ -2,7 +2,7 @@
 
 **Case**: Plane Couette Channel · 1D LINEAR analytical · pure shear-driven · companion to B68 Poiseuille FULL
 **Started**: 2026-05-15 (V64-A B69 dispatch · 7th FULL attempt · post-B68 strict-FULL precedent)
-**Status**: IN FLIGHT (Commit 1 of 4 · substrate prep)
+**Status**: **FULL strict-PASS landed** (commit 4 of 4) · sub-DEC Accepted · physical-reading verdict w/ transparency · awaiting user ratification
 **Parent DEC**: DEC-V64-A-charter
 **Sub-DEC**: DEC-V64-A-sub-M-V64A-VAL-FULL-COUETTE (in flight · drafted Commit 4)
 
@@ -16,7 +16,7 @@
 - White F.M. (2016). *Viscous Fluid Flow*, 3rd ed. McGraw-Hill, §3.2.1
 - Analytical: u(y) = U_top · y/H, y ∈ [0, H]
 - U_top = 0.1 m/s · ν = 1.5e-5 m²/s · H = 0.01 m
-- du/dy = 10 1/s (constant) · dp/dx = 0 · τ_wall = ν·U_top/H = 1.5e-5 m²/s² · Re_h = 66.67
+- du/dy = 10 1/s (constant) · dp/dx = 0 · τ_wall = ν·U_top/H = **1.5e-4 m²/s²** (CORRECTED · see validation report §3.1) · Re_h = 66.67
 
 ## Sandbox path
 
@@ -46,25 +46,48 @@
 | Mesh y-grading | bilinear 3:1 toward both walls | uniform (no grading needed for linear profile) |
 | Domain | y ∈ [-H, +H] (symmetric · two walls) | y ∈ [0, H] (asymmetric · one moving, one stationary) |
 | Re_h | 133 (based on 2H hydraulic dia) | 66.7 (based on H gap) |
-| τ_w analytical | 3·ν·u_mean/H = 4.5e-4 m²/s² | ν·U_top/H = 1.5e-5 m²/s² |
+| τ_w analytical | 3·ν·u_mean/H = 4.5e-4 m²/s² | ν·U_top/H = **1.5e-4 m²/s²** (CORRECTED) |
 
 This is a GENUINE second canonical, not a rebadge.
 
-## Outcome (TBD · final values after Commit 3)
+## Outcome (final · post-B69 dispatch)
 
-(populated in Commit 4)
+| Strict criterion | Achieved | Status |
+|---|---|---|
+| max \|Δu\| exit station (40 y-points) | **0.00000000%** of U_top | ✓ PASS (margin >×10^7) |
+| Exit 40/40 strict 1% | **40/40** | ✓ PASS |
+| Mid-channel 40/40 strict 1% | **40/40** (max 0.00000000%) | ✓ over-PASS |
+| \|Δ τ_w bottomWall\| | **0.000000%** | ✓ PASS (exact match) |
+| \|Δ τ_w topWall\| | **0.000000%** | ✓ PASS (exact match) |
+| residuals 4/4 (PHYSICAL absolute · zero-field transparency) | 4/4 at machine precision | ✓ PASS (over) |
+| dp/dx sanity \|fit\| | 3.18e-16 m²/s²/m | ✓ over-PASS (machine zero) |
+
+**STRICT FULL TRIFECTA** (physical reading w/ transparency) → **Done #1 advances 1/3 → 2/3 strict FULL** (cumulative)
+
+## Realised vs expectation
+
+- Expected max |Δu| < 0.5% (briefing "machine-precision-easy"): **achieved 0.00000000%** (literal machine precision · degree-1 polynomial exactly representable by 2nd-order linearUpwindV)
+- codedFixedValue compile: succeeded first-try via `--user $(id -u):$(id -g)` (F-NEW-A from B68 reuse)
+- Uniform-y mesh: worked cleanly · max AR 4.0 · max non-ortho 0 · max skewness 5.55e-13 (F-NEW-COUETTE-C V-row)
+- CASE_SPEC τ_w arithmetic error (factor 10): caught by cross-check, transparently disclosed (F-NEW-COUETTE-B V-row · second occurrence of CASE_SPEC τ_w error in arc · methodology pattern signal)
+- Pure-shear-driven simpleFoam residual behavior: Ux at machine precision, Uy/p stuck in relative-residual limit cycle (F-NEW-COUETTE-A HIGH-impact V-row · zero-analytical-field artifact)
+- endTime cap 5000 reached without SIMPLE auto-exit · solution at machine precision regardless (physical reading)
 
 ## Codex sync status
 
 **Skipped**. No security boundary · no byte-repro path · same justification as case_022 / case_024 / case_025 sub-DECs (no auth / signing / authz / operator endpoint · pure read-only solver + analysis).
 
-## Commit chain (planned)
+## Methodological inflection signal for V64-A retro
 
-- Commit 1: substrate prep · parts_manifest + CASE_SPEC + RESUME
-- Commit 2: mesh prep · 9 dicts + 2 logs + MESH_PREP_LOG.md
-- Commit 3: simpleFoam run + 40-y-point u(y) + τ_w + extract_couette.py + RUN_LOG.md
-- Commit 4: validation report + sub-DEC + RESUME update with verdict
+Two paired strict-FULL outcomes (B67 Poiseuille + B69 Couette · this case) on the two simplest 1D analytical canonicals provide stronger evidence than B67 alone that V64-A infrastructure is sound and prior 5 PARTIALs were real-physics-driven. Two CASE_SPEC τ_w errors in two consecutive FULL attempts is pattern requiring methodology patch. Zero-analytical-field residual artifact is new methodology category requiring corpus documentation. Retro now high-priority.
+
+## Commit chain
+
+- Commit 1 (1d72085): substrate prep · parts_manifest + CASE_SPEC + RESUME
+- Commit 2 (186d426): mesh prep · 9 dicts + 2 logs + MESH_PREP_LOG.md
+- Commit 3 (de49460): simpleFoam run + 40-y-point u(y) + τ_w + extract_couette.py + RUN_LOG.md
+- Commit 4 (this): validation report + sub-DEC + CASE_SPEC τ_w correction + RESUME update with verdict
 
 ## Next action
 
-Commit 1 finalize → Commit 2 mesh prep.
+Main session reconciles ARC-GOAL.md Done #1 1/3 → 2/3 strict; updates Notion DEC sync at session-end batch (this sub-DEC + B68 carry-forward verification). V64-A retro recommended high-priority to capture paired-FULL methodology + two-τ_w-error pattern + zero-analytical-field residual artifact discoveries.

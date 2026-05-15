@@ -79,7 +79,7 @@ Coordinate origin: channel-inlet bottom-front corner (x=0, y=0, z=0). Top wall a
 | Re_h = U_top·H/ν | 0.1·0.01/1.5e-5 = **66.67** | calculated · deep laminar (half of B68 Poiseuille's Re_h=133.3, since here H is gap not half-gap) |
 | dp_kin/dx | **0.0 m²/s²/m** | analytical · pure shear · NO pressure gradient |
 | du/dy | U_top/H = **10.0 1/s** | analytical · constant linear-profile slope |
-| τ_wall (kinematic) | ν·U_top/H = **1.5e-5 m²/s²** | analytical · same at both walls |
+| τ_wall (kinematic) | ν·U_top/H = 1.5e-5 · 0.1 / 0.01 = **1.5e-4 m²/s²** | analytical · same at both walls · **CORRECTED post-run** (original CASE_SPEC had 1.5e-5 · arithmetic error · forgot /H division · simpleFoam output ±1.5e-4 confirmed corrected value · see validation report §3.1) |
 
 **Inlet BC**: `codedFixedValue` linear profile u(y) = U_top · y/H, v=w=0. The inlet IS the analytical solution.
 
