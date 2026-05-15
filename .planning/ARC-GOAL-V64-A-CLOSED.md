@@ -1,9 +1,14 @@
-# ARC-GOAL · V64-A Validation Maturity Arc
+# ARC-GOAL · V64-A Validation Maturity Arc · **CLOSED 2026-05-15**
+
+> **V64-A CLOSED 2026-05-15 · 6/6 Done dims MET ✓ · V64 close DEC `decisions/2026-05-15_v64_close_dec.md` · Successor: V65 (theme TBD · candidates §9 of close DEC · charter authoring deferred to dedicated V65 charter sub-DEC)** (Done #1 via user-ratified §3.1 MARGINAL → FULL extension · Done #4 via user-ratified §3.2 multi-case PARTIAL → FULL rebadge · both extend V63 close §3.1 governance precedent)
 
 **Plan SSOT**: [.planning/2026-05-15_v64_charter.md](2026-05-15_v64_charter.md)
 **Charter DEC**: [.planning/decisions/2026-05-15_v64_charter_dec.md](decisions/2026-05-15_v64_charter_dec.md) (DEC-V64-A-charter Accepted 2026-05-15)
+**Close DEC**: [.planning/decisions/2026-05-15_v64_close_dec.md](decisions/2026-05-15_v64_close_dec.md) (DEC-V64-A-close Accepted 2026-05-15 · 6/6 Done dims MET ✓)
+**Successor**: V65 (theme TBD · 4 candidates seeded in close DEC §9: V65-A Industrial Coverage Deepening · V65-B AI Advisor Stack Build-out · V65-C Product M1-M6 Roadmap Continuation · V65-D Canonical Coverage Closure) · charter authoring deferred to dedicated V65 charter sub-DEC (this turn does NOT pick theme or create new ARC-GOAL.md)
 **Predecessor**: [V63-A Industrial Scale-Up · CLOSED 2026-05-15](ARC-GOAL-V63-A-CLOSED.md) (6/6 Done dims MET ✓ · `DEC-V63-A-close` Accepted · Done #4 via user-ratified PARTIAL semantics §3.1)
 **Started**: 2026-05-15 (same B52 commit chain as V63-A close)
+**Closed**: 2026-05-15 (B71 commit chain · same-day cadence — first arc in project history closed on same calendar day as its charter)
 **Mode**: milestone-driven (no calendar)
 **Selected**: V64-A "Validation Maturity" · user-ratified 2026-05-15 from 3 candidates (V64-B Frontend Activation + V64-C OSS Readiness + M6 Operationalization → Alternatives Appendix in plan-file §4-§5)
 
@@ -99,7 +104,7 @@
 当前 Done dims MET:                               **3 / 6 ✓ direct + Done #1 2/3 部分 + Done #6 carry-forward → 5/6 effective · 待 user ratify B70 MARGINAL → Done #1 3/3 MET → 4/6 direct + Done #6 = 5/6 → 等 Done #4 ratify 即 V64-A close** (Done #2 + #3 + #5 直接 MET · **Done #1 2/3 strict NEW B68 + B69 双 FULL** · Done #6 carry-forward 满足 · B70 MARGINAL 待 user ratify ↔ Done #4 同 turn rebadge)
 ```
 
-最后更新时间：`2026-05-15 (V64-A B63 + B64 dual-dispatch landed · B63 case_004 F-NEW-3 一行 fix EMPIRICALLY CONFIRMED [|M_x| 37× shift 10077→272 N·m] 但 F-NEW-3.1 LE/TE orientation 新 root cause 浮现 PARTIAL v4 · B64 case_021 NASA TMR 湍流平板 3rd FULL attempt 战略 pivot incompressible PROVED RIGHT · 5-station Cf canonical-grade S3-S5 Δ<3.2% LE-near S1-S2 kOmegaSST transition limit · 2 net-new canonical refs Prandtl-Schlichting + Schultz-Grunow · **Done #2 2/3 → 3/3 ✓ MET 3rd Done dim** · effective 4/6 Done dims · Done #1 strict 仍 0/3 + Done #4 0/≥2 是剩 blockers · 2 sub-DECs Notion synced 361c68942bed81118da0ec84fd5ec245 + 361c68942bed813a9835e2ff6947d0ba · 更新人：Claude Code Opus 4.7 session main)`
+最后更新时间：`2026-05-15 **ARC CLOSED · B71 V64-A close DEC Accepted · 6/6 Done dims MET ✓** · Done #1 via §3.1 MARGINAL ratify (B70 Pipe) · Done #4 via §3.2 multi-case rebadge (3 V63-A PARTIAL cases) · 18 sub-DECs LANDED · 14 FULL-attempt reports (11 PARTIAL + 2 strict-FULL + 1 MARGINAL ratified) · 5 net-new incompressible canonical cases · 1 advisor LANDED (solver_block_advisor) · V101+ promotion queue documented in close DEC §7.2 · V65 charter authoring deferred to dedicated sub-DEC · 更新人：Claude Code Opus 4.7 session main · 历史快照：B63 + B64 dual-dispatch landed · B63 case_004 F-NEW-3 一行 fix EMPIRICALLY CONFIRMED [|M_x| 37× shift 10077→272 N·m] 但 F-NEW-3.1 LE/TE orientation 新 root cause 浮现 PARTIAL v4 · B64 case_021 NASA TMR 湍流平板 3rd FULL attempt 战略 pivot incompressible PROVED RIGHT · 5-station Cf canonical-grade S3-S5 Δ<3.2% LE-near S1-S2 kOmegaSST transition limit · 2 net-new canonical refs Prandtl-Schlichting + Schultz-Grunow · **Done #2 2/3 → 3/3 ✓ MET 3rd Done dim** · effective 4/6 Done dims · Done #1 strict 仍 0/3 + Done #4 0/≥2 是剩 blockers · 2 sub-DECs Notion synced 361c68942bed81118da0ec84fd5ec245 + 361c68942bed813a9835e2ff6947d0ba · 更新人：Claude Code Opus 4.7 session main)`
 
 ---
 
