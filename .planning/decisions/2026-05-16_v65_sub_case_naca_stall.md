@@ -4,7 +4,7 @@ title: V65-A Tier 2 sub-DEC · case_029 NACA 0012 high-AoA stall industrial case
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A Tier 2 · M-V65A-CASE-NACA-STALL
-notion_sync_status: pending (session-end batch · v2.3 round-1 rule · only Accepted DECs)
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed8127a1d9dfcac4908ed2)
 authored_by: Claude Code Opus 4.7 (1M context) · V65-A B75 NACA-stall sub-session
 authored_at: 2026-05-16
 confidence: med
