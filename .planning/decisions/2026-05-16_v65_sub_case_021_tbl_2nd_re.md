@@ -4,7 +4,7 @@ title: case_021 v65 TBL 2nd Re point · strong-PARTIAL · V103 F-NEW-Cf-canonica
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed819bbd2be1d933b3a4f2)
 predecessor: DEC-V64-A-sub-M-V64A-VAL-FULL-3-INCOMP
 batch: B81
 confidence: high
