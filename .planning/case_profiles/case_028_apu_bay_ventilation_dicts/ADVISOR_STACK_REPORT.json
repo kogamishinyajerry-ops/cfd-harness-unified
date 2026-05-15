@@ -1,0 +1,21 @@
+{
+  "advisor_calls": [
+    "face_orientation_advisor",
+    "inlet_outlet_validator",
+    "bc_type_name_validity_advisor",
+    "shm_dict_validator"
+  ],
+  "advisor_count": 4,
+  "evidence_refs": [
+    "V100",
+    "V29",
+    "V52",
+    "V79",
+    "V81",
+    "V86",
+    "V87",
+    "V99"
+  ],
+  "finding_count": 0,
+  "findings_by_advisor": {}
+}
