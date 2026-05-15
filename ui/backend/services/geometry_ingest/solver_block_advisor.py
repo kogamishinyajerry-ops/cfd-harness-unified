@@ -74,6 +74,37 @@ _ASYMMETRIC_ONLY_PRECONDITIONERS: frozenset[str] = frozenset({
     "FDILU",
 })
 
+# Field names routed through rhoCentralFoam's symmetric-matrix path
+# (velocity / energy / turbulence transport quantities). Per V28 corpus:
+# "rhoCentralFoam wraps U/e/k/omega in a different lduMatrix path that
+# maps to symmetric solver registry"; ``ρ``/``ρU``/``ρE`` are direct-
+# update via the ``diagonal`` solver and do NOT route through the
+# symmetric iterative path, so a stray DILU on those blocks is dead
+# config (no V28 runtime failure) — not an advisor finding. Other
+# turbulence transport quantities (``epsilon``, ``nuTilda``, ``T``) live
+# on the same symmetric path as ``e``/``k``/``omega`` and are added here
+# for forward-coverage of RANS / DES variants on the same solver class.
+_SYMMETRIC_PATH_FIELDS: frozenset[str] = frozenset({
+    "U",
+    "e",
+    "k",
+    "omega",
+    "epsilon",
+    "nuTilda",
+    "T",
+})
+
+# Initial ``deltaT`` threshold for R1b (V27 partial-fix branch). The V27
+# corpus notes the CFL-stable dt for case_006 (wing-wall cells 31 mm,
+# U≈285 m/s, a≈340 m/s) is ~50 microseconds, and recommends initial
+# ``deltaT 1e-6`` so adjustTimeStep has a sub-iteration to compute Co
+# from CFL and self-adjust. 1e-3 s as the warning floor is 20× above
+# the recommended initial step (still small enough to be safe on most
+# shock cases) and 1000× below the case_006 v1 pre-fix value (1.0 s) —
+# safely catches the partial-fix pattern while not flagging realistic
+# initial steps for low-Mach / mild-gradient runs.
+_DENSITY_BASED_INITIAL_DELTAT_THRESHOLD_S: float = 1e-3
+
 
 @dataclass(frozen=True)
 class SolverBlockSnapshot:
@@ -104,7 +135,11 @@ class SolverBlockSnapshot:
       preconditioner string read from
       ``fvSolution.solvers.<field>.preconditioner``. Fields where the
       preconditioner is unspecified (e.g., direct ``diagonal`` solver)
-      are absent from the mapping.
+      are absent from the mapping. The advisor only emits V28 findings
+      for the symmetric-path subset (see ``_SYMMETRIC_PATH_FIELDS``);
+      stray DILU on ``p``/``rho``/``rhoU``/``rhoE`` is treated as dead
+      config because those blocks are direct-update via ``diagonal``
+      and never reach the symmetric matrix solver registry.
     """
 
     solver: str
@@ -155,7 +190,7 @@ def check_solver_block(snapshot: SolverBlockSnapshot) -> SolverBlockReport:
     if snapshot.solver not in _DENSITY_BASED_SYMMETRIC_SOLVERS:
         return SolverBlockReport(findings=())
 
-    # R1 (V27) — adjust_time_step missing or False on a density-based-
+    # R1a (V27) — adjust_time_step missing or False on a density-based-
     # explicit solver. Treat absent (None) as False because OpenFOAM's
     # controlDict default is ``adjustTimeStep no`` when the key is omitted.
     if not snapshot.adjust_time_step:
@@ -177,10 +212,43 @@ def check_solver_block(snapshot: SolverBlockSnapshot) -> SolverBlockReport:
                 ),
             )
         )
+    # R1b (V27 · partial-fix branch) — adjustTimeStep yes BUT initial
+    # deltaT is large. The V27 corpus / S15 fix #2 specifies initial
+    # deltaT 1e-6 so adjustTimeStep has a sub-iteration to compute Co
+    # from CFL and self-adjust. A "fixed adjustTimeStep" patch that
+    # leaves the inherited deltaT 1.0 still blows up on iter 1 before
+    # the adjustment kicks in.
+    elif (
+        snapshot.delta_t is not None
+        and snapshot.delta_t > _DENSITY_BASED_INITIAL_DELTAT_THRESHOLD_S
+    ):
+        findings.append(
+            SolverBlockFinding(
+                severity="critical",
+                code="v27_initial_deltat_too_large",
+                location="controlDict.deltaT",
+                detail=(
+                    f"{snapshot.solver} has adjustTimeStep yes but initial "
+                    f"deltaT={snapshot.delta_t!r} > "
+                    f"{_DENSITY_BASED_INITIAL_DELTAT_THRESHOLD_S} s; explicit "
+                    "central-upwind startup needs initial deltaT ≤ ~1e-5 s "
+                    "(S15 fix #2 · V27 partial-fix · case_006 v1 2026-05-08 "
+                    "context: CFL-stable dt ≈ 50 μs for transonic shock cells)"
+                ),
+            )
+        )
 
     # R2 (V28) — DILU / FDILU preconditioner on the symmetric matrix
-    # path. Walk the preconditioner mapping deterministically.
+    # path. Walk the preconditioner mapping deterministically. Restricted
+    # to the symmetric-path field set (``U``/``e``/``k``/``omega``/
+    # ``epsilon``/``nuTilda``/``T``); stray DILU on ``p``/``rho``/
+    # ``rhoU``/``rhoE`` is dead config (those route through ``diagonal``
+    # direct-update), so flagging them would be a false-positive V28
+    # critical against a runtime that never reaches the symmetric solver
+    # registry.
     for field_name in sorted(snapshot.preconditioners):
+        if field_name not in _SYMMETRIC_PATH_FIELDS:
+            continue
         precond = snapshot.preconditioners[field_name]
         if precond in _ASYMMETRIC_ONLY_PRECONDITIONERS:
             findings.append(

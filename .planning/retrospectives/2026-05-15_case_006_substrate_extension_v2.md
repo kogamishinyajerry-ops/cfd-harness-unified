@@ -458,6 +458,49 @@ remains advisor-land-gated, not substrate-gated.**
 
 ---
 
+## §11.5 Codex review round-1 fix (post-cadence-floor trigger)
+
+Cadence-floor pre-push hook (THRESHOLD=30, accumulated 36 since last
+verified) forced a Codex review on the 4 unpushed commits (B56's
+case_004 commit `cc8fc10` + my 3 case_006 v2 commits). Brief's "不要
+Codex review" applied to content-based 1-sync-triggers (auth / signing /
+operator endpoint) — cadence-floor is a separate dimension, so user
+ratified running the review (option default; see B55 pre-push SURFACE).
+
+Codex review round 0 verdict: **CHANGES_REQUIRED · 2 × P2 · 0 × P1**.
+
+Both findings target the new `solver_block_advisor` module (not the
+substrate / stack-integration / runner / sub-DEC). Round-1 fix applied
+in same B55 turn (per v2.3 round cap=3):
+
+| ID | Finding | Fix |
+|---|---|---|
+| Round-0 · P2 #1 | R1 (V27) false negative when `adjustTimeStep yes` but inherited `deltaT 1.0` — the "partial-fix" pattern still blows up on first step because the small initial `deltaT 1e-6` is mandatory per V27/S15 fix #2 | Added **R1b** branch — when `adjust_time_step` is True AND `delta_t > 1e-3 s` → critical `v27_initial_deltat_too_large`. Threshold is 20× above S15 recommended initial (1e-5 s) and 1000× below case_006 v1 pre-fix (1.0 s); catches partial-fix pattern without flagging realistic low-Mach / mild-gradient inits |
+| Round-0 · P2 #2 | R2 (V28) over-reports on non-target equations — `_SYMMETRIC_PATH_FIELDS` was undefined; the loop flagged stray DILU on `p`/`rho`/`rhoU`/`rhoE` which route through `diagonal` direct-update (never reach the symmetric solver registry; not a V28 runtime failure) | Added `_SYMMETRIC_PATH_FIELDS = {U, e, k, omega, epsilon, nuTilda, T}` whitelist; field walk skips non-whitelist entries with `if field_name not in _SYMMETRIC_PATH_FIELDS: continue`. RANS/DES forward-coverage preserved (epsilon/nuTilda/T included) |
+
+New tests (4 added · 14 total · all green):
+- `test_adjusttimestep_yes_with_oversized_deltat_emits_v27_partial_fix`
+- `test_adjusttimestep_yes_with_small_deltat_clean`
+- `test_v28_skips_non_symmetric_path_fields`
+- `test_v28_covers_full_symmetric_path_set` (RANS/DES forward-coverage)
+
+case_006 substrate v2 re-run after fix: **byte-identical** to round 0
+(advisor_count=9 · finding_count=17 · critical_count=17 · V27/V28 in
+evidence_refs · V-row capture 5/9 firm + D4 marginal). The fix sharpens
+advisor correctness on adjacent snapshot shapes without altering
+case_006's specific dispatch.
+
+Round-1 commit chain (appended after B55 round-0 commits):
+
+| commit (round-1) | files | status |
+|---|---|---|
+| `fix(v64-case006-v2): codex round-1 — V27 partial-fix branch + V28 symmetric-path field whitelist` | `solver_block_advisor.py` + tests | Codex-verified pending |
+
+Per v2.3 round cap=3 honesty: round 1 closes both round-0 findings;
+round 2 not needed unless re-review surfaces new findings.
+
+---
+
 ## §12 Commit chain
 
 | # | Subject | Files |
