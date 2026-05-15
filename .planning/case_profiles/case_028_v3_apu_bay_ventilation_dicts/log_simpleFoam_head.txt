@@ -1,0 +1,135 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : simpleFoam
+Date   : May 15 2026
+Time   : 20:19:14
+Host   : 6626870985ff
+PID    : 232
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 0.0001
+    field U	 tolerance 0.0001
+    field k	 tolerance 0.0001
+    field omega	 tolerance 0.0001
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.5555556;
+    gamma2          0.44;
+    beta1           0.075;
+    beta2           0.0828;
+    betaStar        0.09;
+    a1              0.31;
+    b1              1;
+    c1              10;
+    F3              false;
+    decayControl    false;
+    kInf            0;
+    omegaInf        0;
+}
+
+No MRF models present
+
+No finite volume options present
+
+Starting time loop
+
+surfaceFieldValue intake_mass_flow:
+    operation     = sum
+
+
+surfaceFieldValue vent_mass_flow:
+    operation     = sum
+
+
+--> FOAM Warning : 
+    From virtual void Foam::probes::findElements(const Foam::fvMesh&)
+    in file probes/probes.C at line 227
+    Did not find location (65.5 0.5 0) in any cell. Skipping location.
+Time = 1
+
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.02362137, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 1, Final residual = 0.02479309, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 1, Final residual = 0.02811946, No Iterations 2
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.008453793, No Iterations 18
+GAMG:  Solving for p, Initial residual = 0.07450403, Final residual = 0.000695663, No Iterations 5
+time step continuity errors : sum local = 0.002203369, global = -0.0002878804, cumulative = -0.0002878804
+smoothSolver:  Solving for omega, Initial residual = 0.07712799, Final residual = 0.002320892, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 1, Final residual = 0.05611774, No Iterations 2
+ExecutionTime = 1.68 s  ClockTime = 1 s
+
+Time = 2
+
+smoothSolver:  Solving for Ux, Initial residual = 0.3185127, Final residual = 0.0127043, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.3020919, Final residual = 0.01039733, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.2849, Final residual = 0.01279904, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.3832784, Final residual = 0.00355188, No Iterations 16
+GAMG:  Solving for p, Initial residual = 0.02468527, Final residual = 0.0001356347, No Iterations 8
+time step continuity errors : sum local = 0.0009683566, global = 0.0001283988, cumulative = -0.0001594815
+smoothSolver:  Solving for omega, Initial residual = 0.05869567, Final residual = 0.001649052, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 0.470944, Final residual = 0.02117476, No Iterations 2
+ExecutionTime = 2.05 s  ClockTime = 2 s
+
+Time = 3
+
+smoothSolver:  Solving for Ux, Initial residual = 0.2162643, Final residual = 0.01018674, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.1754269, Final residual = 0.01045863, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.1881332, Final residual = 0.0120178, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.1009609, Final residual = 0.0009986834, No Iterations 14
+GAMG:  Solving for p, Initial residual = 0.01784695, Final residual = 0.0001464335, No Iterations 6
+time step continuity errors : sum local = 0.0009329251, global = -9.561602e-07, cumulative = -0.0001604377
+smoothSolver:  Solving for omega, Initial residual = 0.0664712, Final residual = 0.002492251, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 0.3048186, Final residual = 0.01455831, No Iterations 2
+ExecutionTime = 2.39 s  ClockTime = 2 s
+
+Time = 4
+
+smoothSolver:  Solving for Ux, Initial residual = 0.166103, Final residual = 0.01020732, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 0.162178, Final residual = 0.01121516, No Iterations 2
+smoothSolver:  Solving for Uz, Initial residual = 0.1554874, Final residual = 0.01111535, No Iterations 2
+GAMG:  Solving for p, Initial residual = 0.09269676, Final residual = 0.0007278134, No Iterations 12
+GAMG:  Solving for p, Initial residual = 0.02288176, Final residual = 0.0002153554, No Iterations 3
+time step continuity errors : sum local = 0.001147142, global = -6.753365e-05, cumulative = -0.0002279713
+smoothSolver:  Solving for omega, Initial residual = 0.08736008, Final residual = 0.00343341, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 0.2741251, Final residual = 0.01206762, No Iterations 2
+ExecutionTime = 2.7 s  ClockTime = 2 s
+
+Time = 5
+
+smo
