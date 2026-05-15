@@ -1,0 +1,93 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// case_021 · NASA TMR turbulent flat plate · 2D · 545 × 385 = 209,825 cells
+// Domain: x ∈ [0, 2.0] m  ·  y ∈ [0, 0.3] m  ·  z ∈ [0, 0.01] m (single layer)
+// Plate: y=0, x ∈ [0, 2] m, no-slip wall
+// Wall-normal grading: simpleGrading (1 945 1) → δy_first ≈ 5e-6 m, y+ ≈ 1 @ U=70 m/s
+// X-direction grading: simpleGrading (10 1 1) → δx finer at LE, coarser at TE
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+vertices
+(
+    (0     0    0   )   // 0  LE wall
+    (2.0   0    0   )   // 1  TE wall
+    (2.0   0.3  0   )   // 2  TE top
+    (0     0.3  0   )   // 3  LE top
+    (0     0    0.01)   // 4  LE wall  front
+    (2.0   0    0.01)   // 5  TE wall  front
+    (2.0   0.3  0.01)   // 6  TE top   front
+    (0     0.3  0.01)   // 7  LE top   front
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (545 385 1) simpleGrading (10 945 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 3 7 4)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (1 5 6 2)
+        );
+    }
+    plate
+    {
+        type wall;
+        faces
+        (
+            (0 4 5 1)
+        );
+    }
+    top
+    {
+        type patch;
+        faces
+        (
+            (3 2 6 7)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 1 2 3)
+            (4 7 6 5)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //
