@@ -40,7 +40,7 @@
 
 | Axis | B68 Poiseuille | B69 Couette (this case) |
 |---|---|---|
-| BC source | inlet codedFixedValue parabolic | top movingWallVelocity + inlet codedFixedValue linear |
+| BC source | inlet codedFixedValue parabolic | top fixedValue sliding wall + inlet codedFixedValue linear |
 | Profile shape | parabolic (3/2)·u_mean·(1-(y/H)²) | linear U_top·y/H |
 | dp/dx | -0.045 m²/s²/m (nonzero) | 0.0 (zero · pure shear) |
 | Mesh y-grading | bilinear 3:1 toward both walls | uniform (no grading needed for linear profile) |

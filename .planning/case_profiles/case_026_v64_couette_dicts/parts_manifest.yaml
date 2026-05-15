@@ -26,7 +26,7 @@ patches:
   - name: topWall
     role: moving_wall
     blockmesh_patch: topWall
-    location: "y = H = 0.01, x ∈ [0, L] · movingWallVelocity U = (0.1, 0, 0)"
+    location: "y = H = 0.01, x ∈ [0, L] · fixedValue uniform (0.1 0 0) (sliding wall on stationary mesh · same convention as lid-driven cavity case_024)"
   - name: bottomWall
     role: no_slip_wall
     blockmesh_patch: bottomWall

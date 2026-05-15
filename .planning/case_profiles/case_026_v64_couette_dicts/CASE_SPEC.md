@@ -86,7 +86,7 @@ Coordinate origin: channel-inlet bottom-front corner (x=0, y=0, z=0). Top wall a
 **Outlet BC**: p = 0 fixedValue (gauge zero), U zeroGradient (matches B68 Poiseuille convention).
 
 **Wall BC**:
-- Top wall (y=H): `movingWallVelocity` with U=(U_top, 0, 0) — OpenFOAM standard sliding-wall BC enforcing wall-tangent velocity.
+- Top wall (y=H): `fixedValue uniform (U_top 0 0)` — sliding wall on stationary mesh, same convention as lid-driven cavity (case_024). Note: `movingWallVelocity` is for actual moving-mesh use; not applicable here.
 - Bottom wall (y=0): `noSlip`.
 
 **Front/back BC**: empty (2D wedge).
@@ -200,7 +200,7 @@ Aspect ratio:
 - **solver_stability_on_novel_geometry**: low — plane Couette is THE second-simplest textbook canonical (after Poiseuille)
 - **canonical_reference_drift**: zero — analytical solution; no literature dispute
 - **inlet_bc_developed_profile**: low — codedFixedValue uses the analytical linear profile directly
-- **movingWallVelocity_BC**: low — OpenFOAM canonical sliding-wall BC · standard in lid-driven cavity (case_024 used same BC type via fixedValue uniform · here we use movingWallVelocity for explicit wall-motion semantics)
+- **sliding_top_wall_BC**: low — `fixedValue uniform (U_top 0 0)` is canonical for sliding-tangentially walls on stationary meshes (lid-driven cavity convention · case_024 used same BC type)
 - **codedFixedValue_compile**: med — if v2512 dynamic-code compile fails, fall back to fixedValue uniform U=(U_top·0.5,0,0) at inlet + sample at x = 0.5 (≥3·L_entrance buffer for Re_h=66.7)
 
 ## §11 V-row attribution (anticipated)

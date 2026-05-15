@@ -1,0 +1,73 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Inlet: codedFixedValue linear Couette profile (inlet IS analytical)
+//   u(y) = U_top · y/H · U_top=0.1 · H=0.01 · ranges 0 (bottom) to 0.1 (top)
+// Outlet: zeroGradient (allows natural extrapolation · matches B68 Poiseuille)
+// topWall: movingWallVelocity with U=(U_top, 0, 0) · sliding wall canonical
+// bottomWall: noSlip
+// frontAndBack: empty (2D)
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0.05 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            codedFixedValue;
+        value           uniform (0.05 0 0);
+        name            couetteLinearProfile;
+        code
+        #{
+            const fvPatch& patch = this->patch();
+            const vectorField& centers = patch.Cf();
+            vectorField& field = *this;
+
+            // Analytical: u(y) = U_top · y/H (linear)
+            const scalar H     = 0.01;
+            const scalar uTop  = 0.1;
+
+            forAll(centers, i)
+            {
+                scalar y    = centers[i].y();
+                scalar uy   = uTop * (y / H);
+                field[i]    = vector(uy, 0.0, 0.0);
+            }
+        #};
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            noSlip;
+    }
+    topWall
+    {
+        // Static mesh + tangentially sliding wall → fixedValue uniform U_top
+        // (same convention as lid-driven cavity case_024 lid BC).
+        // movingWallVelocity is for actual mesh motion which we do not have here.
+        type            fixedValue;
+        value           uniform (0.1 0 0);
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
