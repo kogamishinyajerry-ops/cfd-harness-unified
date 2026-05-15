@@ -1,0 +1,10 @@
+{
+  "Re1000": {
+    "max_du_pct": 1.894,
+    "max_du_at_y_L": 0.5,
+    "max_dv_pct": 6.492,
+    "max_dv_at_x_L": 0.9688,
+    "u_strict_3pct_pass": "16/16",
+    "v_strict_3pct_pass": "11/15"
+  }
+}
