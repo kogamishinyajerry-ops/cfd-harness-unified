@@ -1,0 +1,128 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// case_025 · Plane Poiseuille channel · 2D · single hex block · 20k cells
+//
+// Geometry:
+//   Channel half-height H = 0.01 m (full 2H = 0.02 m)
+//   Channel length    L = 0.5 m  (50·H · ≥3·L_entrance buffer for Re_h=133)
+//   2D wedge thickness z = 0.001 m (empty patches z = 0 and z = 0.001)
+//
+// Coordinate origin: x=0 at inlet, y=0 at centerline, z=0 at back face.
+// y ∈ [-H, +H] · top wall at y=+H, bottom wall at y=-H.
+//
+// Single block topology:
+//   Block 1 (full channel): nx=500, ny=40, nz=1 = 20,000 cells
+//
+// Grading rationale:
+//   x: 1 (uniform · Δx = 1e-3 m streamwise)
+//   y: symmetric bilinear via multi-region simpleGrading:
+//      ((0.5 0.5 3) (0.5 0.5 0.333333))
+//      first half [-H, 0]: expansion 3 → finer at y=-H bottom wall
+//      second half [0, +H]: expansion 0.333 → finer at y=+H top wall
+//      → y_first (at wall) ≈ 2.7e-4 m, y_last (at centerline) ≈ 8.1e-4 m, ratio ≈ 3:1
+//   z: 1 (uniform single layer, empty patches → no flux)
+//
+// Re_h = 133 deep laminar · no y+ constraint (no turbulence model).
+// δy_wall ≈ 2.7e-4 m gives ~13 cells across y ∈ [-H, 0] half-channel · fully
+// resolves parabolic profile (analytical solution is smooth quadratic).
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+vertices
+(
+    // z = 0 (back face)
+    ( 0      -0.01    0       )   // 0  bottom-back-left  (inlet · bottom wall)
+    ( 0.5    -0.01    0       )   // 1  bottom-back-right (outlet · bottom wall)
+    ( 0.5     0.01    0       )   // 2  top-back-right    (outlet · top wall)
+    ( 0       0.01    0       )   // 3  top-back-left     (inlet · top wall)
+    // z = 0.001 (front face)
+    ( 0      -0.01    0.001   )   // 4  bottom-front-left
+    ( 0.5    -0.01    0.001   )   // 5  bottom-front-right
+    ( 0.5     0.01    0.001   )   // 6  top-front-right
+    ( 0       0.01    0.001   )   // 7  top-front-left
+);
+
+blocks
+(
+    // Block 1: full channel · x ∈ [0, 0.5], y ∈ [-0.01, +0.01], z ∈ [0, 0.001]
+    // x grading 1: uniform Δx = 1e-3 m
+    // y bilinear: fine near both walls, coarse at centerline (3:1 wall/center cell ratio)
+    // z grading 1: single layer (empty 2D)
+    hex (0 1 2 3 4 5 6 7) (500 40 1)
+        simpleGrading
+        (
+            1
+            (
+                (0.5 0.5 3)
+                (0.5 0.5 0.333333)
+            )
+            1
+        )
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 3 7 4)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+    bottomWall
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)
+        );
+    }
+    topWall
+    {
+        type wall;
+        faces
+        (
+            (3 2 6 7)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 1 2 3)
+            (4 7 6 5)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

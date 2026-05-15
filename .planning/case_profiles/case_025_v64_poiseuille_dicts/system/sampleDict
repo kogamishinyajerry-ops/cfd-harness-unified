@@ -1,0 +1,63 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Sample u(y) at exit + mid-channel stations · sample p(x) along centerline
+// for dp/dx extraction.
+//
+// Run as: postProcess -func sampleDict -latestTime -dict system/sampleDict
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+
+type sets;
+libs (sampling);
+writeControl onEnd;
+
+interpolationScheme cellPoint;
+
+setFormat raw;
+
+fields (p U);
+
+sets
+(
+    // u(y) at exit station (x = 0.4995, just upstream of outlet face)
+    // Spans y ∈ [-H, +H] · midPoint sampling returns ny cell-centered y-values
+    // With ny=40 cells (bilinear-3 grading) → 40 y-points → ≥17+ ✓
+    exitProfile
+    {
+        type        midPoint;
+        axis        y;
+        start       (0.4995 -0.01 0.0005);
+        end         (0.4995  0.01 0.0005);
+    }
+
+    // u(y) at mid-channel (x = 0.25 m = 25·H) for fully-developed verification
+    midProfile
+    {
+        type        midPoint;
+        axis        y;
+        start       (0.25 -0.01 0.0005);
+        end         (0.25  0.01 0.0005);
+    }
+
+    // p(x) along centerline (y = 0) for dp/dx linear-fit extraction
+    // Use x ∈ [0.05, 0.45] · excludes inlet (x<0.05) and outlet (x>0.45) effects
+    centerlinePressure
+    {
+        type        midPoint;
+        axis        x;
+        start       (0.05 0.0 0.0005);
+        end         (0.45 0.0 0.0005);
+    }
+);
+
+// ************************************************************************* //

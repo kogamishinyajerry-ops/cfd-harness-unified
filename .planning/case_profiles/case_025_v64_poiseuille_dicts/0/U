@@ -1,0 +1,69 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Inlet: codedFixedValue parabolic Poiseuille profile (inlet IS analytical)
+//   u(y) = (3/2)·u_mean·(1 - (y/H)²) · u_mean=0.1 · H=0.01 · u_max=0.15
+// Outlet: zeroGradient (allows natural extrapolation)
+// Walls: noSlip
+// frontAndBack: empty (2D)
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0.1 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            codedFixedValue;
+        value           uniform (0.1 0 0);
+        name            poiseuilleProfile;
+        code
+        #{
+            const fvPatch& patch = this->patch();
+            const vectorField& centers = patch.Cf();
+            vectorField& field = *this;
+
+            // Analytical: u(y) = (3/2)·u_mean·(1 - (y/H)²)
+            const scalar H     = 0.01;
+            const scalar uMean = 0.1;
+            const scalar uMax  = 1.5 * uMean;
+
+            forAll(centers, i)
+            {
+                scalar y    = centers[i].y();
+                scalar uy   = uMax * (1.0 - sqr(y / H));
+                field[i]    = vector(uy, 0.0, 0.0);
+            }
+        #};
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            noSlip;
+    }
+    topWall
+    {
+        type            noSlip;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
