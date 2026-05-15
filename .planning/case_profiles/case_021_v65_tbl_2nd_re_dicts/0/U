@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// U_inf = 140 m/s · x-direction · V65-A B81 2nd Re point · Re_L = 1.92e7 (~2× case_021 v64 Re_L=9.58e6)
+// Same plate geometry (L=2.0 m), same nu (1.4612e-5 m²/s air). Doubles U_inf only.
+// Tests F-NEW-Cf-canonical-choice (Prandtl-Schlichting inadequate at Re_x>5e6 ·
+// Schultz-Grunow preferred): ALL 5 stations now in Re_x>5e6 regime (vs 3/5 at v64 Re_L).
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (140 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (140 0 0);
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (140 0 0);
+    }
+    plate
+    {
+        type            noSlip;
+    }
+    top
+    {
+        type            slip;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
