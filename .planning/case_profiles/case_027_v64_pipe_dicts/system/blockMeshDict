@@ -1,0 +1,145 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// case_027 · Hagen-Poiseuille pipe · axisymmetric wedge · 5° wedge · 20k cells
+//
+// Geometry:
+//   Pipe radius R = 0.005 m (D = 0.01 m)
+//   Pipe length L = 0.5 m  (100·R · ≥3·L_entrance buffer for Re_D=66.7)
+//   Wedge full angle = 5° · half-angle θ/2 = 2.5° (OpenFOAM canonical wedge)
+//
+// 8-vertex hex block with degenerate axis edge (v0 = v4, v1 = v5 coincident at axis).
+// OpenFOAM blockMesh accepts coincident vertex pairs for wedge meshes; the
+// degenerate edge along the axis is handled natively by the wedge boundary type.
+//
+// Coordinate origin: x=0 at inlet, y=0 at axis, z=0 at wedge bisector plane.
+// y ≥ 0 (radial direction · in wedge bisector plane y = r).
+// z spans [-R·sin(2.5°), +R·sin(2.5°)] at the wall, shrinking to 0 at axis.
+//
+// Vertices (8 total · v0=v4, v1=v5 coincident on axis):
+//   v0 = v4 = (0,   0,                     0)                            // inlet axis
+//   v1 = v5 = (L,   0,                     0)                            // outlet axis
+//   v2     = (L,   R·cos(2.5°), -R·sin(2.5°))                            // outlet wall back
+//   v3     = (0,   R·cos(2.5°), -R·sin(2.5°))                            // inlet wall back
+//   v6     = (L,   R·cos(2.5°), +R·sin(2.5°))                            // outlet wall front
+//   v7     = (0,   R·cos(2.5°), +R·sin(2.5°))                            // inlet wall front
+//
+// With R=0.005, cos(2.5°)=0.999048, sin(2.5°)=0.043619:
+//   R·cos(2.5°) = 0.004995241108
+//   R·sin(2.5°) = 0.000218096937
+//
+// Block topology:
+//   Block 1 (full pipe · degenerate axis edge): nx=500, nr=40, nθ=1 = 20,000 cells
+//
+// Grading rationale:
+//   x: 1 (uniform · Δx = 1e-3 m streamwise)
+//   r (axis → wall): simpleGrading 0.333  ← cells shrink from axis to wall
+//      First cell at axis: Δr_axis ≈ 2.1e-4 m  (larger · u-gradient zero at axis)
+//      Last cell at wall:  Δr_wall ≈ 7.0e-5 m  (smaller · steep ∂u/∂r at wall)
+//      INVERTED from case_025 plane Poiseuille (which had symmetric bilinear-3)
+//      because pipe has ONE wall · axis is degenerate (analytically smooth).
+//   θ: 1 (single azimuthal cell · wedge convention)
+//
+// Re_D = 66.7 deep laminar · no y+ constraint (no turbulence model).
+// Wall cell δr ≈ 7e-5 m gives ~7 cells in the steep ∂u/∂r region near wall.
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+// Wedge geometry constants
+// R*cos(2.5°) = 0.004995241108  (12-digit precision)
+// R*sin(2.5°) = 0.000218096937  (12-digit precision)
+
+// defaultPatch absorbs the 500 degenerate axis faces (zero-area · skewness
+// undefined). Type "empty" tells OpenFOAM these faces have no flux/
+// computation, which is correct for the wedge axis line.
+defaultPatch
+{
+    name axis;
+    type empty;
+}
+
+vertices
+(
+    // v0 = v4 on axis at inlet (coincident pair · degenerate edge)
+    ( 0     0                  0                 )   // 0  inlet axis back
+    ( 0.5   0                  0                 )   // 1  outlet axis back
+    ( 0.5   0.004995241108    -0.000218096937    )   // 2  outlet wall back
+    ( 0     0.004995241108    -0.000218096937    )   // 3  inlet wall back
+    ( 0     0                  0                 )   // 4  inlet axis front  (= v0)
+    ( 0.5   0                  0                 )   // 5  outlet axis front (= v1)
+    ( 0.5   0.004995241108     0.000218096937    )   // 6  outlet wall front
+    ( 0     0.004995241108     0.000218096937    )   // 7  inlet wall front
+);
+
+blocks
+(
+    // Block 1: full pipe · degenerate axis · x ∈ [0, 0.5], r ∈ [0, R], azimuth ±2.5°
+    // nx=500 (uniform), nr=40 (grading 0.333 axis→wall), nθ=1 (single wedge cell)
+    hex (0 1 2 3 4 5 6 7) (500 40 1)
+        simpleGrading (1 0.333333 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 3 7 4)   // x=0 face: from axis (v0=v4) to wall (v3, v7)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)   // x=L face: from axis (v1=v5) to wall (v2, v6)
+        );
+    }
+    wall
+    {
+        type wall;
+        faces
+        (
+            (3 2 6 7)   // r=R cylindrical surface (flat quad chord approximation)
+        );
+    }
+    front
+    {
+        type wedge;
+        faces
+        (
+            (4 5 6 7)   // +θ/2 face · OpenFOAM wedge boundary
+        );
+    }
+    back
+    {
+        type wedge;
+        faces
+        (
+            (0 1 2 3)   // -θ/2 face · OpenFOAM wedge boundary
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

@@ -1,0 +1,76 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Sample u(r) at exit + mid-pipe stations · sample p(x) along axis
+// for dp/dx extraction.
+//
+// Sample lines are at z=0 (wedge bisector plane). Cell centers of wedge cells
+// are at z=0 by azimuthal symmetry, so the line y∈[0, ~R] hits the 40 radial
+// cell centers exactly.
+//
+// Sample end y = 0.004990 (safely inside wall cell · wall vertex at
+// y=R·cos(2.5°)=0.004995241; wall cell center at y≈0.004960).
+// NOTE: CASE_SPEC §5 listed y_end=0.004990480935 with a numeric typo
+// (intended R·cos(2.5°)=0.004995241108; written 0.004990480935 is wrong);
+// sampleDict here uses 0.004990 which is the actually-safe value (inside
+// wall cell · well-defined sampling).
+//
+// Run as: postProcess -func sampleDict -latestTime -dict system/sampleDict
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+
+type sets;
+libs (sampling);
+writeControl onEnd;
+
+interpolationScheme cellPoint;
+
+setFormat raw;
+
+fields (p U);
+
+sets
+(
+    // u(r) at exit station (x = 0.4995, just upstream of outlet face)
+    // Spans r ∈ [0, ~R] at z=0 (wedge bisector) · midPoint returns nr=40
+    // cell-centered radial values → ≥17+ ✓
+    exitProfile
+    {
+        type        midPoint;
+        axis        y;
+        start       (0.4995 0       0);
+        end         (0.4995 0.004990 0);
+    }
+
+    // u(r) at mid-pipe (x = 0.25 = 50·R) for fully-developed verification
+    // L_entrance ≈ 0.04 m for Re_D=66.7 · x=0.25 is ~6.25× past entrance
+    midProfile
+    {
+        type        midPoint;
+        axis        y;
+        start       (0.25 0       0);
+        end         (0.25 0.004990 0);
+    }
+
+    // p(x) along pipe axis (y = z = 0) for dp/dx linear-fit extraction
+    // Use x ∈ [0.05, 0.45] · excludes inlet (x<0.05) and outlet (x>0.45)
+    // boundary perturbations · 10·R buffer each side
+    axisPressure
+    {
+        type        midPoint;
+        axis        x;
+        start       (0.05 0 0);
+        end         (0.45 0 0);
+    }
+);
+
+// ************************************************************************* //
