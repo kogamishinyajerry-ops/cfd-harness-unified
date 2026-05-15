@@ -1,0 +1,46 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object omega; }
+
+// case_028 v2 (V65-A B77) ventilation · specific dissipation
+// v2 change vs v1: 4 lateral walls slip → omegaWallFunction
+// omega = sqrt(k) / (C_mu^0.25 · L) = sqrt(0.09375) / (0.09^0.25 · 0.3) ≈ 1.87 1/s
+
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform 1.87;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 1.87;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bay_top
+    {
+        type            omegaWallFunction;
+        value           uniform 1.87;
+    }
+    bay_bottom
+    {
+        type            omegaWallFunction;
+        value           uniform 1.87;
+    }
+    bay_side_p
+    {
+        type            omegaWallFunction;
+        value           uniform 1.87;
+    }
+    bay_side_n
+    {
+        type            omegaWallFunction;
+        value           uniform 1.87;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            omegaWallFunction;
+        value           uniform 1.87;
+    }
+}

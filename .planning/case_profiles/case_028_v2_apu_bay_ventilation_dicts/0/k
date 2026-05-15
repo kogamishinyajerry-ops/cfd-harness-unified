@@ -1,0 +1,46 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object k; }
+
+// case_028 v2 (V65-A B77) ventilation · TKE
+// v2 change vs v1: 4 lateral walls slip → kqRWallFunction (high-Re wall BC)
+// k = 1.5 · (U · I)² = 1.5 · (5 · 0.05)² = 0.09375 m²/s²
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0.09375;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 0.09375;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bay_top
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+    bay_bottom
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+    bay_side_p
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+    bay_side_n
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            kqRWallFunction;
+        value           uniform 0.09375;
+    }
+}

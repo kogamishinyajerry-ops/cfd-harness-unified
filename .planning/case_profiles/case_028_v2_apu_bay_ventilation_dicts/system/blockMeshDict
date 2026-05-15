@@ -1,0 +1,84 @@
+FoamFile { version 2.0; format ascii; class dictionary; object blockMeshDict; }
+
+// case_028 v2 (V65-A B77) APU bay ventilation · 6-patch split for ventilation BC
+// v2 change vs v1: 4 lateral patches type `patch` → `wall` (required by nutkWallFunction)
+// bbox inherited from source CHT baseline (~/Desktop/apu-bay-ventilation-cht/test_step_stl_cadgrade/)
+// 4 × 3.5 × 3 m enclosure containing APU bay assembly
+
+scale 1;
+
+vertices
+(
+    (63.5 -1.0 -1.5)  // 0
+    (67.5 -1.0 -1.5)  // 1
+    (67.5  2.5 -1.5)  // 2
+    (63.5  2.5 -1.5)  // 3
+    (63.5 -1.0  1.5)  // 4
+    (67.5 -1.0  1.5)  // 5
+    (67.5  2.5  1.5)  // 6
+    (63.5  2.5  1.5)  // 7
+);
+
+// Base mesh 40 × 35 × 30 = 42,000 hex (same as source CHT baseline)
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (40 35 30) simpleGrading (1 1 1)
+);
+
+edges ();
+
+// 6-patch boundary split for ventilation flow path
+// Inflow along +x direction (longitudinal · aligned with engine compartment airflow)
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)  // -x face (x = 63.5)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (2 6 5 1)  // +x face (x = 67.5)
+        );
+    }
+    bay_top
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)  // +y face (y = 2.5)
+        );
+    }
+    bay_bottom
+    {
+        type wall;
+        faces
+        (
+            (1 5 4 0)  // -y face (y = -1.0)
+        );
+    }
+    bay_side_p
+    {
+        type wall;
+        faces
+        (
+            (4 5 6 7)  // +z face (z = 1.5)
+        );
+    }
+    bay_side_n
+    {
+        type wall;
+        faces
+        (
+            (0 3 2 1)  // -z face (z = -1.5)
+        );
+    }
+);
+
+mergePatchPairs ();

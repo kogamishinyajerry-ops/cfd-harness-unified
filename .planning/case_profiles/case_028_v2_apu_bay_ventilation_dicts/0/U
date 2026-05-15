@@ -1,0 +1,41 @@
+FoamFile { version 2.0; format ascii; class volVectorField; location "0"; object U; }
+
+// case_028 v2 (V65-A B77) ventilation flow · U_inlet = 5 m/s along +x
+// v2 change vs v1: 4 lateral walls slip → noSlip (force fluid through obstacles)
+// All 29 STL components → noSlip walls (wildcard at end · sHM creates them)
+
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (5 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (5 0 0);
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bay_top
+    {
+        type            noSlip;
+    }
+    bay_bottom
+    {
+        type            noSlip;
+    }
+    bay_side_p
+    {
+        type            noSlip;
+    }
+    bay_side_n
+    {
+        type            noSlip;
+    }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|intake_duct|vent_door|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            noSlip;
+    }
+}
