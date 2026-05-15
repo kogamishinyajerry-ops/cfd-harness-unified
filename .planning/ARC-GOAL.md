@@ -78,7 +78,7 @@
 
 ### Tier 2 · solver run + experimental comparison + V101+ promotion + net-new industrial cases
 
-- [ ] **M-V65A-CASE-APU-BAY** — APU bay 通风 net-new industrial case e2e · leverages `~/Desktop/apu-bay-ventilation-cht/` 503 MB FreeCAD-cleaned STL + sHM 89,745 cells validated baseline + STAR-CCM+ via CodeBuddy delivery precedent · simpleFoam (or chtMultiRegionFoam) + advisor stack run + V-row attribution · primary net-new industrial Done #3 contribution · **commit: `_____`**
+- [x] **M-V65A-CASE-APU-BAY** — APU bay 通风 net-new industrial case e2e · leverages `~/Desktop/apu-bay-ventilation-cht/work/stl_repair/per_solid/` 29 per_solid STL (560 MB total) + sHM 89,784 cells (matches source CHT 89,745 within 0.04%) + simpleFoam kOmegaSST RAS converged 474 iter · advisor 4/9 fired · 8 V-row attribution (clause-1 over-met) · mass balance machine-precision · **LANDED 2026-05-16 B74 verdict strong-PARTIAL · commits: `7a3e20b` substrate + `07d63eb` mesh + `43f2fad` solver+report + sub-DEC `DEC-V65-A-sub-M-V65A-CASE-APU-BAY` (`.planning/decisions/2026-05-16_v65_sub_case_apu_bay.md`)**
 - [ ] **M-V65A-CASE-NACA-STALL** — NACA airfoil 高 AoA 失速 net-new industrial case · separation-class 2nd witness for F-NEW-15 inlet BL thickness mismatch · **V64-A carry-over #2 absorption** · V104 promotion path · NACA 0012 or NACA 4412 at ≥12° AoA · kOmegaSST RANS + advisor stack + experimental comparison · 2nd net-new industrial Done #3 contribution · **commit: `_____`**
 - [ ] **M-V65A-CASE-SANDIA-FLAME-D** *(candidate · alternate)* — Sandia Flame D reacting-low-Mach net-new industrial case · canonical TNF reference · reactingFoam + flamelet OR EDC + Sandia experimental DB comparison · V106 thermo-FPE template 2nd application candidate (combustion thermo-FPE distinct-signature) · **commit: `_____`**
 - [ ] **M-V65A-CASE-TBL-2ND-RE** — 2nd TBL case at different Re vs case_021 NASA TMR · disambiguates F-NEW-C Cf-canonical-choice + F-NEW-low-Re transition trigger · **V64-A carry-over #3 absorption** · V103 promotion source · **commit: `_____`**
@@ -136,17 +136,18 @@ Done #1 ≥ 5/5 = all 5 absorbed (LANDED OR mark QUESTIONABLE / re-classify with
 当前 V101+ promotion 进 V-series corpus:           1 / 6 (target ≥4/6 · Done #2)
                                                   LANDED: V101 (B73 · `0e0d225` corpus + `99cc42e` sub-DEC)
                                                   pending firmness: V105 ~70% · V103/V104 ~60% · V102/V106 ~50%
-当前 Net-new 工业 case e2e:                       0 / 2 (target ≥2 industrial FULL or strong-PARTIAL · Done #3)
-                                                  candidate set: APU bay · NACA stall · Sandia Flame D · 2nd TBL
+当前 Net-new 工业 case e2e:                       1 / 2 (target ≥2 industrial FULL or strong-PARTIAL · Done #3)
+                                                  LANDED: case_028 APU bay ventilation strong-PARTIAL (B74 · `43f2fad`)
+                                                  remaining candidate: NACA stall · Sandia Flame D · 2nd TBL
 当前 Industrial-grade FULL reports:               0 / 3 (target ≥3 工业级 · Done #4 · 1D analytical NOT counted)
                                                   V64-A 1D analytical trio (Poiseuille / Couette / Pipe) excluded from V65-A Done #4 counting
 当前 Canonical-artifact ledger 2nd witnesses:     0 / 2 (target wedge-axis 2nd + thermo-FPE template 2nd · Done #5)
-当前 V-row truth-capture rate:                    clause-1 ≥7/9: 0 net-new (case_011 7/9 V64-A carry-forward可继承)
-                                                  clause-2 ≥5/9 on ≥2 cases: 0 net-new (case_004 5/9 + case_006 5/9 + case_011 7/9 V64-A carry-forward可继承)
+当前 V-row truth-capture rate:                    clause-1 ≥7/9: **1 net-new on case_028 over-met at 8/9** (B74 · 8 V-rows: V29+V52+V79+V81+V86+V87+V99+V100) · case_011 7/9 V64-A carry-forward 仍 valid
+                                                  clause-2 ≥5/9 on ≥2 cases: 0 net-new (case_028 single case at B74 · clause-2 needs ≥2) · case_004 5/9 + case_006 5/9 + case_011 7/9 V64-A carry-forward可继承
 当前 Done dims MET:                               0 / 6
 ```
 
-最后更新时间：`2026-05-15 **B73 V101 corpus LANDED · M-V65A-V101-PROMOTE Tier 1 milestone state PENDING → LANDED · Done #2 V101+ promotion 0/6 → 1/6 · 1 sub-DEC LANDED (DEC-V65-A-sub-M-V65A-V101-PROMOTE) · counter +1 sub-DEC** · 更新人：Claude Code Opus 4.7 session main`
+最后更新时间：`2026-05-16 **B74 case_028 APU bay ventilation e2e LANDED · M-V65A-CASE-APU-BAY Tier 2 milestone state PENDING → LANDED · Done #3 net-new industrial 0/2 → 1/2 · Done #6 clause-1 over-met on case_028 single case (8/9) · 2 sub-DECs cumulative (V101 + APU-BAY) · counter +1 sub-DEC** · 更新人：Claude Code Opus 4.7 session main`
 
 ---
 
