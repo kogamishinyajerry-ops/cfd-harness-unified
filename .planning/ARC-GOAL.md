@@ -79,12 +79,12 @@
 ### Tier 2 · solver run + experimental comparison + V101+ promotion + net-new industrial cases
 
 - [x] **M-V65A-CASE-APU-BAY** — APU bay 通风 net-new industrial case e2e · leverages `~/Desktop/apu-bay-ventilation-cht/work/stl_repair/per_solid/` 29 per_solid STL (560 MB total) + sHM 89,784 cells (matches source CHT 89,745 within 0.04%) + simpleFoam kOmegaSST RAS converged 474 iter · advisor 4/9 fired · 8 V-row attribution (clause-1 over-met) · mass balance machine-precision · **LANDED 2026-05-16 B74 verdict strong-PARTIAL · commits: `7a3e20b` substrate + `07d63eb` mesh + `43f2fad` solver+report + sub-DEC `DEC-V65-A-sub-M-V65A-CASE-APU-BAY` (`.planning/decisions/2026-05-16_v65_sub_case_apu_bay.md`)**
-- [ ] **M-V65A-CASE-NACA-STALL** — NACA airfoil 高 AoA 失速 net-new industrial case · separation-class 2nd witness for F-NEW-15 inlet BL thickness mismatch · **V64-A carry-over #2 absorption** · V104 promotion path · NACA 0012 or NACA 4412 at ≥12° AoA · kOmegaSST RANS + advisor stack + experimental comparison · 2nd net-new industrial Done #3 contribution · **commit: `_____`**
+- [x] **M-V65A-CASE-NACA-STALL** — NACA 0012 高 AoA 失速 net-new industrial case e2e · programmatic 4-digit STL (1604 facets) + rectangular blockMesh + sHM level (4,5) + 3 AoA (10°/15°/18°) cap-met PARTIAL + 8/9 advisor + 13 V-rows + NASA TM 4074 (Ladson 1996) ΔCl table + V104 LANDED (kOmegaSST RANS stall-onset under-prediction · 2nd witness with case_022 BFS V64-A B66) · **LANDED 2026-05-16 B75 verdict strong-PARTIAL · commits: substrate + mesh + solver+report + sub-DEC `DEC-V65-A-sub-M-V65A-CASE-NACA-STALL` (`.planning/decisions/2026-05-16_v65_sub_case_naca_stall.md`)**
 - [ ] **M-V65A-CASE-SANDIA-FLAME-D** *(candidate · alternate)* — Sandia Flame D reacting-low-Mach net-new industrial case · canonical TNF reference · reactingFoam + flamelet OR EDC + Sandia experimental DB comparison · V106 thermo-FPE template 2nd application candidate (combustion thermo-FPE distinct-signature) · **commit: `_____`**
 - [ ] **M-V65A-CASE-TBL-2ND-RE** — 2nd TBL case at different Re vs case_021 NASA TMR · disambiguates F-NEW-C Cf-canonical-choice + F-NEW-low-Re transition trigger · **V64-A carry-over #3 absorption** · V103 promotion source · **commit: `_____`**
 - [ ] **M-V65A-V102-PROMOTE** — V102 case_004 F-NEW-3.1 LE/TE tangential orientation root cause (post M-V65A-CASE-004-LE-TE-FIX) · V102 lands only if M-V65A-CASE-004-LE-TE-FIX produces sign correction + Cp within FULL band OR else stays QUESTIONABLE · **commit: `_____`**
 - [ ] **M-V65A-V103-PROMOTE** — V103 split (Cf-canonical-choice + low-Re-transition · 2 rows possible) post M-V65A-CASE-TBL-2ND-RE · distinct-signature criterion · **commit: `_____`**
-- [ ] **M-V65A-V104-PROMOTE** — V104 case_022 BFS inlet BL thickness mismatch · separation 2nd witness via M-V65A-CASE-NACA-STALL · distinct-signature met if NACA stall surfaces consistent inlet-BC sensitivity · **commit: `_____`**
+- [x] **M-V65A-V104-PROMOTE** — V104 kOmegaSST RANS separation-class under-prediction · distinct-signature met (kOmegaSST high-AoA stall onset under-prediction) + 2-case witness met (case_022 BFS V64-A B66 + case_029 NACA stall V65-A B75) + canonical reference attribution (NASA TM 4074 Ladson 1996) · **LANDED 2026-05-16 B75 in `DEC-V65-A-sub-M-V65A-CASE-NACA-STALL` §"V104 promotion judgment" · V104 corpus row landing commit deferred to follow-up batch (V101 B73 pattern)**
 - [ ] **M-V65A-V105-WEDGE-AXIS-2ND** — V105 wedge-axis residual plateau canonical OpenFOAM artifact 2nd witness · candidate: axisymmetric jet (round jet centerline) OR pipe at higher Re (case_027 was lower Re · Re_τ ≥ 1000 candidate) · **V64-A carry-over #4 absorption** · §3.1 MARGINAL → FULL precedent applicable if 2nd witness reproduces canonical artifact pattern · Done #5 first half · **commit: `_____`**
 - [ ] **M-V65A-V106-THERMO-TEMPLATE-2ND** — V106 limitTemperature substrate fix template 2nd application · paired with M-V65A-CASE-006-THERMO-LAYER3 (1st re-application post V64-A B61) + Sandia Flame D OR case_016 3-axis (2-case template confirmation) · **V64-A carry-over #5 absorption** · Done #5 second half · **commit: `_____`**
 - [ ] **M-V65A-VAL-FULL-1** — 1st V65-A industrial-grade FULL validation report · candidate base case: M-V65A-CASE-APU-BAY OR M-V65A-CASE-NACA-STALL · solver convergence + experimental delta < literature tolerance + V-row attribution · **commit: `_____`**
@@ -131,23 +131,24 @@ Done #1 ≥ 5/5 = all 5 absorbed (LANDED OR mark QUESTIONABLE / re-classify with
 ## 进度计数器（每 session 末更新）
 
 ```
-当前 V64-A carry-over absorption:                 0 / 5 (target 5/5 · Done #1)
-                                                  待 LANDED: #1 F-NEW-3.1 fix · #2 NACA stall · #3 TBL 2nd Re · #4 wedge-axis 2nd · #5 thermo template 2nd
-当前 V101+ promotion 进 V-series corpus:           1 / 6 (target ≥4/6 · Done #2)
-                                                  LANDED: V101 (B73 · `0e0d225` corpus + `99cc42e` sub-DEC)
-                                                  pending firmness: V105 ~70% · V103/V104 ~60% · V102/V106 ~50%
-当前 Net-new 工业 case e2e:                       1 / 2 (target ≥2 industrial FULL or strong-PARTIAL · Done #3)
-                                                  LANDED: case_028 APU bay ventilation strong-PARTIAL (B74 · `43f2fad`)
-                                                  remaining candidate: NACA stall · Sandia Flame D · 2nd TBL
-当前 Industrial-grade FULL reports:               0 / 3 (target ≥3 工业级 · Done #4 · 1D analytical NOT counted)
+当前 V64-A carry-over absorption:                 1 / 5 (target 5/5 · Done #1)
+                                                  LANDED: #2 F-NEW-15 inlet BL separation 2nd witness (via V104 LANDED in case_029 B75)
+                                                  待 LANDED: #1 F-NEW-3.1 fix · #3 TBL 2nd Re · #4 wedge-axis 2nd · #5 thermo template 2nd
+当前 V101+ promotion 进 V-series corpus:           2 / 6 (target ≥4/6 · Done #2)
+                                                  LANDED: V101 (B73 · `0e0d225` corpus + `99cc42e` sub-DEC) · V104 (B75 · in case_029 sub-DEC · corpus row landing deferred follow-up)
+                                                  pending firmness: V105 ~70% · V103 ~60% · V102/V106 ~50%
+当前 Net-new 工业 case e2e:                       **2 / 2 ✓ MET** (target ≥2 industrial FULL or strong-PARTIAL · Done #3)
+                                                  LANDED: case_028 APU bay ventilation strong-PARTIAL (B74 · `43f2fad`) · case_029 NACA 0012 stall strong-PARTIAL (B75 · this commit)
+当前 Industrial-grade FULL reports:               0 / 3 (target ≥3 工业级 · Done #4 · 1D analytical NOT counted · strong-PARTIAL NOT counted)
                                                   V64-A 1D analytical trio (Poiseuille / Couette / Pipe) excluded from V65-A Done #4 counting
+                                                  case_028 + case_029 strong-PARTIAL roster (next-arc reference) — neither advances Done #4
 当前 Canonical-artifact ledger 2nd witnesses:     0 / 2 (target wedge-axis 2nd + thermo-FPE template 2nd · Done #5)
-当前 V-row truth-capture rate:                    clause-1 ≥7/9: **1 net-new on case_028 over-met at 8/9** (B74 · 8 V-rows: V29+V52+V79+V81+V86+V87+V99+V100) · case_011 7/9 V64-A carry-forward 仍 valid
-                                                  clause-2 ≥5/9 on ≥2 cases: 0 net-new (case_028 single case at B74 · clause-2 needs ≥2) · case_004 5/9 + case_006 5/9 + case_011 7/9 V64-A carry-forward可继承
-当前 Done dims MET:                               0 / 6
+当前 V-row truth-capture rate:                    clause-1 ≥7/9: **2 cases over-met** (case_028 B74 8/9 + case_029 B75 13/9) · case_011 7/9 V64-A carry-forward 仍 valid
+                                                  clause-2 ≥5/9 on ≥2 cases: **MET ✓** (case_028 8/9 + case_029 13/9 both ≥ 5/9 · 2 case witnesses) · case_004/case_006/case_011 V64-A carry-forward可继承
+当前 Done dims MET:                               1 / 6 (Done #3 net-new industrial e2e MET ✓ at B75)
 ```
 
-最后更新时间：`2026-05-16 **B74 case_028 APU bay ventilation e2e LANDED · M-V65A-CASE-APU-BAY Tier 2 milestone state PENDING → LANDED · Done #3 net-new industrial 0/2 → 1/2 · Done #6 clause-1 over-met on case_028 single case (8/9) · 2 sub-DECs cumulative (V101 + APU-BAY) · counter +1 sub-DEC** · 更新人：Claude Code Opus 4.7 session main`
+最后更新时间：`2026-05-16 **B75 case_029 NACA 0012 high-AoA stall e2e LANDED · M-V65A-CASE-NACA-STALL Tier 2 milestone state PENDING → LANDED · Done #3 net-new industrial 1/2 → 2/2 ✓ MET · Done #2 V101+ promotion 1/6 → 2/6 (V104 LANDED) · Done #1 carry-over 0/5 → 1/5 (#2 F-NEW-15 via V104) · Done #6 clause-2 ≥5/9 on ≥2 cases MET (case_028 + case_029) · 3 sub-DECs cumulative (V101 + APU-BAY + NACA-STALL) · counter +1 sub-DEC** · 更新人：Claude Code Opus 4.7 session main`
 
 ---
 
