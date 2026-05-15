@@ -1,0 +1,67 @@
+# case_029 NACA 0012 stall · parts manifest
+# Used by advisor stack (face_orientation / inlet_outlet / bc_type_name).
+# Geometry: programmatically generated NACA 0012 (1604 ASCII STL facets).
+
+case: case_029_naca_stall
+solver: simpleFoam
+turbulence: kOmegaSST
+compressibility: incompressible
+re_c: 3e6
+chord_m: 1.0
+span_m: 0.1
+freestream_velocity_magnitude_m_per_s: 45.0
+aoa_sweep_deg: [10, 15, 18]
+domain_bbox_min: [-10.0, -10.0, -0.05]
+domain_bbox_max: [20.0, 10.0, 0.05]
+
+parts:
+  - name: naca0012
+    type: wall
+    fields:
+      U: noSlip
+      p: zeroGradient
+      k: kqRWallFunction
+      omega: omegaWallFunction
+      nut: nutUSpaldingWallFunction
+
+  - name: inlet
+    type: patch
+    fields:
+      U: freestreamVelocity
+      p: freestreamPressure
+      k: freestream
+      omega: freestream
+      nut: calculated
+
+  - name: outlet
+    type: patch
+    fields:
+      U: freestreamVelocity
+      p: freestreamPressure
+      k: freestream
+      omega: freestream
+      nut: calculated
+
+  - name: top
+    type: patch
+    fields:
+      U: freestreamVelocity
+      p: freestreamPressure
+      k: freestream
+      omega: freestream
+      nut: calculated
+
+  - name: bottom
+    type: patch
+    fields:
+      U: freestreamVelocity
+      p: freestreamPressure
+      k: freestream
+      omega: freestream
+      nut: calculated
+
+  - name: frontAndBack
+    type: empty
+    fields:
+      U: empty
+      p: empty

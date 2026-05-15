@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_029 NACA 0012 · specific dissipation · L=0.07c                           |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 4.29;  // sqrt(k)/(Cmu^0.25 * L) = sqrt(0.027)/(0.547*0.07)
+
+boundaryField
+{
+    inlet
+    {
+        type            freestream;
+        freestreamValue uniform 4.29;
+    }
+    outlet
+    {
+        type            freestream;
+        freestreamValue uniform 4.29;
+    }
+    top
+    {
+        type            freestream;
+        freestreamValue uniform 4.29;
+    }
+    bottom
+    {
+        type            freestream;
+        freestreamValue uniform 4.29;
+    }
+    naca0012
+    {
+        type            omegaWallFunction;
+        value           uniform 4.29;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

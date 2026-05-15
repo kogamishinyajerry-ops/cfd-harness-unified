@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_029 NACA 0012 · turbulent viscosity                                      |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nut;
+}
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 1.5e-5;  // ~nu at inlet, will grow in BL
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 1.5e-5;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 1.5e-5;
+    }
+    top
+    {
+        type            calculated;
+        value           uniform 1.5e-5;
+    }
+    bottom
+    {
+        type            calculated;
+        value           uniform 1.5e-5;
+    }
+    naca0012
+    {
+        type            nutUSpaldingWallFunction;
+        value           uniform 0;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

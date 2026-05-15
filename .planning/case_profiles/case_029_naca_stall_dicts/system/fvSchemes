@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_029 NACA 0012 stall · steady-state simpleFoam schemes                    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSchemes;
+}
+
+ddtSchemes      { default steadyState; }
+
+gradSchemes
+{
+    default         Gauss linear;
+    grad(U)         cellLimited Gauss linear 1;
+    grad(p)         Gauss linear;
+}
+
+divSchemes
+{
+    default                         none;
+    div(phi,U)                      bounded Gauss linearUpwindV grad(U);
+    div(phi,k)                      bounded Gauss limitedLinear 1;
+    div(phi,omega)                  bounded Gauss limitedLinear 1;
+    div((nuEff*dev2(T(grad(U)))))   Gauss linear;
+}
+
+laplacianSchemes  { default Gauss linear limited 0.5; }
+interpolationSchemes { default linear; }
+snGradSchemes     { default limited 0.5; }
+wallDist          { method meshWave; }
+
+// ************************************************************************* //

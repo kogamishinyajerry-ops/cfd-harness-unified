@@ -1,0 +1,22 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_029 NACA 0012 stall · feature extraction for sHM                         |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaceFeatureExtractDict;
+}
+
+naca0012.stl
+{
+    extractionMethod    extractFromSurface;
+    extractFromSurfaceCoeffs
+    {
+        includedAngle   150;
+    }
+    writeObj            yes;
+}
+
+// ************************************************************************* //

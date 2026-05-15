@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_029 NACA 0012 · turbulence k · TI=0.3% (clean wind-tunnel low TI)        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0.027;  // 1.5 * (0.003 * 45)^2
+
+boundaryField
+{
+    inlet
+    {
+        type            freestream;
+        freestreamValue uniform 0.027;
+    }
+    outlet
+    {
+        type            freestream;
+        freestreamValue uniform 0.027;
+    }
+    top
+    {
+        type            freestream;
+        freestreamValue uniform 0.027;
+    }
+    bottom
+    {
+        type            freestream;
+        freestreamValue uniform 0.027;
+    }
+    naca0012
+    {
+        type            kqRWallFunction;
+        value           uniform 0.027;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
