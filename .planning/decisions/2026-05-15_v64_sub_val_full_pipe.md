@@ -4,7 +4,7 @@ title: case_027 Hagen-Poiseuille pipe MARGINAL validation report · 8th FULL att
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-PIPE (B70 dispatch · companion to B68 plane Poiseuille FULL · companion to B69 Couette dispatch · all 1D analytical canonical class · disjoint scope)
-notion_sync_status: pending (session-end batch · only Accepted DECs sync per v2.3 round-1)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed818f847bc2cde5600d86)
 confidence: med
 ---
 

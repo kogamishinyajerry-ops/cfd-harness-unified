@@ -4,7 +4,7 @@ title: case_026 plane Couette FULL validation report · 7th FULL attempt · 1D L
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-COUETTE (B69 dispatch · companion to B67 B68 case_025 plane Poiseuille FULL · disjoint scope from parallel B70 case_027 pipe Hagen-Poiseuille)
-notion_sync_status: pending session-end batch sync (Status=Accepted; will be sync'd per v2.3 round-1 loosen rule)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81e3aff2e2b79a586b5d)
 confidence: med
 ---
 
