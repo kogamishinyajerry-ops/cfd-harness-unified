@@ -1,0 +1,51 @@
+{
+  "case_id": "case_020_porous_media_filter_darcy_forchheimer",
+  "direct_invocation": {
+    "critical_count": 0,
+    "declared_labels": [],
+    "findings": [],
+    "shm_referenced_labels": [],
+    "stl_labels": [
+      "region_fluid",
+      "porous_zone_filter_element",
+      "inlet",
+      "outlet",
+      "housing_wall",
+      "filter_element_face_upstream",
+      "filter_element_face_downstream",
+      "filter_edge_seal",
+      "filter_edge_open_d10"
+    ],
+    "warning_count": 0
+  },
+  "dispatch": {
+    "dispatched": true,
+    "duration_ms": 0.006875023245811462,
+    "status": "ok"
+  },
+  "stack_invocation": {
+    "d11_findings": [],
+    "stack_advisor_count": 4,
+    "stack_duration_ms": 7.3940419824793935,
+    "stack_finding_count": 9
+  },
+  "substrate_source": ".planning/methodology/kickoff/case_020_codex_response.md",
+  "substrate_type": "synthetic_from_kickoff_spec",
+  "verdict": {
+    "actual_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 0,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 0
+    },
+    "archetype": "v94_counter_example_patches_emitted_as_bodies",
+    "expected_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 0,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 0
+    },
+    "match": true,
+    "v94_attribution": "counter_example_proves_d11_does_not_false_positive"
+  }
+}

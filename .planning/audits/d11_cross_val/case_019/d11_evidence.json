@@ -1,0 +1,127 @@
+{
+  "case_id": "case_019_kenics_static_mixer",
+  "direct_invocation": {
+    "critical_count": 0,
+    "declared_labels": [
+      "pipe_inlet",
+      "pipe_outlet",
+      "pipe_wall"
+    ],
+    "findings": [
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_fluid' declares face label 'pipe_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "pipe_inlet",
+        "location": "parts_manifest.parts['region_fluid'].face_labels[0]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'pipe_inlet' (and siblings)."
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_fluid' declares face label 'pipe_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "pipe_outlet",
+        "location": "parts_manifest.parts['region_fluid'].face_labels[1]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'pipe_outlet' (and siblings)."
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_fluid' declares face label 'pipe_wall' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_wall' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "pipe_wall",
+        "location": "parts_manifest.parts['region_fluid'].face_labels[2]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'pipe_wall' (and siblings)."
+      }
+    ],
+    "shm_referenced_labels": [
+      "pipe_inlet",
+      "pipe_outlet",
+      "pipe_wall"
+    ],
+    "stl_labels": [
+      "region_fluid",
+      "mixer_element_1",
+      "mixer_element_2",
+      "mixer_element_3",
+      "mixer_element_4",
+      "mixer_element_5",
+      "mixer_element_6",
+      "mixer_element_7",
+      "mixer_element_8"
+    ],
+    "warning_count": 3
+  },
+  "dispatch": {
+    "dispatched": true,
+    "duration_ms": 0.027916044928133488,
+    "status": "ok"
+  },
+  "stack_invocation": {
+    "d11_findings": [
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_fluid'].face_labels[0]",
+        "message": "part 'region_fluid' declares face label 'pipe_inlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_inlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      },
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_fluid'].face_labels[1]",
+        "message": "part 'region_fluid' declares face label 'pipe_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      },
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_fluid'].face_labels[2]",
+        "message": "part 'region_fluid' declares face label 'pipe_wall' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'pipe_wall' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      }
+    ],
+    "stack_advisor_count": 4,
+    "stack_duration_ms": 9.749041986651719,
+    "stack_finding_count": 12
+  },
+  "substrate_source": ".planning/methodology/kickoff/case_019_codex_response.md",
+  "substrate_type": "synthetic_from_kickoff_spec",
+  "verdict": {
+    "actual_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 3,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 3
+    },
+    "archetype": "partial_v94_mixed_bodies_and_face_labels",
+    "expected_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 3,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 3
+    },
+    "match": true,
+    "v94_attribution": "firm_match"
+  }
+}

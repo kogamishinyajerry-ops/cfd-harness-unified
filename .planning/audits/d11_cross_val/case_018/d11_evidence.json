@@ -1,0 +1,144 @@
+{
+  "case_id": "case_018_stairmand_cyclone_separator",
+  "direct_invocation": {
+    "critical_count": 0,
+    "declared_labels": [
+      "inlet_tangential",
+      "overflow_outlet",
+      "underflow_outlet",
+      "cyclone_walls"
+    ],
+    "findings": [
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_air' declares face label 'inlet_tangential' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'inlet_tangential' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "inlet_tangential",
+        "location": "parts_manifest.parts['region_air'].face_labels[0]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'inlet_tangential' (and siblings)."
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_air' declares face label 'overflow_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'overflow_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "overflow_outlet",
+        "location": "parts_manifest.parts['region_air'].face_labels[1]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'overflow_outlet' (and siblings)."
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_air' declares face label 'underflow_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'underflow_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "underflow_outlet",
+        "location": "parts_manifest.parts['region_air'].face_labels[2]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'underflow_outlet' (and siblings)."
+      },
+      {
+        "advisor_name": "stl_face_label_validator",
+        "code": "orphan_declared_label",
+        "detail": "part 'region_air' declares face label 'cyclone_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cyclone_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "face_label": "cyclone_walls",
+        "location": "parts_manifest.parts['region_air'].face_labels[3]",
+        "severity": "warning",
+        "suggested_fix": "Re-emit the STL with explicit face naming (per-face STL via cq.Assembly + cq.Sketch.face('Tagged'), or FreeCAD MeshPart with STEP face-label sidecar), or post-process the existing mesh with topoSet + createPatch to split the parent patch into the declared 'cyclone_walls' (and siblings)."
+      }
+    ],
+    "shm_referenced_labels": [
+      "cyclone_walls",
+      "inlet_tangential",
+      "overflow_outlet",
+      "underflow_outlet"
+    ],
+    "stl_labels": [
+      "region_air",
+      "debris_cube_d6"
+    ],
+    "warning_count": 4
+  },
+  "dispatch": {
+    "dispatched": true,
+    "duration_ms": 0.022583059035241604,
+    "status": "ok"
+  },
+  "stack_invocation": {
+    "d11_findings": [
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_air'].face_labels[0]",
+        "message": "part 'region_air' declares face label 'inlet_tangential' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'inlet_tangential' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      },
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_air'].face_labels[1]",
+        "message": "part 'region_air' declares face label 'overflow_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'overflow_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      },
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_air'].face_labels[2]",
+        "message": "part 'region_air' declares face label 'underflow_outlet' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'underflow_outlet' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      },
+      {
+        "code": "orphan_declared_label",
+        "evidence_v_rows": [
+          "V94"
+        ],
+        "location": "parts_manifest.parts['region_air'].face_labels[3]",
+        "message": "part 'region_air' declares face label 'cyclone_walls' but the STL inventory has no corresponding solid key \u2014 sHM will not be able to create a 'cyclone_walls' patch (V94 face-label-loss class \u00b7 likely cause: CAD\u2192STL pipeline emitted single-shell solid without face-zone metadata, e.g. cq.exporters.export without cq.Assembly face naming)",
+        "severity": "warning",
+        "source_advisor": "stl_face_label_validator"
+      }
+    ],
+    "stack_advisor_count": 4,
+    "stack_duration_ms": 6.650457973591983,
+    "stack_finding_count": 6
+  },
+  "substrate_source": ".planning/methodology/kickoff/case_018_codex_response.md",
+  "substrate_type": "synthetic_from_kickoff_spec",
+  "verdict": {
+    "actual_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 4,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 4
+    },
+    "archetype": "canonical_v94_single_region_with_orphaned_face_labels",
+    "expected_findings": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 4,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 4
+    },
+    "match": true,
+    "v94_attribution": "firm_match"
+  }
+}
