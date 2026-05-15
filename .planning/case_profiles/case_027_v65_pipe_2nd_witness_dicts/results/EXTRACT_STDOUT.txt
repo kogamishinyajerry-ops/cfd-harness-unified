@@ -1,0 +1,52 @@
+Parsing OpenFOAM fields from /Users/Zhuanz/Desktop/case_027_hagen_poiseuille_pipe/case/5000/
+  C:  20000 cells
+  U:  20000 cells
+  p:  20000 cells
+  τ:  500 wall faces
+
+Building exit-station profile (last x-column, all 40 radial cells)...
+Building mid-pipe profile (x≈0.25, all 40 radial cells)...
+Building axis pressure profile (j=0, x ∈ [0.05, 0.45])...
+Computing τ_wall comparison (500 wall faces · all + developed region)...
+
+==== case_027 · Hagen-Poiseuille pipe validation ====
+
+Solver final iter: 5000 (SIMPLE auto-exit did NOT fire · max iter hit)
+Cell counts: 20000 total, 40 radial cells at exit
+
+--- u(r) exit station x≈0.4995 ---
+  max |Δu| = 0.1807% (of u_max=0.2 m/s)
+  strict (<1%) pass: 40/40
+  gate: PASS
+
+--- u(r) mid station x≈0.25 (cross-check) ---
+  max |Δu| = 0.1807%
+  strict pass: 40/40
+
+--- dp/dx (from j=0 cell linear fit over x ∈ [0.05, 0.45]) ---
+  slope_fit_kin       = -4.817389e-01 m²/s²/m
+  slope_analytical_kin = -4.800000e-01 m²/s²/m
+  Δ = +0.3623%   gate: PASS
+
+--- τ_w cross-check (500 wall faces) ---
+  Full wall (incl entrance · 500 faces):
+    range = 1.1901e-03 to 1.2361e-03 (mean 1.2033e-03)
+    Δ_min/Δ_mean/Δ_max = -0.8241% / +0.2747% / +3.0060%
+    strict pass (|Δ|<1%): 498/500
+  Developed region x∈[0.05,0.45] (400 faces · case_025 §6 convention):
+    range = 1.2032e-03 to 1.2032e-03 (mean 1.2032e-03)
+    Δ_min/Δ_mean/Δ_max = +0.2667% / +0.2668% / +0.2686%
+    max |Δ| = 0.2686%   gate: PASS
+    strict pass (|Δ|<1%): 400/400
+  τ_w analytical (4·ν·u_mean/R) = 1.2000e-03 m²/s²
+
+--- Residuals final (iter 5000) ---
+  Ux: 2.9544e-12  ✓ (< 1e-8)
+  Uy: 9.0629e-07  ✗ (> 1e-8)
+  Uz: 3.3246e-02  ✗ (> 1e-8)
+  p: 2.6859e-08  ✗ (> 1e-8)
+  strict 4/4 < 1e-8: 1/4 FAIL
+  adjusted 3/3 (excl Uz wedge artifact): 1/3 FAIL
+
+==== VERDICT: MARGINAL ====
+  u_PASS=True  dpdx_PASS=True  tau_PASS=True  res4/4_PASS=False  res3/3adj_PASS=False
