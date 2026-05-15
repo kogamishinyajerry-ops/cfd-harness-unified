@@ -1,0 +1,41 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-gen-v2                            |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-GEN-V2                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      meshQualityDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Standard sHM mesh-quality controls for industrial wind-turbine MRF.
+// Tuning derived from OpenFOAM-ESI 2312 default + relaxed non-orthogonality
+// for long-blade boundary regions.
+
+maxNonOrtho             65;
+maxBoundarySkewness     20;
+maxInternalSkewness     4;
+maxConcave              80;
+minVol                  1e-13;
+minTetQuality           -1e30;     // disabled — sHM struggles on coarse bg
+minArea                 -1;
+minTwist                0.02;
+minDeterminant          0.001;
+minFaceWeight           0.05;
+minVolRatio             0.01;
+minTriangleTwist        -1;
+
+nSmoothScale            4;
+errorReduction          0.75;
+
+relaxed
+{
+    maxNonOrtho         75;
+}
+
+// ************************************************************************* //

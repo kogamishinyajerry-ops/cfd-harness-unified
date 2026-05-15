@@ -1,0 +1,90 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-gen-v2                            |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-GEN-V2                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// Background hex block for snappyHexMesh.
+// All coords in mm (STL extraction kept in mm; transportProperties + BC
+// values in 0/ are expressed in mm-consistent units, OR mesh is scaled to
+// meters post-meshing via `transformPoints -scale "(0.001 0.001 0.001)"`).
+// Global bbox of solids (from _freecad_extract.json, sentinel-filtered):
+//   x [-30224, 60398] mm  →  block expanded with farfield margin
+//   y [-12550,  12550] mm
+//   z [-12550,  12550] mm
+// Background cell size target: 500 mm (uniform) → expected bg cell count
+// ≈ (180 × 50 × 50) = 450 k. sHM refinement levels 1..5 around bodies will
+// push final cell count into the 5-15 M range expected for NREL Phase VI.
+// nCellsBetweenLevels = 3, refinement level pattern documented in
+// snappyHexMeshDict.
+
+convertToMeters 1;   // mm-native; scale to meters post-mesh if desired.
+
+// 500-mm uniform cell, fitted to global bbox + 1-cell margin.
+xMin   -30724;
+xMax    60898;
+yMin   -13050;
+yMax    13050;
+zMin   -13050;
+zMax    13050;
+
+nx      184;   // (60898 - (-30724)) / 500 ≈ 183.2 → 184
+ny       53;   // (13050 - (-13050)) / 500 ≈ 52.2  → 53
+nz       53;
+
+vertices
+(
+    ($xMin $yMin $zMin)    //0
+    ($xMax $yMin $zMin)    //1
+    ($xMax $yMax $zMin)    //2
+    ($xMin $yMax $zMin)    //3
+    ($xMin $yMin $zMax)    //4
+    ($xMax $yMin $zMax)    //5
+    ($xMax $yMax $zMax)    //6
+    ($xMin $yMax $zMax)    //7
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) ($nx $ny $nz) simpleGrading (1 1 1)
+);
+
+edges ();
+
+boundary
+(
+    bg_inlet
+    {
+        type patch;
+        faces ( (0 4 7 3) );
+    }
+    bg_outlet
+    {
+        type patch;
+        faces ( (1 2 6 5) );
+    }
+    bg_tunnel_walls
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)   // y- face
+            (3 7 6 2)   // y+ face
+            (0 3 2 1)   // z- face
+            (4 5 6 7)   // z+ face
+        );
+    }
+);
+
+mergePatchPairs ();
+
+// ************************************************************************* //

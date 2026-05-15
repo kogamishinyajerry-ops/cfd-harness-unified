@@ -1,0 +1,184 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM mesh-conv-study h/4                    |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  | DEC-V64-A-sub-M-V64A-MESH-CONV-STUDY            |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// h/4 mesh level: refinement-level minus 2 vs B54 canonical baseline.
+// All other settings (geometry, snapControls, meshQualityDict, locationInMesh,
+// nCellsBetweenLevels, max cell caps, mergeTolerance) IDENTICAL to canonical
+// h-level dict so the only varied parameter is refinement level. Expected
+// cell count: ≈200-300 k (canonical h was 919,762 cells; h/2 was 630,586).
+
+castellatedMesh true;
+snap            true;
+addLayers       false;
+
+geometry
+{
+    rotor_blade_a.stl       { type triSurfaceMesh; name rotor_blade_A; }
+    rotor_blade_b.stl       { type triSurfaceMesh; name rotor_blade_B; }
+    hub_spinner.stl         { type triSurfaceMesh; name hub_spinner_1; }
+    hub_spinner001.stl      { type triSurfaceMesh; name hub_spinner_2; }
+    nacelle_body.stl        { type triSurfaceMesh; name nacelle_body; }
+    nacelle_service_cover.stl { type triSurfaceMesh; name nacelle_service_cover; }
+    tower_body.stl          { type triSurfaceMesh; name tower_body; }
+    yaw_sensor_shim.stl     { type triSurfaceMesh; name yaw_sensor_shim; }
+    rotating_cellzone.stl
+    {
+        type    triSurfaceMesh;
+        name    rotating_cellzone;
+    }
+};
+
+castellatedMeshControls
+{
+    maxLocalCells       4000000;
+    maxGlobalCells      15000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 3;
+    resolveFeatureAngle 30;
+    allowFreeStandingZoneFaces true;
+
+    features
+    (
+        // h/4: features level minus 2 vs canonical (canonical levels: 5,5,4,4,3,4,3,2).
+        // Floor at level 1 — features must be ≥1 for nonzero feature snap.
+        { file "rotor_blade_a.eMesh";        level 3; }
+        { file "rotor_blade_b.eMesh";        level 3; }
+        { file "hub_spinner.eMesh";          level 2; }
+        { file "hub_spinner001.eMesh";       level 2; }
+        { file "nacelle_body.eMesh";         level 1; }
+        { file "nacelle_service_cover.eMesh"; level 2; }
+        { file "tower_body.eMesh";           level 1; }
+        { file "yaw_sensor_shim.eMesh";      level 1; }
+    );
+
+    refinementSurfaces
+    {
+        rotor_blade_A
+        {
+            // h/4: (2,3) → effective 125 / 62.5 mm (canonical (4,5) = 31.25/15.6).
+            level (2 3);
+            patchInfo { type wall; }
+        }
+        rotor_blade_B
+        {
+            level (2 3);
+            patchInfo { type wall; }
+        }
+        hub_spinner_1
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        hub_spinner_2
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        nacelle_body
+        {
+            level (1 1);
+            patchInfo { type wall; }
+        }
+        nacelle_service_cover
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+        tower_body
+        {
+            level (1 1);
+            patchInfo { type wall; }
+        }
+        yaw_sensor_shim
+        {
+            level (0 1);
+            patchInfo { type wall; }
+        }
+        rotating_cellzone
+        {
+            level (0 1);
+            faceZone    rotating_cellzone_faces;
+            cellZone    rotating_cellzone;
+            cellZoneInside  inside;
+        }
+    };
+
+    refinementRegions
+    {
+        rotating_cellzone
+        {
+            // h/4: interior level 1 retained (matching h/2; level 0 would
+            // eliminate MRF-zone refinement entirely, making zone extraction
+            // marginal). This is documented monotonicity caveat — see
+            // validation report §5.
+            mode    inside;
+            levels  ((1e15 1));
+        }
+    };
+
+    locationInMesh (3000 0 0);
+
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      30;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap true;
+    explicitFeatureSnap false;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes       true;
+    expansionRatio      1.2;
+    finalLayerThickness 0.5;
+    minThickness        0.1;
+    nGrow               0;
+    featureAngle        60;
+    nRelaxIter          5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals      3;
+    nSmoothThickness    10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle  90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter          50;
+    layers {}
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+    nSmoothScale 4;
+    errorReduction 0.75;
+}
+
+writeFlags
+(
+    scalarLevels
+    layerSets
+    layerFields
+);
+
+mergeTolerance 1e-6;
+
+// ************************************************************************* //
