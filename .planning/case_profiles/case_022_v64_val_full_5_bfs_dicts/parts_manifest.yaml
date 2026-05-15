@@ -1,0 +1,88 @@
+# case_022 · parts_manifest · minimal stub
+#
+# This case is blockMesh-native (2D backward-facing step · no STL parts).
+# Manifest is preserved for cross-case schema parity but contains no
+# surface mesh references. Geometry is fully described in
+# system/blockMeshDict (3 hex blocks: upstream channel, downstream upper,
+# recirculation below step level).
+
+case_id: case_022_driver_seegmiller_bfs
+schema_version: 1
+geometry_mode: blockMesh_native  # vs. stl_based for surface-mesh cases
+last_assessed: "2026-05-15"
+last_assessed_by: "Claude Code Opus 4.7 (V64-A B65/B66 dispatch · M-V64A-VAL-FULL-5-BFS)"
+
+# No STL parts — BFS is 7 quadrilateral faces (3 wall regions + inlet/outlet/top + 2 empty)
+parts: []
+
+# Logical surface labels (resolved to blockMeshDict patches, not STL files).
+patches:
+  - name: inlet
+    role: velocity_inlet
+    blockmesh_patch: inlet
+    location: "x = 0, y ∈ [h, H_in + h] · upstream channel inlet"
+  - name: outlet
+    role: pressure_outlet_zerogradient
+    blockmesh_patch: outlet
+    location: "x = L_total, y ∈ [0, H_in + h] · downstream outlet (2 faces: above + below step level)"
+  - name: topWall
+    role: no_slip_wall
+    blockmesh_patch: topWall
+    location: "y = H_in + h, x ∈ [0, L_total] · upper wall (both sections)"
+  - name: bottomUpstream
+    role: no_slip_wall
+    blockmesh_patch: bottomUpstream
+    location: "y = h, x ∈ [0, x_step] · upstream channel floor (top of step)"
+  - name: stepWall
+    role: no_slip_wall
+    blockmesh_patch: stepWall
+    location: "x = x_step, y ∈ [0, h] · vertical step face"
+  - name: bottomDownstream
+    role: no_slip_wall
+    blockmesh_patch: bottomDownstream
+    location: "y = 0, x ∈ [x_step, L_total] · post-step floor · canonical Cp/Cf/x_R/h extraction surface"
+    canonical_reference: "NASA TM 86658 Driver & Seegmiller 1985, Figures 7-9 (Cp,Cf,x_R/h)"
+  - name: frontAndBack
+    role: empty_2d
+    blockmesh_patch: [frontAndBack]
+    location: "z = 0 and z = z_thick · 2D wedge layer"
+
+# Risk flags from CaseProfile registry (knowledge/schemas/risk_flag_registry.yaml).
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      First-time BFS substrate. blockMesh + simpleFoam topology is mature
+      (NASA TMR canonical equivalent). Mitigation: full Docker invocation
+      captured in RUN_LOG.md.
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      BFS + kOmegaSST + bounded-upwind is a textbook benchmark topology.
+      ERCOFTAC test case 30 and NASA TMR validation manual both reference
+      this case-class as canonical for separation/reattachment validation.
+  - flag_id: inlet_bc_developed_profile
+    triggered: true
+    justification: |
+      Driver-Seegmiller 1985 experimental inlet BL had δ/h ≈ 1.5 (thick,
+      fully-developed). Reproducing this with uniform inlet at U_ref=44.2 m/s
+      requires L_dev > 100·h (impractical for single-block topology). Per
+      briefing reverse condition ("BC complexity overshoot → 简化为 uniform
+      inlet + 长 inlet section"), this substrate uses 20·h inlet section
+      (doubled from briefing's 10·h) with uniform inlet. Expected pre-step
+      δ/h ≈ 0.4 — documented deviation. x_R/h sensitivity to δ/h is the
+      principal honest risk.
+
+tolerance_policy:
+  reattachment_length:
+    canonical: 6.26  # x_R/h, NASA TM 86658 Fig 7 (Driver & Seegmiller 1985, p. 18)
+    tolerance_strict_full: 0.04   # ± 5% → [6.0, 6.5]
+    tolerance_marginal:    0.12   # ± 12% → [5.5, 7.0]
+  cp_recovery:
+    tolerance: 0.10  # 10% on 5/5 stations
+    canonical_source: "NASA TM 86658 Driver & Seegmiller 1985, Figure 8 (Cp on downstream wall)"
+    stations_xh: [1, 4, 8, 12, 16]
+  cf_skin_friction:
+    tolerance: 0.20  # 20% on 5/5 stations (Cf more sensitive to inlet δ/h than Cp)
+    canonical_source: "NASA TM 86658 Driver & Seegmiller 1985, Figure 9 (Cf on downstream wall)"
+    stations_xh: [1, 4, 8, 12, 16]
