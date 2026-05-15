@@ -1,0 +1,42 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvOptions — V106 thermo-FPE substrate-fix template · 2nd application retry.   |
+|                                                                              |
+| Source: case_006_v64_thermo_fpe_fix_dicts + case_016_v64_thermo_fpe_fix_dicts |
+| (V64-A B61 1st application: rhoSimpleFoam M=0.84 ONERA M6 + rhoPimpleFoam    |
+|  M=0.85 m219 cavity).                                                        |
+|                                                                              |
+| 2nd application context (V65-A B84):                                         |
+| - Solver: rhoPimpleFoam (PIMPLE-based · processes fvOptions ✓)              |
+| - Transport: sutherland (As=1.4585e-6, Ts=110.4 — same recipe as V64-A B61) |
+| - Inflow: M=0.58 (U=200 m/s, T=293 K)                                       |
+| - NACA0012 transonic flow — different geometry, similar M regime to ONERA M6 |
+|                                                                              |
+| Template: limitTemperature [min 110 K, max 2000 K] on all cells.            |
+| Tutorial originally had limitT [101, 1000]; V106 canonical is [110, 2000]:   |
+| - min 110 K: matches sutherland Ts=110.4 K floor (V64-A B61 canonical)      |
+| - max 2000 K: safe upper bound (V64-A B61 canonical)                        |
+| - selectionMode all: V64-A B61 canonical                                    |
+|                                                                              |
+| Expected: "Selecting finite volume options" + "Selecting type limitTemperature"|
+| in log → template activated → V106 LANDS as 2nd application.                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+limitT_V106_2nd_witness
+{
+    type            limitTemperature;
+    active          yes;
+    selectionMode   all;
+    min             110.0;
+    max             2000.0;
+}
+
+
+// ************************************************************************* //
