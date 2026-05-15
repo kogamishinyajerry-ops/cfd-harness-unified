@@ -151,7 +151,7 @@ None of these are in scope for this single-shot focused attack. Documented as fu
 
 - **Cells**: 65,536 (256×256×1 · vertex count 257²=66,049 in 2D, 132,098 with z-extrude)
 - **Grading**: simpleGrading multi-grading `((0.5 128 5)(0.5 128 0.2))` on x AND y; uniform z
-- **Wall cell**: 0.001569 m (B65: 0.00775 m, 5× coarser)
+- **Wall cell**: 0.001569 m (B65: 0.00775 m · v2 is **5× finer** at the wall)
 - **Center cell**: 0.007844 m (B65: 0.00775 m, ~equal — slightly coarser than B65)
 - **checkMesh**: Max AR 5.0 · max non-orth 0 · max skew 4.87e-13 · **Mesh OK**
 
@@ -209,7 +209,7 @@ Per briefing reverse condition table:
 
 **The brief's reverse condition table did not anticipate a "setup-succeeds-but-physics-regresses" outcome.** The closest enumerated bucket is PARTIAL v2 (setup-fail / mesh fail / divergence) — extended here to cover "stretching strategy misapplied"; alternative interpretation is "marginal regression" but the v 6.49% is far outside any band. By strict reading of the FULL gate, this is **NOT FULL**, hence at minimum PARTIAL. Honest classification: **PARTIAL v2 (physics regression)**.
 
-Done #1 stays **0/3 strict FULL**. No advancement, not inflated.
+Done #1 stays **1/3 strict FULL** (Poiseuille @ fea931e). No advancement-by-v2, not inflated. (See §2 for Done #1 baseline rationale.)
 
 ---
 

@@ -103,7 +103,7 @@ Trace 8 checkpoints: see `.planning/case_profiles/case_024_v64_cavity_v2_dicts/C
 1. **B65 hypothesis falsified**: The "129×129 uniform under-resolves descending wall jet" framing in B65 §1 is wrong at single-direction x-stretching. The B65 v-centerline 4-point band is NOT a pure x-resolution issue.
 2. **True driver of v-centerline error**: Combination of (a) y-resolution at y=0.5 sample line, (b) bounded linearUpwindV over-shoot on high-AR cells, (c) cell-Reynolds-number disparity between x and y across the half-block boundary at x=0.5 or y=0.5. Diagnostic-grade hypothesis; not formally tested.
 3. **3 untested v3 strategies** (out of scope this sub-DEC): (A) cluster x ONLY, keep y uniform; (B) reduce AR to 2:1; (C) pure h-refinement uniform 257×257; (D) switch to vanLeer or limitedLinearV scheme. Each is a separate-sub-DEC effort.
-4. **5/5 PARTIAL signal**: V64-A strict 3% gate empirically very hard. V64-A retro should weigh relaxation to 5% CFD-convention vs pivot to other Done dims.
+4. **5/6 PARTIAL signal**: 5 of 6 V64-A FULL attempts have landed PARTIAL (case_004 v4 · case_006 · case_021 · case_024 B65 · case_024 v2); only case_025 Poiseuille FULL cleared the strict 3% gate (and Poiseuille is a 1D analytical canonical without 2D flow features). V64-A retro should weigh relaxation to 5% CFD-convention vs restricting FULL targets to 1D analytical canonicals vs pivot to other Done dims.
 
 ## §8 Out of scope
 
