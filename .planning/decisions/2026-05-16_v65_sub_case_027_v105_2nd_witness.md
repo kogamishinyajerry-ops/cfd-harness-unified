@@ -4,7 +4,7 @@ title: case_027 v65 Hagen-Poiseuille pipe 2nd Re point · V105 wedge-axis 2nd wi
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed8197acaccee0a43cc7ab)
 predecessor: DEC-V64-A-sub-M-V64A-VAL-FULL-PIPE
 batch: B82
 confidence: high
