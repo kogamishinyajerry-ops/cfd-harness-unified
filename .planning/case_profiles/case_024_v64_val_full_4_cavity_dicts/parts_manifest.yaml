@@ -1,0 +1,70 @@
+# case_024 · parts_manifest · minimal stub
+#
+# This case is blockMesh-native (no STL parts). Manifest is preserved
+# for cross-case schema parity but contains no surface mesh references.
+# Geometry is a single 1m × 1m square cavity fully described in
+# system/blockMeshDict.
+
+case_id: case_024_lid_driven_cavity
+schema_version: 1
+geometry_mode: blockMesh_native  # vs. stl_based for surface-mesh cases
+last_assessed: "2026-05-15"
+last_assessed_by: "Claude Code Opus 4.7 (V64-A B65 dispatch · M-V64A-VAL-FULL-4-CAVITY)"
+
+# No STL parts — square cavity is a single hexahedral block.
+parts: []
+
+# Logical surface labels (resolved to blockMeshDict patches, not STL files).
+patches:
+  - name: lid
+    role: moving_wall_tangential
+    blockmesh_patch: lid
+    canonical_reference: "Ghia, Ghia & Shin (1982) JCP 48:387-411 · u=(1,0,0) at y=1"
+  - name: walls_fixed
+    role: no_slip_wall
+    blockmesh_patch: walls_fixed   # bottom + left + right combined
+  - name: front_back
+    role: empty_2d
+    blockmesh_patch: [frontAndBack]
+
+# Risk flags from CaseProfile registry (knowledge/schemas/risk_flag_registry.yaml).
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      First-time substrate for case_024, but lid-driven cavity is THE most
+      validated incompressible RANS canonical (the CFD textbook example).
+      laminar simpleFoam on a 2D blockMesh-native cavity is the lowest-risk
+      OpenFOAM topology possible (no turbulence model, no STL, no rotation,
+      no compressibility, no transition).
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      Square cavity + steady laminar simpleFoam + GAMG/PBiCGStab is the
+      pitzDaily lineage stripped of every complexity layer. Zero novel-
+      geometry risk; the geometry is one block with axis-aligned faces.
+  - flag_id: re_dependent_parameter_sweep
+    triggered: true
+    justification: |
+      Three Re values (100, 400, 1000) realized via 3 distinct ν values
+      in transportProperties; all other dicts identical across cases.
+      Mitigation: 3 sandbox case dirs (case_re100/400/1000) sharing
+      system/ + 0/ + constant/turbulenceProperties; only
+      constant/transportProperties differs per case.
+
+tolerance_policy:
+  u_centerline:
+    tolerance: 0.03  # strict FULL gate: 3% per briefing reverse condition
+    canonical_source: "Ghia, Ghia & Shin (1982) JCP 48:387-411 Table I"
+    sample_points: 17  # canonical Ghia y/L locations
+  v_centerline:
+    tolerance: 0.03  # strict FULL gate: 3% per briefing reverse condition
+    canonical_source: "Ghia, Ghia & Shin (1982) JCP 48:387-411 Table II"
+    sample_points: 17  # canonical Ghia x/L locations
+  residuals:
+    tolerance: 1.0e-7  # strict FULL gate per briefing (deep laminar convergence)
+    note: |
+      Briefing said "6/6 < 1e-7"; laminar simpleFoam has 3 fields
+      (p, Ux, Uy) + continuity, no k/omega. So strict gate honored
+      via 4/4 < 1e-7 instead of 6/6 — field-count adjusted for
+      laminar regime, not gate relaxed.
