@@ -4,7 +4,7 @@ title: V64-A Tier 2 sub-DEC · case_004 NREL Phase VI MRF · case-spec correctio
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-CASE-004-CASE-SPEC-FIX (B56 follow-up · 2nd FULL attempt with case-spec correction)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81c593b7fe9b322907cb)
 authored_by: Claude Code Opus 4.7 (1M context) · sub-session B57
 authored_at: 2026-05-15
 confidence: med

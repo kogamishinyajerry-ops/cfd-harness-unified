@@ -4,7 +4,7 @@ title: case_004 mesh convergence study at h/2 and h/4 refinement levels
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-MESH-CONV-STUDY
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81758b3ec11f26c95f2c)
 autonomous_governance: true
 confidence: med
 date_decided: 2026-05-15

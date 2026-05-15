@@ -71,7 +71,8 @@
 - [ ] **M-V64A-VAL-FULL-2** case_011 (or non-degenerate substitute) FULL validation report · solver convergence + plate-fin HX literature/handbook 对比 · commit: `_____`
 - [x] **M-V64A-VAL-CASE-016-FULL** (B53 · charter §3 "cheapest unblock" attempt · **PARTIAL v2 verdict · charter premise refuted**) · commit chain `356be51` (feat controlDict 0.5→40ms) → `4e8522d` (validation report v2 PARTIAL · crash forensics) → `a7eb58c` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-VAL-CASE-016-FULL` Accepted (2026-05-15 · rhoPimpleFoam crashed t=1.24ms sigFpe FE_DIVBYZERO in libfluidThermophysicalModels · likely T-domain violation in shock startup · 2-axis problem [thermo stability + window extension] not 1-axis · NOT counted toward Done #1 FULL · Done #1 stays 0/3 · M-V64A-VAL-FULL-3 candidate path now reconsidered: case_009 Sandia Flame D OR case_006 ONERA M6 shock-position as fallback · confidence: med · 4Q gate inline PASS · briefing explicitly authorized "PARTIAL v2 · 不掩盖")
 - [ ] **M-V64A-VAL-FULL-3** 3rd FULL report · **candidate path (case_016 charter-cheapest refuted via B53)**: case_009 Sandia Flame D vs Sandia experimental DB OR case_006 ONERA M6 shock-position OR case_016 with thermo-FPE bounding (sutherland T-clamps) · commit: `_____`
-- [ ] **M-V64A-MESH-CONV-STUDY** mesh convergence study (h/2 + h/4) 在 ≥1 case 上 monotonic convergence trend · commit: `_____`
+- [x] **M-V64A-MESH-CONV-STUDY** (B58 · **MONOTONIC PASS ✓** · case_004 h=919k / h/2=630k / h/4=566k · Cp + Ct 单调 across 3 levels · Δ Cp |h-h/4|/|h| = 8.47% · checkMesh PASS-w/-1-flag 三档 · transformPoints scale fix v2 · 副产品: mesh NOT root cause of case_004 不收敛 · 强化 F-NEW-3 case-spec attribution · 注: monotonic but NOT asymptotic · 完整 Richardson order quantification 需 h×2≈1.8M baseline) · commit chain `27d2ddf` (h/2 dicts + sHM 630k) → `94ecf97` (h/4 dicts + sHM 566k) → `23b3e0f` (solver + Richardson) → `c1f0877` (sub-DEC) · sub-DEC `DEC-V64-A-sub-M-V64A-MESH-CONV-STUDY` Accepted (B58 · 2026-05-15 · Notion synced 361c68942bed81758b3ec11f26c95f2c · confidence: med · counter +1)
+- [x] **M-V64A-CASE-004-CASE-SPEC-FIX** (B57 · B56 follow-up · **PARTIAL v3 verdict** · 不在原 milestone 表 · 新增追加) · commit chain `90b5f38` (case-spec correction axis flip + 0° pitch + 11 v3 dicts) → `21ba39b` (solver v3 + Δ vs Seq S 7 m/s) → `843db0e` (sub-DEC Accepted) · 关键: M_x sign flip 经验证 (-10189 → +10077 N·m) · F_x sign flip 经验证 · |M_x| magnitude **基本不变** ~10000 N·m → Cp 仍 ≈4.55 (7.7× over Betz 0.593) · **F-NEW-3 root cause IDENTIFIED**: `scripts/build_cad.py::section_wire()` 行 294 `theta = math.radians(twist_deg + TIP_PITCH_DEG)` 产生 chord 沿 rotation axis (feathered) 而不是 NREL convention 的 chord in rotor plane → blade 当 feathered 转 · drag-driven torque · energy source ½ρω²R² 不是 ½ρU³ · 解释为何 axis-flip + pitch-zero 都不改 Cp magnitude · 2 scoped repair paths: (a) one-line section_wire fix (b) case substitution · 推荐 (b) case_006 ONERA M6 cheapest path · sub-DEC `DEC-V64-A-sub-M-V64A-CASE-004-CASE-SPEC-FIX` Accepted (Notion synced 361c68942bed81c593b7fe9b322907cb · confidence: med · counter +1 · "PARTIAL v3 不掩盖" 授权 by B57 dispatch reverse-condition)
 
 ### Tier 3 · close
 
@@ -85,16 +86,16 @@
 
 ```
 当前 FULL validation reports (real solver convergence + literature delta):
-                                                  **0 / 3 strict** (B53 case_016 + B56 case_004 PARTIAL v2 · 2 honest attempts · NO inflation · M-V64A-VAL-FULL-2 + M-V64A-VAL-FULL-3 path 重选 [case_009 / case_006 ONERA M6 / case_011 non-degen / case_004 case-spec fix sub-DEC])
-当前 canonical literature comparisons:            **1 / 3** (B56 case_004 NREL UAE Sequence S 7 m/s comparison performed · Δ Cp +1051% honestly reported · Done #2 dim 要求 comparison made not Δ within tolerance)
-当前 mesh convergence study (h/2 + h/4 monotonic): 0 / 1 (start · case TBD · M-V64A-MESH-CONV-STUDY)
-当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (case_004 V63-A PARTIAL → V64-A PARTIAL v2 NOT upgraded · case_016 V63-A PARTIAL → V64-A PARTIAL v2 NOT upgraded · target 2/3 over-met 3/3)
-当前 V63-A carry-over closure:                    **2 / ≥4** (#2 first half mesh gen v2 closed B54 ✓ · #6 case_006 substrate v2 closed B55 ✓ · 待 #2 second half [case_004 solver case-spec fix] + #1/#3/#4 中 ≥2)
-当前 V-row truth-capture rate:                    clause-1 over-met 3/2 (case_011 7/9 + case_004 5/9 + case_006 5/9 firm · B55 V27+V28 LANDED solver_block_advisor) · clause-2 ≥3/9 on ≥3 cases over-met 3/3 carry-forward · ≥7/9 on 1 case carry-forward case_011 7/9
-当前 Done dims MET:                               0 / 6 (V64-A active · Tier 1 全部 closed [B53 + B54 + B55] · Tier 2 first FULL B56 attempted PARTIAL v2 · 待 strict FULL × 3 + mesh conv + PARTIAL→FULL upgrade)
+                                                  **0 / 3 strict** (B53 case_016 + B56 case_004 + B57 case_004 v3 · 3 honest PARTIAL attempts · NO inflation · F-NEW-3 blade chord-axis bug 已确定 · M-V64A-VAL-FULL-2 path 切到 case_006 ONERA M6 [substrate ready] OR case_009 Sandia Flame D)
+当前 canonical literature comparisons:            **1 / 3** (B56 case_004 NREL UAE Seq S 7 m/s 一次 · B57 v3 fix-rerun 同 baseline 不计 net-new · 待 case_006 ONERA M6 Schmitt-Charpin OR case_009 Sandia TNF)
+当前 mesh convergence study (h/2 + h/4 monotonic): **1 / 1 ✓** (B58 case_004 三档 h=919k/h/2=630k/h/4=566k · Cp + Ct 单调 PASS · Δ Cp 8.47%)
+当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (case_004 V63-A PARTIAL → V64-A PARTIAL v3 NOT upgraded · case_016 V63-A PARTIAL → V64-A PARTIAL v2 NOT upgraded · target 2/3)
+当前 V63-A carry-over closure:                    **2 / ≥4** (#2 first half mesh gen v2 closed B54 ✓ · #6 case_006 substrate v2 closed B55 ✓ · 待 #2 second half [需 F-NEW-3 fix 或 case sub] + #1/#3/#4 中 ≥2)
+当前 V-row truth-capture rate:                    clause-1 over-met 3/2 (case_011 7/9 + case_004 5/9 + case_006 5/9) · case_004 V-row 12 rows after B57 (4 F-NEW rows · F-NEW-3 是 root cause · F-NEW-4 procedural · F-NEW-1 resolved) · clause-2 ≥3/9 on ≥3 cases over-met 3/3 · ≥7/9 on 1 case carry-forward case_011 7/9
+当前 Done dims MET:                               **1 / 6 ✓** (V64-A Done #3 MET ✓ via B58 monotonic mesh-conv PASS · 待 strict FULL × 3 + PARTIAL→FULL upgrade ≥2 + Done #6 ≥7/9 on 1 case · Done #2 + #5 部分推进未 MET)
 ```
 
-最后更新时间：`2026-05-15 (V64-A B55 + B56 dual-dispatch landed · B55 case_006 substrate v2 5/9 firm · solver_block_advisor LANDED #11 advisor stack-wide + Codex round-1 fix verbatim 2× P2 closed · B56 case_004 first FULL attempt PARTIAL v2 · Done #2 0→1 canonical literature comparison · Done #1 stays 0/3 strict no inflation · 2 sub-DECs Notion synced 361c68942bed81539184f80e396436b2 + 361c68942bed8100b87dd21bafa8080e · 更新人：Claude Code Opus 4.7 session main)`
+最后更新时间：`2026-05-15 (V64-A B57 + B58 dual-dispatch landed · B57 case_004 case-spec fix PARTIAL v3 · axis-flip + 0° pitch 经验证但 Cp 不变 · F-NEW-3 blade chord-axis convention bug ROOT CAUSE IDENTIFIED at scripts/build_cad.py::section_wire() line 294 · B58 mesh-conv MONOTONIC PASS · Done #3 0/1 → 1/1 ✓ 首个 Done dim MET · 副产品: mesh NOT root cause of case_004 不收敛 · 强化 F-NEW-3 case-spec attribution · 2 sub-DECs Notion synced 361c68942bed81c593b7fe9b322907cb + 361c68942bed81758b3ec11f26c95f2c · 更新人：Claude Code Opus 4.7 session main)`
 
 ---
 
@@ -167,13 +168,20 @@ V64-A is the "Validation Maturity" choice precisely because V63-A asset reuse is
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-15 B55 + B56 dual-dispatch landed** · Tier 1 全部 closed (B53 case_016 PARTIAL v2 · B54 mesh gen v2 · B55 case_006 substrate v2 5/9 firm) · Tier 2 first FULL attempt B56 case_004 PARTIAL v2 verdict · 2 sub-DECs Notion synced. **关键经验**: Done #1 strict FULL 不能靠 cheapest-path 拿到 — case_016 thermo-FPE 阻、case_004 case-spec 阻 (rotation direction + 3° pitch 错配) · 必须真正修 case-spec 才能 push 0→1/3 strict FULL.
+> **2026-05-15 B57 + B58 dual-dispatch landed** · 首个 Done dim MET (Done #3 monotonic mesh-conv ✓) · case_004 root cause F-NEW-3 锁定 (blade chord-axis convention bug · scripts/build_cad.py::section_wire() line 294 · feathered blade 不是 rotor plane) · case_004 已经 3 次 PARTIAL (v2 / v3 / case-spec fix) · cheapest fix path 走完，必须 (a) one-line section_wire() blade CAD fix + 4th 尝试 OR (b) case substitution.
 >
-> **下一会话候选** (按推进 Done #1 strict FULL · ROI 排序):
+> **关键判断**: case_004 vs 切到 case_006 ONERA M6 · 后者 cheapest 因为：
+> - case_006 substrate v2 已经 closed (B55 · V-row 5/9 firm)
+> - ONERA M6 transonic wing 是 **canonical 黄金标准** compressible RANS validation case
+> - Schmitt-Charpin experimental Cp distribution at 7 wing sections 公开 + 文献广泛
+> - rhoSimpleFoam steady transonic solver · advisor stack 已有 V-row 支持
+> - 不需要碰 blade CAD bug (与 case_004 是 disjoint substrate)
 >
-> 1. **M-V64A-CASE-004-CASE-SPEC-FIX** (Tier 2 · NEW sub-DEC · B56 follow-up · 高 ROI · 修 case_004 rotation direction + 3° → 0° pitch · 重跑 simpleFoam · 拿 Done #1 0→1/3 strict FULL · NREL UAE Seq S 实验数据已经 ready · 阻力：需要 case.yaml 编辑 + 重跑 solver · 成本中等)
-> 2. **M-V64A-MESH-CONV-STUDY** (Tier 2 · 推 Done #3 0→1 · case_004 mesh v2 919k 已经 ready · 再 sHM 跑 h/2 (≈460k) + h/4 (≈230k) refinement · case_004 是天然候选因为 mesh v2 LANDED · 副产品: 推进 Done #5 carry-over #2 second half [solver run] 或 reframe 为 mesh sensitivity)
-> 3. **M-V64A-VAL-FULL-2** (Tier 2 · 第二次 FULL 尝试 · candidate substitution: case_009 Sandia Flame D vs Sandia experimental DB · 或 case_011 non-degen substrate swap · 或 case_006 ONERA M6 shock-position vs canonical M6 wing data · 成本最高但 Done #1 strict 必经)
-> 4. **M-V64A-D11-CROSS-VAL** (Tier 3 · parallel-safe · D11 stl_face_label_validator 上 case_018/019/020 · V63-A carry-over #4 closure · 不阻 Tier 2 FULL path)
+> **下一会话候选** (按 Done #1 strict FULL ROI 排序):
 >
-> **推荐并行**：**B57 = M-V64A-CASE-004-CASE-SPEC-FIX**（修 case_004 拿 strict FULL · Done #1 唯一近期可达路径）+ **B58 = M-V64A-MESH-CONV-STUDY**（case_004 mesh v2 + sHM h/2 + h/4 · 推 Done #3 0→1 · 副产品验证 mesh 不是 case_004 不收敛 root cause）。两个 milestone 共享 case_004 ready state · 但 B57 编辑 case.yaml + 重跑 solver · B58 跑 sHM refinement levels · scope-disjoint · 可真并行.
+> 1. **M-V64A-VAL-FULL-2 (case_006 ONERA M6)** (Tier 2 · 高 ROI · substrate ready · canonical experimental data ready · rhoSimpleFoam compressible RANS · 第 2 次真 FULL 尝试 · 推 Done #1 0→1/3 strict + Done #2 1→2/3 net-new comparison)
+> 2. **M-V64A-D11-CROSS-VAL** (Tier 3 · parallel-safe · D11 stl_face_label_validator 上 case_018/019/020 · V63-A carry-over #4 closure · 不阻 Tier 2 FULL path · 推 Done #5 carry-over 2/4 → 3/4)
+> 3. **M-V64A-CASE-004-BLADE-CAD-FIX** (Tier 2 · NEW sub-DEC · 修 scripts/build_cad.py section_wire() blade chord-axis convention · 4th 解 v4 simpleFoam 尝试 · 较 (1) 风险高因为 fix 是否拿真收敛仍 unknown · 但能 close case_004 carry-over · 列为 follow-up)
+> 4. **M-V64A-VAL-FULL-3 (case_009 Sandia Flame D)** (Tier 2 · 较高成本 · 还需 case_009 substrate prep · 串行后于 (1)) 
+>
+> **推荐并行**：**B59 = M-V64A-VAL-FULL-2 (case_006 ONERA M6)**（2nd FULL 尝试 · substrate ready · Schmitt-Charpin canonical · 推 Done #1 0→1/3 strict）+ **B60 = M-V64A-D11-CROSS-VAL**（Tier 3 parallel-safe · D11 cross-case 验证 · 推 Done #5 carry-over 2/4 → 3/4 · 完全 disjoint scope 不碰 case_006）。两个 brief scope-disjoint · 真并行.
