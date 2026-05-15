@@ -20,13 +20,13 @@
   },
   "dispatch": {
     "dispatched": true,
-    "duration_ms": 0.006875023245811462,
+    "duration_ms": 0.007958966307342052,
     "status": "ok"
   },
   "stack_invocation": {
     "d11_findings": [],
     "stack_advisor_count": 4,
-    "stack_duration_ms": 7.3940419824793935,
+    "stack_duration_ms": 7.379875052720308,
     "stack_finding_count": 9
   },
   "substrate_source": ".planning/methodology/kickoff/case_020_codex_response.md",
@@ -39,6 +39,14 @@
       "total": 0
     },
     "archetype": "v94_counter_example_patches_emitted_as_bodies",
+    "direct_findings_by_code": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 0,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 0
+    },
+    "direct_match_expected": true,
+    "direct_match_stack": true,
     "expected_findings": {
       "duplicate_face_label_in_manifest": 0,
       "orphan_declared_label": 0,
@@ -46,6 +54,14 @@
       "total": 0
     },
     "match": true,
+    "stack_findings_by_code": {
+      "duplicate_face_label_in_manifest": 0,
+      "orphan_declared_label": 0,
+      "shm_reference_undeclared_in_manifest": 0,
+      "total": 0
+    },
+    "stack_match_expected": true,
+    "stack_status_ok": true,
     "v94_attribution": "counter_example_proves_d11_does_not_false_positive"
   }
 }

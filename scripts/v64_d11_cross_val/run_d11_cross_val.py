@@ -110,22 +110,54 @@ def run_one(case: str) -> dict:
         if f.source_advisor == "stl_face_label_validator"
     ]
 
-    # Cross-check direct vs stack-routed: counts must agree.
-    actual_by_code = {
-        "orphan_declared_label": 0,
-        "duplicate_face_label_in_manifest": 0,
-        "shm_reference_undeclared_in_manifest": 0,
-    }
+    # Cross-check direct vs stack-routed: counts must agree AND
+    # stack-path must agree with direct-path. Per Codex R0 P1
+    # (2026-05-15 round 1): if assemble_stack stops dispatching D11,
+    # routes status="error", or normalizes a divergent finding set,
+    # the runner must surface that as a match-failure rather than
+    # silently passing on direct_report alone. Build both maps and
+    # require triple-agreement (expected == direct == stack).
+    def _empty_counts() -> dict:
+        return {
+            "orphan_declared_label": 0,
+            "duplicate_face_label_in_manifest": 0,
+            "shm_reference_undeclared_in_manifest": 0,
+        }
+
+    direct_by_code = _empty_counts()
     for f in direct_report.findings:
-        actual_by_code[f.code] = actual_by_code.get(f.code, 0) + 1
-    actual_by_code["total"] = sum(
-        v for k, v in actual_by_code.items() if k != "total"
+        direct_by_code[f.code] = direct_by_code.get(f.code, 0) + 1
+    direct_by_code["total"] = sum(
+        v for k, v in direct_by_code.items() if k != "total"
     )
 
-    expected_codes = {
-        k: expected[k] for k in actual_by_code
-    }
-    match = actual_by_code == expected_codes
+    stack_by_code = _empty_counts()
+    for f in d11_findings_from_stack:
+        code = f["code"]
+        stack_by_code[code] = stack_by_code.get(code, 0) + 1
+    stack_by_code["total"] = sum(
+        v for k, v in stack_by_code.items() if k != "total"
+    )
+
+    expected_codes = {k: expected[k] for k in direct_by_code}
+
+    direct_match_expected = direct_by_code == expected_codes
+    stack_match_expected = stack_by_code == expected_codes
+    direct_match_stack = direct_by_code == stack_by_code
+    stack_status_ok = d11_dispatched and d11_status == "ok"
+
+    # Composite match: dispatch must be OK, AND both routes must agree
+    # with each other AND with expected.
+    match = (
+        stack_status_ok
+        and direct_match_expected
+        and stack_match_expected
+        and direct_match_stack
+    )
+
+    # Keep the legacy alias for downstream readers but make it the
+    # composite, not the direct-only short-circuit.
+    actual_by_code = direct_by_code
 
     return {
         "case_id": sub["case_id"],
@@ -152,8 +184,14 @@ def run_one(case: str) -> dict:
         },
         "verdict": {
             "expected_findings": expected_codes,
-            "actual_findings": actual_by_code,
-            "match": match,
+            "actual_findings": actual_by_code,           # alias = direct
+            "direct_findings_by_code": direct_by_code,
+            "stack_findings_by_code": stack_by_code,
+            "direct_match_expected": direct_match_expected,
+            "stack_match_expected": stack_match_expected,
+            "direct_match_stack": direct_match_stack,
+            "stack_status_ok": stack_status_ok,
+            "match": match,                              # composite verdict
             "archetype": expected["archetype"],
             "v94_attribution": expected["v94_attribution"],
         },
@@ -180,8 +218,13 @@ def main(argv: list[str]) -> int:
         })
         print(
             f"{case}: dispatched={evidence['dispatch']['dispatched']} "
+            f"stack_status={evidence['dispatch']['status']} "
             f"expected={verdict['expected_findings']['total']} "
-            f"actual={verdict['actual_findings']['total']} "
+            f"direct={verdict['direct_findings_by_code']['total']} "
+            f"stack={verdict['stack_findings_by_code']['total']} "
+            f"d=e:{verdict['direct_match_expected']} "
+            f"s=e:{verdict['stack_match_expected']} "
+            f"d=s:{verdict['direct_match_stack']} "
             f"match={verdict['match']} "
             f"archetype={verdict['archetype']}"
         )

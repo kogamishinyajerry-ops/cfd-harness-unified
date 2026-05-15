@@ -130,6 +130,37 @@ for this milestone).
 
 ---
 
+## 6.1 Triple-agreement verdict (Codex R0 P1 fix · 2026-05-15 round 1)
+
+Codex R0 P1 (verbatim · `scripts/v64_d11_cross_val/run_d11_cross_val.py:119-126`):
+> If `assemble_stack()` stops dispatching D11, returns `status="error"`,
+> or normalizes a different finding set than the direct validator, this
+> code still records `verdict.match = true` because the comparison is
+> built only from `direct_report.findings`. ... regressions in the
+> stack path this script is supposed to validate are silently missed.
+
+Fix: runner now builds **two** finding-count maps (`direct_by_code` +
+`stack_by_code`) and requires triple-agreement
+(`expected == direct == stack` AND `stack_status == "ok"`) before
+setting `verdict.match = true`. Any divergence is captured verbatim in
+the evidence JSON under `verdict.direct_match_expected /
+stack_match_expected / direct_match_stack / stack_status_ok`.
+
+Triple-agreement re-verification (post-fix, 2026-05-15 round 1):
+
+| Case | dispatched | stack_status | direct_match_expected | stack_match_expected | direct_match_stack | composite match |
+|---|---|---|---|---|---|---|
+| case_018 | True | ok | ✅ | ✅ | ✅ | ✅ |
+| case_019 | True | ok | ✅ | ✅ | ✅ | ✅ |
+| case_020 | True | ok | ✅ | ✅ | ✅ | ✅ |
+
+The 3 / 3 verdict from §1 is preserved AND strengthened: the dispatch
+gate did fire on all 3 cases (case_020 via the `stl_face_normals
+non-empty` leg, confirming the path-(a) walk to clean is not pruned),
+and the stack-routed findings agree with the direct-invocation findings
+on every code on every case (no _normalize_face_label divergence,
+no advisor crash, no advisor_calls dropped).
+
 ## 7. Substrate immutability + scope discipline
 
 - No existing case substrate mutated: case_018/019/020 had no

@@ -261,6 +261,37 @@ named.
 
 ---
 
+## 8.1 Codex R0 P1 fix (2026-05-15 round 1)
+
+Cadence-floor hook on push triggered an opportunistic Codex review even
+though the v2.2 1-sync-trigger rule (security boundary only) would
+normally skip. Codex R0 surfaced **1 P1 in B60-scope**
+(plus 1 P2 in case_006 v64-case006-full2 scope — out of this milestone's
+antithesis-protected zone, not addressed here).
+
+P1 (verbatim · `scripts/v64_d11_cross_val/run_d11_cross_val.py:119-126`):
+> If `assemble_stack()` stops dispatching D11, returns `status="error"`,
+> or normalizes a different finding set than the direct validator,
+> this code still records `verdict.match = true` because the comparison
+> is built only from `direct_report.findings`. ... regressions in the
+> stack path this script is supposed to validate are silently missed.
+
+Fix landed in commit (B60 round 1 fix). Runner now requires triple-
+agreement (`expected == direct == stack` AND `stack_status == "ok"`)
+before setting `verdict.match = true`; evidence JSON records all four
+sub-flags individually so any future regression on the stack path is
+caught (and visible) instead of being masked by the direct invocation.
+
+Re-run after fix: 3 / 3 cases pass triple-agreement. Section 1
+verdict preserved AND strengthened; the cross-val now also validates
+that `_should_dispatch_face_label_validator` correctly gates D11
+dispatch and `_normalize_face_label` correctly preserves the count.
+
+Round cap: 1 / 3 used (per v2.3 DEC-V61-133 cap). No further rounds
+expected since the P2 finding is out of B60 scope (case_006 work is
+the parallel main-session's responsibility; will surface in their own
+DEC-V64-A-sub-VAL-FULL-2 chain).
+
 ## 9. Codex review status
 
 **Codex sync: SKIPPED.**

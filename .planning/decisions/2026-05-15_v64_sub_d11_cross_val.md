@@ -8,8 +8,8 @@ notion_sync_status: pending (session-end batch sync per v2.3 cadence)
 autonomous_governance: true
 confidence: med
 date_decided: 2026-05-15
-codex_review_relay: skipped (no security-boundary touch · v2.2 1-sync-trigger N/A · synthetic substrate YAML + read-only advisor invocation + docs)
-codex_round_cap: N/A (no Codex review chain initiated)
+codex_review_relay: round 1 ran opportunistically via push-time cadence-floor hook (cumulative diff > 500 LOC including interleaved case_006 main-session commit) · 1 P1 in B60 scope addressed (runner dual-path divergence check landed) · 1 P2 out of B60 scope (case_006/controlDict tip_cap force-coeffs · routed to parallel main-session DEC-V64-A-sub-VAL-FULL-2 chain) · no security boundary → still consistent with v2.2 1-sync-trigger skip rationale; review was cadence-driven, not risk-class-driven
+codex_round_cap: 1 / 3 used per v2.3 DEC-V61-133 cap (no further rounds expected; P2 explicitly out of scope per antithesis)
 kogami_review: skipped (V133 opt-in only · user did not invoke)
 spike_class: false (sub-DEC scope · 3 substrate files + runner + evidence + matrix + validation report + sub-DEC)
 surface_scan: clean (no new top-level routes/ or pages/ · audit + docs + scripts/v64_d11_cross_val/ scoped)
