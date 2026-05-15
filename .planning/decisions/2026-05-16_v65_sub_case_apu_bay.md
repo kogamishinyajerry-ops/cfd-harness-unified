@@ -4,7 +4,7 @@ title: V65-A Tier 2 sub-DEC · case_028 APU bay ventilation industrial case e2e 
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A Tier 2 · M-V65A-CASE-APU-BAY
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed81d3885cf20f0a8302d2)
 authored_by: Claude Code Opus 4.7 (1M context) · V65-A B74 APU-bay sub-session
 authored_at: 2026-05-16
 confidence: med
