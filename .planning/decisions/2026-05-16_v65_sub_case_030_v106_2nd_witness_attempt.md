@@ -4,7 +4,7 @@ title: case_030 v65 wedge15Ma5 V106 thermo template 2nd application attempt · M
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed8196bedcd78283077bb9)
 predecessor: DEC-V64-A-sub-M-V64A-THERMO-FPE-FIX
 batch: B83
 confidence: med
