@@ -1,0 +1,40 @@
+    CmRoll:	3.7445944e-06	3.7498508e-06	-5.2564458e-09	0
+    CmYaw:	-3.2558855e-06	-3.2917363e-06	3.5850804e-08	0
+    Cs:	-3.4665396e-06	-3.4993614e-06	3.2821858e-08	0
+    Cs(f):	-4.9891553e-06	-5.041417e-06	5.2261732e-08	0
+    Cs(r):	1.5226157e-06	1.5420556e-06	-1.9439875e-08	0
+
+Time = 5000
+
+smoothSolver:  Solving for Ux, Initial residual = 5.0217235e-06, Final residual = 9.914947e-08, No Iterations 2
+smoothSolver:  Solving for Uy, Initial residual = 1.6258708e-05, Final residual = 3.6053527e-07, No Iterations 2
+GAMG:  Solving for p, Initial residual = 4.0844178e-05, Final residual = 3.9691439e-07, No Iterations 5
+GAMG:  Solving for p, Initial residual = 5.2983372e-06, Final residual = 8.4562798e-08, No Iterations 5
+time step continuity errors : sum local = 1.1185544e-07, global = 4.5914073e-09, cumulative = -4.0816729e-05
+smoothSolver:  Solving for omega, Initial residual = 7.4617014e-05, Final residual = 6.1878396e-07, No Iterations 2
+smoothSolver:  Solving for k, Initial residual = 7.6031041e-05, Final residual = 5.5859039e-07, No Iterations 2
+bounding k, min: -1.9221029 max: 1130.0848 average: 13.869
+ExecutionTime = 229.41 s  ClockTime = 288 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.17313875	0.16827928	0.0048594725	0
+    Cd(f):	0.08657333	0.08414359	0.0024297407	0
+    Cd(r):	0.086565417	0.084135686	0.0024297318	0
+    Cl:	1.0535757	1.0539849	-0.00040921009	0
+    Cl(f):	0.523714	0.52387381	-0.0001598065	0
+    Cl(r):	0.52986171	0.53011111	-0.00024940358	0
+    CmPitch:	-0.0030738511	-0.0031186497	4.479854e-05	0
+    CmRoll:	3.9565641e-06	3.9520896e-06	4.4744965e-09	0
+    CmYaw:	-3.3402802e-06	-3.3646062e-06	2.4325972e-08	0
+    Cs:	-3.3924263e-06	-3.5064651e-06	1.1403883e-07	0
+    Cs(f):	-5.0364934e-06	-5.1178388e-06	8.1345387e-08	0
+    Cs(r):	1.6440671e-06	1.6113737e-06	3.2693442e-08	0
+
+    writing force and moment coefficient files.
+
+yPlus yPlus1 write:
+    writing field yPlus
+    patch naca0012 y+ : min = 10.995387, max = 4624.2895, average = 1015.2534
+End
+
