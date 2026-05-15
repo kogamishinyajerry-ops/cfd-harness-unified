@@ -4,7 +4,7 @@ title: APU bay ventilation case_028 v4 Â· pimpleFoam transient relax-to-steady Â
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed819ba661f73d3794ef16)
 predecessor: DEC-V65-A-sub-M-V65A-CASE-APU-BAY-V3
 batch: B79
 confidence: med
