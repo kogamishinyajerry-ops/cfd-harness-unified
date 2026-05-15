@@ -1,0 +1,31 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object p; }
+
+// case_028 v3 (V65-A B78) ventilation · kinematic pressure (Pa / rho)
+// v3 change vs v2: intake_duct zeroGradient (velocity-driven) · vent_door fixedValue 0 (reference)
+// All 6 bg-block walls + 27 STL walls = zeroGradient
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0;
+
+boundaryField
+{
+    intake_duct
+    {
+        type            zeroGradient;
+    }
+    vent_door
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    end_minus_x { type zeroGradient; }
+    end_plus_x  { type zeroGradient; }
+    bay_top     { type zeroGradient; }
+    bay_bottom  { type zeroGradient; }
+    bay_side_p  { type zeroGradient; }
+    bay_side_n  { type zeroGradient; }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            zeroGradient;
+    }
+}

@@ -1,0 +1,210 @@
+# case_028 v3 (V65-A B78) APU Bay Ventilation · per-solid STL manifest
+# Source: ~/Desktop/apu-bay-ventilation-cht/work/stl_repair/per_solid/ (READ-ONLY)
+# Sandbox: ~/Desktop/case_028_apu_bay_ventilation/case/constant/triSurface/
+# NOT IN GIT — STL files live in sandbox only (size budget: 560 MB across 29 STLs)
+#
+# v3 changes vs v2:
+#   - intake_duct role: wall → inflow_patch (sHM patchInfo type=patch · 161k facets · bbox ~1 m²)
+#   - vent_door role:   wall → outflow_patch (sHM patchInfo type=patch · 7k facets · bbox ~0.3 m²)
+#   - blockMesh bg-block end faces -x/+x: patch → wall (renamed end_minus_x / end_plus_x)
+#   - 4 lateral patches: wall (inherited from v2)
+#   - 27 remaining STL components: wall (inherited)
+# Mass flow target: ~1.5-2 kg/s via intake_duct U_n=1.5 m/s (in SAE AIR1168/4 0.5-2 kg/s)
+
+case_id: case_028
+case_name: apu_bay_ventilation
+geometry_source: ~/Desktop/apu-bay-ventilation-cht/work/stl_repair/per_solid/
+bbox:
+  min: [63.5, -1.0, -1.5]
+  max: [67.5, 2.5, 1.5]
+  units: m
+  bay_volume_m3: 42.0  # 4 × 3.5 × 3
+
+# Patch classification per ventilation flow path
+# All STL components → noSlip walls in baseline (B74 first-pass)
+# Inlet / outlet defined via blockMesh bg block face split (not STL-driven)
+# V65-B / V66 may refactor inlet/outlet onto specific STL surfaces (intake_duct / vent_door)
+
+components:
+  # === Bay enclosure shells ===
+  - name: Outer_Surf
+    file: Outer_Surf.stl
+    size_mb: 50
+    role: wall
+    description: Bay outer shell
+
+  - name: Inner_Surf
+    file: Inner_Surf.stl
+    size_mb: 50
+    role: wall
+    description: Bay inner walls
+
+  - name: Plane_Outer_Surf
+    file: Plane_Outer_Surf.stl
+    size_mb: 57
+    role: wall
+    description: Outer plane segment
+
+  # === Ventilation pathway components (candidates for V65-B inlet/outlet refactor) ===
+  - name: intake_duct
+    file: intake_duct.stl
+    role: inflow_patch  # v3 (V65-A B78) sHM patchInfo type=patch · surfaceNormalFixedValue U=1.5 m/s
+    description: Intake air duct surface · 161,904 facets · bbox 0.93×1.19×0.89 m
+
+  - name: vent_door
+    file: vent_door.stl
+    role: outflow_patch  # v3 (V65-A B78) sHM patchInfo type=patch · inletOutlet BC · p=0 reference
+    description: Vent door (now operable open) · 7,110 facets · bbox 0.32×0.52×0.58 m
+
+  - name: door
+    file: door.stl
+    role: wall
+    description: Operable door (closed)
+
+  - name: plenum
+    file: plenum.stl
+    role: wall
+    description: Distribution plenum
+
+  - name: exhaust_pipe_1
+    file: exhaust_pipe_1.stl
+    role: wall
+    description: Exhaust pipe section
+
+  - name: exhaust_section
+    file: exhaust_section.stl
+    role: wall
+    description: Exhaust manifold
+
+  - name: bleed_air_pipe
+    file: bleed_air_pipe.stl
+    role: wall
+    description: Bleed air piping
+
+  - name: ejector
+    file: ejector.stl
+    role: wall
+    description: Ejector pump assembly
+
+  # === APU core components ===
+  - name: gearbox_1
+    file: gearbox_1.stl
+    role: wall
+    description: APU accessory gearbox instance 1
+
+  - name: gearbox_2
+    file: gearbox_2.stl
+    role: wall
+    description: APU accessory gearbox instance 2
+
+  - name: compressor
+    file: compressor.stl
+    size_mb: 70
+    role: wall
+    description: APU axial compressor
+
+  - name: load_compressor
+    file: load_compressor.stl
+    role: wall
+    description: Load compressor
+
+  - name: load_volute
+    file: load_volute.stl
+    size_mb: 138
+    role: wall
+    description: Load volute (largest single component STL)
+
+  - name: combustion_chamber
+    file: combustion_chamber.stl
+    role: wall
+    description: Combustion chamber
+
+  - name: fuel_valve
+    file: fuel_valve.stl
+    role: wall
+    description: Fuel valve (×2 instances merged into single STL)
+
+  # === Structural members ===
+  - name: firewall_front
+    file: firewall_front.stl
+    role: wall
+    description: Front firewall
+
+  - name: firewall_behind
+    file: firewall_behind.stl
+    role: wall
+    description: Rear firewall
+
+  - name: Frame_1
+    file: Frame_1.stl
+    role: wall
+  - name: Frame_2
+    file: Frame_2.stl
+    role: wall
+  - name: Frame_3
+    file: Frame_3.stl
+    role: wall
+  - name: Frame_4
+    file: Frame_4.stl
+    role: wall
+  - name: Frame_5
+    file: Frame_5.stl
+    role: wall
+  - name: Frame_6
+    file: Frame_6.stl
+    role: wall
+
+  - name: beam_1
+    file: beam_1.stl
+    role: wall
+  - name: beam_2
+    file: beam_2.stl
+    role: wall
+  - name: beam_3
+    file: beam_3.stl
+    role: wall
+
+# Block boundary patches (blockMesh side · NOT STL-driven)
+block_patches:
+  inlet:
+    face: -x  # x = 63.5
+    type: patch
+    bc_baseline: fixedValue U=(5 0 0) m/s
+    physical: Ventilation intake (longitudinal +x flow direction)
+  outlet:
+    face: +x  # x = 67.5
+    type: patch
+    bc_baseline: pressureInletOutletVelocity / zeroGradient
+    physical: Ventilation exhaust
+  bay_top:
+    face: +y  # y = 2.5
+    type: patch
+    bc_baseline: slip
+    physical: Extended bay envelope (slip ≈ symmetry without forcing)
+  bay_bottom:
+    face: -y  # y = -1.0
+    type: patch
+    bc_baseline: slip
+  bay_side_p:
+    face: +z  # z = 1.5
+    type: patch
+    bc_baseline: slip
+  bay_side_n:
+    face: -z  # z = -1.5
+    type: patch
+    bc_baseline: slip
+
+# Mesh strategy
+mesh:
+  base_block:
+    n_cells: [40, 35, 30]  # 42,000 hex cells
+    grading: simpleGrading (1 1 1)
+  sHM:
+    refinement_surfaces_level: [0, 1]  # single level near components
+    n_cells_between_levels: 2
+    expected_total_cells: 80000-120000
+    location_in_mesh: [63.8, 0.5, 0.0]  # inside fluid region
+
+# Total STL size
+total_stl_size_mb: 560
+in_git: false  # sandbox only · per case_021..027 convention

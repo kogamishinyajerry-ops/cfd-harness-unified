@@ -1,0 +1,36 @@
+FoamFile { version 2.0; format ascii; class volVectorField; location "0"; object U; }
+
+// case_028 v3 (V65-A B78) ventilation flow · STL-driven intake_duct/vent_door
+// v3 change vs v2: bg-block end faces → walls · inflow via intake_duct surfaceNormalFixedValue
+// intake_duct U_in magnitude = 1.5 m/s along inward normal (auto-aligned per face) → ~1.5-2 kg/s mass flow
+// vent_door inletOutlet (zeroGradient for outflow, fallback fixedValue (0 0 0) if reverse)
+// All 27 remaining STL components + 6 bg-block walls = noSlip
+
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (0 0 0);
+
+boundaryField
+{
+    intake_duct
+    {
+        type            surfaceNormalFixedValue;
+        refValue        uniform -0.3;          // negative = inward · empirical re-calibration: intake_duct effective area ~4.7 m² (3D ducted surface · NOT 1.1 m² bbox face) · 0.3 m/s × 4.7 m² × 1.2 kg/m³ ≈ 1.7 kg/s (in SAE 0.5-2 kg/s)
+        value           uniform (0 0 0);
+    }
+    vent_door
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0);
+    }
+    end_minus_x { type noSlip; }
+    end_plus_x  { type noSlip; }
+    bay_top     { type noSlip; }
+    bay_bottom  { type noSlip; }
+    bay_side_p  { type noSlip; }
+    bay_side_n  { type noSlip; }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            noSlip;
+    }
+}

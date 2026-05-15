@@ -1,0 +1,33 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object k; }
+
+// case_028 v3 (V65-A B78) ventilation · TKE
+// k = 1.5 · (U_in · I)² = 1.5 · (0.3 · 0.05)² = 0.000338 m²/s²  (U_in = 0.3 m/s recalibrated · I = 5%)
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0.000338;
+
+boundaryField
+{
+    intake_duct
+    {
+        type            fixedValue;
+        value           uniform 0.000338;
+    }
+    vent_door
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.000338;
+        value           uniform 0.000338;
+    }
+    end_minus_x { type kqRWallFunction; value uniform 0.000338; }
+    end_plus_x  { type kqRWallFunction; value uniform 0.000338; }
+    bay_top     { type kqRWallFunction; value uniform 0.000338; }
+    bay_bottom  { type kqRWallFunction; value uniform 0.000338; }
+    bay_side_p  { type kqRWallFunction; value uniform 0.000338; }
+    bay_side_n  { type kqRWallFunction; value uniform 0.000338; }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            kqRWallFunction;
+        value           uniform 0.000338;
+    }
+}

@@ -1,0 +1,32 @@
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object nut; }
+
+// case_028 v3 (V65-A B78) ventilation · turbulent viscosity
+// Calculated at inflow/outflow patches · nutkWallFunction on all wall surfaces
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 0;
+
+boundaryField
+{
+    intake_duct
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    vent_door
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    end_minus_x { type nutkWallFunction; value uniform 0; }
+    end_plus_x  { type nutkWallFunction; value uniform 0; }
+    bay_top     { type nutkWallFunction; value uniform 0; }
+    bay_bottom  { type nutkWallFunction; value uniform 0; }
+    bay_side_p  { type nutkWallFunction; value uniform 0; }
+    bay_side_n  { type nutkWallFunction; value uniform 0; }
+    "(Outer_Surf|Inner_Surf|Plane_Outer_Surf|door|plenum|exhaust_pipe_1|exhaust_section|bleed_air_pipe|ejector|gearbox_.*|compressor|load_compressor|load_volute|combustion_chamber|fuel_valve|firewall_.*|Frame_.*|beam_.*)"
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+}
