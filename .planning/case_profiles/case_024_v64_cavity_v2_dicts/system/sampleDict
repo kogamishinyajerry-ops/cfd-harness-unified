@@ -1,0 +1,54 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Sample u-velocity along vertical centerline (x=0.5)
+//   and v-velocity along horizontal centerline (y=0.5)
+// for comparison vs Ghia et al. 1982 Tables I & II (17 canonical y/L or x/L points).
+//
+// Run as: postProcess -func sampleDict -latestTime -dict system/sampleDict
+//
+// Output: postProcessing/sampleDict/<latestTime>/{u_vertical_centerline_U.xy,
+//                                                v_horizontal_centerline_U.xy}
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+
+type sets;
+libs (sampling);
+writeControl onEnd;
+
+interpolationScheme cellPoint;
+
+setFormat raw;
+
+fields (U);
+
+sets
+(
+    u_vertical_centerline
+    {
+        type        uniform;
+        axis        y;
+        start       (0.5 0.0  0.005);
+        end         (0.5 1.0  0.005);
+        nPoints     1001;
+    }
+    v_horizontal_centerline
+    {
+        type        uniform;
+        axis        x;
+        start       (0.0 0.5  0.005);
+        end         (1.0 0.5  0.005);
+        nPoints     1001;
+    }
+);
+
+// ************************************************************************* //

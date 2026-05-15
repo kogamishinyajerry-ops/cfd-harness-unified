@@ -1,0 +1,104 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// case_024 v2 · Lid-Driven Cavity · 2D · 256 x 256 x 1 = 65,536 cells
+// Vertex grid 257 x 257 (Ghia 1982 Table V high-Re vertex-count convention)
+//
+// Stretched simpleGrading via multi-grading:
+//   x: ((0.5 128 5)(0.5 128 0.2)) — symmetric clustering at x=0 AND x=1
+//   y: ((0.5 128 5)(0.5 128 0.2)) — symmetric clustering at y=0 AND y=1
+// Expansion ratio 5:1 = (largest cell at half-block end) / (smallest cell at wall)
+//
+// Cell-size analytical estimate (geometric progression):
+//   q = 5^(1/127) ~ 1.01275 (cell-to-cell ratio)
+//   a_1 = 0.5 / sum(q^0..q^127) = 0.5 / 318.6 = 0.001569 m  (wall cell)
+//   a_128 = a_1 * 5             = 0.007844 m              (center cell)
+// vs B65 uniform 129x129 dx = 1/129 = 0.007752 m everywhere
+// Ratio v2 wall-cell / B65 uniform = 0.001569 / 0.007752 = 0.20 (5x finer near wall)
+//
+// Target: resolve right-wall steep v-velocity gradient that drove B65
+// v-centerline max Delta 4.10% at x/L=0.9688. Stretched grid places ~5 cells
+// in [0.95, 1.00] (B65 had ~1 cell wide single layer there).
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+scale 1;
+
+vertices
+(
+    (0   0   0   )   // 0  bottom-left  back
+    (1   0   0   )   // 1  bottom-right back
+    (1   1   0   )   // 2  top-right    back
+    (0   1   0   )   // 3  top-left     back
+    (0   0   0.01)   // 4  bottom-left  front
+    (1   0   0.01)   // 5  bottom-right front
+    (1   1   0.01)   // 6  top-right    front
+    (0   1   0.01)   // 7  top-left     front
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (256 256 1)
+    simpleGrading
+    (
+        (
+            (0.5 128 5)     // x:  [0, 0.5]  · 128 cells · ratio 5  (fine at x=0, coarse at center)
+            (0.5 128 0.2)   // x:  [0.5, 1]  · 128 cells · ratio 0.2 (coarse at center, fine at x=1)
+        )
+        (
+            (0.5 128 5)     // y:  [0, 0.5]  · 128 cells · ratio 5  (fine at y=0, coarse at center)
+            (0.5 128 0.2)   // y:  [0.5, 1]  · 128 cells · ratio 0.2 (coarse at center, fine at y=1=lid)
+        )
+        1                   // z:  1 cell uniform
+    )
+);
+
+edges
+(
+);
+
+boundary
+(
+    lid
+    {
+        type wall;
+        faces
+        (
+            (3 2 6 7)   // top face: y = 1
+        );
+    }
+    walls_fixed
+    {
+        type wall;
+        faces
+        (
+            (0 4 5 1)   // bottom: y = 0
+            (0 3 7 4)   // left:   x = 0
+            (1 5 6 2)   // right:  x = 1
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 1 2 3)   // back:  z = 0
+            (4 7 6 5)   // front: z = 0.01
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //
