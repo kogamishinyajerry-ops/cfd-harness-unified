@@ -4,7 +4,7 @@ title: D11 stl_face_label_validator cross-validation on case_018 / case_019 / ca
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 3 · M-V64A-D11-CROSS-VAL (V63-A close DEC §8 carry-over #4)
-notion_sync_status: pending (session-end batch sync per v2.3 cadence)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed810f9320e649b866de60)
 autonomous_governance: true
 confidence: med
 date_decided: 2026-05-15
