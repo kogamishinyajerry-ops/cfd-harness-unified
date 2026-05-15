@@ -1,0 +1,150 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : snappyHexMesh -overwrite
+Date   : May 15 2026
+Time   : 18:44:06
+Host   : 343db1b3815f
+PID    : 237
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Read mesh in = 0.01 s
+
+Overall mesh bounding box  : (-10 -10 -0.05) (20 10 0.05)
+Relative tolerance         : 1e-06
+Absolute matching distance : 3.6055651e-05
+
+Reading refinement surfaces.
+Read refinement surfaces in = 0.01 s
+
+Reading refinement shells.
+Refinement level 2 for all cells inside refineBox
+Read refinement shells in = 0 s
+
+Setting refinement level of surface to be consistent with shells.
+For geometry naca0012.stl detected 0 uncached triangles out of 1604
+Checked shell refinement in = 0.01 s
+
+Reading features.
+Read edgeMesh naca0012.eMesh
+    points      : 802
+    edges       : 804
+    boundingBox : (0 -0.060016699 -0.050000001) (1 0.060016699 0.050000001)
+
+Refinement level according to distance to "naca0012.eMesh" (802 points, 804 edges).
+    level 5 for all cells within 0 metre.
+Read features in = 0 s
+
+
+Determining initial surface intersections
+-----------------------------------------
+
+Edge intersection testing:
+    Number of edges             : 9700
+    Number of edges to retest   : 0
+    Number of intersected edges : 0
+Edge intersection testing:
+    Number of edges             : 9700
+    Number of edges to retest   : 9700
+    Number of intersected edges : 2
+Calculated surface intersections in = 0.01 s
+
+Initial mesh : cells:2400  faces:9700  points:5002
+Cells per refinement level:
+    0	2400
+Setting refinement level of surface to be consistent with curvature.
+Checked curvature refinement in = 0 s
+
+
+Adding patches for surface regions
+----------------------------------
+
+Patch Type                Region                        
+----- ----                ------                        
+naca0012:
+
+5     wall                naca0012                      
+
+Added patches in = 0 s
+
+Edge intersection testing:
+    Number of edges             : 9700
+    Number of edges to retest   : 0
+    Number of intersected edges : 2
+Decomposition method none [1]
+
+Refinement phase
+----------------
+
+Found point (-5 0 0) in cell 1209 on processor 0
+
+Feature refinement iteration 0
+------------------------------
+
+Marked for refinement due to explicit features             : 0 cells.
+Determined cells to refine in = 0.01 s
+Selected for feature refinement : 0 cells (out of 2400)
+Stopping refining since too few cells selected.
+
+
+Surface refinement iteration 0
+------------------------------
+
+Marked for refinement due to surface intersection          : 4 cells.
+Marked for refinement due to curvature/regions             : 0 cells.
+Determined cells to refine in = 0.01 s
+Selected for refinement : 4 cells (out of 2400)
+Edge intersection testing:
+    Number of edges             : 9808
+    Number of edges to retest   : 164
+    Number of intersected edges : 8
+Refined mesh in = 0 s
+After refinement surface refinement iteration 0 : cells:2428  faces:9808  points:5059
+Cells per refinement level:
+    0	2396
+    1	32
+
+Surface refinement iteration 1
+------------------------------
+
+Marked for refinement due to surface intersection          : 16 cells.
+Marked for refinement due to curvature/regions             : 0 cells.
+Determined cells to refine in = 0 s
+Selected for refinement : 20 cells (out of 2428)
+Edge intersection testing:
+    Number of edges             : 10306
+    Number of edges to retest   : 682
+    Number of intersected edges : 32
+Refined mesh in = 0.01 s
+After refinement surface refinement iteration 1 : cells:2568  faces:10306  points:5287
+Cells per refinement level:
+    0	2392
+    1	48
+    2	128
+
+Surface refinement iteration 2
+------------------------------
+
+Marked for refinement due to surface intersection          : 64 cells.
+Marked for refinement due to curvature/regions             : 0 cells.
+Determined cells to refine in = 0 s
+Selected for refinement : 72 cells (out of 2568)
+Edge intersection testing:
+    Number of edges             : 12010
+    Number of edges to retest   : 2268
