@@ -1,0 +1,200 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : snappyHexMesh -overwrite
+Date   : May 15 2026
+Time   : 18:04:02
+Host   : d513d4ee8513
+PID    : 234
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Read mesh in = 0.1 s
+
+Overall mesh bounding box  : (63.5 -1 -1.5) (67.5 2.5 1.5)
+Relative tolerance         : 1e-06
+Absolute matching distance : 6.103278e-06
+
+Reading refinement surfaces.
+Read refinement surfaces in = 3.75 s
+
+Reading refinement shells.
+Read refinement shells in = 0 s
+
+Setting refinement level of surface to be consistent with shells.
+For geometry Outer_Surf.stl detected 0 uncached triangles out of 217976
+For geometry Inner_Surf.stl detected 0 uncached triangles out of 215998
+For geometry Plane_Outer_Surf.stl detected 0 uncached triangles out of 247016
+For geometry intake_duct.stl detected 0 uncached triangles out of 161904
+For geometry vent_door.stl detected 0 uncached triangles out of 7110
+For geometry door.stl detected 0 uncached triangles out of 125118
+For geometry plenum.stl detected 0 uncached triangles out of 91228
+For geometry exhaust_pipe_1.stl detected 0 uncached triangles out of 5456
+For geometry exhaust_section.stl detected 0 uncached triangles out of 82722
+For geometry bleed_air_pipe.stl detected 0 uncached triangles out of 71546
+For geometry ejector.stl detected 0 uncached triangles out of 109842
+For geometry gearbox_1.stl detected 0 uncached triangles out of 12578
+For geometry gearbox_2.stl detected 0 uncached triangles out of 24584
+For geometry compressor.stl detected 0 uncached triangles out of 302466
+For geometry load_compressor.stl detected 0 uncached triangles out of 1036
+For geometry load_volute.stl detected 0 uncached triangles out of 600482
+For geometry combustion_chamber.stl detected 0 uncached triangles out of 85446
+For geometry fuel_valve.stl detected 0 uncached triangles out of 25742
+For geometry firewall_front.stl detected 0 uncached triangles out of 3236
+For geometry firewall_behind.stl detected 0 uncached triangles out of 3282
+For geometry Frame_1.stl detected 0 uncached triangles out of 7542
+For geometry Frame_2.stl detected 0 uncached triangles out of 4954
+For geometry Frame_3.stl detected 0 uncached triangles out of 1754
+For geometry Frame_4.stl detected 0 uncached triangles out of 5922
+For geometry Frame_5.stl detected 0 uncached triangles out of 6536
+For geometry Frame_6.stl detected 0 uncached triangles out of 1056
+For geometry beam_1.stl detected 0 uncached triangles out of 5336
+For geometry beam_2.stl detected 0 uncached triangles out of 6621
+For geometry beam_3.stl detected 0 uncached triangles out of 172
+Checked shell refinement in = 8.65 s
+
+Reading features.
+Read features in = 0 s
+
+
+Determining initial surface intersections
+-----------------------------------------
+
+Edge intersection testing:
+    Number of edges             : 129650
+    Number of edges to retest   : 0
+    Number of intersected edges : 0
+Edge intersection testing:
+    Number of edges             : 129650
+    Number of edges to retest   : 129650
+    Number of intersected edges : 5974
+Calculated surface intersections in = 0.22 s
+
+Initial mesh : cells:42000  faces:129650  points:45756
+Cells per refinement level:
+    0	42000
+Setting refinement level of surface to be consistent with curvature.
+Checked curvature refinement in = 0 s
+
+
+Adding patches for surface regions
+----------------------------------
+
+Patch Type                Region                        
+----- ----                ------                        
+Outer_Surf:
+
+6     wall                Outer_Surf                    
+
+Inner_Surf:
+
+7     wall                Inner_Surf                    
+
+Plane_Outer_Surf:
+
+8     wall                Plane_Outer_Surf              
+
+intake_duct:
+
+9     wall                intake_duct                   
+
+vent_door:
+
+10    wall                vent_door                     
+
+door:
+
+11    wall                door                          
+
+plenum:
+
+12    wall                plenum                        
+
+exhaust_pipe_1:
+
+13    wall                exhaust_pipe_1                
+
+exhaust_section:
+
+14    wall                exhaust_section               
+
+bleed_air_pipe:
+
+15    wall                bleed_air_pipe                
+
+ejector:
+
+16    wall                ejector                       
+
+gearbox_1:
+
+17    wall                gearbox_1                     
+
+gearbox_2:
+
+18    wall                gearbox_2                     
+
+compressor:
+
+19    wall                compressor                    
+
+load_compressor:
+
+20    wall                load_compressor               
+
+load_volute:
+
+21    wall                load_volute                   
+
+combustion_chamber:
+
+22    wall                combustion_chamber            
+
+fuel_valve:
+
+23    wall                fuel_valve                    
+
+firewall_front:
+
+24    wall                firewall_front                
+
+firewall_behind:
+
+25    wall                firewall_behind               
+
+Frame_1:
+
+26    wall                Frame_1                       
+
+Frame_2:
+
+27    wall                Frame_2                       
+
+Frame_3:
+
+28    wall                Frame_3                       
+
+Frame_4:
+
+29    wall                Frame_4                       
+
+Frame_5:
+
+30    wall                Frame_5                       
+
+Frame_6:
