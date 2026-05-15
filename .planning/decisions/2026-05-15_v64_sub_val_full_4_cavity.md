@@ -4,7 +4,7 @@ title: case_024 Lid-Driven Cavity FULL validation report · 4th FULL attempt · 
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-4-CAVITY (4th FULL attempt · simplest possible canonical · incompressible · laminar · no transition / shock / rotation / heat / STL)
-notion_sync_status: pending (session-end batch sync)
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81d0b4ddecbc24eefd62)
 confidence: med
 ---
 

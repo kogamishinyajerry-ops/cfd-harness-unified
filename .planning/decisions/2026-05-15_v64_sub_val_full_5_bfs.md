@@ -4,7 +4,7 @@ title: case_022 Driver-Seegmiller BFS FULL validation report · 5th FULL attempt
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-5-BFS (5th FULL attempt · separation/reattachment canonical · cross-class to case_021 attached BL + B65 cavity)
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed811481c2fe7a00c64a7c)
 confidence: med
 ---
 
