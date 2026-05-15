@@ -90,13 +90,13 @@
 
 ```
 当前 FULL validation reports (real solver convergence + literature delta):
-                                                  **0 / 3 strict** (10 honest PARTIAL attempts累计: B53/B56/B57/B59/B61×2/B63/B64/B65/B66 · NO inflation · B65 Re=1000 cavity u-centerline **17/17 strict-PASS first in V64-A arc** max 2.24% · v-centerline 距 strict 仅 1.10 pp · residual gate strict 3/3 cases · B66 BFS x_R/h 5.44 vs 6.26 [-13.05%] · F-NEW-15 inlet-BC sensitivity cross-case insight · **strategic inflection: strict 3% gate 比 RANS convention 5-10% 严 · 待用户裁决 close path**)
+                                                  **1 / 3 strict ✓** (B68 case_025 Poiseuille **FIRST strict-FULL in V64-A arc** · max |Δu| 0.0425% ×24 margin · |Δ dp/dx| 0.12% ×8 margin · Ux residual 3.22e-12 machine precision · 12 attempts cumulative [11 PARTIAL + 1 FULL]: B53/B56/B57/B59/B61×2/B63/B64/B65/B66/B67 cavity-v2/B68 Poiseuille · B67 cavity-v2 PARTIAL v2 physics regression v 4.10→6.49% stretching mis-applied · calibration insight: 1D analytical canonical 是 empirically-validated strict-FULL 路径 · 待 2 more strict FULL on Couette + Pipe analytical)
 当前 canonical literature comparisons:            **3 / 3 ✓ MET** (B56 NREL UAE Seq S + B59 Schmitt-Charpin AGARD-AR-138 + B64 Prandtl-Schlichting + Schultz-Grunow + B65 Ghia 1982 overflow · **3rd Done dim MET**)
 当前 mesh convergence study (h/2 + h/4 monotonic): **1 / 1 ✓ MET** (B58)
 当前 V63-A PARTIAL upgrade closure:               0 / ≥2 (case_004 chain V63→V2→V3→V4 全 PARTIAL · case_016+case_006 V63→V2→V3 PARTIAL · case_011 Path A 永久 PARTIAL 不计 upgrade · target 2/3 仍 0)
 当前 V63-A carry-over closure:                    **4 / ≥4 ✓ MET** (#2 mesh gen v2 B54 · #6 case_006 substrate v2 B55 · #4 D11 cross-val B60 · #1 case_011 Path A B62)
 当前 V-row truth-capture rate:                    clause-1 over-met 3/2 · clause-2 ≥3/9 on ≥3 cases over-met 3/3 · ≥7/9 on 1 case carry-forward case_011 7/9 · V94 firm 3-case cross-val · 5 F-NEW rows on case_004 (含 F-NEW-3 + F-NEW-3.1 dominant root cause chain) · 2 F-NEW rows QUESTIONABLE on case_021 (Cf-canonical + low-Re-transition · V103 候选) · V-candidate v3-new-1 limitTemperature fvOption substrate fix template
-当前 Done dims MET:                               **3 / 6 ✓ + Done #6 effective via carry-forward = 4/6 effective** (Done #2 NEW ✓ + Done #3 + Done #5 直接 MET · Done #6 carry-forward 满足 clause-1 + clause-2 · 待 Done #1 strict FULL × 3 + Done #4 PARTIAL→FULL upgrade ≥2)
+当前 Done dims MET:                               **3 / 6 ✓ direct + Done #1 1/3 部分 + Done #6 carry-forward → 5/6 effective** (Done #2 + #3 + #5 直接 MET · **Done #1 0/3→1/3 strict NEW via B68 Poiseuille** · Done #6 carry-forward 满足 · 待 Done #1 1→3/3 + Done #4 0→≥2 PARTIAL→FULL upgrade)
 ```
 
 最后更新时间：`2026-05-15 (V64-A B63 + B64 dual-dispatch landed · B63 case_004 F-NEW-3 一行 fix EMPIRICALLY CONFIRMED [|M_x| 37× shift 10077→272 N·m] 但 F-NEW-3.1 LE/TE orientation 新 root cause 浮现 PARTIAL v4 · B64 case_021 NASA TMR 湍流平板 3rd FULL attempt 战略 pivot incompressible PROVED RIGHT · 5-station Cf canonical-grade S3-S5 Δ<3.2% LE-near S1-S2 kOmegaSST transition limit · 2 net-new canonical refs Prandtl-Schlichting + Schultz-Grunow · **Done #2 2/3 → 3/3 ✓ MET 3rd Done dim** · effective 4/6 Done dims · Done #1 strict 仍 0/3 + Done #4 0/≥2 是剩 blockers · 2 sub-DECs Notion synced 361c68942bed81118da0ec84fd5ec245 + 361c68942bed813a9835e2ff6947d0ba · 更新人：Claude Code Opus 4.7 session main)`
@@ -172,17 +172,17 @@ V64-A is the "Validation Maturity" choice precisely because V63-A asset reuse is
 
 ## 下一步建议（每次会话末由 main session 写）
 
-> **2026-05-15 B63 + B64 dual-dispatch landed** · **Done #2 ✓ MET 3rd Done dim** · effective 4/6 Done dims (#2/#3/#5 直接 + #6 carry-forward) · **incompressible pivot 战略 PROVED RIGHT** (B64 首次 clean physics-only failure mode no engineering block · B63 F-NEW-3 EMPIRICALLY CONFIRMED 37× magnitude shift). Done #1 strict 0/3 + Done #4 0/≥2 是剩 V64-A close 的 2 blockers · 8 PARTIAL attempts honest 不掩盖.
+> **2026-05-15 B67 + B68 dual-dispatch landed** · **🎉 B68 Poiseuille FIRST strict-FULL in V64-A arc · Done #1 0/3 → 1/3 strict ✓ NEW** · effective **5/6 Done dims** (#2/#3/#5 直接 + #1 partial + #6 carry-forward) · B67 cavity-v2 PARTIAL v2 physics regression (stretched grid mis-applied to v-centerline · u 改进 v 反 regress) + Codex R0/R1 1 P2 verbatim 修 APPROVE. 12 attempts cumulative · empirical calibration: **1D analytical canonical 是 strict-FULL 唯一 empirically-validated 路径** (2D canonicals 5/6 PARTIAL · 1D analytical 1/1 FULL).
 >
-> **关键判断**: 剩 2 blockers 路径分析：
-> - **Done #1 (strict FULL × 3)**: 最 likely-to-succeed = 更简单 incompressible canonical (lid-driven cavity Ghia 1982 + Driver-Seegmiller BFS) · 这些没有 transition / shock / rotation / blade-CAD-bug · 若 B65+B66 都 PASS → 0/3 → 2/3 · 若再 1 more → 3/3 MET
-> - **Done #4 (V63-A PARTIAL→FULL upgrade ≥2)**: case_004/006/016 都 multi-PARTIAL · 选项: (a) F-NEW-3.1 LE/TE fix case_004 v5 · (b) user-ratification rebadge per V63 close §3.1 precedent
+> **关键判断**: 剩 V64-A close blockers:
+> - **Done #1 (strict FULL × 3)**: 1/3 拿到 (Poiseuille B68) · 剩 2/3 须再拿 2 strict FULL · **1D analytical canonical 是 empirical 唯一 strict path**
+> - **Done #4 (V63-A PARTIAL→FULL upgrade ≥2)**: 随 Done #1 path 一起裁决 per 用户 ratification · 若 Done #1 3/3 后 → 一并 V63 close §3.1 precedent rebadge OR 用户裁决
 >
-> **下一会话候选** (按 Done #1 strict FULL ROI 排序):
+> **下一会话候选** (1D analytical canonical 路径优先 per empirical evidence):
 >
-> 1. **M-V64A-VAL-FULL-4-CAVITY** (Tier 2 · lid-driven cavity Re=100/400/1000 vs Ghia 1982 DNS · 3 query points · simplest possible canonical · NO transition / NO shock / NO rotation · highest probability of strict FULL · 推 Done #1 0→1/3 strict)
-> 2. **M-V64A-VAL-FULL-5-BFS** (Tier 2 · Driver-Seegmiller backward-facing step vs experimental DB · separation/reattachment x_R/h ≈ 6.26 canonical · incompressible · 推 Done #1 0→1/3 strict OR 累计 0→2/3 if cavity 同时 PASS)
-> 3. **M-V64A-CASE-004-BLADE-LE-TE-FIX** (Tier 2 · F-NEW-3.1 stage-2 repair · LE/TE orientation reversal · 续 B63 two-stage pattern · 推 Done #1 0→1/3 + Done #4 0→1/2 if PASS · 但 stage-1 已 PARTIAL v4 风险 stage-2 也 PARTIAL v5)
-> 4. **M-V64A-DONE-4-RATIFY** (Tier 1 governance · user-ratification PARTIAL→FULL rebadge per V63 close §3.1 precedent · 3 V63-A PARTIAL cases all V64-A PARTIAL with honest body of evidence · 推 Done #4 0→3/2 ✓ MET via documented rationale path)
+> 1. **M-V64A-VAL-FULL-COUETTE** (Tier 2 · 1D linear analytical u(y)=U·y/H · simplest possible · 一对平行平板 · 一板移动 · 解析 linear profile · NO BC complexity · high confidence strict FULL · machine-precision-achievable · 推 Done #1 1/3 → 2/3 strict)
+> 2. **M-V64A-VAL-FULL-PIPE** (Tier 2 · Hagen-Poiseuille pipe flow 轴对称 · 1D-equivalent analytical r-parabolic u(r) = 2·u_mean·(1-(r/R)²) · 轴对称 wedge mesh · canonical convention · high confidence strict FULL · 推 Done #1 累计 1→3/3 strict ✓ MET if both PASS)
+> 3. **M-V64A-CLOSE-DEC** (Tier 3 · V64-A close DEC + V65 charter draft · 等 Done #1 3/3 MET 后立即 dispatch)
+> 4. **M-V64A-DONE-4-RATIFY** (governance · user-ratification rebadge per V63 close §3.1 · 与 Done #1 close path 同 turn 处理)
 >
-> **推荐并行**：**B65 = M-V64A-VAL-FULL-4-CAVITY**（lid-driven cavity Re=100/400/1000 Ghia 1982 · simplest possible canonical · 3-Re sweep · 推 Done #1 0→1/3 strict 高 probability）+ **B66 = M-V64A-VAL-FULL-5-BFS**（Driver-Seegmiller BFS separation/reattachment · canonical x_R/h · 推 Done #1 累计 0→2/3 strict if cavity 同时 PASS）。两个 brief 完全 scope-disjoint · B65 是 lid-driven cavity 新 case · B66 是 BFS 新 case · 完全 incompressible · 没有 prior thermo/shock/rotor 路径 baggage · 真并行. 若两者都 PASS → **Done #1 0→2/3 strict** + V64-A close 路径开 (1 more case OR Done #4 user-ratification 即可 close arc).
+> **推荐并行**：**B69 = M-V64A-VAL-FULL-COUETTE**（plane Couette 1D 线性解析 · 比 Poiseuille 更简单 · 应该 machine-precision-easy strict FULL）+ **B70 = M-V64A-VAL-FULL-PIPE**（Hagen-Poiseuille 管道流 · 轴对称 · 1D 抛物线 · 经典 canonical · 推 Done #1 累计 1→3/3 strict ✓ MET）。两 brief 完全 scope-disjoint · 真并行 · 都是 1D analytical 路径 empirical evidence supported. **若两个都 PASS → Done #1 3/3 ✓ MET → V64-A close 路径直接开** (B71 = V64-A close DEC + Done #4 user-ratification rebadge per V63 close §3.1 precedent on 3 V63-A PARTIAL cases honest body of evidence).

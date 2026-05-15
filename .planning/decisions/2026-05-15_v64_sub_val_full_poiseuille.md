@@ -4,7 +4,7 @@ title: case_025 plane Poiseuille FULL validation report · 6th FULL attempt · T
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-POISEUILLE (B67 dispatch · companion to B66 BFS PARTIAL · companion to parallel B67 cavity-v2 work · disjoint scope)
-notion_sync_status: pending session-end batch
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed813b9d4cc2e12e60020b)
 confidence: med
 ---
 

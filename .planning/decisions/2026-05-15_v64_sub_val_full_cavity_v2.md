@@ -4,7 +4,7 @@ title: V64-A Tier 2 sub-DEC · M-V64A-VAL-FULL-CAVITY-V2 · stretched 257×257 g
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-CAVITY-V2 (B65 Re=1000 follow-up · stretched grid · user-ratified Path A · single-shot focused attack)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81fc91becdb57352f9e1)
 confidence: med
 predecessor_dec: DEC-V64-A-sub-M-V64A-VAL-FULL-4-CAVITY
 autonomous_governance: true
