@@ -4,7 +4,7 @@ title: V65-A Tier 2 sub-DEC · case_028 v3 APU bay ventilation · STL-driven int
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A Tier 2 · M-V65A-CASE-APU-BAY-V3
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed8128acb5dcec5cd2e84f)
 authored_by: Claude Code Opus 4.7 (1M context) · V65-A B78 autonomous mode (main session direct execution per "授权全权开发" grant 2026-05-16)
 authored_at: 2026-05-16
 confidence: med
