@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// TEMPLATE — per-case ν override required.
+// Re_L = U_lid · L / ν = 1.0 · 1.0 / ν
+//
+// case_re100  : nu = 0.01
+// case_re400  : nu = 0.0025
+// case_re1000 : nu = 0.001
+//
+// Sandbox case dirs override this file (only).
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      transportProperties;
+}
+
+transportModel  Newtonian;
+
+// Default = Re=100 (lowest Re). Sandbox cases override.
+nu              0.01;
+
+// ************************************************************************* //

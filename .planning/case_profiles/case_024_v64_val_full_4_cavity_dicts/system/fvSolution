@@ -1,0 +1,73 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Laminar lid-driven cavity SIMPLE configuration · canonical setup
+// p: GAMG + GaussSeidel · U: PBiCGStab + DILU
+// URF: p=0.30 U=0.70 (NASA TMR / standard SIMPLE conservative set)
+// residualControl: 1e-7 strict per briefing FULL gate (laminar deep convergence)
+// pRefCell + pRefValue set since all walls are no-slip (no pressure-fixed patch)
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-9;
+        relTol          0.01;
+        nPreSweeps      0;
+        nPostSweeps     2;
+        cacheAgglomeration true;
+        nCellsInCoarsestLevel 100;
+        agglomerator    faceAreaPair;
+        mergeLevels     1;
+    }
+
+    U
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-9;
+        relTol          0.1;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 0;
+    consistent      yes;
+
+    pRefCell        0;
+    pRefValue       0;
+
+    residualControl
+    {
+        p               1e-7;
+        U               1e-7;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.30;
+    }
+    equations
+    {
+        U               0.70;
+    }
+}
+
+// ************************************************************************* //
