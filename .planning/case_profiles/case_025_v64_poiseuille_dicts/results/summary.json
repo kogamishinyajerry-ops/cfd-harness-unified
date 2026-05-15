@@ -1,0 +1,27 @@
+{
+  "case_id": "case_025_plane_poiseuille",
+  "solver_time_step_at_convergence": 1375,
+  "n_y_points_exit": 40,
+  "n_y_points_mid": 40,
+  "max_du_exit_pct": 0.0425,
+  "max_du_mid_pct": 0.2859,
+  "strict_pass_count_exit": "40/40",
+  "strict_pass_count_mid": "40/40",
+  "dpdx_fit_kin_m2_s2_per_m": -0.04494453084496442,
+  "dpdx_analytical_kin_m2_s2_per_m": -0.045,
+  "dpdx_delta_pct": -0.1233,
+  "tau_wall_kin_min_sampled": 0.0004432961683,
+  "tau_wall_kin_max_sampled": 0.0004516952878,
+  "tau_wall_kin_analytical": 0.00045,
+  "tau_delta_mean_pct": -0.5565,
+  "strict_gate_u_pass": true,
+  "strict_gate_dpdx_pass": true,
+  "strict_gate_residuals_pass": true,
+  "verdict": "FULL",
+  "residuals_final": {
+    "p_kin": 7.36e-11,
+    "Ux": 3.22e-12,
+    "Uy": 9.86e-09,
+    "all_below_1e-8": true
+  }
+}

@@ -1,0 +1,29 @@
+==== case_025 · Plane Poiseuille validation ====
+
+Solver converged at iter 1375
+n y-points (exit / mid): 40 / 40
+
+--- u(y) exit station x=0.4995 ---
+  max |Δu| = 0.0425% (of u_max=0.15 m/s)
+  strict (<1%) pass: 40/40
+  gate: PASS
+
+--- u(y) mid station x=0.25 (cross-check) ---
+  max |Δu| = 0.2859%
+  strict pass: 40/40
+
+--- dp/dx (from centerline p(x) linear fit) ---
+  slope_fit_kin       = -4.494453e-02 m²/s²/m
+  slope_analytical_kin = -4.500000e-02 m²/s²/m
+  Δ = -0.1233%   gate: PASS
+
+--- τ_w cross-check ---
+  τ_w sampled range    = 4.4330e-04 to 4.5170e-04 m²/s²
+  τ_w analytical (3·ν·u_mean/H) = 4.5000e-04 m²/s²
+  Δ_min/Δ_max/Δ_mean = -1.4897% / +0.3767% / -0.5565%
+
+--- Residuals final ---
+  p_kin = 7.36e-11 ✓  Ux = 3.22e-12 ✓  Uy = 9.86e-09 ✓  (3/3 < 1e-8 strict)
+
+==== VERDICT: FULL ====
+  strict-gate triple: u_PASS=True · dpdx_PASS=True · res_PASS=True
