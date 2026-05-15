@@ -4,7 +4,7 @@ title: case_021 NASA TMR Turbulent Flat Plate FULL validation report · 3rd FULL
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-VAL-FULL-3-INCOMP (3rd FULL attempt · incompressible canonical · 完全绕开 compressible gating)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed813a9835e2ff6947d0ba)
 confidence: med
 ---
 

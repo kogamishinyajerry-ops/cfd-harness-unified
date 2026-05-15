@@ -4,7 +4,7 @@ title: V64-A Tier 2 sub-DEC · case_004 NREL Phase VI MRF · F-NEW-3 chord-axis 
 status: Accepted
 parent_dec: DEC-V64-A-charter
 phase: V64-A Tier 2 · M-V64A-CASE-004-BLADE-CAD-FIX (B57 follow-up · one-line `section_wire()::theta` fix)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-15 (https://www.notion.so/361c68942bed81118da0ec84fd5ec245)
 authored_by: Claude Code Opus 4.7 (1M context) · sub-session B-blade-cad-fix
 authored_at: 2026-05-15
 confidence: med
