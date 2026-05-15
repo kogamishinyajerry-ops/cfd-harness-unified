@@ -38,13 +38,17 @@ for d in "$CASE_DIR"/*/; do
 done
 
 echo "=== potentialFoam pre-step start $(date +%H:%M:%S) ==="
+# potentialFoam writes velocity potential Phi (volScalarField) + updates U.
+# We do NOT use -writephi (that emits incompressible surfaceScalarField phi
+# with dims m^3/s; rhoSimpleFoam needs compressible phi with dims kg/s and
+# will compute its own from updated U + rho).
 docker run --rm \
     --entrypoint /bin/bash \
     -v "$CASE_DIR":/case \
     -w /case \
     "$IMG" \
     -c "source /usr/lib/openfoam/openfoam2312/etc/bashrc 2>/dev/null || true; \
-        potentialFoam -writephi -writep" \
+        potentialFoam" \
     2>&1 | tee "$LOG_DIR/01_potentialFoam.log"
 rc_pot="${PIPESTATUS[0]}"
 echo "=== potentialFoam end $(date +%H:%M:%S) exit=$rc_pot ==="
@@ -54,6 +58,10 @@ if [ "$rc_pot" -ne 0 ]; then
     cp "$LOG_DIR/01_potentialFoam.log" "$EVID_DIR/" 2>/dev/null || true
     exit "$rc_pot"
 fi
+
+# Clean potentialFoam residue (volScalarField Phi + any incompressible phi)
+# so rhoSimpleFoam starts cleanly with just U/p/T/k/omega/nut/alphat.
+rm -f "$CASE_DIR/0/Phi" "$CASE_DIR/0/phi"
 
 echo "=== rhoSimpleFoam start $(date +%H:%M:%S) ==="
 docker run --rm \

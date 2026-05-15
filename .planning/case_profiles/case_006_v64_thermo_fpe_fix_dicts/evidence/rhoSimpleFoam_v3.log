@@ -1,0 +1,339 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : rhoSimpleFoam
+Date   : May 15 2026
+Time   : 05:26:36
+Host   : 38e343b778a7
+PID    : 1
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 1e-05
+    field U	 tolerance 0.0001
+    field h	 tolerance 0.0001
+    field e	 tolerance 0.0001
+    field "(k|omega)"	 tolerance 0.0001
+
+Reading thermophysical properties
+
+Selecting thermodynamics package 
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       sutherland;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+pressureControl
+    pMax 300000
+    pMin 30000
+
+Creating turbulence model
+
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.55555556;
+    gamma2          0.44;
+    beta1           0.075;
+    beta2           0.0828;
+    betaStar        0.09;
+    a1              0.31;
+    b1              1;
+    c1              10;
+    F3              false;
+    decayControl    false;
+    kInf            0;
+    omegaInf        0;
+}
+
+No MRF models present
+
+Creating finite volume options from "system/fvOptions"
+
+Selecting finite volume options type limitTemperature
+    Source: limitT_thermoFPEfix
+    - selecting all cells
+    - selected 205310 cell(s) with volume 35752.25
+
+Starting time loop
+
+forceCoeffs forceCoeffs1:
+    rho: rhoInf
+    Freestream density (rhoInf) set to 1.133
+    Not including porosity effects
+    magUInf: 285.6
+    lRef   : 0.64607
+    Aref   : 0.7626
+    rhoInf : 1.133
+    Selecting all coefficients
+    - Drag force: Cd
+    - Drag force front: Cd(f)
+    - Drag force rear: Cd(r)
+    - Lift force: Cl
+    - Lift force front: Cl(f)
+    - Lift force rear: Cl(r)
+    - Pitch moment: CmPitch
+    - Roll moment: CmRoll
+    - Yaw moment: CmYaw
+    - Side force: Cs
+    - Side force front: Cs(f)
+    - Side force rear: Cs(r)
+
+
+Time = 1
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.55602519, Final residual = 0.00020861331, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.12355696, Final residual = 0.00063214179, No Iterations 1
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.24899968, Final residual = 0.00036584963, No Iterations 1
+DILUPBiCGStab:  Solving for h, Initial residual = 1, Final residual = 2.115514e-05, No Iterations 1
+limitTemperature limitT_thermoFPEfix Lower limited 0 (0%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 0 (0%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 288
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 288
+DILUPBiCGStab:  Solving for p, Initial residual = 1, Final residual = 0.039982503, No Iterations 19
+DILUPBiCGStab:  Solving for p, Initial residual = 0.0028701265, Final residual = 0.00012018532, No Iterations 9
+time step continuity errors : sum local = 0.01324917, global = 0.00098055083, cumulative = 0.00098055083
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.045977422, Final residual = 8.4349197e-05, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 1, Final residual = 0.0020833906, No Iterations 1
+ExecutionTime = 1.97 s  ClockTime = 2 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.00031960988	0.0002921988	2.7411085e-05	0
+    Cd(f):	0.0020660621	0.0020532607	1.2801442e-05	0
+    Cd(r):	-0.0017464522	-0.0017610619	1.4609643e-05	0
+    Cl:	-4.5911992e-05	-4.4825421e-05	-1.0865709e-06	0
+    Cl(f):	5.2768358e-05	5.3341361e-05	-5.7300257e-07	0
+    Cl(r):	-9.868035e-05	-9.8166782e-05	-5.1356833e-07	0
+    CmPitch:	7.5724354e-05	7.5754071e-05	-2.9717122e-08	0
+    CmRoll:	0.0019062572	0.0019071613	-9.0410073e-07	0
+    CmYaw:	0.038466309	0.03848939	-2.3080036e-05	0
+    Cs:	-0.07966431	-0.079663772	-5.3821543e-07	0
+    Cs(f):	-0.0013658456	-0.0013424965	-2.3349143e-05	0
+    Cs(r):	-0.078298465	-0.078321275	2.2810928e-05	0
+
+Time = 2
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.1730959, Final residual = 0.0006995404, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.047550701, Final residual = 0.00020367654, No Iterations 1
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.064524417, Final residual = 0.00032482887, No Iterations 1
+DILUPBiCGStab:  Solving for h, Initial residual = 0.28829598, Final residual = 9.7251138e-05, No Iterations 1
+limitTemperature limitT_thermoFPEfix Lower limited 0 (0%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 0 (0%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 287.47196
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 291.65354
+DILUPBiCGStab:  Solving for p, Initial residual = 0.64315734, Final residual = 0.031701479, No Iterations 191
+DILUPBiCGStab:  Solving for p, Initial residual = 0.026403093, Final residual = 0.0010204765, No Iterations 140
+time step continuity errors : sum local = 0.055553945, global = -0.00041249039, cumulative = 0.00056806044
+pressureControl: p min 28727.161
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.032946564, Final residual = 6.5124229e-05, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 0.4365385, Final residual = 0.0011256097, No Iterations 1
+ExecutionTime = 7.49 s  ClockTime = 8 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.00016894778	0.00014402653	2.4921248e-05	0
+    Cd(f):	0.0022147277	0.002203086	1.1641796e-05	0
+    Cd(r):	-0.00204578	-0.0020590594	1.3279452e-05	0
+    Cl:	0.00020455617	0.00020551361	-9.5744308e-07	0
+    Cl(f):	-2.7734895e-06	-2.2577231e-06	-5.1576643e-07	0
+    Cl(r):	0.00020732966	0.00020777134	-4.4167665e-07	0
+    CmPitch:	-0.00010505157	-0.00010501453	-3.7044894e-08	0
+    CmRoll:	0.0021302539	0.0021310727	-8.1882768e-07	0
+    CmYaw:	0.037712687	0.037733816	-2.1128424e-05	0
+    Cs:	-0.07804689	-0.078046045	-8.4534608e-07	0
+    Cs(f):	-0.001310758	-0.0012892069	-2.1551097e-05	0
+    Cs(r):	-0.076736132	-0.076756838	2.0705751e-05	0
+
+Time = 3
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.11414732, Final residual = 0.00096014748, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.198422, Final residual = 0.0021855539, No Iterations 1
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.18853309, Final residual = 0.001804596, No Iterations 1
+DILUPBiCGStab:  Solving for h, Initial residual = 0.11584924, Final residual = 8.8752785e-05, No Iterations 1
+limitTemperature limitT_thermoFPEfix Lower limited 1 (0%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 0 (0%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 287.97245
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 426.50501
+DILUPBiCGStab:  Solving for p, Initial residual = 0.44924633, Final residual = 1.6440241, No Iterations 1000
+DILUPBiCGStab:  Solving for p, Initial residual = 0.489987, Final residual = 1.368538, No Iterations 1000
+time step continuity errors : sum local = 89.666066, global = -11.896807, cumulative = -11.896239
+pressureControl: p max 7730362.6
+pressureControl: p min -6301636.5
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.011010697, Final residual = 4.3142041e-05, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 0.33375025, Final residual = 0.0010496883, No Iterations 1
+ExecutionTime = 37.26 s  ClockTime = 38 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.00017528905	0.00015251308	2.2775968e-05	0
+    Cd(f):	0.0022207569	0.0022101617	1.0595242e-05	0
+    Cd(r):	-0.0020454679	-0.0020576486	1.2180726e-05	0
+    Cl:	0.00017311168	0.00017463221	-1.5205322e-06	0
+    Cl(f):	-2.2351192e-05	-2.1575144e-05	-7.7604836e-07	0
+    Cl(r):	0.00019546287	0.00019620735	-7.4448385e-07	0
+    CmPitch:	-0.00010890703	-0.00010889125	-1.5782254e-08	0
+    CmRoll:	0.0021331124	0.0021339051	-7.9274187e-07	0
+    CmYaw:	0.037703944	0.037723358	-1.9413848e-05	0
+    Cs:	-0.078049904	-0.078048386	-1.5182023e-06	0
+    Cs(f):	-0.001321008	-0.001300835	-2.0172949e-05	0
+    Cs(r):	-0.076728896	-0.076747551	1.8654747e-05	0
+
+Time = 4
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.14233637, Final residual = 0.00063265814, No Iterations 2
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.15169516, Final residual = 0.0015248241, No Iterations 1
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.14286914, Final residual = 0.0035064054, No Iterations 1
+DILUPBiCGStab:  Solving for h, Initial residual = 0.99999893, Final residual = 0.00073074821, No Iterations 1
+limitTemperature limitT_thermoFPEfix Lower limited 1 (0%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 118 (0.06%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 110
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 1654.6252
+DILUPBiCGStab:  Solving for p, Initial residual = 0.82153488, Final residual = 23.913481, No Iterations 1000
+DILUPBiCGStab:  Solving for p, Initial residual = 0.98469986, Final residual = 8.2988951, No Iterations 1000
+time step continuity errors : sum local = 1592535.4, global = 91299.861, cumulative = 91287.965
+pressureControl: p max 1.7443929e+12
+pressureControl: p min -4.9344271e+12
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.010073743, Final residual = 0.00010926992, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 0.42009528, Final residual = 0.0033673245, No Iterations 1
+ExecutionTime = 66.82 s  ClockTime = 67 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.00014704793	0.00012603591	2.1012016e-05	0
+    Cd(f):	0.0021977475	0.0021879625	9.7850032e-06	0
+    Cd(r):	-0.0020506996	-0.0020619266	1.1227013e-05	0
+    Cl:	2.5205444e-05	2.6316598e-05	-1.1111537e-06	0
+    Cl(f):	-8.0404699e-05	-7.9823186e-05	-5.8151325e-07	0
+    Cl(r):	0.00010561014	0.00010613978	-5.2964043e-07	0
+    CmPitch:	-9.3007421e-05	-9.2981485e-05	-2.5936406e-08	0
+    CmRoll:	0.0021242236	0.0021249446	-7.2100497e-07	0
+    CmYaw:	0.037749635	0.037767636	-1.8000672e-05	0
+    Cs:	-0.078053026	-0.078051433	-1.5935974e-06	0
+    Cs(f):	-0.001276878	-0.0012580805	-1.879747e-05	0
+    Cs(r):	-0.076776148	-0.076793352	1.7203873e-05	0
+
+Time = 5
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.28988313, Final residual = 0.0032070239, No Iterations 3
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.23426744, Final residual = 0.003979021, No Iterations 3
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.23174171, Final residual = 0.0013820669, No Iterations 3
+DILUPBiCGStab:  Solving for h, Initial residual = 1, Final residual = 0.0039052098, No Iterations 1
+limitTemperature limitT_thermoFPEfix Lower limited 1772 (0.86%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 9779 (4.76%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 110
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 2000
+DILUPBiCGStab:  Solving for p, Initial residual = 0.826788, Final residual = 397.5389, No Iterations 1000
+DILUPBiCGStab:  Solving for p, Initial residual = 8.5904602e-05, Final residual = 2.2121093e-05, No Iterations 1000
+time step continuity errors : sum local = 7.7608108e+13, global = 9.1958076e+11, cumulative = 9.1958085e+11
+pressureControl: p max 7.0582666e+23
+pressureControl: p min -4.3548059e+20
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.0078756371, Final residual = 0.00016565685, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 0.22805609, Final residual = 0.0025177411, No Iterations 1
+ExecutionTime = 96.47 s  ClockTime = 97 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	-3.5390357	-0.060723391	-3.4783123	0
+    Cd(f):	-7.8288659	-2.2345358	-5.59433	0
+    Cd(r):	4.2898302	2.1738124	2.1160177	0
+    Cl:	-6.5989643	-2.5705137	-4.0284506	0
+    Cl(f):	-1.5685816	-0.91738452	-0.6511971	0
+    Cl(r):	-5.0303826	-1.6531292	-3.3772535	0
+    CmPitch:	1.7309005	0.36787232	1.3630282	0
+    CmRoll:	-6.059348	-2.2041741	-3.8551739	0
+    CmYaw:	2.7239185	0.024566468	2.6993521	0
+    Cs:	-1.8430662	-0.18155504	-1.6615111	0
+    Cs(f):	1.8023854	-0.066211052	1.8685965	0
+    Cs(r):	-3.6454516	-0.11534399	-3.5301076	0
+
+Time = 6
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.26586586, Final residual = 0.0021185394, No Iterations 7
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.26583823, Final residual = 0.014949133, No Iterations 5
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.31091078, Final residual = 0.0062779968, No Iterations 7
+DILUPBiCGStab:  Solving for h, Initial residual = 1, Final residual = 3.5670421e-05, No Iterations 2
+limitTemperature limitT_thermoFPEfix Lower limited 17342 (8.45%) of cells, with min limit 110
+limitTemperature limitT_thermoFPEfix Upper limited 187947 (91.54%) of cells, with max limit 2000
+limitTemperature limitT_thermoFPEfix Unlimited Tmin 110
+limitTemperature limitT_thermoFPEfix Unlimited Tmax 2000
+DILUPBiCGStab:  Solving for p, Initial residual = 0.41931245, Final residual = 29.525114, No Iterations 1000
+DILUPBiCGStab:  Solving for p, Initial residual = 1.0416079e-13, Final residual = 1.0416079e-13, No Iterations 0
+time step continuity errors : sum local = 9.3404655e+30, global = 6.1279592e+26, cumulative = 6.1279592e+26
+pressureControl: p max 1.5698522e+26
+pressureControl: p min -1.5738363e+26
+DILUPBiCGStab:  Solving for omega, Initial residual = 0.0052057176, Final residual = 9.593712e-06, No Iterations 1
+DILUPBiCGStab:  Solving for k, Initial residual = 0.19963614, Final residual = 0.00013059273, No Iterations 1
+ExecutionTime = 110.83 s  ClockTime = 111 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	-332749.25	-0.061304171	-332749.19	0
+    Cd(f):	-10232273	-1.4040816	-10232272	0
+    Cd(r):	9899523.8	1.3427774	9899522.4	0
+    Cl:	-7560157.8	-1.8069223	-7560156	0
+    Cl(f):	2059728.3	-0.5895884	2059728.9	0
+    Cl(r):	-9619886.1	-1.2173339	-9619884.9	0
+    CmPitch:	5839807.2	0.31387275	5839806.9	0
+    CmRoll:	-10065898	-1.3734295	-10065897	0
+    CmYaw:	-729791.81	0.079470481	-729791.89	0
+    Cs:	-39321.358	-0.18793229	-39321.17	0
+    Cs(f):	-749452.49	-0.014495662	-749452.48	0
+    Cs(r):	710131.14	-0.17343662	710131.31	0
+
+Time = 7
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 0.17067021, Final residual = 0.017008982, No Iterations 34
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0.29425432, Final residual = 0.010884842, No Iterations 40
+DILUPBiCGStab:  Solving for Uz, Initial residual = 0.1706703, Final residual = 0.015123168, No Iterations 32
+[stack trace]
+=============
+#1  Foam::sigFpe::sigHandler(int) in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libOpenFOAM.so
+#2  __kernel_rt_sigreturn
+#3  Foam::scalarProduct<double, double>::type Foam::sumProd<double>(Foam::UList<double> const&, Foam::UList<double> const&) in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libOpenFOAM.so
+#4  Foam::PBiCGStab::scalarSolve(Foam::Field<double>&, Foam::Field<double> const&, unsigned char) const in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libOpenFOAM.so
+#5  Foam::PBiCGStab::solve(Foam::Field<double>&, Foam::Field<double> const&, unsigned char) const in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libOpenFOAM.so
+#6  Foam::fvMatrix<double>::solveSegregated(Foam::dictionary const&) in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libfiniteVolume.so
+#7  ? in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libfiniteVolume.so
+#8  Foam::fvMesh::solve(Foam::fvMatrix<double>&, Foam::dictionary const&) const in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/lib/libfiniteVolume.so
+#9  ? in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/bin/rhoSimpleFoam
+#10  ? in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/bin/rhoSimpleFoam
+#11  ? in /lib/aarch64-linux-gnu/libc.so.6
+#12  __libc_start_main in /lib/aarch64-linux-gnu/libc.so.6
+#13  ? in /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/bin/rhoSimpleFoam
+=============
