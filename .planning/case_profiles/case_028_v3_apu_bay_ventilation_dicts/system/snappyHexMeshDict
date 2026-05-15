@@ -1,0 +1,148 @@
+FoamFile { version 2.0; format ascii; class dictionary; object snappyHexMeshDict; }
+
+// case_028 v3 (V65-A B78) APU bay ventilation · 29 per-component refinementSurfaces
+// v3 change vs v1/v2: intake_duct + vent_door patchInfo type=patch (was wall)
+// Inflow via intake_duct surface · outflow via vent_door surface · 27 remaining components = walls
+// Inherits source CHT mesh quality controls (sHM PASS-no-errors at ~90k cells baseline)
+
+castellatedMesh true;
+snap            true;
+addLayers       false;        // no near-wall layers in B74 first-pass (high-Re wall functions)
+
+geometry
+{
+    Outer_Surf.stl       { type triSurfaceMesh; name Outer_Surf; }
+    Inner_Surf.stl       { type triSurfaceMesh; name Inner_Surf; }
+    Plane_Outer_Surf.stl { type triSurfaceMesh; name Plane_Outer_Surf; }
+    intake_duct.stl      { type triSurfaceMesh; name intake_duct; }
+    vent_door.stl        { type triSurfaceMesh; name vent_door; }
+    door.stl             { type triSurfaceMesh; name door; }
+    plenum.stl           { type triSurfaceMesh; name plenum; }
+    exhaust_pipe_1.stl   { type triSurfaceMesh; name exhaust_pipe_1; }
+    exhaust_section.stl  { type triSurfaceMesh; name exhaust_section; }
+    bleed_air_pipe.stl   { type triSurfaceMesh; name bleed_air_pipe; }
+    ejector.stl          { type triSurfaceMesh; name ejector; }
+    gearbox_1.stl        { type triSurfaceMesh; name gearbox_1; }
+    gearbox_2.stl        { type triSurfaceMesh; name gearbox_2; }
+    compressor.stl       { type triSurfaceMesh; name compressor; }
+    load_compressor.stl  { type triSurfaceMesh; name load_compressor; }
+    load_volute.stl      { type triSurfaceMesh; name load_volute; }
+    combustion_chamber.stl { type triSurfaceMesh; name combustion_chamber; }
+    fuel_valve.stl       { type triSurfaceMesh; name fuel_valve; }
+    firewall_front.stl   { type triSurfaceMesh; name firewall_front; }
+    firewall_behind.stl  { type triSurfaceMesh; name firewall_behind; }
+    Frame_1.stl          { type triSurfaceMesh; name Frame_1; }
+    Frame_2.stl          { type triSurfaceMesh; name Frame_2; }
+    Frame_3.stl          { type triSurfaceMesh; name Frame_3; }
+    Frame_4.stl          { type triSurfaceMesh; name Frame_4; }
+    Frame_5.stl          { type triSurfaceMesh; name Frame_5; }
+    Frame_6.stl          { type triSurfaceMesh; name Frame_6; }
+    beam_1.stl           { type triSurfaceMesh; name beam_1; }
+    beam_2.stl           { type triSurfaceMesh; name beam_2; }
+    beam_3.stl           { type triSurfaceMesh; name beam_3; }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells   5000000;
+    maxGlobalCells  10000000;
+    minRefinementCells 10;
+    nCellsBetweenLevels 2;
+    maxLoadUnbalance 0.10;
+    resolveFeatureAngle 60;
+    allowFreeStandingZoneFaces false;
+
+    features ();
+
+    refinementSurfaces
+    {
+        Outer_Surf          { level (0 1); patchInfo { type wall; } }
+        Inner_Surf          { level (0 1); patchInfo { type wall; } }
+        Plane_Outer_Surf    { level (0 1); patchInfo { type wall; } }
+        intake_duct         { level (1 2); patchInfo { type patch; } }   // v3: STL-driven inflow patch · ~1 m² aperture
+        vent_door           { level (1 2); patchInfo { type patch; } }   // v3: STL-driven outflow patch · ~0.3 m² aperture
+        door                { level (0 1); patchInfo { type wall; } }
+        plenum              { level (0 1); patchInfo { type wall; } }
+        exhaust_pipe_1      { level (0 1); patchInfo { type wall; } }
+        exhaust_section     { level (0 1); patchInfo { type wall; } }
+        bleed_air_pipe      { level (0 1); patchInfo { type wall; } }
+        ejector             { level (0 1); patchInfo { type wall; } }
+        gearbox_1           { level (0 1); patchInfo { type wall; } }
+        gearbox_2           { level (0 1); patchInfo { type wall; } }
+        compressor          { level (0 1); patchInfo { type wall; } }
+        load_compressor     { level (0 1); patchInfo { type wall; } }
+        load_volute         { level (0 1); patchInfo { type wall; } }
+        combustion_chamber  { level (0 1); patchInfo { type wall; } }
+        fuel_valve          { level (0 1); patchInfo { type wall; } }
+        firewall_front      { level (0 1); patchInfo { type wall; } }
+        firewall_behind     { level (0 1); patchInfo { type wall; } }
+        Frame_1             { level (0 1); patchInfo { type wall; } }
+        Frame_2             { level (0 1); patchInfo { type wall; } }
+        Frame_3             { level (0 1); patchInfo { type wall; } }
+        Frame_4             { level (0 1); patchInfo { type wall; } }
+        Frame_5             { level (0 1); patchInfo { type wall; } }
+        Frame_6             { level (0 1); patchInfo { type wall; } }
+        beam_1              { level (0 1); patchInfo { type wall; } }
+        beam_2              { level (0 1); patchInfo { type wall; } }
+        beam_3              { level (0 1); patchInfo { type wall; } }
+    }
+
+    refinementRegions { }
+
+    // locationInMesh: point inside fluid region (between Outer_Surf and APU components)
+    // Inherited from source CHT validated config
+    locationInMesh (63.8 0.5 0.0);
+}
+
+snapControls
+{
+    nSmoothPatch 3;
+    tolerance 2.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+meshQualityControls
+{
+    maxNonOrtho 65;
+    maxBoundarySkewness 20;
+    maxInternalSkewness 4;
+    maxConcave 80;
+    minVol 1e-13;
+    minTetQuality 1e-30;
+    minArea -1;
+    minTwist 0.02;
+    minDeterminant 0.001;
+    minFaceWeight 0.05;
+    minVolRatio 0.01;
+    minTriangleTwist -1;
+    nSmoothScale 4;
+    errorReduction 0.75;
+}
+
+debug 0;
+mergeTolerance 1e-6;
+
+addLayersControls
+{
+    relativeSizes true;
+    layers { }
+    expansionRatio 1.2;
+    finalLayerThickness 0.3;
+    minThickness 0.1;
+    nGrow 0;
+    featureAngle 60;
+    nRelaxIter 5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle 90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter 50;
+}

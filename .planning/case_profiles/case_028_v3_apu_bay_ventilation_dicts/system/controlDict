@@ -1,0 +1,70 @@
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+// case_028 v3 (V65-A B78) APU bay ventilation · simpleFoam steady-state
+// v3 change vs v2: mass flow monitor patches renamed inlet→intake_duct, outlet→vent_door
+// Target: residuals < 1e-4 on U/p/k/omega OR 5000 iter cap
+
+application     simpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         5000;       // iter cap · v3 likely slower convergence (smaller aperture · faster local velocity gradient)
+deltaT          1;
+writeControl    timeStep;
+writeInterval   500;        // write every 500 iter (5 snapshots + final)
+purgeWrite      3;          // keep 3 most recent
+writeFormat     ascii;
+writePrecision  7;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+functions
+{
+    // Mass conservation monitor — v3 patches renamed (intake_duct = inflow, vent_door = outflow)
+    intake_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            intake_duct;
+        operation       sum;
+        fields          (phi);
+    }
+    vent_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            vent_door;
+        operation       sum;
+        fields          (phi);
+    }
+
+    // Probe velocity at 3 representative bay interior points
+    probes
+    {
+        type            probes;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   10;
+        fields          (U p);
+        probeLocations
+        (
+            (64.5 0.5 0.0)   // upstream of APU core (vs v1/v2 reuse · expect now ≥0.5 m/s · was 0.4 mm/s in v1/v2)
+            (65.5 0.5 0.0)   // bay center (APU core region · inside-solid OK)
+            (66.5 0.5 0.0)   // downstream of APU core (vs v1 0.036 m/s · v2 0.043 m/s)
+            (65.1 0.7 -0.7)  // just downstream of intake_duct (v3 new · expect ≥1 m/s near inflow jet)
+            (65.0 1.8 -0.6)  // just upstream of vent_door (v3 new · expect ≥0.5 m/s near outflow)
+        );
+    }
+}

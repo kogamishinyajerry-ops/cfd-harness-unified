@@ -1,0 +1,69 @@
+FoamFile { version 2.0; format ascii; class dictionary; object blockMeshDict; }
+
+// case_028 v3 (V65-A B78) APU bay ventilation · STL-driven intake/vent + bg-block all-walls
+// v3 change vs v2: bg-block -x (was inlet patch) + +x (was outlet patch) → type wall (renamed end_minus_x / end_plus_x)
+// Inflow now via STL-driven intake_duct patch (sHM-defined · bbox ~1 m² aperture · surfaceNormalFixedValue U=1.5 m/s)
+// Outflow now via STL-driven vent_door patch (sHM-defined · bbox ~0.3 m² aperture · inletOutlet BC)
+// Target: mass flow ~1.5-2 kg/s in SAE AIR1168/4 typical APU bay ventilation range (0.5-2 kg/s)
+// 4 × 3.5 × 3 m enclosure containing APU bay assembly
+
+scale 1;
+
+vertices
+(
+    (63.5 -1.0 -1.5)  // 0
+    (67.5 -1.0 -1.5)  // 1
+    (67.5  2.5 -1.5)  // 2
+    (63.5  2.5 -1.5)  // 3
+    (63.5 -1.0  1.5)  // 4
+    (67.5 -1.0  1.5)  // 5
+    (67.5  2.5  1.5)  // 6
+    (63.5  2.5  1.5)  // 7
+);
+
+// Base mesh 40 × 35 × 30 = 42,000 hex (same as v1/v2 baseline)
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (40 35 30) simpleGrading (1 1 1)
+);
+
+edges ();
+
+// 6-patch boundary split — ALL bg-block faces are walls in v3
+// Ventilation flow path: external intake_duct STL → bay interior → vent_door STL exit
+// bg-block boundary now fully enclosed (no through-flow at faces)
+boundary
+(
+    end_minus_x
+    {
+        type wall;
+        faces ((0 4 7 3));  // -x face (x = 63.5) · was v2 inlet
+    }
+    end_plus_x
+    {
+        type wall;
+        faces ((2 6 5 1));  // +x face (x = 67.5) · was v2 outlet
+    }
+    bay_top
+    {
+        type wall;
+        faces ((3 7 6 2));  // +y face (y = 2.5)
+    }
+    bay_bottom
+    {
+        type wall;
+        faces ((1 5 4 0));  // -y face (y = -1.0)
+    }
+    bay_side_p
+    {
+        type wall;
+        faces ((4 5 6 7));  // +z face (z = 1.5)
+    }
+    bay_side_n
+    {
+        type wall;
+        faces ((0 3 2 1));  // -z face (z = -1.5)
+    }
+);
+
+mergePatchPairs ();
