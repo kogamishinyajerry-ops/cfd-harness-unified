@@ -1,0 +1,41 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| thermophysicalProperties — case_006 v3 thermo-FPE fix.                        |
+|                                                                               |
+| Sutherland transport restored (was downgraded to const in B59 v2.3 because   |
+| of FE_DOMAIN sqrt(T) crash · now safe because system/fvOptions clamps T to   |
+| [110, 2000] K via limitTemperature on every energy-equation correct step).   |
+|                                                                               |
+| Air constants from White, Viscous Fluid Flow (3rd ed) Table 1.2 +            |
+| OpenFOAM tutorial canonical air values.                                       |
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; location "constant"; object thermophysicalProperties; }
+
+thermoType
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       sutherland;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+mixture
+{
+    specie
+    {
+        molWeight   28.96;
+    }
+    thermodynamics
+    {
+        Cp          1004.5;         // J/(kg K) — air at 288 K
+        Hf          0;
+    }
+    transport
+    {
+        As          1.458e-06;      // Sutherland constant for air (kg/m/s/sqrt(K))
+        Ts          110.4;          // Sutherland reference T for air (K)
+    }
+}
+// ************************************************************************* //

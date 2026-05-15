@@ -1,0 +1,7 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| decomposeParDict — case_006 v64-val-full-2: 4-way scotch decomposition.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object decomposeParDict; }
+
+numberOfSubdomains  4;
+method              scotch;

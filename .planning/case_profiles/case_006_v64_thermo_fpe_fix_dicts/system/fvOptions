@@ -1,0 +1,40 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvOptions — case_006 v3 thermo-FPE fix.                                       |
+|                                                                               |
+| Purpose: prevent shock-startup transient cell-local T excursion from          |
+| triggering FE_DOMAIN (sqrt(T) on T<0) + FE_DIVBYZERO (1+Ts/T on T=0)          |
+| inside libfluidThermophysicalModels::sutherlandTransport::mu(T).              |
+|                                                                               |
+| Mechanism: rhoSimpleFoam EEqn.H calls fvOptions.correct(he) after solve;     |
+| limitTemperature back-converts the clamp into the energy field.              |
+|                                                                               |
+| Bounds:                                                                       |
+|   min 110 K  — just above sutherland Ts=110.4 K (mu(T) becomes nonphysical   |
+|                below Ts for air); also safely below T_inf=288 K              |
+|   max 2000 K — far above expected shock-heating T at M=0.84 transonic        |
+|                wing flow (T_stag = T_inf * (1 + 0.2*M^2) ≈ 329 K · post-shock |
+|                on M=1.4 lambda peak ≈ 350 K)                                 |
+|                                                                               |
+| This is the canonical OpenFOAM 2312 fix for shock-startup thermo-FPE.        |
+| Reference: $FOAM_SRC/fvOptions/sources/derived/limitTemperature/             |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+limitT_thermoFPEfix
+{
+    type            limitTemperature;
+    active          yes;
+    selectionMode   all;
+    min             110.0;
+    max             2000.0;
+}
+
+// ************************************************************************* //

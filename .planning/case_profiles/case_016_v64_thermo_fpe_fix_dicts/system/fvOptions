@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvOptions — case_016 v3 thermo-FPE fix.                                       |
+|                                                                               |
+| Purpose: prevent shock-startup transient cell-local T excursion from          |
+| triggering FE_DOMAIN (sqrt(T) on T<0) + FE_DIVBYZERO (1+Ts/T on T=0)          |
+| inside libfluidThermophysicalModels::sutherlandTransport::mu(T).              |
+|                                                                               |
+| Mechanism: rhoPimpleFoam EEqn.H calls fvOptions.correct(he) after solve;     |
+| limitTemperature back-converts the clamp into the energy field. Clamp        |
+| floor 110 K is set just above sutherland Ts=110.4 K (the bound below         |
+| which mu(T) becomes nonphysical for air). Ceiling 2000 K is far above        |
+| expected shock-heating T for M=0.85 freestream cavity flow                    |
+| (canonical post-normal-shock T at M=0.85 ≈ 290 K * 1.40^2 ≈ 568 K).          |
+|                                                                               |
+| Reference: $FOAM_SRC/fvOptions/sources/derived/limitTemperature/             |
+| limitTemperature.{H,C} · canonical since OpenFOAM-3.0.0 · in 2312.            |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+limitT_thermoFPEfix
+{
+    type            limitTemperature;
+    active          yes;
+    selectionMode   all;
+    min             110.0;
+    max             2000.0;
+}
+
+// ************************************************************************* //

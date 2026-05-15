@@ -1,0 +1,85 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | case_016 m219 cavity DES acoustic
+   \\    /   O peration     |
+    \\  /    A nd           |
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.01;
+    }
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+    Phi
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+    rho
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-7;
+        relTol          0;
+    }
+    rhoFinal
+    {
+        $rho;
+        relTol          0;
+    }
+    "(U|e|k|omega)"
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-7;
+        relTol          0.01;
+        nSweeps         1;
+    }
+    "(U|e|k|omega)Final"
+    {
+        $U;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    nOuterCorrectors    2;
+    nCorrectors         2;
+    nNonOrthogonalCorrectors 1;
+    transonic           yes;
+    consistent          yes;
+    momentumPredictor   yes;
+    pMaxFactor          1.5;
+    pMinFactor          0.5;
+}
+
+relaxationFactors
+{
+    fields
+    { p 0.7; }
+    equations
+    { U 0.7; "(e|k|omega)" 0.7; }
+}
+// ************************************************************************* //

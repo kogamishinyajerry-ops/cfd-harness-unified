@@ -1,0 +1,27 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| 0/nut — case_006 ONERA M6 v64-val-full-2.
+| nut_inf = k / omega = 12.24 / 1000 ≈ 0.01224 m^2/s
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object nut; }
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 0.01224;
+
+boundaryField
+{
+    "(farfield_upstream|farfield_downstream|farfield_top|farfield_bottom|farfield_outboard)"
+    {
+        type            freestream;
+        freestreamValue uniform 0.01224;
+        value           uniform 0.01224;
+    }
+    "(wing_surface_reference|tip_cap|root_fairing_pad|root_fairing_cover|tip_cap_sliver)"
+    {
+        type            nutkWallFunction;
+        value           uniform 0.01224;
+    }
+    symmetry_plane_root
+    {
+        type            symmetry;
+    }
+}

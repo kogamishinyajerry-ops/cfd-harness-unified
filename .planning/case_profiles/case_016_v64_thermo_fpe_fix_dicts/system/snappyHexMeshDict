@@ -1,0 +1,117 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | case_016 m219 cavity DES acoustic
+   \\    /   O peration     |
+    \\  /    A nd           |
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+castellatedMesh true;
+snap            true;
+addLayers       false;
+
+geometry
+{
+    flat_plate_upstream.stl { type triSurfaceMesh; name flat_plate_upstream; }
+    flat_plate_downstream.stl { type triSurfaceMesh; name flat_plate_downstream; }
+    flat_plate_side_port.stl { type triSurfaceMesh; name flat_plate_side_port; }
+    flat_plate_side_starboard.stl { type triSurfaceMesh; name flat_plate_side_starboard; }
+    cavity_floor.stl { type triSurfaceMesh; name cavity_floor; }
+    cavity_le_wall.stl { type triSurfaceMesh; name cavity_le_wall; }
+    cavity_te_wall.stl { type triSurfaceMesh; name cavity_te_wall; }
+    cavity_side_wall_port.stl { type triSurfaceMesh; name cavity_side_wall_port; }
+    cavity_side_wall_starboard.stl { type triSurfaceMesh; name cavity_side_wall_starboard; }
+    debris_cube.stl { type triSurfaceMesh; name debris_cube; }
+    top_far_field.stl { type triSurfaceMesh; name top_far_field; }
+    far_field_port.stl { type triSurfaceMesh; name far_field_port; }
+    far_field_starboard.stl { type triSurfaceMesh; name far_field_starboard; }
+    inflow.stl { type triSurfaceMesh; name inflow; }
+    outflow.stl { type triSurfaceMesh; name outflow; }
+    fwh_porous_surface.stl { type triSurfaceMesh; name fwh_porous_surface; }
+};
+
+castellatedMeshControls
+{
+    maxLocalCells 1000000;
+    maxGlobalCells 4000000;
+    minRefinementCells 10;
+    nCellsBetweenLevels 2;
+    features ();
+    refinementSurfaces
+    {
+        cavity_le_wall { level (4 4); patchInfo { type wall; } }
+        cavity_te_wall { level (4 4); patchInfo { type wall; } }
+        cavity_floor { level (3 3); patchInfo { type wall; } }
+        cavity_side_wall_port { level (3 3); patchInfo { type wall; } }
+        cavity_side_wall_starboard { level (3 3); patchInfo { type wall; } }
+        debris_cube { level (4 4); patchInfo { type wall; } }
+        flat_plate_upstream { level (1 2); patchInfo { type wall; } }
+        flat_plate_downstream { level (1 2); patchInfo { type wall; } }
+        flat_plate_side_port { level (1 2); patchInfo { type wall; } }
+        flat_plate_side_starboard { level (1 2); patchInfo { type wall; } }
+        top_far_field { level (0 0); patchInfo { type patch; } }
+        far_field_port { level (0 0); patchInfo { type patch; } }
+        far_field_starboard { level (0 0); patchInfo { type patch; } }
+        inflow { level (0 0); patchInfo { type patch; } }
+        outflow { level (0 0); patchInfo { type patch; } }
+        fwh_porous_surface { level (0 0); faceZone fwh_porous_surface; faceType internal; cellZone fwh_inside; cellZoneInside inside; }
+    };
+
+    resolveFeatureAngle 30;
+    refinementRegions
+    {
+        fwh_porous_surface { mode inside; levels ((1e15 3)); }
+    };
+    locationInMesh (-2.5 0.0 1.0);
+    allowFreeStandingZoneFaces true;
+}
+
+snapControls
+{
+    nSmoothPatch 3;
+    tolerance 2.0;
+    nSolveIter 30;
+    nRelaxIter 5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes true;
+    layers {};
+    expansionRatio 1.2;
+    finalLayerThickness 0.4;
+    minThickness 0.05;
+    nGrow 0;
+    featureAngle 60;
+    nRelaxIter 5;
+    nSmoothSurfaceNormals 1;
+    nSmoothNormals 3;
+    nSmoothThickness 10;
+    maxFaceThicknessRatio 0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedianAxisAngle 90;
+    nBufferCellsNoExtrude 0;
+    nLayerIter 50;
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+writeFlags ( scalarLevels layerSets layerFields );
+mergeTolerance 1e-6;
+// ************************************************************************* //

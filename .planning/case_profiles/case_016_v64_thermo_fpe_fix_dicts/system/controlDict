@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | case_016 m219 cavity DES acoustic
+   \\    /   O peration     |
+    \\  /    A nd           |
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     rhoPimpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         0.040;
+deltaT          1e-6;       // v3 thermo-FPE fix: slow startup ramp (was 1e-4 in v2)
+writeControl    adjustableRunTime;
+writeInterval   0.005;
+purgeWrite      5;
+writeFormat     binary;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   8;
+runTimeModifiable true;
+
+adjustTimeStep  yes;
+maxCo           0.3;        // v3 thermo-FPE fix: was 1.0 in v2 · tighter Co reduces shock-startup energy overshoot magnitude
+maxDeltaT       5e-5;       // v3 thermo-FPE fix: was 1e-4 in v2 · halved alongside maxCo=0.3
+
+functions
+{
+    pressureProbes_kulite
+    {
+        type            probes;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          (p);
+        probeLocations
+        (
+            (0.2794 0.0 -0.1005)
+            (0.4826 0.0 -0.1005)
+        );
+    }
+
+    fwh_porous
+    {
+        type                FWH;
+        libs                ("libfwh.so");
+        writeControl        timeStep;
+        writeInterval       1;
+        timeStart           0;
+        fields              (p U);
+        cellZone            fwh_inside;
+        surface             fwh_porous_surface;
+        observers
+        {
+            obs_8m_above
+            {
+                position (0.254 0.0 8.0);
+                pRef     101325.0;
+            }
+        }
+    }
+
+    cavity_forces
+    {
+        type            forces;
+        libs            ("libforces.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        log             yes;
+        patches         (cavity_floor cavity_le_wall cavity_te_wall cavity_side_wall_port cavity_side_wall_starboard flat_plate_upstream flat_plate_downstream flat_plate_side_port flat_plate_side_starboard);
+        rho             rhoInf;
+        rhoInf          1.2922836699440552;
+        CofR            (0.254 0.0 -0.051);
+        Uinf            (290.0 0 0);
+        lRef            0.508;
+        Aref            0.051815999999999994;
+    }
+
+}
+// ************************************************************************* //

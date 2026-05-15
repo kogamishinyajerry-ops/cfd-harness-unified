@@ -1,0 +1,29 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | case_016 m219 cavity DES acoustic
+   \\    /   O peration     |
+    \\  /    A nd           |
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType LES;
+
+LES
+{
+    LESModel            kOmegaSSTIDDES;
+    turbulence          on;
+    printCoeffs         on;
+    delta               IDDESDelta;
+    IDDESDeltaCoeffs    {}
+    cubeRootVolCoeffs   {}
+}
+// ************************************************************************* //
