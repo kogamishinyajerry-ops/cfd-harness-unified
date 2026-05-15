@@ -1,0 +1,69 @@
+# case_025 · parts_manifest · minimal stub
+#
+# 2D plane-Poiseuille channel · blockMesh-native (no STL · 4 patch faces).
+# Geometry is fully described in system/blockMeshDict (single hex block).
+
+case_id: case_025_plane_poiseuille_channel
+schema_version: 1
+geometry_mode: blockMesh_native
+last_assessed: "2026-05-15"
+last_assessed_by: "Claude Code Opus 4.7 (V64-A B67 dispatch · M-V64A-VAL-FULL-POISEUILLE)"
+
+# No STL parts — plane Poiseuille is 6 quad faces (2 walls + inlet/outlet + 2 empty).
+parts: []
+
+patches:
+  - name: inlet
+    role: velocity_inlet_parabolic_coded
+    blockmesh_patch: inlet
+    location: "x = 0, y ∈ [-H, +H] · codedFixedValue parabolic profile"
+  - name: outlet
+    role: pressure_outlet_fixed_zero
+    blockmesh_patch: outlet
+    location: "x = L = 0.5, y ∈ [-H, +H] · p = 0 fixedValue · U zeroGradient"
+  - name: topWall
+    role: no_slip_wall
+    blockmesh_patch: topWall
+    location: "y = +H = +0.01, x ∈ [0, L] · noSlip"
+  - name: bottomWall
+    role: no_slip_wall
+    blockmesh_patch: bottomWall
+    location: "y = -H = -0.01, x ∈ [0, L] · noSlip"
+  - name: frontAndBack
+    role: empty_2d
+    blockmesh_patch: [frontAndBack]
+    location: "z = 0 and z = z_thick = 0.001 · 2D empty patches"
+
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      First plane-Poiseuille substrate in repo. Analytical 1D canonical with
+      Δ < 1% expected for laminar simpleFoam on a reasonable mesh.
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      Plane Poiseuille is THE textbook laminar canonical · machine-precision
+      analytical solution u(y) = (3/2)·u_mean·(1 - (y/H)²).
+  - flag_id: inlet_bc_developed_profile
+    triggered: false
+    justification: |
+      Inlet uses codedFixedValue with the analytical parabolic profile · the
+      inlet IS the analytical solution · no entrance development needed.
+      Backup uniform-inlet path: L = 50·H = 0.5 m provides 3.1× entrance-
+      length buffer (L_entrance ≈ 0.06·Re·D = 0.16 m for Re_h=133.3).
+
+tolerance_policy:
+  u_profile_centerline_to_walls:
+    canonical: "u(y) = (3/2)·u_mean·(1 - (y/H)²)"
+    canonical_source: "Schlichting H. (2017). Boundary-Layer Theory, 9th ed. Springer §5.1.1 (plane Poiseuille); also White F.M. (2016). Viscous Fluid Flow, 3rd ed. McGraw-Hill §3.3.1"
+    tolerance_strict_full: 0.01   # max |Δu| < 1% across 17+ y-points
+    tolerance_marginal:    0.03   # max |Δu| ∈ [1%, 3%]
+  dp_dx_kinematic:
+    canonical: -0.045  # m²/s²/m  · = -3·ν·u_mean/H² · ν=1.5e-5, u_mean=0.1, H=0.01
+    canonical_source: "Schlichting H. (2017) §5.1.1 eqn (5.4)"
+    tolerance: 0.01    # |Δ| < 1% on dp/dx
+  wall_shear_stress_kinematic:
+    canonical: 0.0003  # m²/s²  · = 2·ν·u_mean/H · same as μ·du/dy at wall (kinematic)
+    canonical_source: "Schlichting H. (2017) §5.1.1 eqn (5.5)"
+    tolerance: 0.02    # |Δ| < 2% on τ_w (consequence of Δu < 1%)
