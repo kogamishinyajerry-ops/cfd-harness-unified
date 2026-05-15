@@ -1,0 +1,66 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvSolution — case_006 v64-val-full-2 (rhoSimpleFoam steady transonic).
+| GAMG for p (best for compressible). smoothSolver for U/e/k/omega.
+| URF per task brief: p=0.30, U=0.70, e=0.50, k/omega=0.70.
+| residualControl: continuity 1e-5, momentum/energy 1e-4.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object fvSolution; }
+
+solvers
+{
+    "(p|rho)"
+    {
+        solver          GAMG;
+        tolerance       1e-7;
+        relTol          0.05;
+        smoother        GaussSeidel;
+        cacheAgglomeration on;
+        nCellsInCoarsestLevel 50;
+        agglomerator    faceAreaPair;
+        mergeLevels     1;
+    }
+
+    "(U|h|e|k|omega)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-7;
+        relTol          0.1;
+        nSweeps         1;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 1;
+    consistent          no;
+    transonic           yes;
+    rhoMin              0.3;
+    rhoMax              2.0;
+
+    residualControl
+    {
+        p               1e-5;
+        U               1e-4;
+        h               1e-4;
+        e               1e-4;
+        "(k|omega)"     1e-4;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.30;
+        rho             0.05;
+    }
+    equations
+    {
+        U               0.70;
+        h               0.50;
+        e               0.50;
+        k               0.70;
+        omega           0.70;
+    }
+}

@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvSchemes — case_006 v64-val-full-2 (rhoSimpleFoam steady transonic).
+| Bounded upwind + linearUpwind for shock-capturing stability.
+| Reference: OpenFOAM tutorials/compressible/rhoSimpleFoam/squareBend.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object fvSchemes; }
+
+ddtSchemes
+{
+    default         steadyState;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+    grad(U)         cellLimited Gauss linear 1;
+    grad(p)         cellLimited Gauss linear 1;
+    grad(T)         cellLimited Gauss linear 1;
+    grad(k)         cellLimited Gauss linear 1;
+    grad(omega)     cellLimited Gauss linear 1;
+}
+
+divSchemes
+{
+    default         none;
+    div(phi,U)      bounded Gauss linearUpwindV grad(U);
+    div(phi,h)      bounded Gauss upwind;
+    div(phi,e)      bounded Gauss upwind;
+    div(phi,K)      bounded Gauss upwind;
+    div(phi,Ekp)    bounded Gauss upwind;
+    div(phid,p)     Gauss limitedLinear 1;
+    div(phi,k)      bounded Gauss upwind;
+    div(phi,omega)  bounded Gauss upwind;
+    div((phi|interpolate(rho)),p) bounded Gauss limitedLinear 1;
+    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+wallDist
+{
+    method          meshWave;
+}

@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| 0/omega — case_006 ONERA M6 v64-val-full-2.
+| omega_inf = sqrt(k) / (Cmu^0.25 * L)
+|   k = 12.24, L = 0.01 * MAC = 0.00646 m, Cmu = 0.09
+|   omega_inf = 3.498 / (0.5477 * 0.00646) ≈ 988.7 1/s
+| Use 1000 1/s for canonical clean value.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object omega; }
+
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform 1000.0;
+
+boundaryField
+{
+    "(farfield_upstream|farfield_downstream|farfield_top|farfield_bottom|farfield_outboard)"
+    {
+        type            freestream;
+        freestreamValue uniform 1000.0;
+        value           uniform 1000.0;
+    }
+    "(wing_surface_reference|tip_cap|root_fairing_pad|root_fairing_cover|tip_cap_sliver)"
+    {
+        type            omegaWallFunction;
+        value           uniform 1000.0;
+    }
+    symmetry_plane_root
+    {
+        type            symmetry;
+    }
+}

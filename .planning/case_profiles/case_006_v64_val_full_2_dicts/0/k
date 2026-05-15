@@ -1,0 +1,28 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| 0/k — case_006 ONERA M6 v64-val-full-2.
+| k_inf = 1.5 * (Tu * U_inf)^2 = 1.5 * (0.01 * 285.6)^2 ≈ 12.24 m^2/s^2
+| (turbulence intensity Tu = 1% canonical wind-tunnel value).
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class volScalarField; location "0"; object k; }
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 12.24;
+
+boundaryField
+{
+    "(farfield_upstream|farfield_downstream|farfield_top|farfield_bottom|farfield_outboard)"
+    {
+        type            freestream;
+        freestreamValue uniform 12.24;
+        value           uniform 12.24;
+    }
+    "(wing_surface_reference|tip_cap|root_fairing_pad|root_fairing_cover|tip_cap_sliver)"
+    {
+        type            kqRWallFunction;
+        value           uniform 12.24;
+    }
+    symmetry_plane_root
+    {
+        type            symmetry;
+    }
+}

@@ -1,0 +1,110 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| snappyHexMeshDict — case_006 v64-val-full-2.
+| Wing surface refinement bumped from v1 (4,5) to (5,6) — 4x cell density at wall.
+| 4 prism layers enabled for compressible RANS boundary-layer resolution.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object snappyHexMeshDict; }
+
+castellatedMesh true;
+snap            true;
+addLayers       true;
+
+geometry
+{
+    wing_surface_reference  { type triSurfaceMesh; file "wing_surface_reference.stl"; }
+    tip_cap                 { type triSurfaceMesh; file "tip_cap.stl"; }
+    root_fairing_pad        { type triSurfaceMesh; file "root_fairing_pad.stl"; }
+    root_fairing_cover      { type triSurfaceMesh; file "root_fairing_cover.stl"; }
+    tip_cap_sliver          { type triSurfaceMesh; file "tip_cap_sliver.stl"; }
+}
+
+castellatedMeshControls
+{
+    maxLocalCells       4000000;
+    maxGlobalCells      6000000;
+    minRefinementCells  0;
+    nCellsBetweenLevels 3;
+    resolveFeatureAngle 30;
+    allowFreeStandingZoneFaces true;
+
+    features ();
+
+    refinementSurfaces
+    {
+        wing_surface_reference
+        {
+            level (6 7);
+            patchInfo { type wall; }
+        }
+        tip_cap
+        {
+            level (5 6);
+            patchInfo { type wall; }
+        }
+        root_fairing_pad
+        {
+            level (4 5);
+            patchInfo { type wall; }
+        }
+        root_fairing_cover
+        {
+            level (4 5);
+            patchInfo { type wall; }
+        }
+        tip_cap_sliver
+        {
+            level (1 2);
+            patchInfo { type wall; }
+        }
+    }
+
+    refinementRegions {}
+
+    locationInMesh (-5.0 5.0 5.0);
+}
+
+snapControls
+{
+    nSmoothPatch    3;
+    tolerance       2.0;
+    nSolveIter      30;
+    nRelaxIter      5;
+    nFeatureSnapIter 10;
+    implicitFeatureSnap false;
+    explicitFeatureSnap true;
+    multiRegionFeatureSnap false;
+}
+
+addLayersControls
+{
+    relativeSizes      true;
+
+    layers
+    {
+        wing_surface_reference  { nSurfaceLayers 4; }
+        tip_cap                 { nSurfaceLayers 4; }
+    }
+
+    expansionRatio          1.25;
+    finalLayerThickness     0.35;
+    minThickness            0.05;
+    nGrow                   0;
+    featureAngle            60;
+    nRelaxIter              5;
+    nSmoothSurfaceNormals   1;
+    nSmoothNormals          3;
+    nSmoothThickness        10;
+    maxFaceThicknessRatio   0.5;
+    maxThicknessToMedialRatio 0.3;
+    minMedialAxisAngle      90;
+    nBufferCellsNoExtrude   0;
+    nLayerIter              50;
+}
+
+meshQualityControls
+{
+    #include "meshQualityDict"
+}
+
+debug 0;
+mergeTolerance 1e-6;

@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| thermophysicalProperties — case_006 v64-val-full-2.
+| Sutherland transport (mu(T)) for canonical compressible transonic accuracy.
+| Air constants from White, Viscous Fluid Flow (3rd ed) Table 1.2.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; location "constant"; object thermophysicalProperties; }
+
+thermoType
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       sutherland;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleEnthalpy;
+}
+
+mixture
+{
+    specie
+    {
+        molWeight   28.96;
+    }
+    thermodynamics
+    {
+        Cp          1004.5;         // J/(kg K) — air at 288 K
+        Hf          0;
+    }
+    transport
+    {
+        As          1.4592e-06;     // Sutherland reference, kg/(m s sqrt(K))
+        Ts          110.4;          // Sutherland temperature, K
+    }
+}

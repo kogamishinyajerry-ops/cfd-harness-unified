@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| controlDict — case_006 v64-val-full-2 (rhoSimpleFoam steady).
+| residualControl: continuity 1e-5, momentum/energy 1e-4 per task brief.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+application     rhoSimpleFoam;
+startFrom       latestTime;
+startTime       0;
+stopAt          endTime;
+endTime         3000;            // iter cap (steady solver: 1 step = 1 iter)
+deltaT          1;
+writeControl    timeStep;
+writeInterval   500;             // write every 500 iter (6 snapshots over 3000)
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+functions
+{
+    forceCoeffs1
+    {
+        type            forceCoeffs;
+        libs            (forces);
+        writeControl    timeStep;
+        writeInterval   25;
+        patches         (wing_surface_reference);
+        rho             rhoInf;
+        rhoInf          1.133;
+        log             true;
+        liftDir         (-0.0533841 0 0.998574);
+        dragDir         ( 0.998574 0 0.0533841);
+        CofR            (0.4 0 0);
+        pitchAxis       (0 1 0);
+        magUInf         285.6;
+        lRef            0.64607;
+        Aref            0.7626;
+    }
+
+    fieldMinMax1
+    {
+        type            fieldMinMax;
+        libs            (fieldFunctionObjects);
+        writeControl    timeStep;
+        writeInterval   100;
+        fields          (U p T);
+        log             true;
+    }
+}
