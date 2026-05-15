@@ -1,0 +1,63 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004 · M-V64A-VAL-FULL-1                    |
+|    \\/     M anipulation  | kinematic pressure (Pa / rho)                   |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    bg_inlet
+    {
+        type            zeroGradient;
+    }
+    bg_outlet
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    bg_tunnel_walls
+    {
+        type            slip;
+    }
+    "rotor_blade_.*"
+    {
+        type            zeroGradient;
+    }
+    "hub_spinner_.*"
+    {
+        type            zeroGradient;
+    }
+    nacelle_body
+    {
+        type            zeroGradient;
+    }
+    nacelle_service_cover
+    {
+        type            zeroGradient;
+    }
+    tower_body
+    {
+        type            zeroGradient;
+    }
+    yaw_sensor_shim
+    {
+        type            zeroGradient;
+    }
+}
+
+// ************************************************************************* //

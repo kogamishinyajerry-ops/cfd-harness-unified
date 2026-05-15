@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004_nrel_phase_vi_mrf                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      MRFProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+MRF1
+{
+    cellZone        rotating_cellzone;
+    active          yes;
+
+    nonRotatingPatches ();
+
+    origin          (0.0 0.0 0.0);
+    // axis sign flipped B57: NREL Phase VI / UAE Phase VI rotor rotates
+    // counter-clockwise viewed from upstream (per NREL/TP-500-29955 §1
+    // + Hand et al. 2001 Fig. 1-2). Wind blows in +x; by right-hand rule
+    // ω_vec must point in -x to produce CCW-from-upwind rotation. v1
+    // used (1 0 0) which produced reversed aerodynamics (LE on trailing
+    // side of motion → Cp > Betz limit). See validation report v3 §3.
+    axis            (-1.0 0.0 0.0);
+    omega           7.539822369;
+}
+
+// ************************************************************************* //

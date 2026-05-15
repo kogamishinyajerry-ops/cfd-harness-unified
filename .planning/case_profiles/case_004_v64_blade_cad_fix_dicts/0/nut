@@ -1,0 +1,71 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004 · M-V64A-VAL-FULL-1                    |
+|    \\/     M anipulation  | turbulent kinematic viscosity                   |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      nut;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    bg_inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bg_outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    bg_tunnel_walls
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    "rotor_blade_.*"
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    "hub_spinner_.*"
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    nacelle_body
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    nacelle_service_cover
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    tower_body
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    yaw_sensor_shim
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+}
+
+// ************************************************************************* //
