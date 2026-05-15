@@ -1,0 +1,103 @@
+=== HEAD (first 50 lines) ===
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : simpleFoam
+Date   : May 15 2026
+Time   : 07:52:34
+Host   : ab737891b29a
+PID    : 233
+I/O    : uncollated
+Case   : /case
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 1e-07
+    field U	 tolerance 1e-07
+
+Reading field p
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+Selecting incompressible transport model Newtonian
+Selecting turbulence model type laminar
+Selecting laminar stress model Stokes
+No MRF models present
+
+No finite volume options present
+
+Starting time loop
+
+Time = 1
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 1, Final residual = 0.05174083096, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 0, Final residual = 0, No Iterations 0
+
+=== TAIL (last 50 lines including convergence statement) ===
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.728196287e-08, Final residual = 2.017630497e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1.01123404e-07, Final residual = 9.536694372e-10, No Iterations 10
+time step continuity errors : sum local = 7.00173495e-11, global = -3.095206455e-19, cumulative = 1.2444776e-15
+ExecutionTime = 93.26 s  ClockTime = 94 s
+
+Time = 4159
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 2.426377171e-08, Final residual = 2.187505847e-10, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.721298961e-08, Final residual = 2.012533028e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1.008688654e-07, Final residual = 9.512336634e-10, No Iterations 10
+time step continuity errors : sum local = 6.983845731e-11, global = 5.428517526e-18, cumulative = 1.249906118e-15
+ExecutionTime = 93.28 s  ClockTime = 94 s
+
+Time = 4160
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 2.420197476e-08, Final residual = 2.181974621e-10, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.714419528e-08, Final residual = 2.007448743e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1.006149826e-07, Final residual = 9.488062558e-10, No Iterations 10
+time step continuity errors : sum local = 6.966027329e-11, global = -8.810972789e-18, cumulative = 1.241095145e-15
+ExecutionTime = 93.3 s  ClockTime = 94 s
+
+Time = 4161
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 2.414033983e-08, Final residual = 2.176457782e-10, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.707557964e-08, Final residual = 2.002377602e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1.003617587e-07, Final residual = 9.463869168e-10, No Iterations 10
+time step continuity errors : sum local = 6.948270267e-11, global = 8.292697606e-18, cumulative = 1.249387843e-15
+ExecutionTime = 93.32 s  ClockTime = 94 s
+
+Time = 4162
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 2.407886582e-08, Final residual = 2.170955287e-10, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.70071416e-08, Final residual = 1.99731967e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 1.001091932e-07, Final residual = 9.439734241e-10, No Iterations 10
+time step continuity errors : sum local = 6.930553158e-11, global = 1.971140897e-17, cumulative = 1.269099252e-15
+ExecutionTime = 93.34 s  ClockTime = 94 s
+
+Time = 4163
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 2.401755215e-08, Final residual = 2.165467084e-10, No Iterations 1
+DILUPBiCGStab:  Solving for Uy, Initial residual = 2.69388807e-08, Final residual = 1.992274827e-10, No Iterations 1
+GAMG:  Solving for p, Initial residual = 9.985728286e-08, Final residual = 9.415659548e-10, No Iterations 10
+time step continuity errors : sum local = 6.91288378e-11, global = 3.650616877e-18, cumulative = 1.272749869e-15
+ExecutionTime = 93.36 s  ClockTime = 94 s
+
+
+SIMPLE solution converged in 4163 iterations
+
+End
+
