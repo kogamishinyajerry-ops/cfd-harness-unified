@@ -1,0 +1,33 @@
+========================================================================
+case_004 mesh convergence study · M-V64A-MESH-CONV-STUDY
+========================================================================
+
+level                                      last_t   rows         Cp         Ct       P_kW
+-----------------------------------------------------------------------------------------------
+h (B56 canonical, 919,762 cells)              500     50     4.6036     0.1682     76.821
+h/2 (630,586 cells)                           230     23     4.2139     0.1175     70.318
+h/4 (566,882 cells)                           260     26     4.1408     0.0747     69.098
+
+--- Richardson trend test (Cp) ---
+Cp_h4 = 4.140782
+Cp_h2 = 4.213853  ΔCp(h/2 - h/4) = +0.073070
+Cp_h  = 4.603600  ΔCp(h - h/2)   = +0.389747
+Monotonic trend?  (same-sign Δ): YES
+Asymptotic?       (|Δfine| < |Δcoarse|): NO
+|ΔCp_fine| / |Cp_h|: 8.47%
+
+--- Richardson trend test (Ct) ---
+Ct_h4 = 0.074740
+Ct_h2 = 0.117536  ΔCt(h/2 - h/4) = +0.042797
+Ct_h  = 0.168200  ΔCt(h - h/2)   = +0.050664
+Monotonic trend?  (same-sign Δ): YES
+Asymptotic?       (|Δfine| < |Δcoarse|): NO
+|ΔCt_fine| / |Ct_h|: 30.12%
+
+--- Verdict ---
+Cp monotonic: True
+Ct monotonic: True
+Overall monotonic convergence trend: PASS
+
+Relative |Cp_h - Cp_h/4| / |Cp_h| = 10.05%
+=> Mesh density NON-trivial impact (>10%) — under-resolution joins case-spec as compound issue.
