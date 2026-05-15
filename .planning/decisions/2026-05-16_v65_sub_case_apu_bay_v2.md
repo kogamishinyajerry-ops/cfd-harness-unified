@@ -4,7 +4,7 @@ title: V65-A Tier 2 sub-DEC · case_028 v2 APU bay ventilation · no-slip latera
 status: Accepted
 parent_dec: DEC-V65-A-charter
 phase: V65-A Tier 2 · M-V65A-CASE-APU-BAY-V2
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-16 (https://www.notion.so/361c68942bed81ee911ed4df7f2df727)
 authored_by: Claude Code Opus 4.7 (1M context) · V65-A B77 APU-bay-v2 sub-session
 authored_at: 2026-05-16
 confidence: med
