@@ -1,0 +1,95 @@
+# case_027 · parts_manifest · minimal stub
+#
+# Hagen-Poiseuille pipe flow · axisymmetric wedge · blockMesh-native (no STL).
+# Geometry is fully described in system/blockMeshDict (single hex wedge block).
+
+case_id: case_027_hagen_poiseuille_pipe
+schema_version: 1
+geometry_mode: blockMesh_native_axisymmetric_wedge
+last_assessed: "2026-05-15"
+last_assessed_by: "Claude Code Opus 4.7 (V64-A B70 dispatch · M-V64A-VAL-FULL-PIPE)"
+
+# No STL parts — axisymmetric wedge pipe is a single degenerate-edge hex block.
+parts: []
+
+patches:
+  - name: inlet
+    role: velocity_inlet_parabolic_coded
+    blockmesh_patch: inlet
+    location: "x = 0, r ∈ [0, R] (annulus across wedge) · codedFixedValue u(r) = 2·u_mean·(1-(r/R)²)"
+  - name: outlet
+    role: pressure_outlet_fixed_zero
+    blockmesh_patch: outlet
+    location: "x = L = 0.5, r ∈ [0, R] · p = 0 fixedValue · U zeroGradient"
+  - name: wall
+    role: no_slip_wall
+    blockmesh_patch: wall
+    location: "r = R = 0.005, x ∈ [0, L] · noSlip · pipe outer surface"
+  - name: front
+    role: wedge_symmetry
+    blockmesh_patch: front
+    location: "azimuth angle +θ/2 = +2.5° face · OpenFOAM wedge boundary type"
+  - name: back
+    role: wedge_symmetry
+    blockmesh_patch: back
+    location: "azimuth angle -θ/2 = -2.5° face · OpenFOAM wedge boundary type"
+  # NOTE: No separate axis patch. The pipe centerline (r=0) is a degenerate edge
+  # along the wedge block where 4 of 8 hex vertices coincide (axis line). OpenFOAM
+  # blockMesh handles the degeneracy natively; the front+back wedge patches handle
+  # the rotational symmetry implicitly.
+
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      First axisymmetric wedge substrate in repo. Hagen-Poiseuille analytical
+      r-parabolic 1D-equivalent canonical with Δ < 1% expected · machine-precision
+      achievable on a reasonable mesh (per case_025 plane Poiseuille precedent
+      hitting 0.04% max |Δu|).
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      Hagen-Poiseuille pipe (r-parabolic 1D-equivalent) is THE textbook canonical
+      for axisymmetric internal laminar flow · machine-precision analytical
+      u(r) = 2·u_mean·(1 - (r/R)²) · solver-class identical to case_025 plane
+      Poiseuille (simpleFoam laminar) which strict-FULL passed first try.
+  - flag_id: inlet_bc_developed_profile
+    triggered: false
+    justification: |
+      Inlet uses codedFixedValue with the analytical parabolic profile · the
+      inlet IS the analytical solution · no entrance development needed.
+      Backup uniform-inlet path: L = 100·R = 0.5 m provides 12.5× entrance-
+      length buffer (L_entrance ≈ 0.06·Re·D = 0.04 m for Re_D=66.7).
+  - flag_id: axisymmetric_wedge_axis_discretization
+    triggered: true
+    justification: |
+      Wedge mesh has degenerate cells at the axis (r=0) where azimuthal cell
+      width shrinks to zero. With r-grading 0.333 toward wall (cells 3× larger
+      at axis), the centerline cell center is at r ≈ 1.05e-4 m, where analytical
+      u = u_max·(1-(1.05e-4/5e-3)²) ≈ 0.999978·u_max → axis-discretization
+      bias < 0.05% before solver error. Below 1% strict gate margin × 20.
+      Mitigation: grade with axis cells coarser (3:1 wall→axis ratio inverted from
+      case_025) to keep wall-shear sampling fine while accepting axis under-
+      resolution that is analytically irrelevant.
+  - flag_id: codedFixedValue_radial_geometry
+    triggered: true
+    justification: |
+      codedFixedValue must compute r = sqrt(y²+z²) per face center (not just |y|),
+      because the wedge spans z ∈ [-R·sin(2.5°), +R·sin(2.5°)] for the outermost
+      cells. Plane Poiseuille (case_025) used u(y) directly · pipe needs u(r)
+      where r is the actual radius. First codedFixedValue-with-sqrt-radius in repo.
+
+tolerance_policy:
+  u_profile_centerline_to_wall:
+    canonical: "u(r) = 2·u_mean·(1 - (r/R)²)"
+    canonical_source: "Schlichting H. (2017). Boundary-Layer Theory, 9th ed. Springer §5.1.2 (Hagen-Poiseuille pipe flow); also White F.M. (2016). Viscous Fluid Flow, 3rd ed. McGraw-Hill §3.3.3"
+    tolerance_strict_full: 0.01   # max |Δu| < 1% across 17+ r-points
+    tolerance_marginal:    0.03   # max |Δu| ∈ [1%, 3%]
+  dp_dx_kinematic:
+    canonical: -0.48   # m²/s²/m · = -8·ν·u_mean/R² · ν=1.5e-5, u_mean=0.1, R=0.005
+    canonical_source: "Schlichting H. (2017) §5.1.2 eqn (Hagen-Poiseuille pressure-gradient)"
+    tolerance: 0.01    # |Δ| < 1% on dp/dx
+  wall_shear_stress_kinematic:
+    canonical: 0.0012  # m²/s² · = 4·ν·u_mean/R · = ν·|du/dr|_{r=R} = ν·(-2·u_max/R)·(-1) magnitude
+    canonical_source: "Schlichting H. (2017) §5.1.2 eqn (Hagen-Poiseuille wall shear); also White §3.3.3 eqn (3-33)"
+    tolerance: 0.01    # |Δ| < 1% on τ_w · briefing strict gate (vs case_025's 2% which was cross-check)
