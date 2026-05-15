@@ -71,7 +71,7 @@
 
 ### Tier 1 · 解锁性 (V64-A carry-over absorption + V101 highest-confidence promote · parallel · independent)
 
-- [ ] **M-V65A-V101-PROMOTE** — V101 case_004 F-NEW-3 `section_wire()` chord-axis convention bug → V-series V101 row promotion · V64-A B57+B63 EMPIRICALLY CONFIRMED |M_x| 37× shift · distinct-signature criterion met · primary V101 landing · single-row promotion · highest-confidence Tier 1 milestone · **commit: `_____`**
+- [x] **M-V65A-V101-PROMOTE** — V101 case_004 F-NEW-3 `section_wire()` chord-axis convention bug → V-series V101 row promotion · V64-A B57+B63 EMPIRICALLY CONFIRMED |M_x| 37× shift · distinct-signature criterion met · primary V101 landing · single-row promotion · highest-confidence Tier 1 milestone · **LANDED 2026-05-15 B73 · commit: `0e0d225` (V-corpus row) + `99cc42e` (sub-DEC `DEC-V65-A-sub-M-V65A-V101-PROMOTE`)**
 - [ ] **M-V65A-CASE-004-LE-TE-FIX** — case_004 NREL Phase VI F-NEW-3.1 LE/TE orientation fix attempt · `scripts/build_cad.py::section_wire()` v2 LE/TE tangential repair · re-tessellate STL · re-run simpleFoam + Cp/Ct + Δ vs NREL UAE Seq S · **V64-A carry-over #1 absorption** · primary V102 promotion source · **commit: `_____`**
 - [ ] **M-V65A-CASE-006-THERMO-LAYER3** — case_006 ONERA M6 thermo-FPE Layer 3 fix · sutherland restore + limitTemperature [110, 2000]K + URF v4 + PIMPLE p-coupling stability + rhoCentralFoam OR rhoPimpleFoam variant · **V64-A carry-over #5 partial absorption** · primary V106 promotion source (1st of 2-case template) · **commit: `_____`**
 - [ ] **M-V65A-CASE-016-3AXIS** — case_016 m219 cavity DES-acoustic 3-axis fix · combined thermo stability + PIMPLE p-coupling + controlDict window extension · **V64-A carry-over #5 partial absorption** · 2nd witness paired with M-V65A-CASE-006-THERMO-LAYER3 for V106 template confirmation · **commit: `_____`**
@@ -117,7 +117,7 @@ Done #1 ≥ 5/5 = all 5 absorbed (LANDED OR mark QUESTIONABLE / re-classify with
 
 | V101+ row | V64-A source | V65-A landing milestone | Promotion criterion | Status |
 |---|---|---|---|---|
-| **V101** | B57 + B63 case_004 F-NEW-3 chord-axis convention | M-V65A-V101-PROMOTE (Tier 1) | EMPIRICALLY CONFIRMED V64-A · distinct-signature met · ≥2-case witness via B57 + B63 cross-evidence within case_004 | candidate firm · pending landing |
+| **V101** | B57 + B63 case_004 F-NEW-3 chord-axis convention | M-V65A-V101-PROMOTE (Tier 1) | EMPIRICALLY CONFIRMED V64-A · distinct-signature met · canonical-reference attribution NREL/TP-500-29955 §3 + Table B-1 | **LANDED 2026-05-15 B73 · `0e0d225` (corpus row) + `99cc42e` (sub-DEC `DEC-V65-A-sub-M-V65A-V101-PROMOTE`)** |
 | **V102** | B63 case_004 F-NEW-3.1 LE/TE orientation | M-V65A-V102-PROMOTE (Tier 2) post M-V65A-CASE-004-LE-TE-FIX | needs 2nd-pass verification: |M_x| sign + Cp band OR else QUESTIONABLE | candidate ~50% · gated on Tier-1 fix attempt yield |
 | **V103** | B64 case_021 NASA TMR · 2 sub-signatures (F-NEW-C + F-NEW-low-Re) | M-V65A-V103-PROMOTE (Tier 2) post M-V65A-CASE-TBL-2ND-RE | needs 2nd TBL case to disambiguate · 2 rows possible | candidate ~60% · split possible |
 | **V104** | B66 case_022 BFS · F-NEW-15 inlet BL | M-V65A-V104-PROMOTE (Tier 2) post M-V65A-CASE-NACA-STALL | separation 2nd witness needed · NACA stall must surface consistent pattern | candidate ~60% |
@@ -133,8 +133,9 @@ Done #1 ≥ 5/5 = all 5 absorbed (LANDED OR mark QUESTIONABLE / re-classify with
 ```
 当前 V64-A carry-over absorption:                 0 / 5 (target 5/5 · Done #1)
                                                   待 LANDED: #1 F-NEW-3.1 fix · #2 NACA stall · #3 TBL 2nd Re · #4 wedge-axis 2nd · #5 thermo template 2nd
-当前 V101+ promotion 进 V-series corpus:           0 / 6 (target ≥4/6 · Done #2)
-                                                  candidate firmness: V101 firm · V105 ~70% · V103/V104 ~60% · V102/V106 ~50%
+当前 V101+ promotion 进 V-series corpus:           1 / 6 (target ≥4/6 · Done #2)
+                                                  LANDED: V101 (B73 · `0e0d225` corpus + `99cc42e` sub-DEC)
+                                                  pending firmness: V105 ~70% · V103/V104 ~60% · V102/V106 ~50%
 当前 Net-new 工业 case e2e:                       0 / 2 (target ≥2 industrial FULL or strong-PARTIAL · Done #3)
                                                   candidate set: APU bay · NACA stall · Sandia Flame D · 2nd TBL
 当前 Industrial-grade FULL reports:               0 / 3 (target ≥3 工业级 · Done #4 · 1D analytical NOT counted)
@@ -145,7 +146,7 @@ Done #1 ≥ 5/5 = all 5 absorbed (LANDED OR mark QUESTIONABLE / re-classify with
 当前 Done dims MET:                               0 / 6
 ```
 
-最后更新时间：`2026-05-15 **ARC ACTIVATED · B72 V65-A charter Accepted · ARC-GOAL initialized · 0/6 Done dims · 0 sub-DECs LANDED yet** · counter +1 charter · 更新人：Claude Code Opus 4.7 session main`
+最后更新时间：`2026-05-15 **B73 V101 corpus LANDED · M-V65A-V101-PROMOTE Tier 1 milestone state PENDING → LANDED · Done #2 V101+ promotion 0/6 → 1/6 · 1 sub-DEC LANDED (DEC-V65-A-sub-M-V65A-V101-PROMOTE) · counter +1 sub-DEC** · 更新人：Claude Code Opus 4.7 session main`
 
 ---
 
