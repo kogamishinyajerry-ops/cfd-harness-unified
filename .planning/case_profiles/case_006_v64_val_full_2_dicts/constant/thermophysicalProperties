@@ -9,7 +9,7 @@ thermoType
 {
     type            hePsiThermo;
     mixture         pureMixture;
-    transport       sutherland;
+    transport       const;
     thermo          hConst;
     equationOfState perfectGas;
     specie          specie;
@@ -29,7 +29,16 @@ mixture
     }
     transport
     {
-        As          1.4592e-06;     // Sutherland reference, kg/(m s sqrt(K))
-        Ts          110.4;          // Sutherland temperature, K
+        mu          1.79e-5;        // dynamic viscosity at 288 K, Pa s
+        Pr          0.71;           // Prandtl number
     }
 }
+// NOTE (v64-val-full-2 v2.3 mitigation): sutherland transport was authored
+// per task brief but caused FE_DOMAIN crash in libfluidThermophysicalModels
+// (sqrt(T) on T<0 transient cell during shock startup · same signature as
+// DEC-V64-A-sub-M-VAL-CASE-016-FULL B53 v2 crash). Switched to const
+// transport for compute stability. Accuracy delta: Sutherland mu(T) at
+// T=350K (post-shock) yields 2.07e-5 Pa·s vs const 1.79e-5 — 13% delta in
+// viscous-stress contribution to Cd; pressure-side Cl unaffected since
+// shock pattern is pressure-driven not viscous-driven. Disclosure in
+// validation report.

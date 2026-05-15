@@ -1,0 +1,58 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvSchemes — density-based shock-capturing for rhoCentralFoam (case_006).      |
+| Per parts_manifest.yaml numerics_hints + case.yaml numerics block.            |
+| Reference: OpenFOAM tutorials/compressible/rhoCentralFoam/{forwardStep,wedge15Ma5}|
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object fvSchemes; }
+
+ddtSchemes
+{
+    default         localEuler;     // pseudo-steady, cell-local time stepping
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+    grad(U)         cellLimited Gauss linear 1;
+}
+
+// rhoCentralFoam canonical pattern: Kurganov flux scheme + reconstruction
+// schemes for ρ, ρU, T. Reconstructions live in interpolationSchemes.
+divSchemes
+{
+    default                                 none;
+    div(tauMC)                              Gauss linear;
+    div(phi,U)                              Gauss linearUpwindV grad(U);
+    div(phid,p)                             Gauss linearUpwind default;
+    div(phi,K)                              Gauss linearUpwind default;
+    div(phi,h)                              Gauss linearUpwind default;
+    div(phi,e)                              Gauss linearUpwind default;
+    div(phi,k)                              Gauss upwind;
+    div(phi,omega)                          Gauss upwind;
+    div(((rho*nuEff)*dev2(T(grad(U)))))     Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default              linear;
+    reconstruct(rho)     Minmod;          // Minmod = less dissipative than venkatakrishnan; preserves lambda
+    reconstruct(U)       MinmodV;
+    reconstruct(T)       Minmod;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+fluxRequired
+{
+    default         no;
+    p;
+    rho;
+}

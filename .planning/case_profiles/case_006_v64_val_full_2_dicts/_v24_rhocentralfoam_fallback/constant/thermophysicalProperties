@@ -1,0 +1,33 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| thermophysicalProperties — air, perfect gas, constant transport for v1.       |
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; location "constant"; object thermophysicalProperties; }
+
+thermoType
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          eConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+mixture
+{
+    specie
+    {
+        molWeight   28.96;
+    }
+    thermodynamics
+    {
+        Cv          717.5;          // J/(kg K) — air at 288 K
+        Hf          0;
+    }
+    transport
+    {
+        mu          1.7894e-5;      // kg/(m s) at 288 K
+        Pr          0.71;
+    }
+}

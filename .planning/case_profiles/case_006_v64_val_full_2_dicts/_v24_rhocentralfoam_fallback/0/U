@@ -1,0 +1,27 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| 0/U — case_006 ONERA M6 v64-val-full-2 (rhoSimpleFoam + kOmegaSST RAS).
+| Freestream M_inf=0.8395, alpha=3.06°. Far-field freestream BC family.
+| Wing surfaces noSlip. Symmetry plane y=0.
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class volVectorField; location "0"; object U; }
+
+dimensions      [0 1 -1 0 0 0 0];
+internalField   uniform (285.193 0.0 15.245);
+
+boundaryField
+{
+    "(farfield_upstream|farfield_downstream|farfield_top|farfield_bottom|farfield_outboard)"
+    {
+        type            freestream;
+        freestreamValue uniform (285.193 0.0 15.245);
+        value           uniform (285.193 0.0 15.245);
+    }
+    "(wing_surface_reference|tip_cap|root_fairing_pad|root_fairing_cover|tip_cap_sliver)"
+    {
+        type            noSlip;
+    }
+    symmetry_plane_root
+    {
+        type            symmetry;
+    }
+}

@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| controlDict — rhoCentralFoam (case_006).                                      |
+\*---------------------------------------------------------------------------*/
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+application     rhoCentralFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+// rhoCentralFoam is explicit central-upwind. dt is sound-speed-limited;
+// adjustTimeStep yes ensures Co < maxCo across all cells. Initial dt = 1e-6 s
+// (1 us) is conservative for ~31 mm cells at ~340 m/s sound speed (Co≈0.011).
+endTime         0.005;          // v2.4 mid-run shortened from 0.008 → 0.005 (v1 baseline endpoint) for direct v1↔v2.4 force-coefficient + Cp comparison; quasi-stationary plateau verified per v1 REPORT.
+deltaT          1e-6;
+writeControl    runTime;
+writeInterval   0.001;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+adjustTimeStep  yes;
+maxCo           0.5;
+
+functions
+{
+    forces
+    {
+        type            forceCoeffs;
+        libs            (forces);
+        writeControl    timeStep;
+        writeInterval   10;
+        patches         (wing_surface_reference);
+        rho             rhoInf;
+        rhoInf          1.133;
+        log             true;
+        liftDir         (-0.0533841 0 0.998574);   // perpendicular to U_inf, in symmetry plane
+        dragDir         ( 0.998574 0 0.0533841);   // along U_inf
+        CofR            (0.4 0 0);
+        pitchAxis       (0 1 0);
+        magUInf         285.6;
+        lRef            0.64607;        // MAC in meters
+        Aref            0.7626;         // half-wing planform; estimate from chord/span
+    }
+}

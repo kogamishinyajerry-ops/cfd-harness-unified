@@ -10,23 +10,18 @@ solvers
 {
     "(p|rho)"
     {
-        solver          GAMG;
+        solver          PBiCGStab;
+        preconditioner  DILU;
         tolerance       1e-7;
         relTol          0.05;
-        smoother        GaussSeidel;
-        cacheAgglomeration on;
-        nCellsInCoarsestLevel 50;
-        agglomerator    faceAreaPair;
-        mergeLevels     1;
     }
 
     "(U|h|e|k|omega)"
     {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
+        solver          PBiCGStab;
+        preconditioner  DILU;
         tolerance       1e-7;
         relTol          0.1;
-        nSweeps         1;
     }
 }
 
@@ -35,8 +30,10 @@ SIMPLE
     nNonOrthogonalCorrectors 1;
     consistent          no;
     transonic           yes;
-    rhoMin              0.3;
-    rhoMax              2.0;
+    rhoMin              0.1;
+    rhoMax              3.0;
+    pMin                30000.0;
+    pMax                300000.0;
 
     residualControl
     {
@@ -52,15 +49,15 @@ relaxationFactors
 {
     fields
     {
-        p               0.30;
+        p               0.10;
         rho             0.05;
     }
     equations
     {
-        U               0.70;
-        h               0.50;
-        e               0.50;
-        k               0.70;
-        omega           0.70;
+        U               0.30;
+        h               0.10;
+        e               0.10;
+        k               0.30;
+        omega           0.30;
     }
 }
