@@ -547,4 +547,122 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V73 · 8 new baselines (37-44) covering V73.1-5 surfaces
+
+  test("37 · V73.1 advisor whitelist scope explanation", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-advisor").click();
+    await page.waitForSelector("[data-testid='advisor-whitelist-explanation']", {
+      timeout: 4_000,
+    });
+    await expect(page).toHaveScreenshot("37-v3-advisor-whitelist-explanation.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("38 · V73.3 multi-case comparison ribbon at Step 5", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page
+      .waitForSelector(
+        "[data-testid='multi-case-ribbon'], [data-testid='multi-case-ribbon-offline-hint']",
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await expect(page).toHaveScreenshot("38-v3-multi-case-ribbon.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("39 · V73.5 Step5Inspector audit completeness live", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-inspector").click();
+    await page.waitForTimeout(500);
+    await expect(page).toHaveScreenshot("39-v3-step5-inspector-completeness.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("40 · V73.4 VerdictPill DRY · TruthChain rendering", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page.waitForTimeout(500);
+    await expect(page).toHaveScreenshot("40-v3-truthchain-verdict-pill.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("41 · V73.2 contrast fix render · Step 1 tertiary text", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=1");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(300);
+    await expect(page).toHaveScreenshot("41-v3-step1-post-contrast-fix.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("42 · V73.2 contrast fix render · Step 3 tertiary text", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(300);
+    await expect(page).toHaveScreenshot("42-v3-step3-post-contrast-fix.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("43 · V73 close · full Step 5 shell with ribbon visible", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(600);
+    await expect(page).toHaveScreenshot("43-v3-step5-full-shell.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("44 · V73 close · right panel inspector with completeness wire", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(500);
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("44-v3-right-panel-step5.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });

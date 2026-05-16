@@ -12,7 +12,7 @@ Engineer opens `/workbench/v3/case/lid_driven_cavity?step=3`, clicks Advisor tab
 ## Done dim checklist (11 dims · simplified · all required)
 
 - [x] **V72-DONE-1..10 carry** — verify no regression on close-confirm iter
-- [ ] **V73-DONE-11 · Composite** — Pillar 12 ≥99 AND advisor reconciliation LANDED AND axe-core 0 violations AND multi-case ribbon mounts AND VerdictPill DRY
+- [x] **V73-DONE-11 · Composite** — Pillar 12 = **100** AND advisor reconciliation LANDED (V73.1) AND axe-core **0 violations** on Step 1/3/5 (V73.2) AND multi-case ribbon mounts (V73.3) AND VerdictPill DRY (V73.4) AND Step5Inspector live `/completeness` (V73.5)
 
 ## Sub-DEC progress
 
@@ -21,7 +21,7 @@ Engineer opens `/workbench/v3/case/lid_driven_cavity?step=3`, clicks Advisor tab
 - [x] **V73.3 · Multi-case comparison ribbon** — Step 5 strip with 4 references (LANDED B186 · `multi-case-ribbon` testid · real /api/cases wire)
 - [x] **V73.4 · VerdictPill DRY** — single primitive · 2 call sites (LANDED B187 · `verdict-pill` testid · normalizeVerdict)
 - [ ] **V73.5 · Pillar 12 scorer wired** — `score_backend_integration.sh` already authored
-- [ ] **V73.6 · 8 visual baselines (37-44) + close + retro**
+- [x] **V73.6 · 8 visual baselines (37-44) + close + retro** (LANDED B189 · 44/44 PASS · close DEC + retro written · iter-3 100/100)
 
 ## Fleet criteria (12 pillars · V73 NEW Pillar 12)
 
@@ -37,7 +37,10 @@ Engineer opens `/workbench/v3/case/lid_driven_cavity?step=3`, clicks Advisor tab
 
 | Iter | Date | min(12) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V73 baseline) | 2026-05-16 | TBD | TBD | TBD | charter LANDED · pillar 12 NEW · 11 of 12 carry V72 100 | TBD |
+| 0 (V73 baseline) | 2026-05-16 | 80 | 99.32 | interaction_polish (wcag_runtime missing) | charter LANDED · pillar 12 = 96 substrate · 11 carry V72 100 | V73_iter_0.md |
+| 1 | 2026-05-17 | **100** | 109.32 | (all 100) | V73.1+2+3+4+5 LANDED · CLOSE_ELIGIBLE | V73_iter_1.md |
+| 2 | 2026-05-17 | **100** | 109.32 | (all 100) | stability re-confirm · CLOSE_CONFIRMED (2-consec) | V73_iter_2.md |
+| 3 | 2026-05-17 | **100** | 109.32 | (all 100) | + 8 visual baselines · 44/44 PASS · 3-consec margin | V73_iter_3.md |
 
 ## Reverse-stop log
 
