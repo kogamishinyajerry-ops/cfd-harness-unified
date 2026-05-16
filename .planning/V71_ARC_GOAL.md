@@ -12,7 +12,7 @@
 ## Done dim checklist (9 dims · all required)
 
 - [x] **V71-DONE-1 · WorkbenchShellV3 4-panel grid** — Activity Bar 48px + Left Panel 260px + Center workspace (Pipeline Strip 44px + Viewport Mode Toolbar 36px + Main Canvas + Bottom Panel toggle) + Right Panel 340px · CSS Grid layout · all panels rendered · **LANDED B170** commit `9df67ab` · `data-v71-ui-shell="true"` tag present · 414 tests pass
-- [ ] **V71-DONE-2 · Step 1/2/3 surfaces** wired to shell — Step 1 geometry viewport + Inspector metadata · Step 2 mesh wireframe + Inspector quality table + bottom Console · Step 3 BC color-coded patches + MaterialCard inline two-column
+- [x] **V71-DONE-2 · Step 1/2/3 surfaces** wired to shell — Step 1 geometry viewport + Inspector metadata · Step 2 mesh wireframe + Inspector quality table + bottom Console (on-demand) · Step 3 BC color-coded patches + MaterialCard inline two-column · **LANDED B171** · V71.G `QualityRow` + V71.H `BC_PALETTE` + V71.I `MaterialCard`
 - [ ] **V71-DONE-3 · ResidualsChart + Bottom Panel** — log-scale multi-line chart + 4-tab bottom panel + streaming console
 - [ ] **V71-DONE-4 · AdvisorTab + V132 contract test** — right-panel peer tab · paragraph + citations + preview-apply text links · ZERO auto-execute buttons regression-protected via e2e
 - [ ] **V71-DONE-5 · ResultsCanvas + TrustGate verdict** — gold-vs-computed chart + HUGE PASS + point-by-point table
@@ -24,7 +24,7 @@
 ## Sub-DEC progress
 
 - [x] **V71.1 · WorkbenchShell v3 4-panel grid** — Image 01 · V71.A/B/C/D · **LANDED B170** · DEC-V71-1
-- [ ] **V71.2 · Step views + Inspector contextual + MaterialCard** — Images 02/03/04 · V71.G/H/I/T
+- [x] **V71.2 · Step views + Inspector contextual + MaterialCard** — Images 02/03/04 · V71.G/H/I/T · **LANDED B171** · DEC-V71-2
 - [ ] **V71.3 · ResidualsChart + Bottom Panel + SolveRun streaming** — Image 05 · V71.E/F/J/L
 - [ ] **V71.4 · AdvisorTab right-panel peer + V132 contract test** — Image 06 · V71.K/M/N/O
 - [ ] **V71.5 · ResultsCanvas + TrustGate verdict surface** — Image 07 · V71.P/Q
@@ -51,6 +51,7 @@
 |---|---|---|---|---|---|---|
 | 0 (V71 baseline) | 2026-05-16 | 0 | 79.84 | functional (0) | charter LANDED · expected lows confirmed | `.planning/scores/V71_iter_0.md` |
 | 1 (V71.1 LANDED) | 2026-05-16 | 17 | 91.04 | functional (17) | shell route mounts · 7/10 pillars at 100 · industrial_ui 48 → 84 (+36) · functional 0 → 17 (+17) · ux/cfd_breadth/novice flipped from intermediate to 100 · viz still 92 (need V71.6 baselines 23-30) | `.planning/scores/V71_iter_1.md` |
+| 2 (V71.2 LANDED) | 2026-05-16 | 33 | 92.32 | functional (33) | V71.G/H/I polish · functional 17 → 33 (+16, 2 sub-DECs of 6 + 2 Done dims of 9) · industrial_ui unchanged 84 · viz unchanged 92 | `.planning/scores/V71_iter_2.md` |
 
 ## Reverse-stop log
 
