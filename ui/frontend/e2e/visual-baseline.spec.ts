@@ -155,4 +155,70 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V68-C.4 · 4 new baselines for the V68-C UI surfaces (charter §4
+  // ≥16 PNG threshold). Each snapshot covers a V68-C-introduced state
+  // that didn't exist in V68-A/B baselines.
+
+  test("13 · workbench index with case_002a gold-pending card (V68-C.3)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench");
+    await page
+      .waitForLoadState("networkidle", { timeout: 8_000 })
+      .catch(() => {});
+    await page.waitForSelector("[data-testid='case-card-case_002a']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("13-index-with-apu-bay.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("14 · case_002a card cropped detail (gold-pending badge + disclaimer)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench");
+    const card = page.getByTestId("case-card-case_002a");
+    await card.waitFor({ state: "attached", timeout: 12_000 });
+    await expect(card).toHaveScreenshot("14-apu-bay-card-cropped.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("15 · workbench index full layout (post V68-C catalog 11 entries)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench");
+    await page
+      .waitForLoadState("networkidle", { timeout: 8_000 })
+      .catch(() => {});
+    await page.waitForSelector("[data-testid='case-card-case_002a']", {
+      timeout: 12_000,
+    });
+    // Capture full page (long viewport) to lock in 11-card layout.
+    await expect(page).toHaveScreenshot("15-index-fullpage.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("16 · viewport dispatcher harness control rail (V68-A→C stable surface)", async ({
+    page,
+  }) => {
+    await page.goto(HARNESS_URL);
+    await page.waitForSelector("[data-testid='viewport-mode-dispatcher']", {
+      timeout: 10_000,
+    });
+    // Snapshot the rail buttons specifically — proves the V68-C
+    // changes didn't drift the existing UI substrate.
+    const rail = page.locator("[data-testid='viewport-mode-button-geometry']").locator("..");
+    await expect(rail).toHaveScreenshot("16-rail-control.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });
