@@ -98,6 +98,18 @@ For canonical eval set V66-B Done #3 regression protection:
 
 ---
 
+## V69.1 layout update (2026-05-16 · DEC-V69.1)
+
+20 individual case files (E01-E20) replace the V66-B B104/B105 batched
+documents. Batched docs preserved at `_archive_batched/` for audit.
+Schema for individual files: YAML frontmatter (eval_case_id · case_id ·
+title · v_row_attribution · v_row_class · physics_regime · status ·
+sandbox_path · substrate_lineage · expected_verdict_signature) + body
+with rules-firing table + anchor narrative.
+
+V69.2 (next sub-DEC) adds `test_canonical_advisor_eval.py` regression
+harness running each frontmatter through `assemble_stack`.
+
 ## Roadmap to V66-B Done #1-3 closure
 
 - B101 · Author 3 new advisor rule descriptions (advisor_v103 + advisor_v107 + advisor_yplus_regime_match) per scoring framework anchors
