@@ -19,6 +19,7 @@ import { useCaseStatus } from "../../../step_panel_shell/useCaseStatus";
 import type { StepId } from "../../WorkbenchShellV3";
 import { VerdictPill as SharedVerdictPill } from "../VerdictPill";
 import { GoldDeltaPanel } from "../GoldDeltaPanel";
+import { AuditPackageDownload } from "../AuditPackageDownload";
 
 interface TruthChainContentProps {
   caseId: string | null;
@@ -346,6 +347,10 @@ export function TruthChainContent({
 
       <Section label="Gold-Standard Delta">
         <GoldDeltaPanel caseId={caseId} />
+      </Section>
+
+      <Section label="Audit Package (V&V evidence bundle)">
+        <AuditPackageDownload caseId={caseId} />
       </Section>
 
       <Section label="Reproducibility">
