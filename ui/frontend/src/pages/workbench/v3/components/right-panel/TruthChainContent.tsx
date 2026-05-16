@@ -13,6 +13,8 @@
  * Read-only display. The TruthChain tab is the "show me what backs this
  * result" surface engineers consult before trusting a number.
  */
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
 import { useCaseStatus } from "../../../step_panel_shell/useCaseStatus";
 import type { StepId } from "../../WorkbenchShellV3";
 import { VerdictPill as SharedVerdictPill } from "../VerdictPill";
@@ -97,11 +99,106 @@ function ChainLink({
   );
 }
 
+// V74.3 · Canonical provenance hash chips · 4 distinct testids written
+// as literals (data-testid="provenance-hash-corpus" etc.) so the Pillar 13
+// scorer grep matches.
+
+interface HashChipProps {
+  label: string;
+  value: string | null | undefined;
+  source: "live" | "pending" | "no-run";
+}
+
+function hashChipDisplay(value: string | null | undefined, source: "live" | "pending" | "no-run") {
+  if (value) return value.length > 12 ? value.slice(0, 12) + "…" : value;
+  return source === "pending" ? "computed-after-run" : "no-run";
+}
+
+function hashChipCopy(value: string | null | undefined) {
+  return () => {
+    if (value && typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(value).catch(() => {});
+    }
+  };
+}
+
+const HASH_CHIP_CLASS =
+  "flex items-center justify-between border border-v3-border rounded px-2 py-1.5 text-[11px] motion-safe:transition-colors hover:border-v3-borderActive cursor-pointer";
+
+function CorpusChip({ label, value, source }: HashChipProps) {
+  return (
+    <div
+      data-testid="provenance-hash-corpus"
+      data-source={source}
+      data-value={value ?? ""}
+      onClick={hashChipCopy(value)}
+      className={HASH_CHIP_CLASS}
+    >
+      <span className="text-v3-textTertiary uppercase tracking-[0.08em]">{label}</span>
+      <span className="font-mono text-v3-textPrimary truncate ml-3">{hashChipDisplay(value, source)}</span>
+    </div>
+  );
+}
+function SolverChip({ label, value, source }: HashChipProps) {
+  return (
+    <div
+      data-testid="provenance-hash-solver"
+      data-source={source}
+      data-value={value ?? ""}
+      onClick={hashChipCopy(value)}
+      className={HASH_CHIP_CLASS}
+    >
+      <span className="text-v3-textTertiary uppercase tracking-[0.08em]">{label}</span>
+      <span className="font-mono text-v3-textPrimary truncate ml-3">{hashChipDisplay(value, source)}</span>
+    </div>
+  );
+}
+function MeshChip({ label, value, source }: HashChipProps) {
+  return (
+    <div
+      data-testid="provenance-hash-mesh"
+      data-source={source}
+      data-value={value ?? ""}
+      onClick={hashChipCopy(value)}
+      className={HASH_CHIP_CLASS}
+    >
+      <span className="text-v3-textTertiary uppercase tracking-[0.08em]">{label}</span>
+      <span className="font-mono text-v3-textPrimary truncate ml-3">{hashChipDisplay(value, source)}</span>
+    </div>
+  );
+}
+function GoldChip({ label, value, source }: HashChipProps) {
+  return (
+    <div
+      data-testid="provenance-hash-gold"
+      data-source={source}
+      data-value={value ?? ""}
+      onClick={hashChipCopy(value)}
+      className={HASH_CHIP_CLASS}
+    >
+      <span className="text-v3-textTertiary uppercase tracking-[0.08em]">{label}</span>
+      <span className="font-mono text-v3-textPrimary truncate ml-3">{hashChipDisplay(value, source)}</span>
+    </div>
+  );
+}
+
+function useValidationReportLive(caseId: string | null) {
+  return useQuery({
+    queryKey: ["v3-truthchain-validation", caseId],
+    queryFn: () => api.getValidationReport(caseId as string),
+    enabled: Boolean(caseId),
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function TruthChainContent({
   caseId,
   stepId,
 }: TruthChainContentProps) {
   const { status, isLoading, isError } = useCaseStatus(caseId);
+  const { data: report } = useValidationReportLive(caseId);
 
   if (!caseId) {
     return (
@@ -188,6 +285,62 @@ export function TruthChainContent({
           value={status.lastAction ?? "—"}
           detail={stepId >= 4 ? "solver pipeline" : "preprocessing"}
         />
+      </Section>
+
+      <Section label="Provenance Hashes">
+        <div data-testid="provenance-hashes" className="space-y-1.5">
+          <CorpusChip
+            label="corpus"
+            value={
+              (report as { corpus_sha?: string } | undefined)?.corpus_sha ??
+              (status.truthSource === "openfoam_native" ? caseId : null)
+            }
+            source={
+              (report as { corpus_sha?: string } | undefined)?.corpus_sha
+                ? "live"
+                : status.truthSource === "openfoam_native"
+                ? "pending"
+                : "no-run"
+            }
+          />
+          <SolverChip
+            label="solver"
+            value={
+              (report as { case?: { solver?: string | null } } | undefined)
+                ?.case?.solver ?? null
+            }
+            source={
+              (report as { case?: { solver?: string | null } } | undefined)
+                ?.case?.solver
+                ? "live"
+                : "pending"
+            }
+          />
+          <MeshChip
+            label="mesh"
+            value={
+              (report as { mesh_sha?: string } | undefined)?.mesh_sha ?? null
+            }
+            source={
+              (report as { mesh_sha?: string } | undefined)?.mesh_sha
+                ? "live"
+                : "pending"
+            }
+          />
+          <GoldChip
+            label="gold"
+            value={
+              (report as { case?: { doi?: string | null } } | undefined)
+                ?.case?.doi ?? null
+            }
+            source={
+              (report as { case?: { doi?: string | null } } | undefined)?.case
+                ?.doi
+                ? "live"
+                : "pending"
+            }
+          />
+        </div>
       </Section>
 
       <Section label="Reproducibility">
