@@ -62,6 +62,23 @@ beforeEach(() => {
       if (url.includes("/ai-review") || url.includes("/ai-diagnose")) {
         return new Response("upstream offline", { status: 503 });
       }
+      if (url.endsWith("/api/cases")) {
+        return new Response(
+          JSON.stringify([
+            {
+              case_id: "lid_driven_cavity",
+              name: "Lid Driven Cavity",
+              case_kind: "whitelist",
+              physics: "incompressible",
+              difficulty: "novice",
+              solver: "icoFoam",
+              tags: [],
+              available_demo_dirs: [],
+            },
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
       return new Response("{}", { status: 200 });
     }),
   );

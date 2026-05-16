@@ -10,9 +10,11 @@
  * Reverse-stop: if any check fails, V71 is in violation of V130/V132 invariants
  * and the offending commit MUST revert.
  */
+import type { ReactElement } from "react";
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as rtlRender, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AdvisorContent } from "../components/right-panel/AdvisorContent";
 import type {
@@ -21,6 +23,32 @@ import type {
 } from "@/types/ai_advisor";
 
 const CASE_ID = "lid_driven_cavity";
+
+// V73.1 · contract tests target the advisor execution path (imported_user
+// case). Whitelist cases hit the V73.1 pre-flight explanation branch — that
+// path has its own dedicated test below. Mock /api/cases accordingly so the
+// pre-flight passes through to the advisor consult UI.
+const CASES_IMPORTED = [
+  {
+    case_id: CASE_ID,
+    name: CASE_ID,
+    case_kind: "imported_user" as const,
+    physics: "incompressible",
+    difficulty: "novice",
+    solver: "icoFoam",
+    tags: [],
+    available_demo_dirs: [],
+  },
+];
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return rtlRender(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
 
 const REVIEW: ReviewResponse = {
   case_id: CASE_ID,
@@ -81,6 +109,12 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url.endsWith("/api/cases")) {
+        return new Response(JSON.stringify(CASES_IMPORTED), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
       if (url.includes("/ai-review")) {
         return new Response(JSON.stringify(REVIEW), {
           status: 200,
@@ -236,5 +270,41 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
     );
     assertNoForbiddenButtons("error");
     assertNoForbiddenFormControls("error");
+  });
+
+  // V73.1 · whitelist pre-flight surface
+  it("whitelist case · renders advisor-scope explanation instead of 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.endsWith("/api/cases")) {
+          return new Response(
+            JSON.stringify([
+              {
+                ...CASES_IMPORTED[0],
+                case_kind: "whitelist",
+              },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        // V73.1 contract: no consult fetch should fire for whitelist
+        return new Response("would have 404'd", { status: 404 });
+      }),
+    );
+    render(<AdvisorContent caseId={CASE_ID} stepId={3} />);
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("advisor-whitelist-explanation"),
+      ).toBeInTheDocument(),
+    );
+    // Calm tone · no harsh "Error · 404"
+    expect(screen.queryByText(/Error · 404/)).toBeNull();
+    // Architecture note explains the scope (V73.1 success criterion)
+    expect(screen.getByText(/whitelist gold-reference case/)).toBeInTheDocument();
+    // V130/V132 still hold on this surface
+    assertNoForbiddenButtons("whitelist");
+    assertNoForbiddenFormControls("whitelist");
   });
 });

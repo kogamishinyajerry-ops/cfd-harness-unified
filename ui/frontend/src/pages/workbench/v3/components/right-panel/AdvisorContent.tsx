@@ -12,6 +12,7 @@
  *     copies and applies manually.
  */
 import { useCallback, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@/api/client";
 import type {
   DiagnoseResponse,
@@ -20,6 +21,7 @@ import type {
   ReviewResponse,
   CitedChunk,
 } from "@/types/ai_advisor";
+import type { CaseIndexEntry } from "@/types/validation";
 import type { StepId } from "../../WorkbenchShellV3";
 
 interface AdvisorContentProps {
@@ -173,8 +175,27 @@ function AdvisoryBadge() {
   );
 }
 
+function useCaseList() {
+  return useQuery<CaseIndexEntry[]>({
+    queryKey: ["v3-case-list"],
+    queryFn: () => api.listCases(),
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
   const [mode, setMode] = useState<AdvisorMode>("review");
+  // V73.1 · pre-flight check · is this a whitelist (gold-reference) case?
+  // The advisor backend only accepts imported_user cases (its case_dir
+  // resolver lives under user_drafts/imported). Whitelist cases would 404
+  // with a raw error — V73 explains the architecture instead.
+  const { data: cases } = useCaseList();
+  const thisCase = Array.isArray(cases)
+    ? cases.find((c) => c.case_id === caseId)
+    : undefined;
+  const isWhitelist = thisCase?.case_kind === "whitelist";
   const [review, setReview] = useState<ReviewResponse | null>(null);
   const [diagnose, setDiagnose] = useState<DiagnoseResponse | null>(null);
   const [loading, setLoading] = useState<AdvisorMode | null>(null);
@@ -220,6 +241,45 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
         <p className="mt-2 text-[12px] text-v3-textTertiary">
           The advisor reads case files + corpus citations and emits text
           recommendations. It never modifies the case.
+        </p>
+      </div>
+    );
+  }
+
+  // V73.1 · whitelist case → advisor architecture explanation, not raw 404.
+  // This is what the user would see on lid_driven_cavity / naca0012 / etc.
+  if (isWhitelist) {
+    return (
+      <div className="text-[13px] text-v3-textSecondary">
+        <AdvisoryBadge />
+        <div
+          data-testid="advisor-whitelist-explanation"
+          className="mt-4 border border-v3-border rounded-md px-3 py-3 motion-safe:transition-colors"
+        >
+          <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary mb-2">
+            advisor scope · this case is a whitelist gold-standard
+          </div>
+          <p className="text-v3-textPrimary leading-relaxed mb-3">
+            AI Advisor reviews <em>user-imported</em> cases against the
+            corpus. <span className="font-mono text-v3-textPrimary">{caseId}</span>{" "}
+            is a whitelist gold-reference case — its validation is already
+            attested.
+          </p>
+          <p className="text-[12px] text-v3-textTertiary leading-relaxed">
+            For its existing trust verdict + provenance chain, see the{" "}
+            <strong className="text-v3-textPrimary">TruthChain</strong> tab.
+            To consult the advisor on a real case, import one from{" "}
+            <strong className="text-v3-textPrimary">+ new case</strong>.
+          </p>
+        </div>
+        <p
+          data-testid="advisor-architecture-note"
+          className="mt-3 text-[11px] text-v3-textTertiary leading-relaxed"
+        >
+          Why this gate exists: advisor reads case files under{" "}
+          <span className="font-mono">user_drafts/imported/</span>; whitelist
+          cases live at a different path. The pre-flight prevents a confusing
+          404 from the backend.
         </p>
       </div>
     );
