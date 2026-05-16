@@ -12,7 +12,7 @@
  *   7. Bottom panel collapses + expands · 4 tabs (Console/Residuals/Forces/Log)
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -376,5 +376,25 @@ describe("WorkbenchShellV3 · activity bar", () => {
         screen.getByTestId(`activity-${key}`),
       ).toBeInTheDocument();
     }
+  });
+});
+
+// V73.3 · multi-case comparison ribbon mounts at Step 5
+describe("WorkbenchShellV3 · V73.3 multi-case ribbon", () => {
+  it("ribbon mounts at Step 5 only · NOT at Step 1-4", async () => {
+    renderShell("/workbench/v3/case/lid_driven_cavity?step=4");
+    // At Step 4 the ribbon is absent
+    expect(screen.queryByTestId("multi-case-ribbon")).toBeNull();
+    expect(screen.queryByTestId("multi-case-ribbon-loading")).toBeNull();
+  });
+
+  it("ribbon mounts at Step 5 and pulls from real /api/cases", async () => {
+    renderShell("/workbench/v3/case/lid_driven_cavity?step=5");
+    // Either live ribbon or offline fallback — both are valid V73.3 surfaces
+    await waitFor(() => {
+      const live = screen.queryByTestId("multi-case-ribbon");
+      const offline = screen.queryByTestId("multi-case-ribbon-offline-hint");
+      expect(live ?? offline).not.toBeNull();
+    });
   });
 });

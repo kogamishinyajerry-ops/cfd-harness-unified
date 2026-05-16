@@ -31,6 +31,7 @@ import { BottomPanelV3 } from "./components/BottomPanelV3";
 import { ActivityBarV3 } from "./components/ActivityBarV3";
 import { TopBarV3 } from "./components/TopBarV3";
 import { MainCanvasV3 } from "./components/MainCanvasV3";
+import { MultiCaseRibbonV3 } from "./components/MultiCaseRibbonV3";
 import { useV3Keyboard } from "./hooks/useV3Keyboard";
 
 export type StepId = 1 | 2 | 3 | 4 | 5;
@@ -167,6 +168,9 @@ export function WorkbenchShellV3({
             />
           )}
         </div>
+        {stepId === 5 && caseId && (
+          <MultiCaseRibbonV3 caseId={caseId} />
+        )}
         <BottomPanelV3
           collapsed={bottomCollapsed}
           onToggle={() => setBottomCollapsed((v) => !v)}
