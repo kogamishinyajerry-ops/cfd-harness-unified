@@ -28,13 +28,29 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    // V68-A.1: VITE_MSW=1 enables MSW service worker so /workbench/case/{id}
-    // can render against the in-browser mock backend without a real fastapi.
-    command: "npm run dev -- --port 5173",
-    env: { VITE_MSW: "1" },
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  // V68-B.5 · webServer is an ARRAY · spawns BOTH fastapi backend (port 8001
+  // to avoid colliding with a developer's already-running :8000 backend) AND
+  // vite frontend (port 5173 · proxies /api → 127.0.0.1:8001).
+  //
+  // MSW is intentionally OFF here (no VITE_MSW env). The whole point of V68-B
+  // is that e2e runs against the real fastapi serving real corpus data.
+  // V68-A's MSW-on configuration is still available via `VITE_MSW=1` env var
+  // for offline-airplane work or isolation specs that want MSW intercept.
+  webServer: [
+    {
+      command:
+        "uv run uvicorn ui.backend.main:app --port 8001 --host 127.0.0.1",
+      url: "http://127.0.0.1:8001/api/cases",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      cwd: "../../",
+    },
+    {
+      command: "npm run dev -- --port 5173",
+      env: { CFD_BACKEND_PORT: "8001" },
+      url: "http://localhost:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 });
