@@ -22,10 +22,14 @@ failures=("placeholder")
 # ─────────── 1. Turbulence models ─────────────────────────────────
 # Look for distinct turbulence model identifiers across the corpus
 turb_count=0
-if [ -d "ui/backend/services/ai_advisor" ]; then
-  # Common identifiers · kEpsilon / kOmegaSST / kOmega / Spalart Allmaras / LES / DNS / laminar
-  turb_count=$(grep -rohE "kEpsilon|kOmegaSST|kOmega|SpalartAllmaras|LES|DNS|laminar" ui/backend/services/ai_advisor/ ui/backend/whitelist.yaml 2>/dev/null | sort -u | wc -l | tr -d ' ')
-fi
+# Look across advisor surface + actual whitelist + canonical eval set + capability matrix doc
+turb_sources=(
+  "ui/backend/services/ai_advisor/"
+  "knowledge/whitelist.yaml"
+  ".planning/evals/canonical/"
+  ".planning/cfd_capability_matrix.md"
+)
+turb_count=$(grep -rohE "kEpsilon|k-epsilon|kOmegaSST|k-omega.SST|kOmega|SpalartAllmaras|Spalart.Allmaras|LES|DNS|laminar|resolved.scale" "${turb_sources[@]}" 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed 's/k-epsilon/kepsilon/g; s/k-omega.sst/komegasst/g; s/spalart.allmaras/spalartallmaras/g; s/resolved.scale/dns/g' | sort -u | wc -l | tr -d ' ')
 turb_count=${turb_count:-0}
 if [ "$turb_count" -ge 4 ]; then
   turb_score=25

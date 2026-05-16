@@ -114,6 +114,53 @@
 
 **Current: 88/100** — V69 "Canonical Advisor Eval Regression Harness + Backend Hardening" arc CLOSE (B157). V68-C baseline 85 + V69 delta drivers: canonical eval frontmatter schema validator brings AI-advisor SSOT to wire-level regression protection (+1.0) · KNOWN_F_NEW_ADVISORS skip-list disclosure makes 6 V66-B gaps auditable from test file (+0.8) · per-test triage on remaining 6 backend failures (+0.7) · PNG baseline 17 case-detail StrictMode regression-protected (+0.5) = 88.0.
 
+### Pillar 8 · CFD-Capability-Breadth (8% weight · V70 NEW)
+
+Introduced V70 (B160) per user mandate ("CFD仿真全维度能力" / "full-dimensional CFD capability"). Audits the workbench's regime coverage along orthogonal axes — what kinds of CFD problems can the workbench actually run end-to-end.
+
+| Raw range | Anchor |
+|---|---|
+| 0-40 | Single-regime workbench (laminar incompressible steady only · 1 turbulence model · 1 BC set) |
+| 40-60 | ≥2 turbulence + ≥1 compressibility + steady-only · 1 meshing strategy · ≤5 BC types |
+| 60-75 | ≥3 turbulence + ≥2 compressibility + steady+transient · 1 meshing · ≤8 BC types · advisor surface aware |
+| 75-85 | ≥4 turbulence + ≥2 compressibility + 2 steadiness regimes · ≥2 meshing · ≥10 BC types · capability matrix doc absent |
+| **85-95** | **+ Capability matrix doc enumerates coverage with explicit GAP-TRACKED entries · ≥4 turbulence × ≥3 compressibility × ≥2 steadiness × ≥10 BC types × ≥2 meshing (V70 charter §3 threshold MET)** |
+| 95-100 | Capability matrix ≥90% cells PR (no GAP-TRACKED majority) · advisor surface lists ≥30 canonical eval cases distributed across regimes · all regimes have ≥1 industrial-grade reference case |
+
+**Current: TBD/100** — V70 iter-0 baseline `cfd_breadth=83` (placeholder before V70.1 lands capability matrix doc). V70.1 will lift to ≥85 by authoring the matrix; V70.2 (canonical eval 20→30) reinforces the regime distribution.
+
+### Pillar 9 · Novice-Onboarding (7% weight · V70 NEW)
+
+Introduced V70 (B160) per user mandate ("新手人类用户的使用难度、交互模式" / "novice user usability + interaction patterns"). Audits whether a first-time engineer can reach first-success without external guidance.
+
+| Raw range | Anchor |
+|---|---|
+| 0-30 | No tutorial · no tooltips · no first-time banner · documentation requires CFD expertise to parse |
+| 30-50 | Basic README · cases listed in index · engineer must read multiple docs to discover lid_driven_cavity as starter |
+| 50-70 | First-time banner pointing to starter case · ≤5 tooltips on key controls · onboarding doc <500 words |
+| 70-85 | Tutorial route at `/workbench/tutorial` · ≥6 tooltips on Engineer Control Rail · banner pointing to lid_driven_cavity · onboarding doc ≥1000 words · ≥1 novice e2e spec validating the path |
+| **85-95** | **All P9 artifacts present (V70 charter §3 threshold MET) · fresh Claude Code session can complete lid_driven_cavity flow in <10 minutes via the tutorial route** |
+| 95-100 | + Multi-tier tutorial (beginner / intermediate / advanced) · context-aware tooltips that update based on case state · error-recovery affordances on every step |
+
+**Current: TBD/100** — V70 iter-0 baseline `novice_onboarding=0` (no V70.3 artifacts yet). V70.3 lifts to ≥70 by authoring tutorial + tooltips + banner.
+
+### Pillar 10 · Industrial-UI-Benchmark (7% weight · V70 NEW)
+
+Introduced V70 (B160) per user mandate ("UI设计是否能对标顶级工业软件" / "UI design comparable to top-tier industrial software"). Audits the workbench's UI quality against commercial CFD GUI references.
+
+**Anti-marketing gate**: doc must contain explicit "Commercial GUI better at X" admission. Self-promotional benchmark docs FAIL `honest_findings` subscore (built into score_industrial_ui.sh).
+
+| Raw range | Anchor |
+|---|---|
+| 0-30 | No benchmark exists · UI claims are unbacked by comparative evaluation |
+| 30-55 | Internal review only · 1-2 axes discussed informally · no commercial GUI directly compared |
+| 55-75 | Benchmark doc compares vs 1 commercial GUI · ≤3 axes evaluated · improvements identified but not LANDED |
+| 75-88 | Benchmark vs ≥3 GUIs (ANSYS Fluent / STAR-CCM+ / SimScale) · 6 axes (info density / shortcuts / panel docking / design tokens / accessibility / dark mode / scientific typography) · ≥3 improvements LANDED · ≥1 honest "commercial better at X" finding · ≥2 V70 visual baselines lock improvements |
+| **88-95** | **All P10 artifacts present (V70 charter §3 threshold MET) · ≥1 commercial-GUI heavy user gives ≥3/6 axes "comparable or better than commercial" rating in qualitative review** |
+| 95-100 | + Workbench leads ≥4/6 axes in independent rating · sustained delta-improvement tracking · benchmark refreshed across 3 commercial-GUI version cycles |
+
+**Current: TBD/100** — V70 iter-0 baseline `industrial_ui=0` (no V70.4 benchmark doc yet). V70.4 lifts to ≥75 by authoring benchmark + landing ≥3 improvements + 2 baselines.
+
 ---
 
 ## 3 · Score update protocol (honest accounting)
