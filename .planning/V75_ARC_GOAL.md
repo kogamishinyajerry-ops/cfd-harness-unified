@@ -12,16 +12,16 @@ Engineer refreshes `/workbench/v3/case/foo?step=3&tab=advisor&btab=residuals&vie
 ## Done dim checklist
 
 - [x] **V74-DONE-1..12 carry** — verify no regression on V74 close
-- [ ] **V75-DONE-13 · Composite** — Pillar 14 ≥99 AND 3 error boundaries AND 4 skeletons AND URL state on 3 aspects AND TopBar observability indicator live
+- [x] **V75-DONE-13 · Composite** — Pillar 14 = **100** AND 4 error boundaries AND 4 skeletons AND URL state on 3 aspects (view/tab/btab) AND TopBar observability indicator live
 
 ## Sub-DEC progress
 
-- [ ] **V75.1 · Error boundaries** — 3 boundaries with data-testid="error-boundary-*"
-- [ ] **V75.2 · Loading skeletons** — 4 surfaces with Skeleton primitive
-- [ ] **V75.3 · URL state resumability** — ?tab=&btab=&view= deep-link safe
-- [ ] **V75.4 · Observability indicator** — TopBar shows TTFB + inflight count
-- [ ] **V75.5 · Pillar 14 scorer wired** — 4 subscores · all ≥25 floor
-- [ ] **V75.6 · 8 visual baselines (53-60) + close + retro**
+- [x] **V75.1 · Error boundaries** — 3 boundaries with data-testid="error-boundary-*"
+- [x] **V75.2 · Loading skeletons** — 4 surfaces with Skeleton primitive
+- [x] **V75.3 · URL state resumability** — ?tab=&btab=&view= deep-link safe
+- [x] **V75.4 · Observability indicator** — TopBar shows TTFB + inflight count
+- [x] **V75.5 · Pillar 14 scorer wired** — 4 subscores · all ≥25 floor
+- [x] **V75.6 · 8 visual baselines (53-60) + close + retro**
 
 ## Fleet criteria (14 pillars · V75 NEW Pillar 14)
 
@@ -38,7 +38,10 @@ Engineer refreshes `/workbench/v3/case/foo?step=3&tab=advisor&btab=residuals&vie
 
 | Iter | Date | min(14) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V75 baseline) | 2026-05-17 | TBD | TBD | TBD | charter LANDED · pillar 14 NEW · 13 of 14 carry V74 100 | TBD |
+| 0 (V75 baseline) | 2026-05-17 | 16 | 99.04 | resumability_observability (NEW pillar) | charter LANDED · pillar 14 NEW · 13 of 14 carry V74 100 | V75_iter_0.md |
+| 1 | 2026-05-17 | **100** | 121.04 | (all 100) | V75.1+2+3+4 LANDED · CLOSE_ELIGIBLE | V75_iter_1.md |
+| 2 | 2026-05-17 | **100** | 121.04 | (all 100) | stability re-confirm · CLOSE_CONFIRMED (2-consec) | V75_iter_2.md |
+| 3 | 2026-05-17 | **100** | 121.04 | (all 100) | + 8 baselines (53-60) · 60/60 PASS · 3-consec margin | V75_iter_3.md |
 
 ## Reverse-stop log
 

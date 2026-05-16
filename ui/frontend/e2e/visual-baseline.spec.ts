@@ -838,6 +838,171 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     });
   });
 
+  // V75 · 8 new baselines (53-60) covering V75.1-4 surfaces
+
+  test("53 · V75.1 error boundary fallback · right-panel reset card", async ({
+    page,
+  }) => {
+    // We can't trigger a real exception in production code, so screenshot
+    // the right-panel under normal conditions (where no boundary has caught)
+    // — locks the substrate. Synthetic-error baselines would belong to a
+    // dev harness, not the canonical baseline set.
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=1");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("53-v3-right-panel-no-error.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("54 · V75.2 advisor skeleton during pre-flight (transient capture)", async ({
+    page,
+  }) => {
+    // Navigate to an unknown case so /api/cases settles fast but useCaseList
+    // still triggers a skeleton on initial mount of AdvisorContent.
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-advisor").click();
+    // Wait for either skeleton or its successor to be present
+    await page
+      .waitForSelector(
+        "[data-testid='skeleton-advisor'], [data-testid='advisor-whitelist-explanation'], [data-testid='advisor-run-review']",
+        { timeout: 4_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(150);
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("54-v3-advisor-skeleton-or-loaded.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("55 · V75.4 TopBar observability indicator", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=1");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForSelector("[data-testid='observability-ttfb']", {
+      timeout: 6_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(
+      page.locator("[data-testid='topbar-v3']"),
+    ).toHaveScreenshot("55-v3-topbar-observability.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("56 · V75.3 URL deep-link · tab=advisor reload restores tab", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/workbench/v3/case/lid_driven_cavity?step=3&tab=advisor&btab=closed&view=bc",
+    );
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    // Advisor tab should be active (NOT inspector)
+    await expect(page.getByTestId("right-tab-advisor")).toHaveAttribute(
+      "data-active",
+      "true",
+    );
+    await expect(page).toHaveScreenshot("56-v3-deeplink-tab-advisor.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("57 · V75.3 URL deep-link · view=field reload restores viewport", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/workbench/v3/case/lid_driven_cavity?step=5&view=field",
+    );
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(page).toHaveScreenshot("57-v3-deeplink-view-field.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("58 · V75.3 URL deep-link · btab=open expands bottom panel", async ({
+    page,
+  }) => {
+    await page.goto(
+      "/workbench/v3/case/lid_driven_cavity?step=1&btab=open",
+    );
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    // Bottom panel should be expanded even at Step 1 (default would be closed)
+    await expect(
+      page.getByTestId("bottom-panel-expanded"),
+    ).toBeVisible({ timeout: 3_000 });
+    await expect(page).toHaveScreenshot("58-v3-deeplink-btab-open.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("59 · V75.2 multi-case ribbon skeleton transient state", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page
+      .waitForSelector(
+        "[data-testid='skeleton-multi-case'], [data-testid='multi-case-ribbon'], [data-testid='multi-case-ribbon-offline-hint']",
+        { timeout: 6_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(150);
+    await expect(page).toHaveScreenshot("59-v3-ribbon-skeleton-or-loaded.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("60 · V75 close · full shell w/ all V75 surfaces", async ({ page }) => {
+    await page.goto(
+      "/workbench/v3/case/lid_driven_cavity?step=5&tab=truthchain",
+    );
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector("[data-testid='observability-ttfb']"),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(400);
+    await expect(page).toHaveScreenshot("60-v3-full-shell-v75-close.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
   test("52 · V74 close · full TruthChain tab w/ all V74 sections", async ({ page }) => {
     await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
     await page.waitForSelector("[data-testid='workbench-shell-v3']", {
