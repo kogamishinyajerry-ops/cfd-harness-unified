@@ -10,6 +10,9 @@
  */
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
+import type { CaseDetail } from "@/types/validation";
 import type { StepId, ViewportMode } from "../../WorkbenchShellV3";
 
 interface InspectorContentProps {
@@ -88,34 +91,89 @@ function EmptyState() {
   );
 }
 
+function useCaseDetail(caseId: string) {
+  return useQuery<CaseDetail>({
+    queryKey: ["v3-case-detail", caseId],
+    queryFn: () => api.getCase(caseId),
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
 function Step1Inspector({ caseId }: { caseId: string }) {
-  // Hard-coded canonical content for a few cases · others get generic
+  // V72.1 · pulls /api/cases/:id when reachable · falls back to canonical
+  // hardcoded values when offline (V130 invariant: workbench navigable
+  // backend-offline).
+  const { data, isLoading, isError } = useCaseDetail(caseId);
   const isNaca = caseId.includes("naca0012");
   const isCavity = caseId.includes("cavity");
+
+  // Format helpers — backend may not return Re/Mach so we synthesize hints
+  // for canonical cases when absent.
+  const reHint = isNaca ? "3.0×10⁶" : isCavity ? "100" : "—";
+  const machHint = isNaca
+    ? "0.15 (low-Mach)"
+    : isCavity
+    ? "incompressible"
+    : "—";
+  const reValue = (data?.parameters?.Re as string | number | undefined) ?? reHint;
+  const machValue =
+    (data?.parameters?.Mach as string | number | undefined) ?? machHint;
+
   return (
     <>
       <Section label="Case metadata">
-        <Row k="case_id" v={caseId} />
+        <Row k="case_id" v={data?.case_id ?? caseId} />
         <Row
           k="flow_type"
-          v={isNaca ? "EXTERNAL" : isCavity ? "INTERNAL" : "EXTERNAL"}
+          v={
+            data?.flow_type
+              ? data.flow_type.toUpperCase()
+              : isNaca
+              ? "EXTERNAL"
+              : isCavity
+              ? "INTERNAL"
+              : "EXTERNAL"
+          }
         />
         <Row
           k="geometry"
-          v={isNaca ? "airfoil 2D" : isCavity ? "unit cavity 2D" : "—"}
+          v={
+            data?.geometry_type ??
+            (isNaca ? "airfoil 2D" : isCavity ? "unit cavity 2D" : "—")
+          }
         />
-        <Row
-          k="Re"
-          v={isNaca ? "3.0×10⁶" : isCavity ? "100" : "—"}
-        />
-        <Row
-          k="Mach"
-          v={isNaca ? "0.15 (low-Mach)" : isCavity ? "incompressible" : "—"}
-        />
+        <Row k="Re" v={String(reValue)} />
+        <Row k="Mach" v={String(machValue)} />
         <Row
           k="classification"
-          v={isNaca ? "gold · canonical E16" : isCavity ? "gold · canonical E01" : "canonical"}
+          v={
+            data?.gold_standard
+              ? `gold · ${data.gold_standard.citation}`
+              : isNaca
+              ? "gold · canonical E16"
+              : isCavity
+              ? "gold · canonical E01"
+              : "canonical"
+          }
         />
+        {isLoading && (
+          <div
+            data-testid="step1-loading"
+            className="text-[11px] text-v3-textTertiary italic"
+          >
+            loading from /api/cases/{caseId}…
+          </div>
+        )}
+        {isError && (
+          <div
+            data-testid="step1-offline-hint"
+            className="text-[11px] text-v3-textTertiary italic"
+          >
+            backend offline · showing canonical mock
+          </div>
+        )}
       </Section>
       <Section label="Geometry">
         <Row

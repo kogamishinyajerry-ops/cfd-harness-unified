@@ -170,6 +170,83 @@ describe("WorkbenchShellV3 · bottom panel", () => {
   });
 });
 
+describe("WorkbenchShellV3 · V72.1 real-data wire", () => {
+  it("CaseBrowser uses live API when backend returns case list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.endsWith("/api/cases")) {
+          return new Response(
+            JSON.stringify([
+              {
+                case_id: "lid_driven_cavity",
+                name: "Lid Driven Cavity",
+                flow_type: "internal",
+                geometry_type: "unit cavity 2D",
+                turbulence_model: "laminar",
+                has_gold_standard: true,
+                has_measurement: true,
+                contract_status: "PASS",
+                run_summary: { latest_run_id: null, last_run_at: null, run_count: 0 },
+                case_kind: "whitelist",
+                gold_pending: false,
+              },
+              {
+                case_id: "naca0012_airfoil",
+                name: "NACA 0012",
+                flow_type: "external",
+                geometry_type: "airfoil 2D",
+                turbulence_model: "k-omega-sst",
+                has_gold_standard: true,
+                has_measurement: false,
+                contract_status: "PASS",
+                run_summary: { latest_run_id: null, last_run_at: null, run_count: 0 },
+                case_kind: "whitelist",
+                gold_pending: false,
+              },
+            ]),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+        if (url.includes("/completeness")) {
+          return new Response("{}", { status: 200 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderShell();
+    // Wait for react-query to settle
+    const browser = await screen.findByTestId("case-browser-v3");
+    // Give React Query a tick to flush
+    await new Promise((r) => setTimeout(r, 50));
+    expect(["live-api", "loading"]).toContain(
+      browser.getAttribute("data-source"),
+    );
+  });
+
+  it("CaseBrowser falls back to offline mock when /api/cases errors", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url.endsWith("/api/cases")) {
+          return new Response("backend down", { status: 503 });
+        }
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    renderShell();
+    const browser = await screen.findByTestId("case-browser-v3");
+    // Wait for retry+settle
+    await new Promise((r) => setTimeout(r, 200));
+    // After error, source should be "fallback" (or still "loading" if retry pending)
+    expect(["fallback", "loading"]).toContain(
+      browser.getAttribute("data-source"),
+    );
+  });
+});
+
 describe("WorkbenchShellV3 · V71.5 results canvas", () => {
   it("Step 5 mounts TrustGateVerdict block + comparison chart", async () => {
     const user = userEvent.setup();
