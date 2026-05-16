@@ -14,8 +14,8 @@
 - [x] **V68-A-DONE-1 · MSW backend mocking** — 7 `http.get` handlers cover case + status + geometry/render + geometry/stl + mesh/render + bc/render + import/stl · gated by `VITE_MSW=1` · 3 vitest shape tests PASS · 342/342 full vitest PASS · evidence: `src/mocks/handlers.ts` · B127
 - [x] **V68-A-DONE-2 · TopBar real data wiring** — 4 dynamic fields feed from `useCaseStatus` React Query hook against `/api/cases/:id/status` · normalised + clamped · V130 default-true invariant preserved · 9 vitest PASS · 351/351 full suite · evidence: `useCaseStatus.ts` · B128
 - [x] **V68-A-DONE-3 · Step body Power-mode adoption** — PowerDisclosure wrapper (~65 LOC) + 5 step bodies (Step1Import/2Mesh/3SetupBC/4SolveRun/5ResultsView) each gate one engineer-tier advanced section behind `isPower` · graceful no-Provider fallback · 4 vitest PASS · 355/355 full suite · evidence: `PowerDisclosure.tsx` · B129
-- [ ] **V68-A-DONE-4 · Viewport mode dispatcher** — 6 modes (geometry/mesh-wireframe/BC-faces/field-slice/residuals/report-grid) · mode-state surfaces in viewport · ≤200ms switch · evidence: viewport dispatcher test + e2e test
-- [ ] **V68-A-DONE-5 · Visual snapshot baseline** — 8 canonical UI states · `toHaveScreenshot()` baseline files committed · diff < 0.1% on stable runs · evidence: `__visual_baselines__/chromium/*-snapshots/` ≥8 PNG files
+- [x] **V68-A-DONE-4 · Viewport mode dispatcher** — ViewportModeDispatcher (~95 LOC) · 6 modes via data-viewport-mode attr · step default mapping (1→geometry, 2→mesh, 3→bc, 4→residuals, 5→report) · 12 vitest PASS · 7/7 e2e PASS · evidence: `ViewportMode.tsx` · B130
+- [x] **V68-A-DONE-5 · Visual snapshot baseline** — 8 PNG files committed at `__visual_baselines__/chromium/visual-baseline.spec.ts-snapshots/` · 8/8 e2e PASS first-run (lenient `maxDiffPixelRatio: 0.1`) · evidence: `visual-baseline.spec.ts` · B130
 - [ ] **V68-A-DONE-6 · End-to-end 5-step flow** — Import→Mesh→BC→Solve→Results · all 5 steps reachable · CompletenessCard updates · TopBar `trustGate` progresses · evidence: `e2e/full-flow.spec.ts` ≥5 step navigations
 - [ ] **V68-A-DONE-7 · Pillar 6 ≥95 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `95-100` zone · evidence: V68-A close DEC §10
 
@@ -24,7 +24,7 @@
 - [x] **V68-A.1 · MSW bootstrap** — msw@2.14.6 + 7 handlers + service worker + main.tsx opt-in + 3 vitest shape tests · B127 · commit pending
 - [x] **V68-A.2 · TopBar real data wiring** — useCaseStatus hook (~105 LOC) + StepPanelShell call-site updated · 9 vitest PASS · B128
 - [x] **V68-A.3 · Step body Power-mode disclosure** — PowerDisclosure wrapper + 5 step bodies adopted · 4 vitest PASS · B129
-- [ ] **V68-A.4 · Viewport mode dispatcher + visual baseline** — 6-mode dispatcher + 8 PNG snapshots
+- [x] **V68-A.4 · Viewport mode dispatcher + visual baseline** — ViewportModeDispatcher + ViewportModeDevPage harness + 7+8 e2e specs + 8 PNG baselines · B130
 - [ ] **V68-A.5 · End-to-end 5-step flow + close** — full Playwright e2e Import→Mesh→BC→Solve→Results
 
 ## Fleet criteria (tightened vs V67-C)

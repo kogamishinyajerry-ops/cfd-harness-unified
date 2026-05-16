@@ -35,6 +35,7 @@ import { StepTree } from "./step_panel_shell/StepTree";
 import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
 import { useCaseStatus } from "./step_panel_shell/useCaseStatus";
+import { ViewportModeDispatcher } from "./step_panel_shell/ViewportMode";
 import {
   FacePickProvider,
   useFacePickOptional,
@@ -518,6 +519,7 @@ export function StepPanelShell() {
           data-testid="viewport-pane"
           className="flex min-h-0 flex-1 items-stretch"
         >
+          <ViewportModeDispatcher stepId={currentStepId}>
           <div className="flex flex-1 items-center justify-center p-3">
             {viewportProps ? (
               <div className="w-full">
@@ -551,6 +553,7 @@ export function StepPanelShell() {
               </div>
             )}
           </div>
+          </ViewportModeDispatcher>
         </main>
         <div className="w-72 shrink-0">
           <TaskPanel

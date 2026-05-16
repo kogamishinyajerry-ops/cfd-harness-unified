@@ -15,9 +15,13 @@ test.describe("V67-C.1 · workbench shell loads (Playwright bootstrap)", () => {
     await expect(page).toHaveTitle(/cfd-harness|workbench|harness/i, {
       timeout: 10_000,
     });
-    // body should not be empty
-    const bodyText = await page.locator("body").innerText();
-    expect(bodyText.length).toBeGreaterThan(0);
+    // Wait for MSW service worker registration + React first commit.
+    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+    // body should not be empty — poll briefly to absorb StrictMode first-render.
+    await expect(async () => {
+      const bodyText = await page.locator("body").innerText();
+      expect(bodyText.length).toBeGreaterThan(0);
+    }).toPass({ timeout: 10_000 });
   });
 
   test("root redirects to /workbench", async ({ page }) => {

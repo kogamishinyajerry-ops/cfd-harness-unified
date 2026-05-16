@@ -17,6 +17,7 @@ import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
+import { ViewportModeDevPage } from "@/pages/dev/ViewportModeDevPage";
 import { BeginnerPowerProvider } from "@/pages/workbench/step_panel_shell/BeginnerPowerContext";
 import { StepPanelShell } from "@/pages/workbench/StepPanelShell";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
@@ -106,6 +107,14 @@ export default function App() {
             shareable. Reuses /run-history/{run_id} detail surface for data. */}
         <Route path="/workbench/case/:caseId/compare" element={<RunComparePage />} />
         {/* DEC-V61-115: catch-all redirects to /workbench (was /learn). */}
+        {/* V68-A.4 dev-only: ViewportModeDispatcher isolated harness for
+            Playwright e2e. Mounted at all envs (no significant payload
+            cost in production), but gating to /workbench/dev/ keeps it
+            out of the user-facing nav. */}
+        <Route
+          path="/workbench/dev/viewport-mode"
+          element={<ViewportModeDevPage />}
+        />
         <Route path="*" element={<Navigate to="/workbench" replace />} />
       </Route>
       </Routes>
