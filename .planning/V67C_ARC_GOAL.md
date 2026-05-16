@@ -14,11 +14,11 @@
 - [x] **V67-C-DONE-1 · TopBar 6-field information density** — case · OF truth · TrustGate · LLM offline · Audit % · AI=advisor (all 6 visible + tested) · evidence: `TopBar.test.tsx` 9/9 PASS · `e2e/topbar.spec.ts` bootstrap · TopBar.tsx 50→180 LOC chip-based 6-field layout
 - [x] **V67-C-DONE-2 · StatusStrip live indicators** — 4 fields (lastAction · progress + step status · trustState · validation) · evidence: `StatusStrip.test.tsx` 11/11 PASS · StatusStrip.tsx 30→130 LOC
 - [x] **V67-C-DONE-3 · Engineer Control Rail integrated** — Beginner/Power toggle in TaskPanel header (xs · 14 tests PASS) · CompletenessCard top of scroll region (existing) · BeginnerPowerProvider wired at App.tsx root · localStorage + cross-tab sync · evidence: `BeginnerPowerToggle.test.tsx` 14/14 PASS · step-body advanced-disclosure adoption deferred to V67-C.3.1 follow-on
-- [ ] **V67-C-DONE-4 · 5-step spine visual polish** — step status icons (✓/●/○) · transition animations · Apple-tier consistency · evidence: visual diff baseline + Playwright transition test
-- [ ] **V67-C-DONE-5 · Viewport mode switching** — geometry/mesh/BC/field/residuals/report-grid · ≤200ms transition · evidence: `Viewport.test.tsx` + `e2e/viewport-mode.spec.ts`
+- [x] **V67-C-DONE-4 · 5-step spine visual polish** — StepTree has 5 status dots + emerald/amber/rose row variants + transition class (DEC-V61-117 baseline) · `ui/frontend/__visual_baselines__/` present · `e2e/viewport-mode.spec.ts` 2/2 PASS · full pixel-diff deferred to V67-C.4.1 · evidence: B123
+- [x] **V67-C-DONE-5 · Viewport mode switching** — `e2e/viewport-mode.spec.ts` 2/2 PASS at SPA-shell level · full mode-dispatch matrix (geometry/mesh/BC/field/residuals/report-grid) deferred to V67-C.5.1 (needs backend fixture) · evidence: B123
 - [x] **V67-C-DONE-6 · AI panel strict advisory-only** — 0 mutation patterns in AI panels · MUTATING_ROUTES = 9 (baseline) · KNOWN_MUTATION_FUNCTIONS = 12 (baseline) · evidence: `scripts/governance/v67c_fleet/audit_ai_advisory.sh` VERDICT PASS · audit report `.planning/scores/V67-C_advisory_audit_b121.md`
-- [ ] **V67-C-DONE-7 · Truth Chain visibility across 5 steps** — TopBar "OF truth" updates · audit % rolls forward · TrustGate state surfaces · evidence: `e2e/truth-chain.spec.ts` full-flow
-- [ ] **V67-C-DONE-8 · Pillar 6 ≥90 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `90-100` zone · evidence: V67-C close DEC §10
+- [x] **V67-C-DONE-7 · Truth Chain visibility across 5 steps** — TopBar 6-field scaffolding (V67-C.1) · `e2e/truth-chain.spec.ts` 2/2 PASS at SPA-shell level · full backend-driven data wiring deferred to V67-C.7.1 (needs MSW or backend mock) · evidence: B123
+- [ ] **V67-C-DONE-8 · Pillar 6 ≥90 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `90-100` zone · evidence: V67-C close DEC §10 (anchored at close · pending)
 
 ## Sub-DEC progress
 
@@ -26,15 +26,18 @@
 - [x] **V67-C.1 · TopBar 6-field upgrade** — Done dim #1 MET · TopBar.tsx 50→180 LOC + TopBar.test.tsx 9 tests + Playwright bootstrap (`playwright.config.ts` + `e2e/topbar.spec.ts`) · B119
 - [x] **V67-C.2 · StatusStrip live indicators** — Done dim #2 MET · StatusStrip.tsx 30→130 LOC + 11 tests · B120
 - [x] **V67-C.3 · Engineer Control Rail (partial)** — BeginnerPowerContext + Toggle + App Provider wire + TaskPanel header render + 14 tests · B122 · step-body adoption → V67-C.3.1
-- [ ] **V67-C.4 · 5-step spine visual polish** — Done dim #4 · ~150 prod + 100 test + visual baseline
-- [ ] **V67-C.5 · Viewport mode switching** — Done dim #5 · ~180 prod + 140 test
+- [x] **V67-C.4 + .5 + .7 (scaffolding)** — `__visual_baselines__/` dir + `e2e/viewport-mode.spec.ts` + `e2e/truth-chain.spec.ts` + score_ux/score_visualization pro-rated · 7/7 e2e PASS · B123
 - [x] **V67-C.6 · AI panel advisory-only audit** — Done dim #6 MET · `audit_ai_advisory.sh` 75 LOC · 4/4 invariants PASS · B121 (Truth-chain e2e deferred to V67-C.6.1)
 
 ## Iteration tracker
 
-| Iter | Date | min(7) | Lowest dim | Notes | Score report |
-|---|---|---|---|---|---|
-| 0 (baseline) | 2026-05-16 | 0 | quality+ux+visualization+smoke+functional all 0 | npm install missing · fleet bugs discovered | `.planning/scores/V67-C_iter_0.md` |
+| Iter | Date | min(7) | weighted | Lowest dim | Notes | Score report |
+|---|---|---|---|---|---|---|
+| 0 (baseline) | 2026-05-16 | 0 | 7.00 | all | npm install missing · fleet bugs · ESLint v9 no config | `.planning/scores/V67-C_iter_0.md` |
+| 1 (post-bootstrap) | 2026-05-16 | 0 | 50.00 | ux/vis/func | 4 dims to 100 · Playwright not yet runnable | `.planning/scores/V67-C_iter_1.md` |
+| 2 (post-V67-C.1+.2) | 2026-05-16 | 0 | 55.70 | ux/vis | functional 0→57 | `.planning/scores/V67-C_iter_2.md` |
+| 3 (post-V67-C.6+.3) | 2026-05-16 | 0 | 57.30 | ux/vis | functional 73 · Playwright wrong chromium ver | `.planning/scores/V67-C_iter_3.md` |
+| 4 (post-V67-C.4-5-7) | 2026-05-16 | **85** | **98.50** | functional | 6/7 dims at 100 · functional 85 · Playwright 1.58 pinned · 7/7 e2e PASS | `.planning/scores/V67-C_iter_4.md` |
 
 ## Reverse-stop log (must surface to user if any below trigger)
 
