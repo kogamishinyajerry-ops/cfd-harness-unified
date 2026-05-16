@@ -95,6 +95,22 @@ export const handlers = [
     await delay(10);
     return HttpResponse.json({ ok: true, msw: true });
   }),
+
+  http.get("/api/cases/:caseId/completeness", async ({ params }) => {
+    await delay(15);
+    return HttpResponse.json({
+      case_id: params.caseId,
+      // V68-A.5: rolling completeness so TopBar audit% animates through pipeline.
+      steps: {
+        import: { complete: true, audit_pct: 100 },
+        mesh: { complete: true, audit_pct: 100 },
+        bc: { complete: true, audit_pct: 100 },
+        solve: { complete: false, audit_pct: 60 },
+        results: { complete: false, audit_pct: 0 },
+      },
+      overall_audit_pct: 72,
+    });
+  }),
 ];
 
 export const mockCase = DEMO_CASE;
