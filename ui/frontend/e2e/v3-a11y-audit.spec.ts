@@ -66,17 +66,31 @@ async function auditSurface(
   expect(blocking, `[${label}] axe-core found blocking violations`).toEqual([]);
 }
 
-test.describe("V73.2 · v3 runtime a11y audit (axe-core · WCAG 2.1 AA)", () => {
+test.describe("V73.2 / V74.1 · v3 runtime a11y audit (axe-core · WCAG 2.1 AA)", () => {
   test("Step 1 (Import) · zero serious/critical axe violations", async ({
     page,
   }) => {
     await auditSurface(page, `${BASE}?step=1`, "step1");
   });
 
+  // V74.1 · Step 2 added (mesh)
+  test("Step 2 (Mesh) · zero serious/critical axe violations", async ({
+    page,
+  }) => {
+    await auditSurface(page, `${BASE}?step=2`, "step2");
+  });
+
   test("Step 3 (Physics) · zero serious/critical axe violations", async ({
     page,
   }) => {
     await auditSurface(page, `${BASE}?step=3`, "step3");
+  });
+
+  // V74.1 · Step 4 added (solver)
+  test("Step 4 (Solver) · zero serious/critical axe violations", async ({
+    page,
+  }) => {
+    await auditSurface(page, `${BASE}?step=4`, "step4");
   });
 
   test("Step 5 (Postprocess) · zero serious/critical axe violations", async ({
