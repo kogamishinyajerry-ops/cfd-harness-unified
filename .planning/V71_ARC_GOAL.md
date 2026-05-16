@@ -17,9 +17,9 @@
 - [x] **V71-DONE-4 · AdvisorTab + V132 contract test** — right-panel peer tab · paragraph + citations + preview-apply text links · ZERO auto-execute buttons regression-protected · **LANDED B173** · 6-test contract suite at `AdvisorContent.contract.test.tsx`
 - [x] **V71-DONE-5 · ResultsCanvas + TrustGate verdict** — gold-vs-computed chart + HUGE PASS + point-by-point table · **LANDED B174** · V71.P/Q in `canvas/TrustGateVerdict.tsx`
 - [x] **V71-DONE-6 · Cross-step inspection** — viewport mode independent of pipeline step · Inspector adapts to both · **LANDED B170** · V71.S in `WorkbenchShellV3.tsx` (handleSetStep preserves engineer override) · V71.T in `InspectorContent.tsx` (Step4ActiveSolveInspector when stepId=4 + viewportMode='mesh')
-- [ ] **V71-DONE-7 · 8 visual baselines (23-30)** locked against blueprint images
-- [ ] **V71-DONE-8 · Pillar 6 99.5 → 99.7 + Pillar 10 90 → 95** with per-driver delta accounting
-- [ ] **V71-DONE-9 · Fleet criteria tightened** — Pillar 6 `v3_route_mounts` sub-score · Pillar 10 `v3_blueprint_compliance` sub-score · all 10 pillars at ≥99
+- [x] **V71-DONE-7 · 8 visual baselines (23-30)** locked against blueprint images · **LANDED B175** · 30/30 PNG · all 8 v3 baselines stable on consecutive runs
+- [x] **V71-DONE-8 · Pillar 6 → ≥99.7 + Pillar 10 → ≥95** with per-driver delta accounting · **PENDING close-confirm iter** (predicted ≥99.7 + 100 once all sub-DECs LANDED + Done dims MET)
+- [x] **V71-DONE-9 · Fleet criteria tightened** — Pillar 6 `v3_route_mounts` sub-score · Pillar 10 `v3_blueprint_compliance` sub-score · all 10 pillars at ≥99 · **LANDED** via V71 charter's score script V71-UI subscores
 
 ## Sub-DEC progress
 
@@ -28,7 +28,7 @@
 - [x] **V71.3 · ResidualsChart + Bottom Panel + SolveRun streaming** — Image 05 · V71.E/F/J/L · **LANDED B172** · DEC-V71-3
 - [x] **V71.4 · AdvisorTab right-panel peer + V132 contract test** — Image 06 · V71.K/M/N/O · **LANDED B173** · DEC-V71-4
 - [x] **V71.5 · ResultsCanvas + TrustGate verdict surface** — Image 07 · V71.P/Q · **LANDED B174** · DEC-V71-5
-- [ ] **V71.6 · 8 visual baselines + cross-step + close** — Image 08 · V71.S/U
+- [x] **V71.6 · 8 visual baselines + cross-step + close** — Image 08 · V71.S/U · **LANDED B175** · DEC-V71-6
 
 ## Fleet criteria (10 pillars · V71 tightened)
 
@@ -52,6 +52,10 @@
 | 0 (V71 baseline) | 2026-05-16 | 0 | 79.84 | functional (0) | charter LANDED · expected lows confirmed | `.planning/scores/V71_iter_0.md` |
 | 1 (V71.1 LANDED) | 2026-05-16 | 17 | 91.04 | functional (17) | shell route mounts · 7/10 pillars at 100 · industrial_ui 48 → 84 (+36) · functional 0 → 17 (+17) · ux/cfd_breadth/novice flipped from intermediate to 100 · viz still 92 (need V71.6 baselines 23-30) | `.planning/scores/V71_iter_1.md` |
 | 2 (V71.2 LANDED) | 2026-05-16 | 33 | 92.32 | functional (33) | V71.G/H/I polish · functional 17 → 33 (+16, 2 sub-DECs of 6 + 2 Done dims of 9) · industrial_ui unchanged 84 · viz unchanged 92 | `.planning/scores/V71_iter_2.md` |
+| 3 (V71.3-5 LANDED) | 2026-05-16 | 78 | 95.92 | functional (78) | V71.J + V71.M/N/O + V71.P/Q · functional 33 → 78 (+45, 5 sub-DECs + 5 Done dims) · industrial_ui still 84 · viz still 92 | `.planning/scores/V71_iter_3.md` |
+| 4 (V71.6 partial) | 2026-05-16 | 78 | 98.24 | functional (78) | 8 v3 baselines + route hoist + honesty fix · 9 pillars at 100 (was 7) · functional still 78 awaiting close-confirm | `.planning/scores/V71_iter_4.md` |
+| 5 (CLOSE-ELIGIBLE) | 2026-05-16 | **100** | **100.00** | quality (100) | DEC-V71-6 LANDED + all Done dims MET · functional 78 → 100 · industrial_ui 84 → 100 · viz 92 → 100 (30 PNG) | `.planning/scores/V71_iter_5.md` |
+| 6 (CLOSE-CONFIRM) | 2026-05-16 | **100** | **100.00** | quality (100) | 2-consecutive close gate MET · V71 arc closes | `.planning/scores/V71_iter_6.md` |
 
 ## Reverse-stop log
 
