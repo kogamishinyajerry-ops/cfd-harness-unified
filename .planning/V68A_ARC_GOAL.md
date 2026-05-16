@@ -43,7 +43,12 @@
 
 | Iter | Date | min(7) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V68-A baseline) | 2026-05-16 | TBD | TBD | functional | V68-A charter LANDED · 0/5 sub-DECs · 0/7 Done dims · expected functional drop | `.planning/scores/V68-A_iter_0.md` |
+| 0 (V68-A baseline) | 2026-05-16 | **0** | 81.00 | functional | V68-A charter LANDED · 0/5 sub-DECs · 0/7 Done · visualization 100→55 (≥6 PNG threshold) | `.planning/scores/V68-A_iter_0.md` |
+| 1 (post V68-A.1) | 2026-05-16 | **18** | 82.80 | functional | V68-A.1 MSW LANDED · 1/5 + 1/7 · functional 0→18 | `.planning/scores/V68-A_iter_1.md` |
+| 2 (post V68-A.2-.3-.4) | 2026-05-16 | **77** | 97.70 | functional | V68-A.2/.3/.4 LANDED · 4/5 + 5/7 · visualization 55→100 · functional 18→77 | `.planning/scores/V68-A_iter_2.md` |
+| 3 (post V68-A.5) | 2026-05-16 | **95** | 99.50 | functional | V68-A.5 LANDED · 5/5 + 6/7 · 6/7 dims at 100 · functional 95 | `.planning/scores/V68-A_iter_3.md` |
+| 4 (post close DEC) | 2026-05-16 | **100** | **100.00** | none | Done #7 MET · 1st 100 (CLOSE_ELIGIBLE 1st iter) | `.planning/scores/V68-A_iter_4.md` |
+| 5 (close confirm) | 2026-05-16 | **100** | **100.00** | none | **2nd consecutive 100 · ARC CLOSE RATIFIED** | `.planning/scores/V68-A_iter_5.md` |
 
 ## Predicted trajectory (per charter §11)
 
