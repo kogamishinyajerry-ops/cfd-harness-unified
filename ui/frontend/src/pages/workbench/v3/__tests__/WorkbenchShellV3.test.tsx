@@ -170,6 +170,33 @@ describe("WorkbenchShellV3 · bottom panel", () => {
   });
 });
 
+describe("WorkbenchShellV3 · V71.5 results canvas", () => {
+  it("Step 5 mounts TrustGateVerdict block + comparison chart", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-5"));
+    expect(screen.getByTestId("canvas-report")).toBeInTheDocument();
+    const verdict = screen.getByTestId("trustgate-verdict-block");
+    expect(verdict).toBeInTheDocument();
+    expect(verdict.getAttribute("data-verdict")).toBe("PASS");
+    expect(screen.getByTestId("trustgate-summary")).toBeInTheDocument();
+    expect(screen.getByTestId("trustgate-points-table")).toBeInTheDocument();
+    expect(screen.getByTestId("trustgate-provenance")).toBeInTheDocument();
+  });
+
+  it("V71.Q TrustGate block exposes provenance + has zero promotion buttons", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-5"));
+    // V71.Q · V130 invariant: no "promote" / "override" / "publish" buttons
+    expect(screen.queryByRole("button", { name: /promote/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /override/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /publish/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /推送/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /覆盖/ })).toBeNull();
+  });
+});
+
 describe("WorkbenchShellV3 · V71.3 residuals chart", () => {
   it("residuals chart marks p as watched curve by default (sand-coral)", async () => {
     const user = userEvent.setup();
