@@ -48,6 +48,19 @@ beforeEach(() => {
           headers: { "content-type": "application/json" },
         });
       }
+      // V74.2 · per-ref completeness fetches
+      if (url.includes("/completeness")) {
+        return new Response(
+          JSON.stringify({
+            case_id: "x",
+            validation: "audit-passing",
+            percentage: 100,
+            blocked_by_critical: 0,
+            ready_for_archive: true,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
       return new Response("{}", { status: 200 });
     }),
   );
@@ -113,5 +126,22 @@ describe("V73.3 · MultiCaseRibbonV3 · real-data wire", () => {
       expect(screen.getByTestId("multi-case-ribbon")).toBeInTheDocument(),
     );
     expect(screen.queryByRole("button", { name: /apply|submit|execute|run/i })).toBeNull();
+  });
+
+  // V74.2 · per-ref completeness wire
+  it("ref chips fetch live /completeness · data-source=live on chips", async () => {
+    render(<MultiCaseRibbonV3 caseId={CASE_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("multi-case-ribbon")).toBeInTheDocument(),
+    );
+    // After completeness queries settle, ribbon chips carry data-source=live
+    await waitFor(
+      () => {
+        const chips = screen.getAllByTestId("multi-case-chip");
+        const live = chips.filter((c) => c.getAttribute("data-source") === "live");
+        expect(live.length).toBeGreaterThanOrEqual(1);
+      },
+      { timeout: 4_000 },
+    );
   });
 });

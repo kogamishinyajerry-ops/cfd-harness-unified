@@ -29,6 +29,20 @@ function useCaseList() {
   });
 }
 
+// V74.2 · per-ref completeness wire · each chip fetches its own
+// /completeness so the verdict pill reflects REAL contract_status not the
+// (sometimes stale) /api/cases list-time value.
+function useCompletenessLive(caseId: string) {
+  return useQuery({
+    queryKey: ["v3-ribbon-completeness", caseId],
+    queryFn: () => api.getCaseCompleteness(caseId),
+    enabled: Boolean(caseId),
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
 function CaseChip({
   entry,
   isCurrent,
@@ -38,10 +52,22 @@ function CaseChip({
   isCurrent: boolean;
   label: string;
 }) {
+  // V74.2 · query live completeness for each chip (current + 4 refs)
+  const { data: live, isError: liveError } = useCompletenessLive(entry.case_id);
+  const liveStatus =
+    (live as { validation?: string; contract_status?: string } | undefined)
+      ?.validation ??
+    (live as { contract_status?: string } | undefined)?.contract_status;
   const full = "contract_status" in entry ? entry : null;
-  const status = full?.contract_status as string | undefined;
+  const fallbackStatus = full?.contract_status as string | undefined;
+  const status = liveStatus ?? fallbackStatus;
   const tone = verdictTone(status);
   const kind = normalizeVerdict(status);
+  const dataSource = liveError
+    ? "fallback"
+    : liveStatus
+    ? "live"
+    : "list-time";
   // Short 4-char label for the compact chip header
   const shortLabel =
     kind === "PASS"
@@ -58,6 +84,7 @@ function CaseChip({
       data-testid={isCurrent ? "multi-case-chip-current" : "multi-case-chip"}
       data-case-id={entry.case_id}
       data-active={isCurrent ? "true" : "false"}
+      data-source={dataSource}
       className={`flex flex-col gap-1 min-w-[160px] flex-1 border rounded-md px-3 py-2 motion-safe:transition-colors ${
         isCurrent
           ? "border-v3-accent bg-v3-surface2"
