@@ -7,6 +7,11 @@
  *
  * V70-DONE-3 anchor: scorer matches "FirstTimeBanner" + "lid_driven_cavity.*starter"
  * patterns to verify the banner is in place.
+ *
+ * V70-UI-IMPROVEMENT-B: aria-live + tabIndex a11y hooks (V70.4 Pillar 10
+ * Axis 5 Accessibility improvement — closes "comparable but commercial
+ * better at none of them" gap by adding screen-reader announce on banner
+ * mount + keyboard focus accessibility).
  */
 import { useState, useEffect } from "react";
 
@@ -40,8 +45,11 @@ export function FirstTimeBanner() {
     <div
       data-testid="first-time-banner"
       data-novice-banner="true"
+      data-v70-ui-improvement="B"
       role="status"
+      aria-live="polite"
       aria-label="First-time user welcome · novice onboarding"
+      tabIndex={0}
       className="mb-4 flex items-start justify-between gap-4 rounded-lg border border-emerald-700/50 bg-emerald-900/20 px-4 py-3 text-sm text-emerald-200"
     >
       <div className="flex flex-col gap-1">

@@ -20,6 +20,8 @@ import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
 import { ViewportModeDevPage } from "@/pages/dev/ViewportModeDevPage";
 import { BeginnerPowerProvider } from "@/pages/workbench/step_panel_shell/BeginnerPowerContext";
 import { StepPanelShell } from "@/pages/workbench/StepPanelShell";
+import { ShortcutPalette } from "@/components/ShortcutPalette";
+import { ThemeRoot } from "@/components/ThemeRoot";
 import { TutorialPage } from "@/pages/workbench/TutorialPage";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
@@ -41,6 +43,8 @@ import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
 export default function App() {
   return (
     <BeginnerPowerProvider>
+      <ThemeRoot />
+      <ShortcutPalette />
       <Routes>
       {/* DEC-V61-115: default redirect / → /workbench (was /learn). */}
       <Route index element={<Navigate to="/workbench" replace />} />
