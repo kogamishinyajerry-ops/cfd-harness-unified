@@ -79,4 +79,10 @@ def test_dashboard_reports_current_phase():
     # current_phase should be a string (might be "" if STATE.md evolves);
     # we just check the field is present and types are sensible.
     assert isinstance(body["current_phase"], str)
-    assert body["autonomous_governance_counter"] in (None, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    # V69.3: counter changed from bounded hard-floor-4 (≤10) to pure
+    # telemetry post-RETRO-V61-001. Test now asserts non-negative int OR
+    # None — actual value drifts upward over arc lifetime.
+    counter = body["autonomous_governance_counter"]
+    assert counter is None or (isinstance(counter, int) and counter >= 0), (
+        f"counter should be None or non-negative int; got {counter!r}"
+    )

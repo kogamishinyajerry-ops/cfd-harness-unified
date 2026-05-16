@@ -66,12 +66,20 @@ class LoadedChunk:
     _tokens: frozenset[str] = field(default_factory=frozenset)
 
     def to_cited(self) -> CitedChunk:
+        # V69.3 (2026-05-16): some long-form V-row corpus anchors exceed
+        # the CitedChunk.section_anchor 256-char Pydantic constraint
+        # (e.g. V94 "STL files emitted..." carrying full body description).
+        # Truncate to 253 + "..." so the wire contract stays honest about
+        # truncation while keeping construction safe under Pydantic.
+        anchor = self.section_anchor
+        if anchor is not None and len(anchor) > 256:
+            anchor = anchor[:253] + "..."
         return CitedChunk(
             chunk_id=self.chunk_id,
             source=self.source,
             path=self.path,
             sha=self.sha,
-            section_anchor=self.section_anchor,
+            section_anchor=anchor,
             byte_offset=self.byte_offset,
             text=self.text,
         )

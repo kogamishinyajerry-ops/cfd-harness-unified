@@ -26,9 +26,15 @@ def client() -> TestClient:
 # cylinder emitted a scalar mis-keyed, duct emitted hydraulic_diameter
 # against friction_factor, plane_channel emitted U_max_approx against
 # u_mean_profile.
+# V69.3 (2026-05-16): backward_facing_step and circular_cylinder_wake
+# fixtures were regenerated with real extractors between V61 and V69, so
+# their audit_real_run no longer carries the silent-substitution marker
+# G1 was designed to catch. Per the test's own escape hatch ("Either the
+# fixture was regenerated with a real extractor (good — remove from
+# PASS_WASHING_CASES)"), we drop them. duct_flow and plane_channel_flow
+# still emit MISSING_TARGET_QUANTITY on audit_real_run, so G1 protection
+# remains validated on those two.
 PASS_WASHING_CASES = [
-    "backward_facing_step",
-    "circular_cylinder_wake",
     "duct_flow",
     "plane_channel_flow",
 ]
