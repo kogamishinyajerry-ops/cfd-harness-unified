@@ -46,7 +46,8 @@
 | 0 (V68-C baseline) | 2026-05-16 | **0** | 84.65 | functional 0 | charter LANDED · 0/4 sub-DECs · 0/7 Done · expected drops MET (physics 75 · viz 92) | `.planning/scores/V68-C_iter_0.md` |
 | 1 (post .1+.2+.3 implementation) | 2026-05-16 | **73** | 95.70 | functional 73 | 3/4 sub-DECs LANDED · physics 75→100 (whitelist 11) · viz still 92 (PNG 12) | `.planning/scores/V68-C_iter_1.md` |
 | 2 (post .4 impl pre sub-DEC) | 2026-05-16 | **73** | 95.70 | functional 73 | V68-C.4 e2e+spike+baselines committed · sub-DEC+close DEC pending | `.planning/scores/V68-C_iter_2.md` |
-| 3 (post sub-DEC + close DEC) | 2026-05-16 | TBD | TBD | TBD | 4/4 sub-DECs LANDED · 7/7 Done · vis 92→100 (PNG 16) · functional 73→100 expected | to be run post close commit |
+| 3 (post sub-DEC + close DEC) | 2026-05-16 | **100** | **100.00** | none | **1st 100** · 4/4 sub-DECs LANDED + 7/7 Done · vis 92→100 (PNG 16) · functional 73→100 | `.planning/scores/V68-C_iter_3.md` |
+| 4 (close confirm) | 2026-05-16 | **100** | **100.00** | none | **2nd consecutive 100 · ARC CLOSE RATIFIED** | `.planning/scores/V68-C_iter_4.md` |
 
 ## Reverse-stop log
 
