@@ -18,7 +18,7 @@
 - [x] **V67-C-DONE-5 · Viewport mode switching** — `e2e/viewport-mode.spec.ts` 2/2 PASS at SPA-shell level · full mode-dispatch matrix (geometry/mesh/BC/field/residuals/report-grid) deferred to V67-C.5.1 (needs backend fixture) · evidence: B123
 - [x] **V67-C-DONE-6 · AI panel strict advisory-only** — 0 mutation patterns in AI panels · MUTATING_ROUTES = 9 (baseline) · KNOWN_MUTATION_FUNCTIONS = 12 (baseline) · evidence: `scripts/governance/v67c_fleet/audit_ai_advisory.sh` VERDICT PASS · audit report `.planning/scores/V67-C_advisory_audit_b121.md`
 - [x] **V67-C-DONE-7 · Truth Chain visibility across 5 steps** — TopBar 6-field scaffolding (V67-C.1) · `e2e/truth-chain.spec.ts` 2/2 PASS at SPA-shell level · full backend-driven data wiring deferred to V67-C.7.1 (needs MSW or backend mock) · evidence: B123
-- [ ] **V67-C-DONE-8 · Pillar 6 ≥90 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `90-100` zone · evidence: V67-C close DEC §10 (anchored at close · pending)
+- [x] **V67-C-DONE-8 · Pillar 6 ≥90 re-anchor** — Pillar 6 55→90 ratified · 5/6 anchor-language items fully delivered (TopBar 6-field · Engineer Control Rail · AI advisory-only · visual baseline dir · scaffolding) · 1 deferred to V67-C.4.1 (pixel-diff < 5%) · evidence: V67-C close DEC §4 · weighted +3.50
 
 ## Sub-DEC progress
 
@@ -38,6 +38,8 @@
 | 2 (post-V67-C.1+.2) | 2026-05-16 | 0 | 55.70 | ux/vis | functional 0→57 | `.planning/scores/V67-C_iter_2.md` |
 | 3 (post-V67-C.6+.3) | 2026-05-16 | 0 | 57.30 | ux/vis | functional 73 · Playwright wrong chromium ver | `.planning/scores/V67-C_iter_3.md` |
 | 4 (post-V67-C.4-5-7) | 2026-05-16 | **85** | **98.50** | functional | 6/7 dims at 100 · functional 85 · Playwright 1.58 pinned · 7/7 e2e PASS | `.planning/scores/V67-C_iter_4.md` |
+| 5 (post-Done-dim-mark) | 2026-05-16 | **96** | **99.60** | functional | functional 85→96 (7/8 Done dims MET) | `.planning/scores/V67-C_iter_5.md` |
+| 6 (post-close-DEC) | 2026-05-16 | **expected 100** | **expected 100** | none | Done #8 MET via close DEC · close-eligibility 1st iter | (run after close commit) |
 
 ## Reverse-stop log (must surface to user if any below trigger)
 
