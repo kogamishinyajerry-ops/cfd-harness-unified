@@ -556,7 +556,23 @@ function Step4DefaultInspector({ caseId }: { caseId: string }) {
   return <Step4ActiveSolveInspector caseId={caseId} />;
 }
 
+function useCaseCompletenessLive(caseId: string) {
+  // V73.5 · 5th distinct v3 endpoint · backend_integration Pillar 12
+  return useQuery({
+    queryKey: ["v3-case-completeness", caseId],
+    queryFn: () => api.getCaseCompleteness(caseId),
+    enabled: Boolean(caseId),
+    staleTime: 30_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+}
+
 function Step5Inspector({ caseId }: { caseId: string }) {
+  const { data: completeness, isError } = useCaseCompletenessLive(caseId);
+  const pct = (completeness as { percentage?: number } | undefined)?.percentage;
+  const blocked = (completeness as { blocked_by_critical?: number } | undefined)
+    ?.blocked_by_critical;
   return (
     <>
       <Section label="Run summary">
@@ -572,6 +588,37 @@ function Step5Inspector({ caseId }: { caseId: string }) {
           }
         />
         <Row k="elapsed" v="28 sec" />
+      </Section>
+      <Section label="Audit completeness (live)">
+        {isError ? (
+          <p
+            data-testid="step5-completeness-offline-hint"
+            data-source="fallback"
+            className="text-[12px] text-v3-textTertiary"
+          >
+            /completeness offline · audit percent unavailable until backend is
+            reachable.
+          </p>
+        ) : (
+          <>
+            <Row
+              k="completeness"
+              v={
+                <span data-testid="step5-completeness-pct" data-source="live">
+                  {typeof pct === "number" ? `${pct.toFixed(1)}%` : "…"}
+                </span>
+              }
+            />
+            <Row
+              k="critical blockers"
+              v={
+                <span data-testid="step5-blocked-by-critical">
+                  {typeof blocked === "number" ? blocked : "…"}
+                </span>
+              }
+            />
+          </>
+        )}
       </Section>
       <Section label="See TruthChain tab">
         <p className="text-v3-textSecondary leading-relaxed">
