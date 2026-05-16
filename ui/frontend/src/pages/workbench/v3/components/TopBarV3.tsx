@@ -26,11 +26,12 @@ export function TopBarV3({ caseId }: TopBarV3Props) {
       <div className="flex items-center gap-4 text-v3-textTertiary text-[11px]">
         <span className="font-mono">a4f3b21</span>
         <span
+          role="img"
           aria-label="user avatar"
           className="w-5 h-5 rounded-full bg-v3-surface2 border border-v3-border"
         />
         <span>⌘K</span>
-        <span aria-label="settings">⚙</span>
+        <span role="img" aria-label="settings">⚙</span>
       </div>
     </div>
   );

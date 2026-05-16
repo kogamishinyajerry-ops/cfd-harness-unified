@@ -38,7 +38,7 @@ export default {
           borderActive: "#2e2e34", // active element border
           textPrimary: "#e8e8eb",
           textSecondary: "#82828a",
-          textTertiary: "#4a4a52",
+          textTertiary: "#9a9aa0", // V73.2 · raised from #4a4a52 to clear WCAG 2.1 AA 4.5:1 on #0e0e10 (~7.3:1)
           accent: "#b78b65",      // SINGLE accent · sand-coral · <2% pixels
           // CFD-domain semantic (low-saturation only)
           inlet: "#5b8a73",       // dusty green

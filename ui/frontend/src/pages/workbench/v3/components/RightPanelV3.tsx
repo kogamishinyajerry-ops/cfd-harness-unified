@@ -55,7 +55,10 @@ export function RightPanelV3({
               id={`right-tab-${t.id}`}
               role="tab"
               aria-selected={isActive}
-              aria-controls={`right-panel-content-${t.id}`}
+              // V73.2 · only reference the panel id when it actually exists
+              // in DOM (active tab). Inactive tabs omit aria-controls to
+              // pass axe's aria-valid-attr-value rule.
+              aria-controls={isActive ? `right-panel-content-${t.id}` : undefined}
               data-testid={`right-tab-${t.id}`}
               data-active={isActive ? "true" : "false"}
               className={`relative mr-5 py-1 motion-safe:transition-colors motion-safe:duration-150 ${
@@ -78,6 +81,7 @@ export function RightPanelV3({
       {/* Tab content · V72.4 ARIA + autoFocus on tab change */}
       <div
         role="tabpanel"
+        id={`right-panel-content-${activeTab}`}
         aria-labelledby={`right-tab-${activeTab}`}
         data-testid={`right-panel-content-${activeTab}`}
         tabIndex={0}

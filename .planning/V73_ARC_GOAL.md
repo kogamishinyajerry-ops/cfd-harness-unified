@@ -16,7 +16,7 @@ Engineer opens `/workbench/v3/case/lid_driven_cavity?step=3`, clicks Advisor tab
 
 ## Sub-DEC progress
 
-- [ ] **V73.1 · Advisor pre-flight UI fix** — whitelist case shows explanation, not 404
+- [x] **V73.1 · Advisor pre-flight UI fix** — whitelist case shows explanation, not 404 (LANDED B184 · `advisor-whitelist-explanation` testid · 430/430)
 - [ ] **V73.2 · axe-core runtime a11y audit** — `@axe-core/playwright` integrated · Step 1/3/5 PASS 0 violations
 - [ ] **V73.3 · Multi-case comparison ribbon** — Step 5 strip with 4 references
 - [ ] **V73.4 · VerdictPill DRY** — single primitive · 2 call sites

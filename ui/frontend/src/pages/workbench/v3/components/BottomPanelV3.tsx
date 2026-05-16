@@ -211,6 +211,8 @@ export function BottomPanelV3({
         >
           ▾
         </button>
+        {/* V73.2 · tablist wrapper so role=tab elements have a valid parent */}
+        <div role="tablist" aria-label="Bottom panel sections" className="flex items-center">
         {TABS.map((t) => {
           const isActive = t.id === activeTab;
           return (
@@ -238,6 +240,7 @@ export function BottomPanelV3({
             </button>
           );
         })}
+        </div>
         {stepId >= 4 && (
           <span className="ml-auto inline-flex items-center text-v3-accent text-[11px]">
             <span
