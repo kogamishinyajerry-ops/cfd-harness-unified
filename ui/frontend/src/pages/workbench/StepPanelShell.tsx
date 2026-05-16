@@ -34,6 +34,7 @@ import { Step5ResultsGrid } from "./step_panel_shell/Step5ResultsGrid";
 import { StepTree } from "./step_panel_shell/StepTree";
 import { TaskPanel } from "./step_panel_shell/TaskPanel";
 import { TopBar } from "./step_panel_shell/TopBar";
+import { useCaseStatus } from "./step_panel_shell/useCaseStatus";
 import {
   FacePickProvider,
   useFacePickOptional,
@@ -258,6 +259,10 @@ export function StepPanelShell() {
   const { caseId = "" } = useParams<{ caseId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentStepId = clampStepId(searchParams.get("step"));
+
+  // V68-A.2 · TopBar 4-field wiring · falls back to PENDING/unknown if no
+  // backend present (e.g. tests without MSW).
+  const { status: caseStatus } = useCaseStatus(caseId);
 
   // Each step's task-panel calls onStepComplete / onStepError to
   // signal its own status; the shell threads those into stepStates.
@@ -485,7 +490,13 @@ export function StepPanelShell() {
       data-current-step-id={currentStepId}
       className="flex h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-md border border-surface-800 bg-surface-950"
     >
-      <TopBar caseId={caseId} />
+      <TopBar
+        caseId={caseId}
+        truthSource={caseStatus.truthSource}
+        trustGate={caseStatus.trustGate}
+        auditPct={caseStatus.auditPct}
+        llmOffline={caseStatus.llmOffline}
+      />
       <div className="flex min-h-0 flex-1">
         <div className="w-44 shrink-0 border-r border-surface-800 bg-surface-950/60">
           {/* Codex R5 P2 fix (V61-117): keying StepTree by caseId

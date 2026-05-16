@@ -12,7 +12,7 @@
 ## Done dim checklist (7 dims · all required for V68-A close · FULL delivery only)
 
 - [x] **V68-A-DONE-1 · MSW backend mocking** — 7 `http.get` handlers cover case + status + geometry/render + geometry/stl + mesh/render + bc/render + import/stl · gated by `VITE_MSW=1` · 3 vitest shape tests PASS · 342/342 full vitest PASS · evidence: `src/mocks/handlers.ts` · B127
-- [ ] **V68-A-DONE-2 · TopBar real data wiring** — 4 dynamic fields (truthSource/trustGate/auditPct/llmOffline) feed from `useCaseStatus` React Query hook · evidence: `useCaseStatus.test.ts` + visual snapshot diff < 0.1%
+- [x] **V68-A-DONE-2 · TopBar real data wiring** — 4 dynamic fields feed from `useCaseStatus` React Query hook against `/api/cases/:id/status` · normalised + clamped · V130 default-true invariant preserved · 9 vitest PASS · 351/351 full suite · evidence: `useCaseStatus.ts` · B128
 - [ ] **V68-A-DONE-3 · Step body Power-mode adoption** — 5 step bodies (Import/Mesh/SetupBC/SolveRun/ResultsView) gate advanced section behind `isPower` · Beginner shows preset · Power reveals advanced · evidence: 5 step body tests + 1 e2e toggle test
 - [ ] **V68-A-DONE-4 · Viewport mode dispatcher** — 6 modes (geometry/mesh-wireframe/BC-faces/field-slice/residuals/report-grid) · mode-state surfaces in viewport · ≤200ms switch · evidence: viewport dispatcher test + e2e test
 - [ ] **V68-A-DONE-5 · Visual snapshot baseline** — 8 canonical UI states · `toHaveScreenshot()` baseline files committed · diff < 0.1% on stable runs · evidence: `__visual_baselines__/chromium/*-snapshots/` ≥8 PNG files
@@ -22,7 +22,7 @@
 ## Sub-DEC progress (5 sub-DECs · serial)
 
 - [x] **V68-A.1 · MSW bootstrap** — msw@2.14.6 + 7 handlers + service worker + main.tsx opt-in + 3 vitest shape tests · B127 · commit pending
-- [ ] **V68-A.2 · TopBar real data wiring** — useCaseStatus hook + StepPanelShell call-site update
+- [x] **V68-A.2 · TopBar real data wiring** — useCaseStatus hook (~105 LOC) + StepPanelShell call-site updated · 9 vitest PASS · B128
 - [ ] **V68-A.3 · Step body Power-mode disclosure** — 5 step bodies gate advanced section
 - [ ] **V68-A.4 · Viewport mode dispatcher + visual baseline** — 6-mode dispatcher + 8 PNG snapshots
 - [ ] **V68-A.5 · End-to-end 5-step flow + close** — full Playwright e2e Import→Mesh→BC→Solve→Results
