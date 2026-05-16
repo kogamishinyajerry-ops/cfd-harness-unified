@@ -39,7 +39,8 @@
 | 3 (post-V67-C.6+.3) | 2026-05-16 | 0 | 57.30 | ux/vis | functional 73 · Playwright wrong chromium ver | `.planning/scores/V67-C_iter_3.md` |
 | 4 (post-V67-C.4-5-7) | 2026-05-16 | **85** | **98.50** | functional | 6/7 dims at 100 · functional 85 · Playwright 1.58 pinned · 7/7 e2e PASS | `.planning/scores/V67-C_iter_4.md` |
 | 5 (post-Done-dim-mark) | 2026-05-16 | **96** | **99.60** | functional | functional 85→96 (7/8 Done dims MET) | `.planning/scores/V67-C_iter_5.md` |
-| 6 (post-close-DEC) | 2026-05-16 | **expected 100** | **expected 100** | none | Done #8 MET via close DEC · close-eligibility 1st iter | (run after close commit) |
+| 6 (post-close-DEC) | 2026-05-16 | **100** | **100.00** | none | Done #8 MET · CLOSE_ELIGIBLE 1st iter (need 2 consecutive) | `.planning/scores/V67-C_iter_6.md` |
+| 7 (close-confirm) | 2026-05-16 | **100** | **100.00** | none | **2nd consecutive CLOSE_ELIGIBLE · ARC CLOSE RATIFIED** | `.planning/scores/V67-C_iter_7.md` |
 
 ## Reverse-stop log (must surface to user if any below trigger)
 
