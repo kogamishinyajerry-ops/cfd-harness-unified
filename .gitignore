@@ -125,3 +125,7 @@ _industrial_substrates/
 _starccm_workspace/
 _external_substudies/
 _adjacent_workspaces/
+
+# Playwright e2e artifacts (V67-C.1)
+ui/frontend/test-results/
+ui/frontend/playwright-report/
