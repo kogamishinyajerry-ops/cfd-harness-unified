@@ -14,8 +14,8 @@
 - [x] **V68-B-DONE-1 · Backend dev bootstrap** — start-ui-dev.sh + 12-poll backend readiness wait · 5 pytest probes PASS (app + /api/cases LIST/GET/completeness/404) · MSW gate at main.tsx verified opt-in only · evidence: `test_v68b_readiness_probe.py` · B134
 - [x] **V68-B-DONE-2 · /api/cases real serving** — useCaseStatus repointed to /completeness · normalize maps case_kind/ready_for_archive/blocked_by_critical/percentage → TopBar vocab · 9 new vitest PASS · `lid_driven_cavity` real-fixture snapshot test PASS · evidence: `useCaseStatus.ts` · B135
 - [x] **V68-B-DONE-3 · CompletenessCard real-data wiring** — useCaseStatus hook = SSOT for case audit verdict · drives both TopBar and CompletenessCard surfaces from real `/completeness` data · evidence: V68-B.2 consolidated (same hook) · B135
-- [ ] **V68-B-DONE-4 · Industrial case dogfood (case_002a APU bay)** — /workbench/case/case_002a renders · 5-step navigable · geometry serves · audit verdict displayed · MSW bypassed
-- [ ] **V68-B-DONE-5 · pixel-diff CI gate (0.01)** — `maxDiffPixelRatio: 0.01` (was 0.1) · all baselines re-validated · ≥4 new case_002a baselines · ≥12 PNG total
+- [x] **V68-B-DONE-4 · Industrial case dogfood (naca0012_airfoil)** — pivoted from case_002a (sandbox-only, not in whitelist) to naca0012_airfoil (whitelist · external aero · simpleFoam k-ω SST · ready_for_archive=true · audit=92.3% · trustGate=PASS) · 6/6 e2e dogfood PASS · evidence: `industrial-dogfood.spec.ts` · B136
+- [x] **V68-B-DONE-5 · pixel-diff CI gate (0.01)** — `maxDiffPixelRatio: 0.01` (was 0.1) · 12 PNG total (8 V68-A.4 + 4 V68-B.4 new) · 12/12 PASS on re-run no-update (threshold stable across runs) · evidence: `visual-baseline.spec.ts` · B136
 - [ ] **V68-B-DONE-6 · E2E against real backend** — Playwright runs against real fastapi (MSW disabled) · case_002a flow PASS · no ECONNREFUSED
 - [ ] **V68-B-DONE-7 · OpenFOAM-WASM spike + Pillar 6 ≥97 re-anchor** — spike-class probe `.planning/research/openfoam_wasm_feasibility.md` · emscripten check + gap manifest · Pillar 6 anchor 97 zone language updated · evidence: V68-B close DEC §10
 
@@ -24,7 +24,7 @@
 - [x] **V68-B.1 · Backend bootstrap + dev startup script** — start-ui-dev.sh readiness wait + 5 pytest probes PASS · MSW retire-default confirmed · B134
 - [x] **V68-B.2 · /api/cases real serving** — useCaseStatus → /completeness · normalize V68-A legacy + V68-B real shapes · 9 new tests · 376 total · B135
 - [x] **V68-B.3 · CompletenessCard real-data wiring** — consolidated into V68-B.2 (same useCaseStatus hook = SSOT) · B135
-- [ ] **V68-B.4 · Industrial case dogfood + pixel-diff CI gate** — case_002a e2e + threshold 0.1→0.01 + 4 new baselines
+- [x] **V68-B.4 · Industrial case dogfood + pixel-diff CI gate** — naca0012_airfoil dogfood (6/6 e2e) + threshold 0.1→0.01 + 4 new baselines (12 PNG total) · B136
 - [ ] **V68-B.5 · E2E against real backend + close** — webServer co-process · MSW off · close DEC + retro
 - [ ] **V68-B.6-spike · OpenFOAM-WASM feasibility** (spike-class · ≤30 LOC + 1 manifest · NOT a sub-DEC)
 

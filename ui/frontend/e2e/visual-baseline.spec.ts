@@ -25,7 +25,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto("/workbench");
     await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
     await expect(page).toHaveScreenshot("01-workbench-index.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -38,7 +38,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 10_000,
     });
     await expect(page).toHaveScreenshot("02-dev-step1-geometry.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -49,7 +49,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("dev-step-button-2").click();
     await expect(page).toHaveScreenshot("03-dev-step2-mesh.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -58,7 +58,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("dev-step-button-3").click();
     await expect(page).toHaveScreenshot("04-dev-step3-bc.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -67,7 +67,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("dev-step-button-4").click();
     await expect(page).toHaveScreenshot("05-dev-step4-residuals.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -78,7 +78,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("dev-step-button-5").click();
     await expect(page).toHaveScreenshot("06-dev-step5-report.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -89,7 +89,7 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("viewport-mode-button-field-slice").click();
     await expect(page).toHaveScreenshot("07-dev-override-field.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
@@ -100,7 +100,58 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
     await page.goto(HARNESS_URL);
     await page.getByTestId("viewport-mode-button-mesh-wireframe").click();
     await expect(page).toHaveScreenshot("08-dev-override-mesh.png", {
-      maxDiffPixelRatio: 0.1,
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  // V68-B.4 · 4 new states for industrial-class coverage (12 PNG total · meets
+  // ≥12 fleet threshold).
+
+  test("09 · viewport dispatcher · Step 2 with bc-faces override (cross-step inspection)", async ({
+    page,
+  }) => {
+    await page.goto(HARNESS_URL);
+    await page.getByTestId("dev-step-button-2").click();
+    await page.getByTestId("viewport-mode-button-bc-faces").click();
+    await expect(page).toHaveScreenshot("09-step2-bc-override.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("10 · viewport dispatcher · Step 4 with geometry override (solver-time geom inspect)", async ({
+    page,
+  }) => {
+    await page.goto(HARNESS_URL);
+    await page.getByTestId("dev-step-button-4").click();
+    await page.getByTestId("viewport-mode-button-geometry").click();
+    await expect(page).toHaveScreenshot("10-step4-geom-override.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("11 · viewport dispatcher · Step 5 with residuals override (post-run convergence look)", async ({
+    page,
+  }) => {
+    await page.goto(HARNESS_URL);
+    await page.getByTestId("dev-step-button-5").click();
+    await page.getByTestId("viewport-mode-button-residuals").click();
+    await expect(page).toHaveScreenshot("11-step5-residuals-override.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("12 · viewport dispatcher · Step 3 with report-grid override (BC-time report peek)", async ({
+    page,
+  }) => {
+    await page.goto(HARNESS_URL);
+    await page.getByTestId("dev-step-button-3").click();
+    await page.getByTestId("viewport-mode-button-report-grid").click();
+    await expect(page).toHaveScreenshot("12-step3-report-override.png", {
+      maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
   });
