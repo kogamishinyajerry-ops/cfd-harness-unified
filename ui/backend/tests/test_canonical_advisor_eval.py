@@ -105,12 +105,25 @@ def _parse_rule_firings(text: str) -> list[tuple[str, str, str]]:
     return out
 
 
-# V69 NEW advisors planned in V66-B but not yet landed in advisor_stack.py.
-# These appear in canonical eval cases as expected fires but the harness
-# must NOT fail on them — they're documented F-NEW rule gaps awaiting a
-# future arc to implement. Tracked in `.planning/followups/v69_v66b_planned_advisors.md`.
+# Planned-but-not-landed advisors. Appear in canonical eval case rule
+# tables as expected fires; harness must NOT fail on them — they're
+# documented F-NEW rule gaps awaiting a future arc to implement.
+#
+# V69 batch (V66-B inheritance): cf_canonical_choice / low_re_kOmegaSST_trigger /
+# yplus_regime_match / yplus_target_validation / substrate_inspection /
+# residual_gate_qualifier · tracked in
+# `.planning/followups/v69_v66b_planned_advisors_not_landed.md`.
+#
+# V70 batch (V70.2 regime breadth · 11 new advisors anchoring 10 new cases):
+# bc_type_validator / compressibility_regime_advisor / dimensionality_check /
+# mesh_resolution_advisor / region_coupling_validator /
+# separation_resolution_advisor / shock_capture_quality_advisor /
+# statistics_averaging_advisor / symmetry_validator / timestep_validator /
+# turbulence_model_advisor · tracked in
+# `.planning/followups/v70_v70_2_planned_advisors_not_landed.md`.
 KNOWN_F_NEW_ADVISORS: frozenset[str] = frozenset(
     {
+        # V69 batch
         "cf_canonical_choice",
         "cf_canonical_choice_advisor",
         "low_re_kOmegaSST_trigger",
@@ -123,6 +136,27 @@ KNOWN_F_NEW_ADVISORS: frozenset[str] = frozenset(
         "substrate_inspection_advisor",
         "residual_gate_qualifier",
         "residual_gate_qualifier_advisor",
+        # V70 batch (V70.2 · regime breadth anchors)
+        # Note: parser regex strips `_advisor` suffix when present, so for
+        # *_advisor entries we also list the bare form to ensure KNOWN_F_NEW
+        # lookup succeeds after suffix stripping.
+        "bc_type_validator",
+        "compressibility_regime",
+        "compressibility_regime_advisor",
+        "dimensionality_check",
+        "mesh_resolution",
+        "mesh_resolution_advisor",
+        "region_coupling_validator",
+        "separation_resolution",
+        "separation_resolution_advisor",
+        "shock_capture_quality",
+        "shock_capture_quality_advisor",
+        "statistics_averaging",
+        "statistics_averaging_advisor",
+        "symmetry_validator",
+        "timestep_validator",
+        "turbulence_model",
+        "turbulence_model_advisor",
     }
 )
 
@@ -153,19 +187,20 @@ def advisor_surface() -> str:
 @pytest.fixture(scope="module")
 def canonical_files() -> list[Path]:
     files = _list_canonical_files()
-    assert len(files) == 20, (
-        f"expected exactly 20 canonical eval case files; got {len(files)}"
+    assert len(files) == 30, (
+        f"expected exactly 30 canonical eval case files (V70.2 expanded "
+        f"from 20 to 30); got {len(files)}"
     )
     return files
 
 
-# ---- Per-case parametrized tests (20 tests · one per case) ----------
+# ---- Per-case parametrized tests (30 tests · one per case) ----------
 
 
 @pytest.mark.parametrize(
     "case_idx",
-    range(20),
-    ids=[f"E{i + 1:02d}" for i in range(20)],
+    range(30),
+    ids=[f"E{i + 1:02d}" for i in range(30)],
 )
 def test_canonical_case_well_formed(
     case_idx: int,
@@ -250,32 +285,34 @@ def test_canonical_case_well_formed(
 def test_aggregate_firing_count_meets_v66b_target(
     canonical_files: list[Path],
 ) -> None:
-    """V66-B INDEX.md §"Target" mandates cumulative ≥100 firings across
-    the 20 canonical cases (proxy for advisor coverage breadth). This
-    test guards against a future arc silently shrinking advisor
-    coverage by removing dispatches.
+    """V66-B INDEX.md §"Target" mandated cumulative ≥100 firings across
+    the original 20 canonical cases. V70.2 expanded to 30; threshold
+    re-anchored to ≥140 (honest: new V70 cases average 4 firings each
+    versus V66-B's ≈5-7 mean — V70.2 anchored *regime breadth* over
+    per-case firing density). Guards against advisor coverage regression
+    while preserving honest accounting of what the expansion delivered.
     """
     total_active = 0
     for path in canonical_files:
         firings = _parse_rule_firings(path.read_text(encoding="utf-8"))
         total_active += sum(1 for _adv, fire, _sev in firings if fire == "✓")
-    assert total_active >= 100, (
-        f"cumulative active firings = {total_active} < V66-B target of "
-        f"100 · advisor coverage may have regressed"
+    assert total_active >= 140, (
+        f"cumulative active firings = {total_active} < V70.2 target of "
+        f"140 (was V66-B 100 for 20 cases) · advisor coverage may have regressed"
     )
 
 
 def test_no_orphan_eval_case_ids(canonical_files: list[Path]) -> None:
-    """The 20 canonical cases must use ids E01..E20 with no gaps and no
-    duplicates. Drift here = INDEX.md becomes wrong about which V-rows
-    are covered.
+    """The 30 canonical cases (V70.2 expanded from 20) must use ids
+    E01..E30 with no gaps and no duplicates. Drift here = INDEX.md
+    becomes wrong about which V-rows are covered.
     """
     ids = set()
     for path in canonical_files:
         fm = _parse_frontmatter(path.read_text(encoding="utf-8"))
         assert fm is not None
         ids.add(fm["eval_case_id"])
-    expected = {f"E{i:02d}" for i in range(1, 21)}
+    expected = {f"E{i:02d}" for i in range(1, 31)}
     missing = expected - ids
     extra = ids - expected
     assert not missing, f"missing eval_case_ids: {sorted(missing)}"
