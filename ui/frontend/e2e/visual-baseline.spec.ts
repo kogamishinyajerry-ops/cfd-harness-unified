@@ -665,4 +665,134 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V74 · 8 new baselines (45-52) covering V74.1-5 surfaces
+
+  test("45 · V74.3 TopBar canonical run_id surfaced", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=4");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(
+      page.locator("[data-testid='topbar-v3']"),
+    ).toHaveScreenshot("45-v3-topbar-run-id.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("46 · V74.3 TruthChain · 4 provenance hash chips", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page.waitForSelector("[data-testid='provenance-hashes']", {
+      timeout: 4_000,
+    });
+    await expect(
+      page.locator("[data-testid='provenance-hashes']"),
+    ).toHaveScreenshot("46-v3-truthchain-provenance-hashes.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("47 · V74.4 GoldDeltaPanel · summary + per-point rows", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page
+      .waitForSelector(
+        "[data-testid='gold-delta-panel'], [data-testid='gold-delta-offline-hint']",
+        { timeout: 6_000 },
+      )
+      .catch(() => {});
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("47-v3-gold-delta-panel.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("48 · V74.5 AuditPackageDownload wire in TruthChain", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page
+      .waitForSelector(
+        "[data-testid='audit-package-build'], [data-testid='audit-package-download-no-run']",
+        { timeout: 6_000 },
+      )
+      .catch(() => {});
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("48-v3-audit-package.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("49 · V74.1 Step 2 (mesh) · post-axe-extension render", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=2");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(page).toHaveScreenshot("49-v3-step2-post-a11y.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("50 · V74.1 Step 4 (solver) · post-axe-extension render", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=4");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.waitForTimeout(400);
+    await expect(page).toHaveScreenshot("50-v3-step4-post-a11y.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("51 · V74.2 multi-case ribbon · live per-ref completeness", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page
+      .waitForSelector(
+        "[data-testid='multi-case-ribbon'], [data-testid='multi-case-ribbon-offline-hint']",
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(600); // let per-ref completeness settle
+    await expect(page).toHaveScreenshot("51-v3-ribbon-live-completeness.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("52 · V74 close · full TruthChain tab w/ all V74 sections", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page.waitForTimeout(800);
+    await expect(
+      page.locator("[data-testid='workbench-right-panel']"),
+    ).toHaveScreenshot("52-v3-truthchain-full.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });
