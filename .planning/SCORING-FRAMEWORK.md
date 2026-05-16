@@ -95,9 +95,10 @@
 | 80-95 | TopBar 6-field · Engineer Control Rail · AI strict advisory-only · viewport baseline dir present · visual scaffolding for 5-step + Truth Chain |
 | 95-97 | MSW backend mocking + TopBar real data wiring + Step body Power-mode + Viewport mode dispatcher + 8 PNG baselines + e2e 5-step flow PASS |
 | 97-98 | Real fastapi backend serves real corpus + useCaseStatus drives off real `/completeness` (case_kind / ready_for_archive / blocked_by_critical / percentage) + industrial-class case dogfood (whitelist case with trustGate=PASS) + pixel-diff CI gate at 0.01 threshold + 12 PNG baselines + e2e runs against real backend (no MSW) |
-| **98-100** | **+ MaterialCard real-data wiring (usePhysicsState committed/reference dual-mode) + LLM-offline graceful fallback in AIAdvisorPanel (classifyAdvisorFailure) + case_002a APU bay first-class catalog entry (gold_pending flag) + 16 PNG baselines + 43 Playwright PASS (+6 V68-C) · (current zone post-V68-C close)** |
+| 98-99 | + MaterialCard real-data wiring (usePhysicsState committed/reference dual-mode) + LLM-offline graceful fallback in AIAdvisorPanel (classifyAdvisorFailure) + case_002a APU bay first-class catalog entry (gold_pending flag) + 16 PNG baselines + 43 Playwright PASS (+6 V68-C) |
+| **99-100** | **+ Canonical eval set 20/20 individual files with frontmatter schema validator + backend triage 14 → 6 (8 fixed · ≤7 charter EXCEEDED) + 7 V69 e2e specs + StrictMode workaround officially documented (case-detail single-nav clean) + 18 PNG baselines · (current zone post-V69 close)** |
 
-**Current: 98/100** — V68-C "AI Advisor Integration & Material Wiring" arc CLOSE (B149). V68-B baseline 97 + V68-C delta drivers: M3 MaterialCard read-side query-before-mutate (+0.4) · LLM-offline graceful fallback removes "advisor down = workbench broken" UX cliff (+0.3) · case_002a in catalog with gold_pending flag (+0.2) · +6 e2e specs broadening real-backend integration (+0.1) = 98.0. Remaining 98→100 reserved for OpenFOAM-WASM (V68-D research arc · 12-19 weeks effort post iter-2 triage · deferred per iter-2 spike artifact 5-question go/no-go).
+**Current: 99/100** — V69 "Canonical Advisor Eval Regression Harness + Backend Hardening" arc CLOSE (B157). V68-C baseline 98 + V69 delta drivers: canonical eval 5→20 individual files lifts advisor SSOT to machine-checkable substrate (+0.3) · backend triage 14→6 reduces user-visible "pytest red noise" 57% (+0.3) · V69.4 e2e wire locks V69-introduced surfaces with 7 specs + 2 baselines (+0.2) · StrictMode workaround officially documented replaces "deeply broken" framing (+0.2) = 99.0. Remaining 99→100 reserved for OpenFOAM-WASM (V68-D research arc · 12-19 weeks effort post iter-2 triage · deferred per iter-2 spike artifact 5-question go/no-go).
 
 ### Pillar 7 · AI-advisor SSOT (5% weight)
 
@@ -107,12 +108,11 @@
 | 40-70 | V130 advisor-not-driver thesis established · 4Q gate per artifact · AI as consultant role |
 | 70-82 | Claude Code session = AI advisor (per V132 collapse) · external SDK / API surface |
 | 82-85 | + gold_pending catalog flag (first explicit catalog-level audit-state honesty marker) · batch_matrix + CSV exclude gold_pending entries (trust-grade reports stay gold-anchored) · LLM-offline state preserves V130 invariant under transient failure · 4 new visual baselines lock V68-C audit-surface visual contract |
-| **85-100** | **(post-V68-C close · current zone)** |
+| 85-88 | + Canonical advisor eval frontmatter schema validator (20/20 individual files · machine-checkable v_row_attribution + expected_verdict_signature) · KNOWN_F_NEW_ADVISORS structural honesty disclosure (6 V66-B planned-but-not-landed advisors documented in followup not hidden) · per-test triage on 6 remaining backend failures (each engineering-estimated, no failure unattributed) · PNG baseline 17 locks case-detail StrictMode mount visually |
+| **88-100** | **(post-V69 close · current zone)** |
 | 90-100 | AI advisor SSOT validates against eval set · regression-protected · canonical advisor scenarios |
 
-**Current: 85/100** — V68-C "AI Advisor Integration & Material Wiring" arc CLOSE (B149). V68-B baseline 82 + V68-C delta drivers: gold_pending catalog flag (+1.5) · batch_matrix/CSV filtering of gold_pending entries (+0.5) · AI offline state preserves V130 (+0.5) · 4 visual baselines locking V68-C audit surfaces (+0.5) = 85.0.
-
-**Current: 62/100** — V130 thesis solidified + 4Q gate uniformly applied + Claude Code session = AI advisor (V132).
+**Current: 88/100** — V69 "Canonical Advisor Eval Regression Harness + Backend Hardening" arc CLOSE (B157). V68-C baseline 85 + V69 delta drivers: canonical eval frontmatter schema validator brings AI-advisor SSOT to wire-level regression protection (+1.0) · KNOWN_F_NEW_ADVISORS skip-list disclosure makes 6 V66-B gaps auditable from test file (+0.8) · per-test triage on remaining 6 backend failures (+0.7) · PNG baseline 17 case-detail StrictMode regression-protected (+0.5) = 88.0.
 
 ---
 
