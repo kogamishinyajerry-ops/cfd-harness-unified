@@ -221,4 +221,39 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V69.4 · 2 new baselines for V69 UI surfaces (charter §4 ≥18 PNG)
+  test("17 · case-detail StrictMode mount snapshot (V69-DONE-5 verified)", async ({
+    page,
+  }) => {
+    // V69.4 StrictMode investigation: single-navigation mount of
+    // /workbench/case/:id is deterministic. This baseline locks in
+    // the rendered card structure so a future StrictMode regression
+    // gets caught visually.
+    await page.goto("/workbench/case/lid_driven_cavity?step=3");
+    await page
+      .waitForLoadState("networkidle", { timeout: 12_000 })
+      .catch(() => {});
+    await expect(page).toHaveScreenshot("17-case-detail-strictmode.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("18 · catalog with 11 entries + gold_pending case_002a (V69 regression)", async ({
+    page,
+  }) => {
+    // Distinct from baseline 13 (V68-C.4): this one is a wide-format
+    // catalog view at a different viewport size to lock the 11-card
+    // grid + ⏳ badge under V69 advisor-stack changes.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/workbench");
+    await page.waitForSelector("[data-testid='case-card-case_002a']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("18-catalog-wide-v69.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });
