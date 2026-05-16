@@ -98,17 +98,19 @@ export const handlers = [
 
   http.get("/api/cases/:caseId/completeness", async ({ params }) => {
     await delay(15);
+    // V68-B.2 · MSW now mirrors the real backend completeness shape
+    // (case_kind / ready_for_archive / blocked_by_critical / percentage)
+    // so useCaseStatus can normalize identically against MSW or real fastapi.
     return HttpResponse.json({
       case_id: params.caseId,
-      // V68-A.5: rolling completeness so TopBar audit% animates through pipeline.
-      steps: {
-        import: { complete: true, audit_pct: 100 },
-        mesh: { complete: true, audit_pct: 100 },
-        bc: { complete: true, audit_pct: 100 },
-        solve: { complete: false, audit_pct: 60 },
-        results: { complete: false, audit_pct: 0 },
-      },
-      overall_audit_pct: 72,
+      case_kind: "whitelist",
+      ready_for_archive: false,
+      blocked_by_critical: 0,
+      present_count: 12,
+      total_count: 16,
+      percentage: 75,
+      missing: [],
+      notes: [],
     });
   }),
 ];

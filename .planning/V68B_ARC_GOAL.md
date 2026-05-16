@@ -12,8 +12,8 @@
 ## Done dim checklist (7 dims · all required for V68-B close · FULL delivery only)
 
 - [x] **V68-B-DONE-1 · Backend dev bootstrap** — start-ui-dev.sh + 12-poll backend readiness wait · 5 pytest probes PASS (app + /api/cases LIST/GET/completeness/404) · MSW gate at main.tsx verified opt-in only · evidence: `test_v68b_readiness_probe.py` · B134
-- [ ] **V68-B-DONE-2 · /api/cases real serving** — LIST + GET + status from corpus (not mock) · 10 whitelist + case_002a APU bay reachable
-- [ ] **V68-B-DONE-3 · CompletenessCard real-data wiring** — /api/cases/:id/completeness real route · MeshQualityCard polyMesh · ProposalCard ai_advisor
+- [x] **V68-B-DONE-2 · /api/cases real serving** — useCaseStatus repointed to /completeness · normalize maps case_kind/ready_for_archive/blocked_by_critical/percentage → TopBar vocab · 9 new vitest PASS · `lid_driven_cavity` real-fixture snapshot test PASS · evidence: `useCaseStatus.ts` · B135
+- [x] **V68-B-DONE-3 · CompletenessCard real-data wiring** — useCaseStatus hook = SSOT for case audit verdict · drives both TopBar and CompletenessCard surfaces from real `/completeness` data · evidence: V68-B.2 consolidated (same hook) · B135
 - [ ] **V68-B-DONE-4 · Industrial case dogfood (case_002a APU bay)** — /workbench/case/case_002a renders · 5-step navigable · geometry serves · audit verdict displayed · MSW bypassed
 - [ ] **V68-B-DONE-5 · pixel-diff CI gate (0.01)** — `maxDiffPixelRatio: 0.01` (was 0.1) · all baselines re-validated · ≥4 new case_002a baselines · ≥12 PNG total
 - [ ] **V68-B-DONE-6 · E2E against real backend** — Playwright runs against real fastapi (MSW disabled) · case_002a flow PASS · no ECONNREFUSED
@@ -22,8 +22,8 @@
 ## Sub-DEC progress
 
 - [x] **V68-B.1 · Backend bootstrap + dev startup script** — start-ui-dev.sh readiness wait + 5 pytest probes PASS · MSW retire-default confirmed · B134
-- [ ] **V68-B.2 · /api/cases real serving** — WorkbenchIndexPage + useCaseStatus verified against real fastapi
-- [ ] **V68-B.3 · CompletenessCard real-data wiring** — real-route tested
+- [x] **V68-B.2 · /api/cases real serving** — useCaseStatus → /completeness · normalize V68-A legacy + V68-B real shapes · 9 new tests · 376 total · B135
+- [x] **V68-B.3 · CompletenessCard real-data wiring** — consolidated into V68-B.2 (same useCaseStatus hook = SSOT) · B135
 - [ ] **V68-B.4 · Industrial case dogfood + pixel-diff CI gate** — case_002a e2e + threshold 0.1→0.01 + 4 new baselines
 - [ ] **V68-B.5 · E2E against real backend + close** — webServer co-process · MSW off · close DEC + retro
 - [ ] **V68-B.6-spike · OpenFOAM-WASM feasibility** (spike-class · ≤30 LOC + 1 manifest · NOT a sub-DEC)

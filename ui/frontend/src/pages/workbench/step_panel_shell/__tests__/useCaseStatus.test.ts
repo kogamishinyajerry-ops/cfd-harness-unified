@@ -76,3 +76,92 @@ describe("normalizeCaseStatus (V68-A.2)", () => {
     expect(empty.validation).toBe(null);
   });
 });
+
+describe("normalizeCaseStatus · V68-B.2 real-backend /completeness shape", () => {
+  it("derives truthSource=openfoam_native from case_kind='whitelist'", () => {
+    const s = normalizeCaseStatus("lid_driven_cavity", {
+      case_kind: "whitelist",
+      ready_for_archive: false,
+      percentage: 93.8,
+    });
+    expect(s.truthSource).toBe("openfoam_native");
+  });
+
+  it("derives truthSource=unknown for case_kind='imported_user'", () => {
+    const s = normalizeCaseStatus("c", { case_kind: "imported_user" });
+    expect(s.truthSource).toBe("unknown");
+  });
+
+  it("derives trustGate=PASS when ready_for_archive=true", () => {
+    const s = normalizeCaseStatus("c", {
+      case_kind: "whitelist",
+      ready_for_archive: true,
+      blocked_by_critical: 0,
+    });
+    expect(s.trustGate).toBe("PASS");
+  });
+
+  it("derives trustGate=FAIL when blocked_by_critical > 0", () => {
+    const s = normalizeCaseStatus("c", {
+      case_kind: "whitelist",
+      ready_for_archive: false,
+      blocked_by_critical: 1,
+    });
+    expect(s.trustGate).toBe("FAIL");
+  });
+
+  it("derives trustGate=PASS_WITH_DISCLAIMER when not archive-ready and no critical blockers", () => {
+    const s = normalizeCaseStatus("c", {
+      case_kind: "whitelist",
+      ready_for_archive: false,
+      blocked_by_critical: 0,
+    });
+    expect(s.trustGate).toBe("PASS_WITH_DISCLAIMER");
+  });
+
+  it("derives auditPct from percentage field (93.8 from real backend)", () => {
+    const s = normalizeCaseStatus("lid_driven_cavity", {
+      case_kind: "whitelist",
+      percentage: 93.8,
+    });
+    expect(s.auditPct).toBe(93.8);
+  });
+
+  it("clamps invalid percentage to null (defense against ill-shaped payload)", () => {
+    expect(normalizeCaseStatus("c", { percentage: 150 }).auditPct).toBe(null);
+    expect(normalizeCaseStatus("c", { percentage: -1 }).auditPct).toBe(null);
+  });
+
+  it("V68-A legacy fast-path wins over V68-B derivation when both present", () => {
+    // truth_source (legacy) wins over case_kind (V68-B)
+    const s = normalizeCaseStatus("c", {
+      truth_source: "msw-mock",
+      case_kind: "whitelist",
+    });
+    expect(s.truthSource).toBe("mock");
+    // audit_pct (legacy) wins over percentage (V68-B)
+    const s2 = normalizeCaseStatus("c", {
+      audit_pct: 42,
+      percentage: 93.8,
+    });
+    expect(s2.auditPct).toBe(42);
+  });
+
+  it("real-backend lid_driven_cavity completeness fixture maps to expected status", () => {
+    // Snapshot of real backend response for lid_driven_cavity (Phase-0 contract).
+    const s = normalizeCaseStatus("lid_driven_cavity", {
+      case_id: "lid_driven_cavity",
+      case_kind: "whitelist",
+      ready_for_archive: false,
+      blocked_by_critical: 1,
+      present_count: 15,
+      total_count: 16,
+      percentage: 93.8,
+    });
+    expect(s.caseId).toBe("lid_driven_cavity");
+    expect(s.truthSource).toBe("openfoam_native");
+    expect(s.trustGate).toBe("FAIL"); // 1 critical block
+    expect(s.auditPct).toBe(93.8);
+    expect(s.llmOffline).toBe(true);
+  });
+});

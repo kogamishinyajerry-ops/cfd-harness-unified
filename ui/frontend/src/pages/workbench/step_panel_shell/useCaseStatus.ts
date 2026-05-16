@@ -9,21 +9,35 @@
  * camelCase props vocabulary, and clamps invalid/missing values to the
  * blueprint's safe-default zone (PENDING / unknown / null).
  *
- * In V67-C TopBar fed entirely from caller props (StepPanelShell:488 passed
- * only caseId). V68-A.2 wires real backend data via this hook; in offline /
- * pre-MSW environments the hook returns the blueprint-safe defaults so the
- * UI never flashes raw nulls.
+ * V68-B.2 · Endpoint repointed from /api/cases/:id/status (V68-A invented)
+ * to the real backend's /api/cases/:id/completeness so the hook drives off
+ * real audit verdicts (Phase-0 contract: percentage, ready_for_archive,
+ * blocked_by_critical, case_kind). MSW handler still serves a /status-style
+ * fallback shape for the legacy raw fields — `normalizeCaseStatus` accepts
+ * either shape (real-backend or legacy) and converges on the TopBar vocab.
  */
 import { useQuery } from "@tanstack/react-query";
 
 export interface CaseStatusRaw {
   case_id?: string;
+  // Legacy V68-A /status shape
   truth_source?: string | null;
   trust_gate?: string | null;
   audit_pct?: number | null;
   llm_offline?: boolean | null;
   last_action?: string | null;
   validation?: string | null;
+  // V68-B real /completeness shape
+  case_kind?: string | null;
+  ready_for_archive?: boolean | null;
+  blocked_by_critical?: number | null;
+  percentage?: number | null;
+  // Carried-but-unused fields from /completeness — typed so tests / fixtures
+  // can construct realistic payloads without TS2353.
+  present_count?: number;
+  total_count?: number;
+  missing?: unknown[];
+  notes?: unknown[];
 }
 
 export interface CaseStatus {
@@ -55,28 +69,69 @@ const TRUTH_SOURCE_MAP: Record<string, CaseStatus["truthSource"]> = {
   unknown: "unknown",
 };
 
+function deriveTruthSource(
+  raw: CaseStatusRaw | undefined | null,
+): CaseStatus["truthSource"] | undefined {
+  // V68-A legacy fast-path (MSW handler or any caller providing truth_source).
+  if (raw?.truth_source != null && raw.truth_source !== "") {
+    return TRUTH_SOURCE_MAP[raw.truth_source];
+  }
+  // V68-B real-backend path: case_kind="whitelist" / "imported_user" / ...
+  // whitelist cases come from corpus = openfoam_native truth; user imports = unknown
+  // until they reach archive state (V132 advisor-only invariant).
+  const kind = raw?.case_kind;
+  if (kind === "whitelist") return "openfoam_native";
+  if (kind === "imported_user" || kind === "imported") return "unknown";
+  return undefined;
+}
+
+function deriveTrustGate(
+  raw: CaseStatusRaw | undefined | null,
+): CaseStatus["trustGate"] | undefined {
+  // V68-A legacy fast-path.
+  if (raw?.trust_gate != null && raw.trust_gate !== "") {
+    return TRUST_GATE_MAP[raw.trust_gate];
+  }
+  // V68-B real-backend path: derive from ready_for_archive + blocked_by_critical.
+  if (typeof raw?.ready_for_archive === "boolean") {
+    if (raw.ready_for_archive) return "PASS";
+    if ((raw.blocked_by_critical ?? 0) > 0) return "FAIL";
+    return "PASS_WITH_DISCLAIMER";
+  }
+  return undefined;
+}
+
+function deriveAuditPct(
+  raw: CaseStatusRaw | undefined | null,
+): number | null {
+  // V68-A legacy fast-path.
+  if (
+    typeof raw?.audit_pct === "number" &&
+    raw.audit_pct >= 0 &&
+    raw.audit_pct <= 100
+  ) {
+    return raw.audit_pct;
+  }
+  // V68-B real-backend path: completeness `percentage` field.
+  if (
+    typeof raw?.percentage === "number" &&
+    raw.percentage >= 0 &&
+    raw.percentage <= 100
+  ) {
+    return raw.percentage;
+  }
+  return null;
+}
+
 export function normalizeCaseStatus(
   caseId: string,
   raw: CaseStatusRaw | undefined | null,
 ): CaseStatus {
-  const truthSource =
-    raw?.truth_source != null && raw.truth_source !== ""
-      ? TRUTH_SOURCE_MAP[raw.truth_source]
-      : undefined;
-  const trustGate =
-    raw?.trust_gate != null && raw.trust_gate !== ""
-      ? TRUST_GATE_MAP[raw.trust_gate]
-      : undefined;
   return {
     caseId,
-    truthSource: truthSource ?? "unknown",
-    trustGate: trustGate ?? "PENDING",
-    auditPct:
-      typeof raw?.audit_pct === "number" &&
-      raw.audit_pct >= 0 &&
-      raw.audit_pct <= 100
-        ? raw.audit_pct
-        : null,
+    truthSource: deriveTruthSource(raw) ?? "unknown",
+    trustGate: deriveTrustGate(raw) ?? "PENDING",
+    auditPct: deriveAuditPct(raw),
     // V130 invariant: default to true (offline-first guarantee). Only flip
     // to false when the backend explicitly reports llm_offline=false.
     llmOffline: raw?.llm_offline === false ? false : true,
@@ -86,12 +141,14 @@ export function normalizeCaseStatus(
 }
 
 async function fetchCaseStatus(caseId: string): Promise<CaseStatusRaw> {
-  const res = await fetch(`/api/cases/${encodeURIComponent(caseId)}/status`, {
-    method: "GET",
-  });
+  // V68-B.2 · hit real backend's /api/cases/:id/completeness route.
+  const res = await fetch(
+    `/api/cases/${encodeURIComponent(caseId)}/completeness`,
+    { method: "GET" },
+  );
   if (!res.ok) {
-    // V130 invariant: never throw on /status — surface PENDING instead so the
-    // UI doesn't escalate a transient backend hiccup to an audit failure.
+    // V130 invariant: never throw on case-status — surface PENDING instead so
+    // the UI doesn't escalate a transient backend hiccup to an audit failure.
     return {};
   }
   return (await res.json()) as CaseStatusRaw;
