@@ -6,6 +6,10 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { useState } from "react";
+import {
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 
 import { Step3SetupBC } from "../steps/Step3SetupBC";
 import {
@@ -20,11 +24,15 @@ const {
   setupBCWithEnvelopeMock,
   getFaceAnnotationsMock,
   putFaceAnnotationsMock,
+  getPhysicsStateMock,
+  getCaseMock,
 } = vi.hoisted(() => ({
   setupBCMock: vi.fn(),
   setupBCWithEnvelopeMock: vi.fn(),
   getFaceAnnotationsMock: vi.fn(),
   putFaceAnnotationsMock: vi.fn(),
+  getPhysicsStateMock: vi.fn(),
+  getCaseMock: vi.fn(),
 }));
 
 vi.mock("@/api/client", async () => {
@@ -42,9 +50,25 @@ vi.mock("@/api/client", async () => {
         getFaceAnnotationsMock(...args),
       putFaceAnnotations: (...args: unknown[]) =>
         putFaceAnnotationsMock(...args),
+      // V68-C.1: Step3 now mounts MaterialCard which calls these.
+      // Default-resolve to null/empty so existing tests don't fail
+      // on the unrelated physics fetch.
+      getPhysicsState: (...args: unknown[]) => getPhysicsStateMock(...args),
+      getCase: (...args: unknown[]) => getCaseMock(...args),
     },
   };
 });
+
+// V68-C.1: MaterialCard pulls in react-query. These Step3SetupBC tests
+// pre-date that dependency and many render Step3SetupBC without a
+// QueryClientProvider wrapper. The card's surface is exercised in
+// MaterialCard.test.tsx; here we stub it so the unrelated tests stay
+// isolated and the QueryClient wiring is a single-file concern.
+vi.mock("../MaterialCard", () => ({
+  MaterialCard: ({ caseId }: { caseId: string | null | undefined }) => (
+    <div data-testid="material-card-stub" data-case-id={caseId ?? ""} />
+  ),
+}));
 
 // A small harness that primes a picked face so the AnnotationPanel
 // renders inside Step3SetupBC's body. Wrapped in MemoryRouter so
@@ -60,16 +84,24 @@ function PickedHarness({
   children: ReactNode;
   initialEntries?: string[];
 }) {
+  // V68-C.1 · MaterialCard inside Step3SetupBC uses react-query.
+  // Per-render fresh client (matches MaterialCard.test.tsx) so tests
+  // remain isolated.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
   return (
-    <MemoryRouter initialEntries={initialEntries}>
-      <FacePickProvider>
-        <Step3StateProvider caseId={caseId}>
-          <Primer faceId={faceId} />
-          {children}
-          <span data-testid="harness-case-id">{caseId}</span>
-        </Step3StateProvider>
-      </FacePickProvider>
-    </MemoryRouter>
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={initialEntries}>
+        <FacePickProvider>
+          <Step3StateProvider caseId={caseId}>
+            <Primer faceId={faceId} />
+            {children}
+            <span data-testid="harness-case-id">{caseId}</span>
+          </Step3StateProvider>
+        </FacePickProvider>
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
 
@@ -93,6 +125,25 @@ describe("Step3SetupBC face-annotation save path", () => {
     setupBCWithEnvelopeMock.mockReset();
     getFaceAnnotationsMock.mockReset();
     putFaceAnnotationsMock.mockReset();
+    getPhysicsStateMock.mockReset();
+    getPhysicsStateMock.mockResolvedValue(null);
+    getCaseMock.mockReset();
+    getCaseMock.mockResolvedValue({
+      case_id: "test",
+      name: "test",
+      reference: null,
+      doi: null,
+      flow_type: "INTERNAL",
+      geometry_type: "BOX",
+      compressibility: "INCOMPRESSIBLE",
+      steady_state: "STEADY",
+      solver: "icoFoam",
+      turbulence_model: "laminar",
+      parameters: {},
+      gold_standard: null,
+      preconditions: [],
+      contract_status_narrative: null,
+    });
   });
 
   it("happy path: save dispatches putFaceAnnotations with revision + sticky annotated_by", async () => {
@@ -230,6 +281,25 @@ describe("Step3SetupBC envelope-mode (M9 Tier-B AI)", () => {
     setupBCWithEnvelopeMock.mockReset();
     getFaceAnnotationsMock.mockReset();
     putFaceAnnotationsMock.mockReset();
+    getPhysicsStateMock.mockReset();
+    getPhysicsStateMock.mockResolvedValue(null);
+    getCaseMock.mockReset();
+    getCaseMock.mockResolvedValue({
+      case_id: "test",
+      name: "test",
+      reference: null,
+      doi: null,
+      flow_type: "INTERNAL",
+      geometry_type: "BOX",
+      compressibility: "INCOMPRESSIBLE",
+      steady_state: "STEADY",
+      solver: "icoFoam",
+      turbulence_model: "laminar",
+      parameters: {},
+      gold_standard: null,
+      preconditions: [],
+      contract_status_narrative: null,
+    });
   });
 
   it("ai_mode=force_uncertain: clicking [AI 处理] dispatches envelope mode + renders DialogPanel", async () => {
@@ -1102,6 +1172,25 @@ describe("Step3SetupBC multi-question slot routing (M9 Step 3)", () => {
     setupBCWithEnvelopeMock.mockReset();
     getFaceAnnotationsMock.mockReset();
     putFaceAnnotationsMock.mockReset();
+    getPhysicsStateMock.mockReset();
+    getPhysicsStateMock.mockResolvedValue(null);
+    getCaseMock.mockReset();
+    getCaseMock.mockResolvedValue({
+      case_id: "test",
+      name: "test",
+      reference: null,
+      doi: null,
+      flow_type: "INTERNAL",
+      geometry_type: "BOX",
+      compressibility: "INCOMPRESSIBLE",
+      steady_state: "STEADY",
+      solver: "icoFoam",
+      turbulence_model: "laminar",
+      parameters: {},
+      gold_standard: null,
+      preconditions: [],
+      contract_status_narrative: null,
+    });
   });
 
   it("two unresolved face questions → no auto-route until 'Select this face' is clicked", async () => {

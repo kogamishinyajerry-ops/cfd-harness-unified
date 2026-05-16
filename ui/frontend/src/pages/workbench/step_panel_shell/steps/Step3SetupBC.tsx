@@ -33,6 +33,7 @@ import type { CaseSolveRejection } from "@/types/case_solve";
 
 import { AnnotationPanel } from "../AnnotationPanel";
 import { DialogPanel } from "../DialogPanel";
+import { MaterialCard } from "../MaterialCard";
 import { PatchClassificationPanel } from "../PatchClassificationPanel";
 import { RawDictEditor } from "@/components/RawDictEditor";
 
@@ -925,6 +926,13 @@ export function Step3SetupBC({
         (the <code>ldc_box</code> demo). External-flow demos require
         Phase-2 (blockMesh + sHM).
       </div>
+
+      {/* V68-C.1 · MaterialCard · read-only display of the case's
+       *  committed physics state (constant/physicalProperties +
+       *  constant/momentumTransport). Surfaces immediately on Step 3
+       *  entry so the engineer sees the current state before deciding
+       *  whether to re-commit via PhysicsPanel below. */}
+      <MaterialCard caseId={caseId} />
 
       {envelopeMode && (
         <div

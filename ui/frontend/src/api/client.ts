@@ -957,6 +957,29 @@ export const api = {
     return (await resp.json()) as import("@/types/case_dicts").RawDictPostResponse;
   },
 
+  // V68-C.1 · GET /api/cases/:id/physics — current committed physics
+  // state. Returns null when the case isn't in IMPORTED_DIR (whitelist
+  // cases, fresh scaffolds) — distinct from a network/server error which
+  // still throws. Hook layer (usePhysicsState) decides UI surface.
+  getPhysicsState: async (
+    caseId: string,
+  ): Promise<import("@/types/physics").PhysicsStateResponse | null> => {
+    const resp = await fetch(
+      `/api/cases/${encodeURIComponent(caseId)}/physics`,
+      {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      },
+    );
+    if (resp.status === 404) return null;
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new ApiError(resp.status, body || resp.statusText);
+    }
+    return (await resp.json()) as import("@/types/physics").PhysicsStateResponse;
+  },
+
   // DEC-V61-142 (N3.3) — commit MaterialContract + RegimeContract
   // to the case's constant/ dicts. V132 mutating route.
   commitPhysics: async (

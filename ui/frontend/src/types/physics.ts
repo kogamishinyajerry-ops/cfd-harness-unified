@@ -59,6 +59,18 @@ export interface PhysicsCommitResponse {
   committed_at: string;
 }
 
+// V68-C.1 · GET /api/cases/{case_id}/physics
+// Mirror of backend PhysicsStateResponse (routes/physics.py).
+// Both dict texts are nullable: a freshly scaffolded case has neither
+// file on disk; a whitelist case has neither because the case isn't
+// materialized in IMPORTED_DIR (the route returns 404 in that case,
+// which the hook normalizes to a `not_imported` state, not an error).
+export interface PhysicsStateResponse {
+  case_id: string;
+  material_dict_text: string | null;
+  regime_dict_text: string | null;
+}
+
 /** Frontend-only library mirror — keeps the dropdown working without
  *  a separate fetch. Values match the backend library; tests assert
  *  citation parity. */
