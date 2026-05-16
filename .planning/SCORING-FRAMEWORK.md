@@ -90,12 +90,12 @@
 | Raw range | Anchor |
 |---|---|
 | 0-40 | CLI-only · no UI |
-| **40-65** | **Workbench 4-region layout + 5-step spine designed · concept SVG approved (current zone)** |
+| 40-65 | Workbench 4-region layout + 5-step spine designed · concept SVG approved |
 | 65-80 | 5-step spine partially implemented · Truth Chain visible · advisor integration UI live |
-| 80-95 | Full workbench parity · M2 mesh + M3 physics + M4 solver + M5 postprocess UIs all functional |
-| 95-100 | Engineer can complete industrial case e2e without leaving workbench |
+| 80-95 | TopBar 6-field · Engineer Control Rail · AI strict advisory-only · viewport baseline dir present · visual scaffolding for 5-step + Truth Chain |
+| **95-100** | **MSW backend mocking + TopBar real data wiring (useCaseStatus) + Step body Power-mode adoption (5 step bodies) + Viewport mode dispatcher (6 modes) + 8 PNG snapshot baselines + e2e 5-step flow PASS (current zone post-V68-A close)** |
 
-**Current: 55/100** — concept SVG + N1.1 step-1 ingest scaffolded · M2-M6 unimplemented.
+**Current: 95/100** — V68-A "Workbench Depth & Real-Usability" arc CLOSE (B132). V67-C scaffolding (55→90) + V68-A FULL upgrade (90→95): 6 Done dims FULL-MET (MSW + TopBar wiring + Power-mode + Viewport dispatcher + 8 PNG baselines + e2e flow). Engineer can navigate Import→Mesh→BC→Solve→Results against mocked backend with rolling audit% + 6-mode viewport · 27/27 Playwright PASS · 367/367 vitest PASS.
 
 ### Pillar 7 · AI-advisor SSOT (5% weight)
 

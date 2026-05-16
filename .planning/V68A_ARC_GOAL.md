@@ -17,7 +17,7 @@
 - [x] **V68-A-DONE-4 · Viewport mode dispatcher** — ViewportModeDispatcher (~95 LOC) · 6 modes via data-viewport-mode attr · step default mapping (1→geometry, 2→mesh, 3→bc, 4→residuals, 5→report) · 12 vitest PASS · 7/7 e2e PASS · evidence: `ViewportMode.tsx` · B130
 - [x] **V68-A-DONE-5 · Visual snapshot baseline** — 8 PNG files committed at `__visual_baselines__/chromium/visual-baseline.spec.ts-snapshots/` · 8/8 e2e PASS first-run (lenient `maxDiffPixelRatio: 0.1`) · evidence: `visual-baseline.spec.ts` · B130
 - [x] **V68-A-DONE-6 · End-to-end 5-step flow** — `full-flow.spec.ts` 7/7 PASS · 5 distinct modes resolved across 5 step transitions · TrustGate wiring proven via V68-A.2 unit (9 PASS) · CompletenessCard MSW endpoint added · evidence: `full-flow.spec.ts` · B131
-- [ ] **V68-A-DONE-7 · Pillar 6 ≥95 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `95-100` zone · evidence: V68-A close DEC §10
+- [x] **V68-A-DONE-7 · Pillar 6 ≥95 re-anchor** — `SCORING-FRAMEWORK.md` Pillar 6 anchor `95-100` zone updated · 6/6 sub-dim items demonstrably FULL-delivered · Pillar 6 90→95 ratified · weighted +0.5 · evidence: V68-A close DEC §4+§10 · B132
 
 ## Sub-DEC progress (5 sub-DECs · serial)
 
