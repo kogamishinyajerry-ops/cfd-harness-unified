@@ -11,19 +11,19 @@
 
 ## Done dim checklist (9 dims · all required)
 
-- [ ] **V71-DONE-1 · WorkbenchShellV3 4-panel grid** — Activity Bar 48px + Left Panel 260px + Center workspace (Pipeline Strip 44px + Viewport Mode Toolbar 36px + Main Canvas + Bottom Panel toggle) + Right Panel 340px · CSS Grid layout · all panels rendered
+- [x] **V71-DONE-1 · WorkbenchShellV3 4-panel grid** — Activity Bar 48px + Left Panel 260px + Center workspace (Pipeline Strip 44px + Viewport Mode Toolbar 36px + Main Canvas + Bottom Panel toggle) + Right Panel 340px · CSS Grid layout · all panels rendered · **LANDED B170** commit `9df67ab` · `data-v71-ui-shell="true"` tag present · 414 tests pass
 - [ ] **V71-DONE-2 · Step 1/2/3 surfaces** wired to shell — Step 1 geometry viewport + Inspector metadata · Step 2 mesh wireframe + Inspector quality table + bottom Console · Step 3 BC color-coded patches + MaterialCard inline two-column
 - [ ] **V71-DONE-3 · ResidualsChart + Bottom Panel** — log-scale multi-line chart + 4-tab bottom panel + streaming console
 - [ ] **V71-DONE-4 · AdvisorTab + V132 contract test** — right-panel peer tab · paragraph + citations + preview-apply text links · ZERO auto-execute buttons regression-protected via e2e
 - [ ] **V71-DONE-5 · ResultsCanvas + TrustGate verdict** — gold-vs-computed chart + HUGE PASS + point-by-point table
-- [ ] **V71-DONE-6 · Cross-step inspection** — viewport mode independent of pipeline step · Inspector adapts to both
+- [x] **V71-DONE-6 · Cross-step inspection** — viewport mode independent of pipeline step · Inspector adapts to both · **LANDED B170** · V71.S in `WorkbenchShellV3.tsx` (handleSetStep preserves engineer override) · V71.T in `InspectorContent.tsx` (Step4ActiveSolveInspector when stepId=4 + viewportMode='mesh')
 - [ ] **V71-DONE-7 · 8 visual baselines (23-30)** locked against blueprint images
 - [ ] **V71-DONE-8 · Pillar 6 99.5 → 99.7 + Pillar 10 90 → 95** with per-driver delta accounting
 - [ ] **V71-DONE-9 · Fleet criteria tightened** — Pillar 6 `v3_route_mounts` sub-score · Pillar 10 `v3_blueprint_compliance` sub-score · all 10 pillars at ≥99
 
 ## Sub-DEC progress
 
-- [ ] **V71.1 · WorkbenchShell v3 4-panel grid** — Image 01 · V71.A/B/C/D
+- [x] **V71.1 · WorkbenchShell v3 4-panel grid** — Image 01 · V71.A/B/C/D · **LANDED B170** · DEC-V71-1
 - [ ] **V71.2 · Step views + Inspector contextual + MaterialCard** — Images 02/03/04 · V71.G/H/I/T
 - [ ] **V71.3 · ResidualsChart + Bottom Panel + SolveRun streaming** — Image 05 · V71.E/F/J/L
 - [ ] **V71.4 · AdvisorTab right-panel peer + V132 contract test** — Image 06 · V71.K/M/N/O
@@ -49,7 +49,8 @@
 
 | Iter | Date | min(10) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V71 baseline) | 2026-05-16 | TBD | TBD | TBD | charter LANDED · expected lows: UX (13 < 17 V71 threshold) · Viz (22 < 30) · Functional (0 sub-DECs V71) · Industrial (no v3 mounts yet) | TBD |
+| 0 (V71 baseline) | 2026-05-16 | 0 | 79.84 | functional (0) | charter LANDED · expected lows confirmed | `.planning/scores/V71_iter_0.md` |
+| 1 (V71.1 LANDED) | 2026-05-16 | 17 | 91.04 | functional (17) | shell route mounts · 7/10 pillars at 100 · industrial_ui 48 → 84 (+36) · functional 0 → 17 (+17) · ux/cfd_breadth/novice flipped from intermediate to 100 · viz still 92 (need V71.6 baselines 23-30) | `.planning/scores/V71_iter_1.md` |
 
 ## Reverse-stop log
 
