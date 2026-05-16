@@ -8,6 +8,7 @@
  *   - Step 4 (active solve, mesh viewport mode) → ACTIVE SOLVE + MESH SUMMARY (Image 08)
  *   - Step 5 → fall through to TruthChain (or compact summary)
  */
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { StepId, ViewportMode } from "../../WorkbenchShellV3";
 
@@ -162,56 +163,81 @@ function Step1Inspector({ caseId }: { caseId: string }) {
   );
 }
 
+// V71.G · MeshQualityInspector primitive — semantic pass/warn dot inline.
+// `verdict` drives both color + data attribute (for visual baseline + tests).
+function QualityRow({
+  k,
+  v,
+  verdict,
+}: {
+  k: string;
+  v: React.ReactNode;
+  verdict?: "pass" | "warn" | "fail" | "na";
+}) {
+  const dot =
+    verdict === "pass"
+      ? "bg-v3-inlet"
+      : verdict === "warn"
+      ? "bg-v3-symmetry"
+      : verdict === "fail"
+      ? "bg-v3-wall"
+      : null;
+  return (
+    <div
+      data-testid="mesh-quality-row"
+      data-quality-verdict={verdict ?? "na"}
+      className="flex items-baseline justify-between gap-3"
+    >
+      <span className="text-v3-textSecondary truncate">{k}</span>
+      <span className="text-v3-textPrimary font-mono text-right tabular-nums">
+        {v}
+        {dot && (
+          <span
+            aria-hidden
+            className={`inline-block w-2 h-2 rounded-full ml-1.5 align-middle ${dot}`}
+          />
+        )}
+      </span>
+    </div>
+  );
+}
+
 function Step2Inspector({ caseId }: { caseId: string }) {
   const isCavity = caseId.includes("cavity");
   return (
     <>
       <Section label="Mesh summary">
-        <Row
-          k="Total cells"
-          v={isCavity ? "289" : "1,237,452"}
-        />
+        <Row k="Total cells" v={isCavity ? "289" : "1,237,452"} />
         {!isCavity && (
           <>
             <Row k="Hex" v="1,189,022 (96.1%)" />
             <Row k="Prism (BL)" v="48,430 (3.9%)" />
           </>
         )}
-        <Row
+        <QualityRow
           k="Min volume"
           v={isCavity ? "3.4×10⁻³ m³" : "3.1×10⁻¹² m³"}
+          verdict={isCavity ? "pass" : "pass"}
         />
-        <Row
+        <QualityRow
           k="Max aspect ratio"
           v={isCavity ? "1.00" : "842"}
-          note={
-            !isCavity && (
-              <span className="inline-block w-2 h-2 rounded-full bg-v3-symmetry ml-1" />
-            )
-          }
+          verdict={isCavity ? "pass" : "warn"}
         />
-        <Row
+        <QualityRow
           k="Max skewness"
           v={isCavity ? "0.00" : "1.84"}
-          note={
-            <span className="inline-block w-2 h-2 rounded-full bg-v3-inlet ml-1" />
-          }
+          verdict="pass"
         />
-        <Row
+        <QualityRow
           k="Max non-ortho"
           v={isCavity ? "0.0°" : "62.3°"}
-          note={
-            <span className="inline-block w-2 h-2 rounded-full bg-v3-inlet ml-1" />
-          }
+          verdict="pass"
         />
-        <Row
+        <QualityRow
           k="y⁺ estimate"
           v={isCavity ? "N/A (laminar)" : "0.6–1.4"}
-          note={
-            !isCavity && (
-              <span className="inline-block w-2 h-2 rounded-full bg-v3-inlet ml-1" />
-            )
-          }
+          verdict={isCavity ? "na" : "pass"}
         />
       </Section>
       <Section label="Refinement">
@@ -241,6 +267,146 @@ function Step2Inspector({ caseId }: { caseId: string }) {
   );
 }
 
+// V71.I · MaterialCard inline · two-column layout (Committed | Reference).
+// Row-click expands a derivation note in-place (DISPLAY-ONLY · per V130
+// the v3 surface NEVER mutates case state · expanded text is read-only
+// guidance, not an edit form).
+function MaterialRow({
+  k,
+  v,
+  derive,
+  testid,
+}: {
+  k: string;
+  v: React.ReactNode;
+  derive?: string;
+  testid?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const isInteractive = !!derive;
+  return (
+    <div className="text-[13px]">
+      <div
+        data-testid={testid}
+        data-open={open ? "true" : "false"}
+        className={`flex items-center justify-between gap-3 ${
+          isInteractive ? "cursor-pointer hover:text-v3-textPrimary" : ""
+        }`}
+        onClick={isInteractive ? () => setOpen((x) => !x) : undefined}
+        role={isInteractive ? "button" : undefined}
+        tabIndex={isInteractive ? 0 : undefined}
+        onKeyDown={
+          isInteractive
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setOpen((x) => !x);
+                }
+              }
+            : undefined
+        }
+      >
+        <span className="text-v3-textSecondary">{k}</span>
+        <span className="text-v3-textPrimary font-mono tabular-nums">
+          {v}
+          {isInteractive && (
+            <span
+              aria-hidden
+              className={`ml-1.5 text-v3-textTertiary inline-block transition-transform ${
+                open ? "rotate-90" : ""
+              }`}
+            >
+              ›
+            </span>
+          )}
+        </span>
+      </div>
+      {open && derive && (
+        <p
+          data-testid={testid ? `${testid}-derive` : undefined}
+          className="mt-1.5 ml-3 text-[11px] text-v3-textTertiary leading-relaxed border-l border-v3-border pl-2"
+        >
+          {derive}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MaterialCard({ isCavity }: { isCavity: boolean }) {
+  return (
+    <Section label="Materials">
+      <div data-testid="material-card" className="flex gap-6 -mx-1">
+        <div className="flex-1 px-1">
+          <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary mb-2">
+            Committed
+          </div>
+          <div className="space-y-2.5">
+            <MaterialRow
+              testid="material-transport"
+              k="transportModel"
+              v="Newtonian"
+            />
+            <MaterialRow
+              testid="material-nu"
+              k="ν"
+              v={`${isCavity ? "1.0×10⁻²" : "1.0×10⁻⁵"} m²/s`}
+              derive={
+                isCavity
+                  ? "Cavity Re=100 baseline · ν = U_lid · H / Re = 1·1/100 = 1×10⁻²"
+                  : "Air at 15 °C · ν = µ/ρ = 1.8×10⁻⁵ / 1.225 ≈ 1.47×10⁻⁵ → rounded to 1×10⁻⁵"
+              }
+            />
+            <MaterialRow
+              testid="material-rho"
+              k="ρ"
+              v="1.225 kg/m³"
+              derive="Air at sea level · ISA 15 °C · committed via case dict (constant/transportProperties)"
+            />
+          </div>
+        </div>
+        <div className="flex-1 px-1 border-l border-v3-border pl-4">
+          <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary mb-2">
+            Reference (derived)
+          </div>
+          <div className="space-y-2.5 text-v3-textSecondary">
+            <MaterialRow
+              k="Re_H"
+              v={isCavity ? "100" : "36,000"}
+              derive={
+                isCavity
+                  ? "U_lid · H / ν = 1·1/0.01 = 100 (laminar regime)"
+                  : "U_inf · H / ν = 7.7·0.075/1×10⁻⁵ ≈ 36,000 (turbulent BFS)"
+              }
+              testid="reference-Re"
+            />
+            <MaterialRow
+              k="y⁺ target"
+              v={isCavity ? "N/A" : "30 (wall-fn)"}
+              derive={
+                isCavity
+                  ? "Laminar regime · no wall function required"
+                  : "k-ε high-Re wall function · target y⁺ ∈ [30, 300] for log-law region"
+              }
+              testid="reference-yplus"
+            />
+            <MaterialRow
+              k="turbulence"
+              v={isCavity ? "laminar" : "k-ε wallFn"}
+              testid="reference-turbulence"
+            />
+            <MaterialRow
+              k="solver"
+              v={isCavity ? "icoFoam" : "simpleFoam"}
+              testid="reference-solver"
+            />
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
 function Step3Inspector({ caseId }: { caseId: string }) {
   const isCavity = caseId.includes("cavity");
   return (
@@ -251,58 +417,7 @@ function Step3Inspector({ caseId }: { caseId: string }) {
         <BCRow color="wall" name="walls" bc="noSlip" />
         <BCRow color="symmetry" name="symmetry" bc="symmetry (2D)" />
       </Section>
-      <Section label="Materials">
-        <div className="flex gap-6 -mx-1">
-          <div className="flex-1 px-1">
-            <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary mb-2">
-              Committed
-            </div>
-            <div className="space-y-2 text-[13px]">
-              <div className="flex justify-between">
-                <span className="text-v3-textSecondary">transportModel</span>
-                <span className="text-v3-textPrimary">Newtonian</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-v3-textSecondary">ν</span>
-                <span className="text-v3-textPrimary font-mono">
-                  {isCavity ? "1.0×10⁻²" : "1.0×10⁻⁵"} m²/s ›
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-v3-textSecondary">ρ</span>
-                <span className="text-v3-textPrimary font-mono">1.225 kg/m³ ›</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex-1 px-1 border-l border-v3-border pl-4">
-            <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary mb-2">
-              Reference (derived)
-            </div>
-            <div className="space-y-2 text-[13px] text-v3-textSecondary">
-              <div className="flex justify-between">
-                <span>Re_H</span>
-                <span className="font-mono">{isCavity ? "100" : "36,000"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>y⁺ target</span>
-                <span className="font-mono">{isCavity ? "N/A" : "30 (wall-fn)"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>turbulence</span>
-                <span className="font-mono">
-                  {isCavity ? "laminar" : "k-ε wallFn"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>solver</span>
-                <span className="font-mono">
-                  {isCavity ? "icoFoam" : "simpleFoam"}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Section>
+      <MaterialCard isCavity={isCavity} />
       <Section label="Next step">
         <p className="text-v3-textSecondary leading-relaxed">
           All BC types assigned and consistent. Continue to Step 4 (Solve).

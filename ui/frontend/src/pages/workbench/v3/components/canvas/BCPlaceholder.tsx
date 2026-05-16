@@ -1,7 +1,24 @@
 /**
  * V71-UI-V3 · BCPlaceholder · color-coded boundary patches
  * Per Image 04 · uses v3 dusty CFD palette (inlet/wall/symmetry/custom).
+ *
+ * V71.H · BCViewportLayer — locked dusty palette mapped 1:1 to the
+ * Tailwind v3.* tokens (defined in ui/frontend/tailwind.config.ts).
+ * The SVG strokes use hex inline because SVG attributes can't reference
+ * Tailwind classes; the values MUST stay byte-identical to the token
+ * definitions or the visual baseline regresses.
+ *
+ *   inlet     = v3.inlet     #5b8a73 (dusty green)
+ *   wall      = v3.wall      #a66060 (dusty red)
+ *   symmetry  = v3.symmetry  #a89060 (dusty amber)
+ *   custom    = v3.custom    #6f7a96 (dusty steel)
  */
+const BC_PALETTE = {
+  inlet: "#5b8a73",
+  wall: "#a66060",
+  symmetry: "#a89060",
+  custom: "#6f7a96",
+} as const;
 interface BCPlaceholderProps {
   caseId: string;
 }
@@ -26,23 +43,30 @@ export function BCPlaceholder({ caseId }: BCPlaceholderProps) {
           strokeWidth="1"
         />
         {/* INLET · left vertical (dusty green) */}
-        <line x1="100" y1="280" x2="100" y2="280" stroke="#5b8a73" strokeWidth="6" />
-        <line x1="100" y1="280" x2="100" y2="175" stroke="#5b8a73" strokeWidth="4" opacity="0.6" />
-        <text x="50" y="232" fill="#5b8a73" fontSize="11" fontFamily="Inter">inlet</text>
+        <g data-bc-type="inlet" data-testid="bc-patch-inlet">
+          <line x1="100" y1="280" x2="100" y2="175" stroke={BC_PALETTE.inlet} strokeWidth="4" opacity="0.6" />
+          <text x="50" y="232" fill={BC_PALETTE.inlet} fontSize="11" fontFamily="Inter">inlet</text>
+        </g>
 
         {/* OUTLET · right vertical (dusty steel blue) */}
-        <line x1="700" y1="175" x2="700" y2="280" stroke="#6f7a96" strokeWidth="4" opacity="0.6" />
-        <text x="715" y="232" fill="#6f7a96" fontSize="11" fontFamily="Inter">outlet_top</text>
+        <g data-bc-type="custom" data-testid="bc-patch-outlet">
+          <line x1="700" y1="175" x2="700" y2="280" stroke={BC_PALETTE.custom} strokeWidth="4" opacity="0.6" />
+          <text x="715" y="232" fill={BC_PALETTE.custom} fontSize="11" fontFamily="Inter">outlet_top</text>
+        </g>
 
         {/* WALLS · floor + step face + ceiling (dusty red) */}
-        <line x1="100" y1="280" x2="700" y2="280" stroke="#a66060" strokeWidth="4" opacity="0.6" />
-        <line x1="350" y1="280" x2="350" y2="175" stroke="#a66060" strokeWidth="4" opacity="0.6" />
-        <line x1="350" y1="175" x2="700" y2="175" stroke="#a66060" strokeWidth="4" opacity="0.6" />
-        <text x="200" y="300" fill="#a66060" fontSize="11" fontFamily="Inter">wall_floor</text>
-        <text x="360" y="225" fill="#a66060" fontSize="11" fontFamily="Inter">wall_step</text>
+        <g data-bc-type="wall" data-testid="bc-patch-walls">
+          <line x1="100" y1="280" x2="700" y2="280" stroke={BC_PALETTE.wall} strokeWidth="4" opacity="0.6" />
+          <line x1="350" y1="280" x2="350" y2="175" stroke={BC_PALETTE.wall} strokeWidth="4" opacity="0.6" />
+          <line x1="350" y1="175" x2="700" y2="175" stroke={BC_PALETTE.wall} strokeWidth="4" opacity="0.6" />
+          <text x="200" y="300" fill={BC_PALETTE.wall} fontSize="11" fontFamily="Inter">wall_floor</text>
+          <text x="360" y="225" fill={BC_PALETTE.wall} fontSize="11" fontFamily="Inter">wall_step</text>
+        </g>
 
         {/* SYMMETRY · front face label (dusty amber, hint) */}
-        <text x="380" y="160" fill="#a89060" fontSize="11" fontFamily="Inter">symmetry_front</text>
+        <g data-bc-type="symmetry" data-testid="bc-patch-symmetry">
+          <text x="380" y="160" fill={BC_PALETTE.symmetry} fontSize="11" fontFamily="Inter">symmetry_front</text>
+        </g>
       </svg>
     </div>
   );

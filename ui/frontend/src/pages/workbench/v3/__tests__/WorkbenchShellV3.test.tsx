@@ -170,6 +170,44 @@ describe("WorkbenchShellV3 · bottom panel", () => {
   });
 });
 
+describe("WorkbenchShellV3 · V71.2 step surfaces", () => {
+  it("Step 2 inspector renders mesh-quality rows with verdict dots (V71.G)", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-2"));
+    const rows = screen.getAllByTestId("mesh-quality-row");
+    expect(rows.length).toBeGreaterThanOrEqual(4);
+    // At least one row carries a non-N/A verdict
+    const verdicts = rows.map((r) => r.getAttribute("data-quality-verdict"));
+    expect(verdicts.some((v) => v === "pass" || v === "warn")).toBe(true);
+  });
+
+  it("Step 3 BC viewport renders all 4 BC types via dusty palette (V71.H)", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-3"));
+    expect(screen.getByTestId("bc-patch-inlet")).toBeInTheDocument();
+    expect(screen.getByTestId("bc-patch-outlet")).toBeInTheDocument();
+    expect(screen.getByTestId("bc-patch-walls")).toBeInTheDocument();
+    expect(screen.getByTestId("bc-patch-symmetry")).toBeInTheDocument();
+  });
+
+  it("Step 3 MaterialCard rows expand inline on click (V71.I · read-only)", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-3"));
+    expect(screen.getByTestId("material-card")).toBeInTheDocument();
+    const nuRow = screen.getByTestId("material-nu");
+    expect(nuRow.getAttribute("data-open")).toBe("false");
+    await user.click(nuRow);
+    expect(nuRow.getAttribute("data-open")).toBe("true");
+    expect(screen.getByTestId("material-nu-derive")).toBeInTheDocument();
+    // V130: the expanded panel is read-only · no input/textarea/edit button
+    const derive = screen.getByTestId("material-nu-derive");
+    expect(derive.tagName).toBe("P");
+  });
+});
+
 describe("WorkbenchShellV3 · activity bar", () => {
   it("renders 6 activity-bar entries", () => {
     renderShell();
