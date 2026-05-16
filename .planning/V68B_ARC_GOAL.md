@@ -11,7 +11,7 @@
 
 ## Done dim checklist (7 dims · all required for V68-B close · FULL delivery only)
 
-- [ ] **V68-B-DONE-1 · Backend dev bootstrap** — `scripts/start-ui-dev.sh` starts fastapi + vite · `/health` 200 · MSW retired as default · readiness probe vitest
+- [x] **V68-B-DONE-1 · Backend dev bootstrap** — start-ui-dev.sh + 12-poll backend readiness wait · 5 pytest probes PASS (app + /api/cases LIST/GET/completeness/404) · MSW gate at main.tsx verified opt-in only · evidence: `test_v68b_readiness_probe.py` · B134
 - [ ] **V68-B-DONE-2 · /api/cases real serving** — LIST + GET + status from corpus (not mock) · 10 whitelist + case_002a APU bay reachable
 - [ ] **V68-B-DONE-3 · CompletenessCard real-data wiring** — /api/cases/:id/completeness real route · MeshQualityCard polyMesh · ProposalCard ai_advisor
 - [ ] **V68-B-DONE-4 · Industrial case dogfood (case_002a APU bay)** — /workbench/case/case_002a renders · 5-step navigable · geometry serves · audit verdict displayed · MSW bypassed
@@ -21,7 +21,7 @@
 
 ## Sub-DEC progress
 
-- [ ] **V68-B.1 · Backend bootstrap + dev startup script** — `start-ui-dev.sh` + MSW default off + readiness probe
+- [x] **V68-B.1 · Backend bootstrap + dev startup script** — start-ui-dev.sh readiness wait + 5 pytest probes PASS · MSW retire-default confirmed · B134
 - [ ] **V68-B.2 · /api/cases real serving** — WorkbenchIndexPage + useCaseStatus verified against real fastapi
 - [ ] **V68-B.3 · CompletenessCard real-data wiring** — real-route tested
 - [ ] **V68-B.4 · Industrial case dogfood + pixel-diff CI gate** — case_002a e2e + threshold 0.1→0.01 + 4 new baselines

@@ -64,6 +64,19 @@ python3 -m uvicorn ui.backend.main:app \
 BACKEND_PID=$!
 echo "→ backend PID:  $BACKEND_PID  (http://127.0.0.1:$CFD_BACKEND_PORT/api/docs)"
 
+# V68-B.1: wait briefly for backend bind before launching frontend, so the
+# vite dev proxy's first /api/* request doesn't ECONNREFUSED (observed
+# during V68-A.4 playwright runs). Up to ~6s; if backend still hasn't
+# answered, keep going — uvicorn might still be importing heavy modules
+# (FreeCAD/trimesh) and the vite HMR can race fine after that lands.
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if curl -fsS "http://127.0.0.1:$CFD_BACKEND_PORT/api/cases" >/dev/null 2>&1; then
+    echo "→ backend ready (took ${i} polls × 0.5s)"
+    break
+  fi
+  sleep 0.5
+done
+
 (cd ui/frontend && npm run dev -- --host 127.0.0.1 --port "$CFD_FRONTEND_PORT") \
   >"$FRONTEND_LOG" 2>&1 &
 FRONTEND_PID=$!
