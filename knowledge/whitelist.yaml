@@ -254,6 +254,48 @@ cases:
         - {x_over_c: 1.0, Cp: 0.2}
       tolerance: 0.20  # 20% 相对误差
 
+  # ──────────────────────────────────────────────────────────────────
+  # V68-C.3 (2026-05-16) · case_002a APU bay metadata-entry.
+  #
+  # case_002a is the APU bay industrial substrate that drove the
+  # 2026-05-07 strategic pivot (charter operationally complete
+  # 2026-05-12 per APU-BAY-EXTEND arc; 5 V-series-extract artifacts
+  # LANDED). The entry below is NOT a curated whitelist case — there
+  # is no Ghia/Driver-style 3rd-party gold reference and one is not
+  # planned for V68-C (gold authoring deferred to a future arc).
+  #
+  # Why list it here anyway:
+  #   * The workbench is functionally a CFD case browser. Hiding the
+  #     industrial substrate that ALREADY drove charter work means
+  #     engineers can't open it from /workbench, can't run
+  #     /ai-review on it, can't dogfood the full step pipeline.
+  #     The catalog needs to surface what's reachable.
+  #   * `case_kind: imported_user` + `gold_pending: true` (V68-C.3
+  #     new fields per DEC-V68-C.3) flag the entry so the catalog
+  #     card shows a ⏳ gold pending badge and the trust gate stays
+  #     in PENDING (not synthesizing a PASS/FAIL it can't honestly
+  #     compute). Listable + honest.
+  #   * V130 invariant intact: no AI writes / no synthetic gold.
+  #     The frontend reads the flag and surfaces a disclaimer; the
+  #     engineer decides whether to trust the case.
+  - id: case_002a
+    name: "APU Bay Industrial Ventilation (Gold Pending)"
+    reference: "Industrial substrate · 2026-05-07 strategic pivot · _industrial_substrates/apu-bay-ventilation-cht/"
+    doi: null
+    flow_type: INTERNAL
+    geometry_type: COMPLEX
+    compressibility: COMPRESSIBLE
+    steady_state: STEADY
+    solver: chtMultiRegionFoam
+    turbulence_model: k-omega SST
+    case_kind: imported_user
+    gold_pending: true
+    parameters:
+      # Ventilation airflow ranges from APU-bay design spec; not pinned
+      # to a 3rd-party reference. Engineer authoring a real gold should
+      # replace this stub.
+      Re_design_inlet: 250000
+
   - id: rayleigh_benard_convection
     name: "Rayleigh-Bénard Convection (Ra=10^6)"
     reference: "Chaivat et al. 2006"

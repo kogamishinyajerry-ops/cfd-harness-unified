@@ -149,15 +149,30 @@ function Section({ children }: { children: React.ReactNode }) {
 function CaseCard({ c }: { c: CaseIndexEntry }) {
   const editHref = `/workbench/case/${encodeURIComponent(c.case_id)}/edit`;
   const runsHref = `/workbench/case/${encodeURIComponent(c.case_id)}/runs`;
+  const isGoldPending = c.gold_pending === true;
   return (
-    <div className="flex flex-col rounded-md border border-surface-800 bg-surface-900/40 p-4 transition hover:border-surface-700">
+    <div
+      data-testid={`case-card-${c.case_id}`}
+      data-case-kind={c.case_kind ?? "whitelist"}
+      data-gold-pending={isGoldPending ? "true" : "false"}
+      className="flex flex-col rounded-md border border-surface-800 bg-surface-900/40 p-4 transition hover:border-surface-700"
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-surface-100">{c.name}</h3>
           <p className="mt-0.5 font-mono text-[11px] text-surface-500">{c.case_id}</p>
         </div>
-        <ContractChip status={c.contract_status} />
+        {isGoldPending ? <GoldPendingBadge /> : <ContractChip status={c.contract_status} />}
       </div>
+      {isGoldPending && (
+        <p
+          data-testid={`case-card-gold-pending-disclaimer-${c.case_id}`}
+          className="mt-2 rounded-sm border border-amber-700/40 bg-amber-900/10 px-2 py-1 text-[10px] text-amber-200"
+        >
+          ⏳ Gold pending · industrial substrate listed for browsing; no curated
+          reference yet, so the trust gate stays PENDING until gold authoring.
+        </p>
+      )}
 
       <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[11px]">
         <dt className="font-mono text-surface-500">flow</dt>
@@ -188,6 +203,18 @@ function CaseCard({ c }: { c: CaseIndexEntry }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function GoldPendingBadge() {
+  return (
+    <span
+      data-testid="case-card-gold-pending-badge"
+      className="whitespace-nowrap rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-amber-300"
+      title="Gold reference not yet authored — case is listable but trust gate stays PENDING"
+    >
+      ⏳ gold pending
+    </span>
   );
 }
 

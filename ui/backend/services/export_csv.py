@@ -89,7 +89,17 @@ def _whitelist_case_ids() -> list[str]:
     except yaml.YAMLError:
         return []
     rows = (doc or {}).get("cases") or []
-    return [r["id"] for r in rows if isinstance(r, dict) and r.get("id")]
+    # V68-C.3 · skip gold_pending entries — the batch CSV is a gold-anchored
+    # PASS/FAIL/HAZARD export; a case without a gold reference produces only
+    # UNKNOWN rows and dilutes the audit verdict signal. The case is still
+    # listable via /api/cases for browsing.
+    return [
+        r["id"]
+        for r in rows
+        if isinstance(r, dict)
+        and r.get("id")
+        and not bool(r.get("gold_pending"))
+    ]
 
 
 def _now_iso() -> str:

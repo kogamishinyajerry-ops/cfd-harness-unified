@@ -329,16 +329,30 @@ def test_audit_fixture_doc_stamps_u_ref_unresolved_warn() -> None:
     assert "default U_ref=1.0" in concern["summary"]
 
 
-def test_cases_index_contains_ten_entries(client: TestClient) -> None:
+def test_cases_index_contains_eleven_entries(client: TestClient) -> None:
     response = client.get("/api/cases")
     assert response.status_code == 200
     body = response.json()
-    assert len(body) == 10, f"expected 10 whitelist cases, got {len(body)}"
+    # V68-C.3 (2026-05-16): catalog grew to 11 entries — 10 curated whitelist
+    # cases + case_002a APU bay (imported_user, gold_pending=true) added per
+    # DEC-V68-C.3 strategic-pivot follow-through.
+    assert len(body) == 11, f"expected 11 catalog entries, got {len(body)}"
     ids = {entry["case_id"] for entry in body}
     # Phase 0 gate: canonical three that drive Screen 4.
     assert "differential_heated_cavity" in ids
     assert "circular_cylinder_wake" in ids
     assert "turbulent_flat_plate" in ids
+    # V68-C.3: APU bay surfaces with gold_pending flag.
+    assert "case_002a" in ids
+    apu = next(e for e in body if e["case_id"] == "case_002a")
+    assert apu["case_kind"] == "imported_user"
+    assert apu["gold_pending"] is True
+    assert apu["has_gold_standard"] is False
+    # Other 10 retain whitelist kind + no gold_pending flag.
+    for entry in body:
+        if entry["case_id"] != "case_002a":
+            assert entry["case_kind"] == "whitelist", entry["case_id"]
+            assert entry["gold_pending"] is False, entry["case_id"]
 
 
 def test_case_detail_differential_heated_cavity(client: TestClient) -> None:

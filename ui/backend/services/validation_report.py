@@ -832,6 +832,11 @@ def list_cases() -> list[CaseIndexEntry]:
                 run_status = "UNKNOWN"
             verdict_counts[run_status] = verdict_counts.get(run_status, 0) + 1
         run_summary = RunSummary(total=len(runs), verdict_counts=verdict_counts)
+        # V68-C.3 · honor case_kind + gold_pending if the whitelist entry
+        # declares them. Default values keep the existing 10 curated
+        # whitelist entries shape-stable.
+        case_kind = str(case.get("case_kind") or "whitelist")
+        gold_pending = bool(case.get("gold_pending") or False)
         out.append(
             CaseIndexEntry(
                 case_id=cid,
@@ -843,6 +848,8 @@ def list_cases() -> list[CaseIndexEntry]:
                 has_measurement=measurement is not None,
                 run_summary=run_summary,
                 contract_status=status,
+                case_kind=case_kind,
+                gold_pending=gold_pending,
             )
         )
     return out

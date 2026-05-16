@@ -38,6 +38,12 @@ export interface CaseIndexEntry {
   has_measurement: boolean;
   contract_status: ContractStatus;
   run_summary: RunSummary;
+  // V68-C.3 · case_kind annotates whether the entry is curated whitelist
+  // or an imported user substrate; gold_pending=true means the catalog
+  // surfaces the case but the trust gate must NOT report a PASS/FAIL
+  // verdict (no gold reference yet). Defaults preserve V68-A/B wire shape.
+  case_kind?: "whitelist" | "imported_user";
+  gold_pending?: boolean;
 }
 
 export interface GoldStandardReference {
