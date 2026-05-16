@@ -48,6 +48,7 @@ const STEP3_RAW_DICT_PATHS = [
   "constant/physicalProperties",
 ] as const;
 import { useFacePickOptional } from "../FacePickContext";
+import { PowerDisclosure } from "../PowerDisclosure";
 import { useStep3State } from "../Step3StateContext";
 import type {
   AnnotationsDocument,
@@ -1110,6 +1111,23 @@ export function Step3SetupBC({
           ) : null}
         </div>
       </details>
+
+      <PowerDisclosure
+        label="Solver-specific BC overrides"
+        summary="Defaults: standard turbulence inlet (k-ω SST), no-slip walls"
+        testIdPrefix="step3-bc-adv"
+      >
+        <p className="text-surface-300">
+          Override turbulence intensity, hydraulic diameter, wall function
+          model on a per-patch basis. Use the Raw Dict editor above for
+          arbitrary keys not surfaced here.
+        </p>
+        <ul className="ml-3 list-disc text-surface-400">
+          <li>Turbulence intensity: 5% (default)</li>
+          <li>Hydraulic diameter: auto from patch bbox</li>
+          <li>Wall function: nutkWallFunction (default) | nutkRoughWallFunction</li>
+        </ul>
+      </PowerDisclosure>
     </div>
   );
 }

@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { PowerDisclosure } from "../PowerDisclosure";
 import { useSolveStream } from "../SolveStreamContext";
 import { RawDictEditor } from "@/components/RawDictEditor";
 
@@ -209,6 +210,23 @@ export function Step4SolveRun({
           ) : null}
         </div>
       </details>
+
+      <PowerDisclosure
+        label="Solver schemes & tolerances"
+        summary="Preset: simpleFoam · steady · 2nd-order upwind · 1e-4 tolerance"
+        testIdPrefix="step4-solve-adv"
+      >
+        <p className="text-surface-300">
+          Override numerical schemes (gradient / divergence / Laplacian) and
+          residual tolerances. Useful when the preset diverges on tight
+          geometries or high-Re flows.
+        </p>
+        <ul className="ml-3 list-disc text-surface-400">
+          <li>divSchemes: bounded Gauss linearUpwind (default)</li>
+          <li>residual tolerance: 1e-4 (default) | 1e-3 (fast) | 1e-6 (publish)</li>
+          <li>relaxation factor p: 0.3 (default) · U: 0.7 (default)</li>
+        </ul>
+      </PowerDisclosure>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import type {
   ResultsSummary,
 } from "@/types/case_solve";
 
+import { PowerDisclosure } from "../PowerDisclosure";
 import type { StepTaskPanelProps } from "../types";
 
 const REJECTION_HINTS: Record<string, string> = {
@@ -282,6 +283,22 @@ export function Step5ResultsView({
           {networkError}
         </div>
       )}
+
+      <PowerDisclosure
+        label="Post-processing knobs"
+        summary="Defaults: field plots at last timestep · auto-ranged colorbar"
+        testIdPrefix="step5-post-adv"
+      >
+        <p className="text-surface-300">
+          Override sample timesteps, contour levels, slice plane orientation.
+          Use the Raw Dict editor for arbitrary postProcessing dicts.
+        </p>
+        <ul className="ml-3 list-disc text-surface-400">
+          <li>Timestep: last (default) | any | range</li>
+          <li>Colorbar: auto (default) | fixed [min, max]</li>
+          <li>Slice: midplane (default) | custom plane equation</li>
+        </ul>
+      </PowerDisclosure>
     </div>
   );
 }
