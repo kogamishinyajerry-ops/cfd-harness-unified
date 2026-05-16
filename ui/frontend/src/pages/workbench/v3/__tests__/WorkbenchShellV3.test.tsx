@@ -316,9 +316,11 @@ describe("WorkbenchShellV3 · V71.3 residuals chart", () => {
     expect(
       screen.getByTestId("bottom-panel-expanded"),
     ).toBeInTheDocument();
-    await user.click(screen.getByTestId("bottom-tab-residuals"));
+    // V75.2 · SkeletonInspector may briefly hold the right panel during
+    // useCaseDetail fetch; use findBy on residuals tab content
+    await user.click(await screen.findByTestId("bottom-tab-residuals"));
     expect(
-      screen.getByTestId("bottom-tab-residuals-content"),
+      await screen.findByTestId("bottom-tab-residuals-content"),
     ).toBeInTheDocument();
   });
 });
@@ -328,9 +330,12 @@ describe("WorkbenchShellV3 · V71.2 step surfaces", () => {
     const user = userEvent.setup();
     renderShell();
     await user.click(screen.getByTestId("pipeline-step-2"));
+    // V75.2 · skeleton briefly during useCaseDetail fetch · await rows
+    await waitFor(() => {
+      const rows = screen.getAllByTestId("mesh-quality-row");
+      expect(rows.length).toBeGreaterThanOrEqual(4);
+    });
     const rows = screen.getAllByTestId("mesh-quality-row");
-    expect(rows.length).toBeGreaterThanOrEqual(4);
-    // At least one row carries a non-N/A verdict
     const verdicts = rows.map((r) => r.getAttribute("data-quality-verdict"));
     expect(verdicts.some((v) => v === "pass" || v === "warn")).toBe(true);
   });
@@ -349,7 +354,8 @@ describe("WorkbenchShellV3 · V71.2 step surfaces", () => {
     const user = userEvent.setup();
     renderShell();
     await user.click(screen.getByTestId("pipeline-step-3"));
-    expect(screen.getByTestId("material-card")).toBeInTheDocument();
+    // V75.2 · skeleton briefly · await the material card to mount
+    expect(await screen.findByTestId("material-card")).toBeInTheDocument();
     const nuRow = screen.getByTestId("material-nu");
     expect(nuRow.getAttribute("data-open")).toBe("false");
     await user.click(nuRow);

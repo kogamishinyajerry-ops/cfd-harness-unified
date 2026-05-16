@@ -78,32 +78,115 @@ export function WorkbenchShellV3({
     stepParam >= 1 && stepParam <= 5 ? (stepParam as StepId) : 1;
   const caseId = params.caseId ?? null;
 
-  // V71.S · viewport mode is INDEPENDENT of pipeline step · engineer can
-  // override at any time · default per step but override persists
-  const [viewportMode, setViewportMode] = useState<ViewportMode>(
-    initialViewportMode ?? DEFAULT_VIEWPORT_FOR_STEP[stepId],
+  // V75.3 · URL state resumability · 3 aspects survive page refresh:
+  //   ?view=geometry|mesh|bc|residuals|report|forces
+  //   ?tab=inspector|advisor|truthchain
+  //   ?btab=open|closed
+  // Engineers can paste a deep-link and land in the exact same UI state.
+  const VALID_VIEWPORTS: ReadonlyArray<ViewportMode> = [
+    "geometry",
+    "mesh",
+    "bc",
+    "field",
+    "residuals",
+    "report",
+  ];
+  const VALID_TABS: ReadonlyArray<RightPanelTab> = [
+    "inspector",
+    "advisor",
+    "truthchain",
+  ];
+  const urlView = searchParams.get("view");
+  const urlTab = searchParams.get("tab");
+  const urlBtab = searchParams.get("btab");
+
+  const [viewportMode, setViewportModeState] = useState<ViewportMode>(
+    (VALID_VIEWPORTS.includes(urlView as ViewportMode)
+      ? (urlView as ViewportMode)
+      : null) ??
+      initialViewportMode ??
+      DEFAULT_VIEWPORT_FOR_STEP[stepId],
   );
-  const [rightTab, setRightTab] = useState<RightPanelTab>(
-    initialRightTab ?? "inspector",
+  const [rightTab, setRightTabState] = useState<RightPanelTab>(
+    (VALID_TABS.includes(urlTab as RightPanelTab)
+      ? (urlTab as RightPanelTab)
+      : null) ??
+      initialRightTab ??
+      "inspector",
   );
-  const [bottomCollapsed, setBottomCollapsed] = useState<boolean>(stepId < 4);
+  const [bottomCollapsed, setBottomCollapsedState] = useState<boolean>(
+    urlBtab === "open" ? false : urlBtab === "closed" ? true : stepId < 4,
+  );
+
+  // URL-syncing setters · V75.3
+  const setViewportMode = useCallback(
+    (next: ViewportMode | ((current: ViewportMode) => ViewportMode)) => {
+      setViewportModeState((current) => {
+        const resolved = typeof next === "function" ? next(current) : next;
+        setSearchParams(
+          (sp) => {
+            sp.set("view", resolved);
+            return sp;
+          },
+          { replace: true },
+        );
+        return resolved;
+      });
+    },
+    [setSearchParams],
+  );
+  const setRightTab = useCallback(
+    (next: RightPanelTab) => {
+      setRightTabState(next);
+      setSearchParams(
+        (sp) => {
+          sp.set("tab", next);
+          return sp;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+  const setBottomCollapsed = useCallback(
+    (next: boolean | ((current: boolean) => boolean)) => {
+      setBottomCollapsedState((current) => {
+        const resolved = typeof next === "function" ? next(current) : next;
+        setSearchParams(
+          (sp) => {
+            sp.set("btab", resolved ? "closed" : "open");
+            return sp;
+          },
+          { replace: true },
+        );
+        return resolved;
+      });
+    },
+    [setSearchParams],
+  );
 
   function handleSetStep(next: StepId) {
-    const sp = new URLSearchParams(searchParams);
-    sp.set("step", String(next));
-    setSearchParams(sp, { replace: true });
-    // V71.S · viewport mode auto-adjusts to step default UNLESS engineer
-    // already overrode it (we keep their override on step change)
-    setViewportMode((current) => {
-      const defaultForCurrent = DEFAULT_VIEWPORT_FOR_STEP[stepId];
-      if (current === defaultForCurrent) {
-        return DEFAULT_VIEWPORT_FOR_STEP[next];
-      }
-      // engineer had overridden · keep override
-      return current;
-    });
-    // Bottom panel auto-expands at Step 4+
-    setBottomCollapsed(next < 4);
+    // V75.3 · batch all URL writes in one setSearchParams call so the route
+    // re-renders once, not three times (avoids racing the in-flight test
+    // assertions that find-by-testid right after the click).
+    const defaultForCurrent = DEFAULT_VIEWPORT_FOR_STEP[stepId];
+    const nextViewport: ViewportMode =
+      viewportMode === defaultForCurrent
+        ? DEFAULT_VIEWPORT_FOR_STEP[next]
+        : viewportMode;
+    const nextBottomCollapsed = next < 4;
+
+    setViewportModeState(nextViewport);
+    setBottomCollapsedState(nextBottomCollapsed);
+    setSearchParams(
+      (sp) => {
+        sp.set("step", String(next));
+        sp.set("view", nextViewport);
+        sp.set("btab", nextBottomCollapsed ? "closed" : "open");
+        return sp;
+      },
+      { replace: true },
+    );
   }
 
   // V72.2 · keyboard shortcuts (Esc collapses bottom panel; 1..5/g/m/b/r/p/f
