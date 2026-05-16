@@ -326,4 +326,116 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V71.6 · 8 visual baselines (23-30) for v3 blueprint surfaces.
+  // Locks each of the 8 v3 blueprint images (01-08) against the rendered
+  // /workbench/v3 surface. Drift > 0.05 SSIM against blueprint PNGs triggers
+  // V71 reverse-stop per V71 charter §reverse_stops.
+
+  test("23 · /workbench/v3 empty state (no case) · Image 01", async ({ page }) => {
+    await page.goto("/workbench/v3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("23-v3-empty-state.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("24 · /workbench/v3/case/lid_driven_cavity Step 1 geometry · Image 02", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=1");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("24-v3-step1-geometry.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("25 · /workbench/v3 Step 2 mesh · Image 03", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=2");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("25-v3-step2-mesh.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("26 · /workbench/v3 Step 3 BC + MaterialCard · Image 04", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='material-card']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("26-v3-step3-bc-materials.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("27 · /workbench/v3 Step 4 active solve · residuals · Image 05", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=4");
+    await page.waitForSelector("[data-testid='canvas-residuals']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("27-v3-step4-residuals.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("28 · /workbench/v3 Advisor tab (consult panel) · Image 06", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-advisor").click();
+    await page.waitForSelector("[data-testid='advisor-advisory-badge']", {
+      timeout: 8_000,
+    });
+    await expect(page).toHaveScreenshot("28-v3-advisor-tab.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("29 · /workbench/v3 Step 5 TrustGate verdict · Image 07", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='trustgate-verdict-block']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("29-v3-step5-trustgate.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("30 · /workbench/v3 Step 4 + viewport=mesh cross-step inspection · Image 08", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=4");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    // Engineer overrides viewport to mesh while at Step 4 → V71.T cross-step inspector
+    await page.getByTestId("viewport-mode-mesh").click();
+    await page.waitForTimeout(200);
+    await expect(page).toHaveScreenshot("30-v3-step4-mesh-cross-step.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });

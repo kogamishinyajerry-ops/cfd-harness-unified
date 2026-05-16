@@ -13,9 +13,9 @@
 
 - [x] **V71-DONE-1 · WorkbenchShellV3 4-panel grid** — Activity Bar 48px + Left Panel 260px + Center workspace (Pipeline Strip 44px + Viewport Mode Toolbar 36px + Main Canvas + Bottom Panel toggle) + Right Panel 340px · CSS Grid layout · all panels rendered · **LANDED B170** commit `9df67ab` · `data-v71-ui-shell="true"` tag present · 414 tests pass
 - [x] **V71-DONE-2 · Step 1/2/3 surfaces** wired to shell — Step 1 geometry viewport + Inspector metadata · Step 2 mesh wireframe + Inspector quality table + bottom Console (on-demand) · Step 3 BC color-coded patches + MaterialCard inline two-column · **LANDED B171** · V71.G `QualityRow` + V71.H `BC_PALETTE` + V71.I `MaterialCard`
-- [ ] **V71-DONE-3 · ResidualsChart + Bottom Panel** — log-scale multi-line chart + 4-tab bottom panel + streaming console
-- [ ] **V71-DONE-4 · AdvisorTab + V132 contract test** — right-panel peer tab · paragraph + citations + preview-apply text links · ZERO auto-execute buttons regression-protected via e2e
-- [ ] **V71-DONE-5 · ResultsCanvas + TrustGate verdict** — gold-vs-computed chart + HUGE PASS + point-by-point table
+- [x] **V71-DONE-3 · ResidualsChart + Bottom Panel** — log-scale multi-line chart + 4-tab bottom panel + streaming console (static data; V71.L SSE deferred to V72) · **LANDED B172** · V71.J watched-curve sand-coral
+- [x] **V71-DONE-4 · AdvisorTab + V132 contract test** — right-panel peer tab · paragraph + citations + preview-apply text links · ZERO auto-execute buttons regression-protected · **LANDED B173** · 6-test contract suite at `AdvisorContent.contract.test.tsx`
+- [x] **V71-DONE-5 · ResultsCanvas + TrustGate verdict** — gold-vs-computed chart + HUGE PASS + point-by-point table · **LANDED B174** · V71.P/Q in `canvas/TrustGateVerdict.tsx`
 - [x] **V71-DONE-6 · Cross-step inspection** — viewport mode independent of pipeline step · Inspector adapts to both · **LANDED B170** · V71.S in `WorkbenchShellV3.tsx` (handleSetStep preserves engineer override) · V71.T in `InspectorContent.tsx` (Step4ActiveSolveInspector when stepId=4 + viewportMode='mesh')
 - [ ] **V71-DONE-7 · 8 visual baselines (23-30)** locked against blueprint images
 - [ ] **V71-DONE-8 · Pillar 6 99.5 → 99.7 + Pillar 10 90 → 95** with per-driver delta accounting
@@ -25,9 +25,9 @@
 
 - [x] **V71.1 · WorkbenchShell v3 4-panel grid** — Image 01 · V71.A/B/C/D · **LANDED B170** · DEC-V71-1
 - [x] **V71.2 · Step views + Inspector contextual + MaterialCard** — Images 02/03/04 · V71.G/H/I/T · **LANDED B171** · DEC-V71-2
-- [ ] **V71.3 · ResidualsChart + Bottom Panel + SolveRun streaming** — Image 05 · V71.E/F/J/L
-- [ ] **V71.4 · AdvisorTab right-panel peer + V132 contract test** — Image 06 · V71.K/M/N/O
-- [ ] **V71.5 · ResultsCanvas + TrustGate verdict surface** — Image 07 · V71.P/Q
+- [x] **V71.3 · ResidualsChart + Bottom Panel + SolveRun streaming** — Image 05 · V71.E/F/J/L · **LANDED B172** · DEC-V71-3
+- [x] **V71.4 · AdvisorTab right-panel peer + V132 contract test** — Image 06 · V71.K/M/N/O · **LANDED B173** · DEC-V71-4
+- [x] **V71.5 · ResultsCanvas + TrustGate verdict surface** — Image 07 · V71.P/Q · **LANDED B174** · DEC-V71-5
 - [ ] **V71.6 · 8 visual baselines + cross-step + close** — Image 08 · V71.S/U
 
 ## Fleet criteria (10 pillars · V71 tightened)

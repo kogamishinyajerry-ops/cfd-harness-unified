@@ -53,6 +53,13 @@ export default function App() {
       {/* DEC-V61-115: default redirect / → /workbench (was /learn). */}
       <Route index element={<Navigate to="/workbench" replace />} />
 
+      {/* V71 (2026-05-16) · v3 blueprint-aligned 4-panel workbench shell.
+          Mounted OUTSIDE <Layout> so the shell owns the full viewport (per
+          blueprint Image 01). Parallel route · existing /workbench/case/:id
+          continues serving the legacy three-pane shell. v3 is opt-in until V72+. */}
+      <Route path="/workbench/v3/case/:caseId" element={<WorkbenchShellV3 />} />
+      <Route path="/workbench/v3" element={<WorkbenchShellV3 />} />
+
       {/* Student-facing learn shell */}
       <Route path="/learn" element={<LearnLayout />}>
         <Route index element={<LearnHomePage />} />
@@ -97,11 +104,6 @@ export default function App() {
             Charter Addendum 3 §3. Skeleton ships placeholder bodies for
             every step; step-by-step wireup lands in spec_v2 §E Steps 3-6. */}
         <Route path="/workbench/case/:caseId" element={<StepPanelShell />} />
-        {/* V71 (2026-05-16) · v3 blueprint-aligned 4-panel workbench shell.
-            Parallel route · existing /workbench/case/:caseId continues to
-            serve the legacy three-pane shell. v3 is opt-in until V72+. */}
-        <Route path="/workbench/v3/case/:caseId" element={<WorkbenchShellV3 />} />
-        <Route path="/workbench/v3" element={<WorkbenchShellV3 />} />
         {/* M2 (2026-04-26) · Workbench Closed-Loop main-line — param-form
             editor for an existing whitelist case. Saves to user_drafts/ and
             navigates to /workbench/run/:caseId where RealSolverDriver picks
