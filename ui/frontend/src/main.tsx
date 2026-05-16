@@ -16,12 +16,25 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </React.StrictMode>,
-);
+async function enableMocksIfRequested() {
+  // V68-A.1 · MSW opt-in via Vite env flag · skipped in production builds.
+  if (import.meta.env.PROD) return;
+  if (import.meta.env.VITE_MSW !== "1") return;
+  const { worker } = await import("./mocks/browser");
+  await worker.start({
+    onUnhandledRequest: "bypass",
+    serviceWorker: { url: "/mockServiceWorker.js" },
+  });
+}
+
+enableMocksIfRequested().then(() => {
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </React.StrictMode>,
+  );
+});
