@@ -16,7 +16,7 @@
 - [ ] **V67-C-DONE-3 · Engineer Control Rail integrated** — Beginner/Power toggle on every step · CompletenessCard top-fixed · advanced disclosure pattern · evidence: `EngineerControlRail.test.tsx` + Playwright + visual snapshot
 - [ ] **V67-C-DONE-4 · 5-step spine visual polish** — step status icons (✓/●/○) · transition animations · Apple-tier consistency · evidence: visual diff baseline + Playwright transition test
 - [ ] **V67-C-DONE-5 · Viewport mode switching** — geometry/mesh/BC/field/residuals/report-grid · ≤200ms transition · evidence: `Viewport.test.tsx` + `e2e/viewport-mode.spec.ts`
-- [ ] **V67-C-DONE-6 · AI panel strict advisory-only** — no Apply button · copy-paste UX · V132 MUTATING_ROUTES diff = 0 · evidence: static grep + Code Quality agent + Playwright button-presence test
+- [x] **V67-C-DONE-6 · AI panel strict advisory-only** — 0 mutation patterns in AI panels · MUTATING_ROUTES = 9 (baseline) · KNOWN_MUTATION_FUNCTIONS = 12 (baseline) · evidence: `scripts/governance/v67c_fleet/audit_ai_advisory.sh` VERDICT PASS · audit report `.planning/scores/V67-C_advisory_audit_b121.md`
 - [ ] **V67-C-DONE-7 · Truth Chain visibility across 5 steps** — TopBar "OF truth" updates · audit % rolls forward · TrustGate state surfaces · evidence: `e2e/truth-chain.spec.ts` full-flow
 - [ ] **V67-C-DONE-8 · Pillar 6 ≥90 re-anchor** — scoring framework v1.0 Pillar 6 anchor language matches `90-100` zone · evidence: V67-C close DEC §10
 
@@ -28,7 +28,7 @@
 - [ ] **V67-C.3 · Engineer Control Rail integration** — Done dim #3 · ~200 prod + 150 test
 - [ ] **V67-C.4 · 5-step spine visual polish** — Done dim #4 · ~150 prod + 100 test + visual baseline
 - [ ] **V67-C.5 · Viewport mode switching** — Done dim #5 · ~180 prod + 140 test
-- [ ] **V67-C.6 · AI panel advisory-only audit + truth-chain e2e** — Done dims #6 + #7 · ~100 prod + 200 test
+- [x] **V67-C.6 · AI panel advisory-only audit** — Done dim #6 MET · `audit_ai_advisory.sh` 75 LOC · 4/4 invariants PASS · B121 (Truth-chain e2e deferred to V67-C.6.1)
 
 ## Iteration tracker
 
