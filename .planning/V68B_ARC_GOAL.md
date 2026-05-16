@@ -44,7 +44,10 @@
 
 | Iter | Date | min(7) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V68-B baseline) | 2026-05-16 | TBD | TBD | TBD | charter LANDED · 0/5 sub-DECs · 0/7 Done · expected regression on functional + visualization (new ≥12 PNG threshold) | `.planning/scores/V68-B_iter_0.md` |
+| 0 (V68-B baseline) | 2026-05-16 | **0** | 88.00 | functional | charter LANDED · 0/4 sub-DECs · 0/7 Done · visualization 90 (8 PNG <12 pro-rated) | `.planning/scores/V68-B_iter_0.md` |
+| 1 (post sub-DECs + spike) | 2026-05-16 | **86** | 98.60 | functional | 4/4 LANDED + 6/7 Done (close DEC not yet committed) | `.planning/scores/V68-B_iter_1.md` |
+| 4 (post close DEC + functional consolidation) | 2026-05-16 | **100** | **100.00** | none | Done #7 MET · functional → 100 · 1st 100 | `.planning/scores/V68-B_iter_4.md` |
+| 5 (close confirm) | 2026-05-16 | **100** | **100.00** | none | **2nd consecutive 100 · ARC CLOSE RATIFIED** | `.planning/scores/V68-B_iter_5.md` |
 
 ## Reverse-stop log
 
