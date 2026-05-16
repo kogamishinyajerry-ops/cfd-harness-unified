@@ -26,6 +26,10 @@ import { TutorialPage } from "@/pages/workbench/TutorialPage";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
+// V71 (2026-05-16 · DEC v71_charter) · parallel v3 workbench route mounting
+// the blueprint-aligned 4-panel shell. Does NOT migrate legacy /workbench
+// routes — they continue working. V72+ may migrate.
+import { WorkbenchShellV3 } from "@/pages/workbench/v3/WorkbenchShellV3";
 
 // Engineer-first routing (DEC-V61-115, 2026-05-04): default landing flipped
 // from /learn → /workbench. Rationale: the product's primary user is the CFD
@@ -93,6 +97,11 @@ export default function App() {
             Charter Addendum 3 §3. Skeleton ships placeholder bodies for
             every step; step-by-step wireup lands in spec_v2 §E Steps 3-6. */}
         <Route path="/workbench/case/:caseId" element={<StepPanelShell />} />
+        {/* V71 (2026-05-16) · v3 blueprint-aligned 4-panel workbench shell.
+            Parallel route · existing /workbench/case/:caseId continues to
+            serve the legacy three-pane shell. v3 is opt-in until V72+. */}
+        <Route path="/workbench/v3/case/:caseId" element={<WorkbenchShellV3 />} />
+        <Route path="/workbench/v3" element={<WorkbenchShellV3 />} />
         {/* M2 (2026-04-26) · Workbench Closed-Loop main-line — param-form
             editor for an existing whitelist case. Saves to user_drafts/ and
             navigates to /workbench/run/:caseId where RealSolverDriver picks

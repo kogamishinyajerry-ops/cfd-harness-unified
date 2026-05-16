@@ -27,6 +27,25 @@ export default {
           fail: "#f87171",
           unknown: "#7f8fa4",
         },
+        // V71-UI-V3 · Claude-tier industrial workbench design tokens
+        // per .planning/blueprints/v3/INDEX.md visual contract
+        // Sand-coral single accent + dusty CFD semantic palette
+        v3: {
+          bg: "#0e0e10",          // background
+          surface1: "#16161a",    // surface elev1 (panels)
+          surface2: "#1c1c20",    // surface elev2 (hover / focus only)
+          border: "#232328",      // subtle border (1px hairlines)
+          borderActive: "#2e2e34", // active element border
+          textPrimary: "#e8e8eb",
+          textSecondary: "#82828a",
+          textTertiary: "#4a4a52",
+          accent: "#b78b65",      // SINGLE accent · sand-coral · <2% pixels
+          // CFD-domain semantic (low-saturation only)
+          inlet: "#5b8a73",       // dusty green
+          wall: "#a66060",        // dusty red
+          symmetry: "#a89060",    // dusty amber
+          custom: "#6f7a96",      // dusty steel blue
+        },
       },
       fontFamily: {
         sans: [
