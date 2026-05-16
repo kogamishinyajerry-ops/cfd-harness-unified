@@ -25,7 +25,8 @@ done
 done_met=0
 arc_goal=".planning/V67C_ARC_GOAL.md"
 if [ -f "$arc_goal" ]; then
-  done_met=$(grep -cE "^\- \[x\] \*\*V67-C-DONE-[1-8]" "$arc_goal" 2>/dev/null | tr -d ' ' || echo 0)
+  done_met=$(grep -cE "^- \[x\] \*\*V67-C-DONE-[1-8]" "$arc_goal" 2>/dev/null | head -1 | tr -d ' \n')
+  done_met=${done_met:-0}
   evidence+=("Done dims MET: ${done_met}/8 (from $arc_goal)")
 else
   failures+=("V67C_ARC_GOAL.md not yet authored · Done dims = 0/8 honest baseline")
