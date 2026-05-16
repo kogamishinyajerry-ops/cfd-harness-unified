@@ -15,34 +15,21 @@
  */
 import { useCaseStatus } from "../../../step_panel_shell/useCaseStatus";
 import type { StepId } from "../../WorkbenchShellV3";
+import { VerdictPill as SharedVerdictPill } from "../VerdictPill";
 
 interface TruthChainContentProps {
   caseId: string | null;
   stepId: StepId;
 }
 
+// V73.4 · Wrapper around shared VerdictPill primitive so the existing
+// `truthchain-verdict` testid remains stable for V71.O contract tests.
 function VerdictPill({
   verdict,
 }: {
   verdict: "PASS" | "PASS_WITH_DISCLAIMER" | "FAIL" | "PENDING";
 }) {
-  const tone =
-    verdict === "PASS"
-      ? "text-v3-inlet border-v3-inlet/40"
-      : verdict === "PASS_WITH_DISCLAIMER"
-      ? "text-v3-symmetry border-v3-symmetry/40"
-      : verdict === "FAIL"
-      ? "text-v3-wall border-v3-wall/40"
-      : "text-v3-textTertiary border-v3-border";
-  return (
-    <span
-      data-testid="truthchain-verdict"
-      data-verdict={verdict}
-      className={`text-[11px] uppercase tracking-[0.08em] px-2 py-0.5 border rounded ${tone}`}
-    >
-      {verdict.replace(/_/g, " ").toLowerCase()}
-    </span>
-  );
+  return <SharedVerdictPill verdict={verdict} data-testid="truthchain-verdict" />;
 }
 
 function Section({

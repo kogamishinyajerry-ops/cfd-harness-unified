@@ -13,6 +13,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { CaseIndexEntry } from "@/types/validation";
+import { verdictTone, normalizeVerdict } from "./VerdictPill";
 
 interface MultiCaseRibbonV3Props {
   caseId: string;
@@ -28,22 +29,6 @@ function useCaseList() {
   });
 }
 
-function verdictTone(status?: string): { dot: string; label: string } {
-  switch (status) {
-    case "audit-passing":
-    case "PASS":
-      return { dot: "bg-v3-inlet", label: "PASS" };
-    case "audit-failing":
-    case "FAIL":
-      return { dot: "bg-v3-wall", label: "FAIL" };
-    case "gold-pending":
-    case "PENDING":
-      return { dot: "bg-v3-symmetry", label: "PEND" };
-    default:
-      return { dot: "bg-v3-border", label: "—" };
-  }
-}
-
 function CaseChip({
   entry,
   isCurrent,
@@ -54,7 +39,20 @@ function CaseChip({
   label: string;
 }) {
   const full = "contract_status" in entry ? entry : null;
-  const tone = verdictTone(full?.contract_status as string | undefined);
+  const status = full?.contract_status as string | undefined;
+  const tone = verdictTone(status);
+  const kind = normalizeVerdict(status);
+  // Short 4-char label for the compact chip header
+  const shortLabel =
+    kind === "PASS"
+      ? "PASS"
+      : kind === "FAIL"
+      ? "FAIL"
+      : kind === "PASS_WITH_DISCLAIMER"
+      ? "PASS!"
+      : kind === "PENDING"
+      ? "PEND"
+      : "—";
   return (
     <div
       data-testid={isCurrent ? "multi-case-chip-current" : "multi-case-chip"}
@@ -74,7 +72,7 @@ function CaseChip({
           className={`inline-flex items-center gap-1 text-[10px] text-v3-textTertiary`}
         >
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${tone.dot}`} />
-          {tone.label}
+          {shortLabel}
         </span>
       </div>
       <div className="text-[12px] text-v3-textPrimary font-mono truncate">
