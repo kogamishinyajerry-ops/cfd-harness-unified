@@ -93,9 +93,10 @@
 | 40-65 | Workbench 4-region layout + 5-step spine designed · concept SVG approved |
 | 65-80 | 5-step spine partially implemented · Truth Chain visible · advisor integration UI live |
 | 80-95 | TopBar 6-field · Engineer Control Rail · AI strict advisory-only · viewport baseline dir present · visual scaffolding for 5-step + Truth Chain |
-| **95-100** | **MSW backend mocking + TopBar real data wiring (useCaseStatus) + Step body Power-mode adoption (5 step bodies) + Viewport mode dispatcher (6 modes) + 8 PNG snapshot baselines + e2e 5-step flow PASS (current zone post-V68-A close)** |
+| 95-97 | MSW backend mocking + TopBar real data wiring + Step body Power-mode + Viewport mode dispatcher + 8 PNG baselines + e2e 5-step flow PASS |
+| **97-100** | **Real fastapi backend serves real corpus + useCaseStatus drives off real `/completeness` (case_kind / ready_for_archive / blocked_by_critical / percentage) + industrial-class case dogfood (whitelist case with trustGate=PASS) + pixel-diff CI gate at 0.01 threshold + 12 PNG baselines + e2e runs against real backend (no MSW) · (current zone post-V68-B close)** |
 
-**Current: 95/100** — V68-A "Workbench Depth & Real-Usability" arc CLOSE (B132). V67-C scaffolding (55→90) + V68-A FULL upgrade (90→95): 6 Done dims FULL-MET (MSW + TopBar wiring + Power-mode + Viewport dispatcher + 8 PNG baselines + e2e flow). Engineer can navigate Import→Mesh→BC→Solve→Results against mocked backend with rolling audit% + 6-mode viewport · 27/27 Playwright PASS · 367/367 vitest PASS.
+**Current: 97/100** — V68-B "Real Backend & Industrial Dogfood" arc CLOSE (B138). V68-A scaffolding (90→95) + V68-B FULL upgrade (95→97): backend bootstrap + readiness + 5 pytest probes · useCaseStatus repointed to real `/completeness` · industrial dogfood on naca0012_airfoil (audit=92.3%, ready_for_archive=true) · pixel-diff 0.01 stable + 12 PNG baselines · 37/37 Playwright PASS against real fastapi · 376/376 vitest PASS. Remaining 97→100 reserved for OpenFOAM-WASM (V68-D research arc · 14-22 weeks effort · deferred per feasibility spike).
 
 ### Pillar 7 · AI-advisor SSOT (5% weight)
 
