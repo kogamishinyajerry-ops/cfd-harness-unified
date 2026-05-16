@@ -11,7 +11,7 @@
 
 ## Done dim checklist (7 dims · all required for V68-C close · FULL delivery only)
 
-- [ ] **V68-C-DONE-1 · M3 MaterialCard real-data wiring** — `usePhysicsState` hook hits `/api/cases/:id/physics` · MaterialCard renders material + regime
+- [x] **V68-C-DONE-1 · M3 MaterialCard real-data wiring** — `usePhysicsState` hook hits `/api/cases/:id/physics` · MaterialCard renders material + regime · committed (200) + reference (404→CaseDetail fallback) · 21 new vitest · B141
 - [ ] **V68-C-DONE-2 · ProposalCard AI review real route** — Real `/ai-review` returns ReviewResponse · displayed in ProposalCard
 - [ ] **V68-C-DONE-3 · ProposalCard AI diagnose real route** — Real `/ai-diagnose` returns DiagnoseResponse
 - [ ] **V68-C-DONE-4 · LLM-offline graceful fallback** — AI hooks return 'advisor offline' state on 503/500 · UI doesn't crash · V130 preserved · 4 fallback tests
@@ -21,7 +21,7 @@
 
 ## Sub-DEC progress
 
-- [ ] **V68-C.1 · MaterialCard real-data wiring** — usePhysicsState hook + Step 3 surface
+- [x] **V68-C.1 · MaterialCard real-data wiring** — usePhysicsState hook + Step 3 surface · B141
 - [ ] **V68-C.2 · ProposalCard AI advisor real route** — ai-review + ai-diagnose wired + 4 fallback tests
 - [ ] **V68-C.3 · case_002a APU bay metadata entry** — whitelist YAML + gold_pending flag
 - [ ] **V68-C.4 · E2E + V68-D iter-2 spike + close** — 4 new playwright + docker emsdk + close DEC
