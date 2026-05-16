@@ -170,6 +170,38 @@ describe("WorkbenchShellV3 · bottom panel", () => {
   });
 });
 
+describe("WorkbenchShellV3 · V71.3 residuals chart", () => {
+  it("residuals chart marks p as watched curve by default (sand-coral)", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-4"));
+    // Step 4 default viewport = residuals
+    expect(
+      screen.getByTestId("residual-line-p").getAttribute("data-watched"),
+    ).toBe("true");
+    expect(
+      screen.getByTestId("residual-line-Ux").getAttribute("data-watched"),
+    ).toBe("false");
+    expect(
+      screen.getByTestId("residual-line-continuity").getAttribute("data-watched"),
+    ).toBe("false");
+  });
+
+  it("bottom panel residuals tab renders 5 residual indicators at step 4", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByTestId("pipeline-step-4"));
+    // Bottom panel auto-expands at step 4
+    expect(
+      screen.getByTestId("bottom-panel-expanded"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByTestId("bottom-tab-residuals"));
+    expect(
+      screen.getByTestId("bottom-tab-residuals-content"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("WorkbenchShellV3 · V71.2 step surfaces", () => {
   it("Step 2 inspector renders mesh-quality rows with verdict dots (V71.G)", async () => {
     const user = userEvent.setup();
