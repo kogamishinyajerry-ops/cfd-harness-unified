@@ -9,6 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { StepId } from "../WorkbenchShellV3";
+import { ObservabilityIndicator } from "./ObservabilityIndicator";
 
 interface TopBarV3Props {
   caseId: string | null;
@@ -74,6 +75,7 @@ export function TopBarV3({ caseId }: TopBarV3Props) {
       </div>
       <div className="flex-1" />
       <div className="flex items-center gap-4 text-v3-textTertiary text-[11px]">
+        <ObservabilityIndicator />
         <span className="font-mono">a4f3b21</span>
         <span
           role="img"

@@ -95,19 +95,38 @@ test.describe("V72.5 · sub-agent autonomous user journey · happy path", () => 
       await expect(page.getByRole("button", { name: pat })).toHaveCount(0);
     }
 
-    // ─── 7. Consult advisor · accept any of {finding, offline, error} ───
-    await page.getByTestId("advisor-run-review").click();
-    // Wait for any terminal state · either findings, offline banner, or
-    // error banner. The sub-agent journey only cares that the UI stayed
-    // navigable; the exact outcome depends on backend reachability.
-    await page.waitForFunction(
-      () =>
-        !!document.querySelector(
-          "[data-testid='advisor-review-findings'], [data-testid='advisor-offline-banner'], [data-testid='advisor-error']",
-        ),
-      undefined,
-      { timeout: 8_000 },
+    // ─── 7. Consult advisor · accept any terminal state ──────────────
+    // V73.1 added a whitelist pre-flight surface for gold cases (this case
+    // is lid_driven_cavity). For whitelist cases the consult button is NOT
+    // rendered — the advisor-whitelist-explanation card replaces it.
+    // V75.2 SkeletonAdvisor briefly holds the panel during pre-flight, so
+    // wait for either surface to materialize before deciding the path.
+    await page
+      .waitForFunction(
+        () =>
+          !!document.querySelector(
+            "[data-testid='advisor-whitelist-explanation'], [data-testid='advisor-run-review']",
+          ),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    const whitelistExplanation = page.getByTestId(
+      "advisor-whitelist-explanation",
     );
+    if ((await whitelistExplanation.count()) === 0) {
+      await page.getByTestId("advisor-run-review").click();
+      await page.waitForFunction(
+        () =>
+          !!document.querySelector(
+            "[data-testid='advisor-review-findings'], [data-testid='advisor-offline-banner'], [data-testid='advisor-error']",
+          ),
+        undefined,
+        { timeout: 8_000 },
+      );
+    } else {
+      await expect(whitelistExplanation).toBeVisible();
+    }
     // No mutating affordance leaked into post-consult state
     for (const pat of [/apply/i, /submit/i, /execute/i, /auto-fix/i]) {
       await expect(page.getByRole("button", { name: pat })).toHaveCount(0);

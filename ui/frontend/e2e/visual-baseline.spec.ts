@@ -442,26 +442,44 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
   // V72.6 · 6 visual baselines (31-36) for v3 interaction states.
   // Locks the new V72 surfaces against silent drift.
 
-  test("31 · v3 advisor consulted · finding card rendered", async ({ page }) => {
+  test("31 · v3 advisor surface · terminal state (whitelist or consulted)", async ({ page }) => {
     await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
     await page.waitForSelector("[data-testid='workbench-shell-v3']", {
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-advisor").click();
-    await page.getByTestId("advisor-run-review").click();
-    // Wait for any terminal state
+    // V73.1 · lid_driven_cavity is whitelist → consult button is replaced
+    // by the advisor-whitelist-explanation surface. Wait for either to
+    // materialize (skeleton may briefly hold the panel during the cases
+    // pre-flight fetch).
     await page
       .waitForFunction(
         () =>
           !!document.querySelector(
-            "[data-testid='advisor-review-findings'], [data-testid='advisor-offline-banner'], [data-testid='advisor-error']",
+            "[data-testid='advisor-whitelist-explanation'], [data-testid='advisor-run-review']",
           ),
         undefined,
         { timeout: 8_000 },
       )
       .catch(() => {});
+    const whitelist = page.getByTestId("advisor-whitelist-explanation");
+    if ((await whitelist.count()) === 0) {
+      await page.getByTestId("advisor-run-review").click();
+      await page
+        .waitForFunction(
+          () =>
+            !!document.querySelector(
+              "[data-testid='advisor-review-findings'], [data-testid='advisor-offline-banner'], [data-testid='advisor-error']",
+            ),
+          undefined,
+          { timeout: 8_000 },
+        )
+        .catch(() => {});
+    } else {
+      await whitelist.waitFor({ state: "visible", timeout: 4_000 });
+    }
     await page.waitForTimeout(150);
-    await expect(page).toHaveScreenshot("31-v3-advisor-consulted.png", {
+    await expect(page).toHaveScreenshot("31-v3-advisor-terminal.png", {
       maxDiffPixelRatio: 0.01,
       animations: "disabled",
     });
@@ -490,10 +508,17 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
+    // V75.2 · wait for skeleton to settle
     await page
-      .waitForSelector("[data-testid='truthchain-content']", { timeout: 5_000 })
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector("[data-testid='truthchain-content']"),
+        undefined,
+        { timeout: 8_000 },
+      )
       .catch(() => {});
-    await page.waitForTimeout(150);
+    await page.waitForTimeout(200);
     await expect(page).toHaveScreenshot("33-v3-truthchain-tab.png", {
       maxDiffPixelRatio: 0.01,
       animations: "disabled",
@@ -601,7 +626,17 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
-    await page.waitForTimeout(500);
+    // V75.2 · wait for skeleton to settle
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector("[data-testid='truthchain-content']"),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(200);
     await expect(page).toHaveScreenshot("40-v3-truthchain-verdict-pill.png", {
       maxDiffPixelRatio: 0.01,
       animations: "disabled",
@@ -688,9 +723,17 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
-    await page.waitForSelector("[data-testid='provenance-hashes']", {
-      timeout: 4_000,
-    });
+    // V75.2 · wait for skeleton to settle before snapshotting provenance
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector("[data-testid='provenance-hashes']"),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(200);
     await expect(
       page.locator("[data-testid='provenance-hashes']"),
     ).toHaveScreenshot("46-v3-truthchain-provenance-hashes.png", {
@@ -705,12 +748,19 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
+    // V75.2 · wait for TruthChain skeleton to settle before snapshotting
     await page
-      .waitForSelector(
-        "[data-testid='gold-delta-panel'], [data-testid='gold-delta-offline-hint']",
-        { timeout: 6_000 },
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector(
+            "[data-testid='gold-delta-panel'], [data-testid='gold-delta-offline-hint']",
+          ),
+        undefined,
+        { timeout: 8_000 },
       )
       .catch(() => {});
+    await page.waitForTimeout(200);
     await expect(
       page.locator("[data-testid='workbench-right-panel']"),
     ).toHaveScreenshot("47-v3-gold-delta-panel.png", {
@@ -725,12 +775,19 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
+    // V75.2 · wait for skeleton to settle
     await page
-      .waitForSelector(
-        "[data-testid='audit-package-build'], [data-testid='audit-package-download-no-run']",
-        { timeout: 6_000 },
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector(
+            "[data-testid='audit-package-build'], [data-testid='audit-package-download-no-run']",
+          ),
+        undefined,
+        { timeout: 8_000 },
       )
       .catch(() => {});
+    await page.waitForTimeout(200);
     await expect(
       page.locator("[data-testid='workbench-right-panel']"),
     ).toHaveScreenshot("48-v3-audit-package.png", {
@@ -787,7 +844,17 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       timeout: 12_000,
     });
     await page.getByTestId("right-tab-truthchain").click();
-    await page.waitForTimeout(800);
+    // V75.2 · wait for skeleton to settle + V74 sections to mount
+    await page
+      .waitForFunction(
+        () =>
+          !document.querySelector("[data-testid='skeleton-truthchain']") &&
+          !!document.querySelector("[data-testid='provenance-hashes']"),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(300);
     await expect(
       page.locator("[data-testid='workbench-right-panel']"),
     ).toHaveScreenshot("52-v3-truthchain-full.png", {
