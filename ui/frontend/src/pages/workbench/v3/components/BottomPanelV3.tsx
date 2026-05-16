@@ -220,7 +220,9 @@ export function BottomPanelV3({
               data-testid={`bottom-tab-${t.id}`}
               data-active={isActive ? "true" : "false"}
               onClick={() => setActiveTab(t.id)}
-              className={`relative mr-5 py-1 ${
+              aria-selected={isActive}
+              role="tab"
+              className={`relative mr-5 py-1 motion-safe:transition-colors motion-safe:duration-150 ${
                 isActive
                   ? "text-v3-textPrimary"
                   : "text-v3-textSecondary hover:text-v3-textPrimary"

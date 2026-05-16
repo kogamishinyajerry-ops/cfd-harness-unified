@@ -21,7 +21,7 @@
  * V71 does NOT migrate legacy /workbench routes · those continue working.
  * V72+ may migrate. This file is the v3 SSOT.
  */
-import { useState, type ReactNode } from "react";
+import { useState, useCallback, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { CaseBrowserV3 } from "./components/CaseBrowserV3";
 import { PipelineStripV3 } from "./components/PipelineStripV3";
@@ -31,6 +31,7 @@ import { BottomPanelV3 } from "./components/BottomPanelV3";
 import { ActivityBarV3 } from "./components/ActivityBarV3";
 import { TopBarV3 } from "./components/TopBarV3";
 import { MainCanvasV3 } from "./components/MainCanvasV3";
+import { useV3Keyboard } from "./hooks/useV3Keyboard";
 
 export type StepId = 1 | 2 | 3 | 4 | 5;
 export type ViewportMode =
@@ -97,6 +98,19 @@ export function WorkbenchShellV3({
     // Bottom panel auto-expands at Step 4+
     setBottomCollapsed(next < 4);
   }
+
+  // V72.2 · keyboard shortcuts (Esc collapses bottom panel; 1..5/g/m/b/r/p/f
+  // jump steps + viewport; [/] cycle right-panel tabs).
+  const handleEscape = useCallback(() => {
+    setBottomCollapsed(true);
+  }, []);
+  useV3Keyboard({
+    onSetStep: handleSetStep,
+    onSetViewport: setViewportMode,
+    onSetRightTab: setRightTab,
+    onEscape: handleEscape,
+    currentTab: rightTab,
+  });
 
   // V71-UI-V3 · CSS grid template-columns 48 / 260 / 1fr / 340 ·
   // template-rows 40 / 1fr

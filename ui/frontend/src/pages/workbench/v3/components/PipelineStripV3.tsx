@@ -46,7 +46,10 @@ export function PipelineStripV3({
               onClick={() => onSetStep(s.id)}
               data-testid={`pipeline-step-${s.id}`}
               data-state={isActive ? "active" : isPassed ? "passed" : "pending"}
-              className={`relative flex items-center gap-2 px-2 py-1 text-[14px] ${
+              data-active={isActive ? "true" : "false"}
+              aria-current={isActive ? "step" : undefined}
+              aria-label={`Pipeline step ${s.id}: ${s.label}`}
+              className={`relative flex items-center gap-2 px-2 py-1 text-[14px] motion-safe:transition-colors motion-safe:duration-150 ${
                 isActive
                   ? "text-v3-textPrimary"
                   : "text-v3-textSecondary hover:text-v3-textPrimary"

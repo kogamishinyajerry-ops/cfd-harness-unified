@@ -52,7 +52,9 @@ export function ViewportToolbarV3({
               onClick={() => onSetMode(m.id)}
               data-testid={`viewport-mode-${m.id}`}
               data-active={isActive ? "true" : "false"}
-              className={`relative px-2 py-0.5 ${
+              aria-pressed={isActive}
+              aria-label={`Viewport mode: ${m.label}`}
+              className={`relative px-2 py-0.5 motion-safe:transition-colors motion-safe:duration-150 ${
                 isActive
                   ? "text-v3-textPrimary"
                   : "text-v3-textSecondary hover:text-v3-textPrimary"

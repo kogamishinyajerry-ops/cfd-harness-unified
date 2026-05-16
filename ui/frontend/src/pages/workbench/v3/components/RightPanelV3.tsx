@@ -40,7 +40,11 @@ export function RightPanelV3({
       className="h-full flex flex-col"
     >
       {/* Tab strip */}
-      <div className="h-10 flex items-center px-4 border-b border-v3-border text-[13px]">
+      <div
+        role="tablist"
+        aria-label="Right panel sections"
+        className="h-10 flex items-center px-4 border-b border-v3-border text-[13px]"
+      >
         {TABS.map((t) => {
           const isActive = t.id === activeTab;
           return (
@@ -48,9 +52,13 @@ export function RightPanelV3({
               key={t.id}
               type="button"
               onClick={() => onSetTab(t.id)}
+              id={`right-tab-${t.id}`}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`right-panel-content-${t.id}`}
               data-testid={`right-tab-${t.id}`}
               data-active={isActive ? "true" : "false"}
-              className={`relative mr-5 py-1 ${
+              className={`relative mr-5 py-1 motion-safe:transition-colors motion-safe:duration-150 ${
                 isActive
                   ? "text-v3-textPrimary"
                   : "text-v3-textSecondary hover:text-v3-textPrimary"
@@ -67,8 +75,15 @@ export function RightPanelV3({
           );
         })}
       </div>
-      {/* Tab content */}
-      <div className="flex-1 overflow-y-auto py-5 px-6">
+      {/* Tab content · V72.4 ARIA + autoFocus on tab change */}
+      <div
+        role="tabpanel"
+        aria-labelledby={`right-tab-${activeTab}`}
+        data-testid={`right-panel-content-${activeTab}`}
+        tabIndex={0}
+        key={activeTab}
+        className="flex-1 overflow-y-auto py-5 px-6 motion-safe:transition-opacity motion-safe:duration-150 outline-none"
+      >
         {activeTab === "inspector" && (
           <InspectorContent
             caseId={caseId}

@@ -37,11 +37,13 @@ export function ActivityBarV3({ active }: ActivityBarV3Props) {
             key={it.id}
             data-testid={`activity-${it.id}`}
             data-active={isActive ? "true" : "false"}
-            className={`relative w-full flex items-center justify-center h-10 ${
+            className={`relative w-full flex items-center justify-center h-10 motion-safe:transition-colors motion-safe:duration-150 ${
               isLast ? "mt-auto" : ""
             }`}
             title={it.label}
             aria-label={it.label}
+            role="button"
+            tabIndex={0}
           >
             {isActive && (
               <span
