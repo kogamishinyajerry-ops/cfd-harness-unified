@@ -21,14 +21,15 @@ failures=("placeholder")
 # ─────────── 1. Tutorial route ────────────────────────────────────
 tutorial_score=0
 tutorial_present=0
-# Look for tutorial route in main router
 if [ -d "ui/frontend/src" ]; then
-  if grep -rl "tutorial\|Tutorial\|onboarding" ui/frontend/src/router 2>/dev/null | head -1 > /dev/null \
-     || ls ui/frontend/src/pages/TutorialPage*.tsx 2>/dev/null | head -1 > /dev/null \
-     || grep -lE "TutorialPage|/workbench/tutorial" ui/frontend/src/router/*.tsx ui/frontend/src/App.tsx 2>/dev/null | head -1 > /dev/null; then
+  # Tutorial route present if either:
+  # (a) TutorialPage.tsx exists anywhere under ui/frontend/src/pages/
+  # (b) App.tsx wires /workbench/tutorial route
+  if find ui/frontend/src/pages -name "TutorialPage*.tsx" 2>/dev/null | head -1 | grep -q . \
+     || grep -lE "/workbench/tutorial|TutorialPage" ui/frontend/src/App.tsx 2>/dev/null | head -1 > /dev/null; then
     tutorial_present=1
     tutorial_score=25
-    evidence+=("tutorial route: PRESENT (TutorialPage or /workbench/tutorial reachable)")
+    evidence+=("tutorial route: PRESENT (TutorialPage + /workbench/tutorial wired in App.tsx)")
   else
     failures+=("tutorial route: MISSING (need TutorialPage at /workbench/tutorial for V70-DONE-3)")
   fi

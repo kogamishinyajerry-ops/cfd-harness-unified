@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
+import { FirstTimeBanner } from "@/components/FirstTimeBanner";
 import type { CaseIndexEntry } from "@/types/validation";
 
 // Workbench landing index. Engineer-first surface (DEC-V61-115, 2026-05-04):
@@ -51,6 +52,7 @@ export function WorkbenchIndexPage() {
 
   return (
     <Section>
+      <FirstTimeBanner />
       <WorkbenchHero />
 
       <header className="mt-10 mb-4 flex items-baseline justify-between">

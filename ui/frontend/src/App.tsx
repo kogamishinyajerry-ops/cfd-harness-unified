@@ -20,6 +20,7 @@ import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
 import { ViewportModeDevPage } from "@/pages/dev/ViewportModeDevPage";
 import { BeginnerPowerProvider } from "@/pages/workbench/step_panel_shell/BeginnerPowerContext";
 import { StepPanelShell } from "@/pages/workbench/StepPanelShell";
+import { TutorialPage } from "@/pages/workbench/TutorialPage";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
 import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
@@ -69,6 +70,7 @@ export default function App() {
             picker grid for the closed-loop entry point so users don't have
             to know case_ids by URL. */}
         <Route path="/workbench" element={<WorkbenchIndexPage />} />
+        <Route path="/workbench/tutorial" element={<TutorialPage />} />
         {/* Workbench 60-day extension #3 (2026-04-26) · cross-case "today's
             runs" feed grouped by local-tz date. */}
         <Route path="/workbench/today" element={<WorkbenchTodayPage />} />
