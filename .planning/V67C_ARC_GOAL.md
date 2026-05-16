@@ -12,7 +12,7 @@
 ## Done dim checklist (8 dims · all required for V67-C close)
 
 - [x] **V67-C-DONE-1 · TopBar 6-field information density** — case · OF truth · TrustGate · LLM offline · Audit % · AI=advisor (all 6 visible + tested) · evidence: `TopBar.test.tsx` 9/9 PASS · `e2e/topbar.spec.ts` bootstrap · TopBar.tsx 50→180 LOC chip-based 6-field layout
-- [ ] **V67-C-DONE-2 · StatusStrip live indicators** — progress · current-step status · trust state · last action (4 fields) · evidence: `StatusStrip.test.tsx` + Playwright live-update verification
+- [x] **V67-C-DONE-2 · StatusStrip live indicators** — 4 fields (lastAction · progress + step status · trustState · validation) · evidence: `StatusStrip.test.tsx` 11/11 PASS · StatusStrip.tsx 30→130 LOC
 - [ ] **V67-C-DONE-3 · Engineer Control Rail integrated** — Beginner/Power toggle on every step · CompletenessCard top-fixed · advanced disclosure pattern · evidence: `EngineerControlRail.test.tsx` + Playwright + visual snapshot
 - [ ] **V67-C-DONE-4 · 5-step spine visual polish** — step status icons (✓/●/○) · transition animations · Apple-tier consistency · evidence: visual diff baseline + Playwright transition test
 - [ ] **V67-C-DONE-5 · Viewport mode switching** — geometry/mesh/BC/field/residuals/report-grid · ≤200ms transition · evidence: `Viewport.test.tsx` + `e2e/viewport-mode.spec.ts`
@@ -24,7 +24,7 @@
 
 - [x] **V67-C.0 · Bootstrap** (sub-DEC) — npm install + ESLint 9 flat config + 3 fleet script fixes + ARC-GOAL · commit `19253bf` · B118
 - [x] **V67-C.1 · TopBar 6-field upgrade** — Done dim #1 MET · TopBar.tsx 50→180 LOC + TopBar.test.tsx 9 tests + Playwright bootstrap (`playwright.config.ts` + `e2e/topbar.spec.ts`) · B119
-- [ ] **V67-C.2 · StatusStrip live indicators** — Done dim #2 · ~80 prod + 60 test
+- [x] **V67-C.2 · StatusStrip live indicators** — Done dim #2 MET · StatusStrip.tsx 30→130 LOC + 11 tests · B120
 - [ ] **V67-C.3 · Engineer Control Rail integration** — Done dim #3 · ~200 prod + 150 test
 - [ ] **V67-C.4 · 5-step spine visual polish** — Done dim #4 · ~150 prod + 100 test + visual baseline
 - [ ] **V67-C.5 · Viewport mode switching** — Done dim #5 · ~180 prod + 140 test
