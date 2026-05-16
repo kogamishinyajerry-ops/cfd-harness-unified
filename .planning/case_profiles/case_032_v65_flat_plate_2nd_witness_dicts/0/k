@@ -1,0 +1,38 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| I = 0.5% (matches V64-A B64 F-NEW-low-Re-transition-trigger inlet condition) |
+| k = 1.5 * (U * I)^2 = 1.5 * (45 * 0.005)^2 = 0.0759375 m²/s²                |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+
+dimensions      [0 2 -2 0 0 0 0];
+internalField   uniform 0.0759375;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 0.0759375;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.0759375;
+        value           uniform 0.0759375;
+    }
+    plate
+    {
+        type            kqRWallFunction;
+        value           uniform 0.0759375;
+    }
+    top             { type slip; }
+    frontAndBack    { type empty; }
+}
+
+// ************************************************************************* //

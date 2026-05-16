@@ -1,0 +1,88 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| case_032 v65 — independent flat plate · 2nd witness for F-NEW-low-Re        |
+| trigger (V107 candidate). Different geometry + different mesh resolution    |
+| from case_021 v65 to satisfy 2-case-witness independence.                   |
+|                                                                              |
+| Geometry: L=1.0 m plate · h_dom=0.15 m · z=0.01 m (single layer 2D)         |
+| Mesh: 250 × 120 = 30,000 cells (vs case_021 v65 545×385=209,825 = 7× smaller)|
+| X-grading: simpleGrading (5 1 1) (vs case_021 (10 1 1) — coarser LE focus)  |
+| Y-grading: simpleGrading (1 200 1) (vs case_021 (1 945 1) — coarser BL)     |
+| Expected δy_first ≈ 2e-5 m → y+ ~ 2-3 at U=45 m/s (acceptable for ωFct)     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+vertices
+(
+    (0     0     0   )   // 0
+    (1.0   0     0   )   // 1
+    (1.0   0.15  0   )   // 2
+    (0     0.15  0   )   // 3
+    (0     0     0.01)   // 4
+    (1.0   0     0.01)   // 5
+    (1.0   0.15  0.01)   // 6
+    (0     0.15  0.01)   // 7
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (250 120 1) simpleGrading (5 200 1)
+);
+
+edges ();
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+    plate
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)
+        );
+    }
+    top
+    {
+        type patch;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 3 2 1)
+            (4 5 6 7)
+        );
+    }
+);
+
+mergePatchPairs ();
+
+// ************************************************************************* //

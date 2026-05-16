@@ -1,0 +1,47 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| SpalartAllmaras nuTilda · NASA TMR canonical inlet = 3 * nu (per SA model docs) |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nuTilda;
+}
+
+dimensions      [0 2 -1 0 0 0 0];
+internalField   uniform 4.164e-5;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 4.164e-5;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 4.164e-5;
+        value           uniform 4.164e-5;
+    }
+    topWall
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    symmetry
+    {
+        type            symmetryPlane;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

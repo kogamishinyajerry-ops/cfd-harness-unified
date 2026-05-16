@@ -1,0 +1,40 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| omega = sqrt(k) / (Cmu^(1/4) * l)                                            |
+| Cmu = 0.09 · Cmu^(1/4) = 0.5477                                              |
+| l = 0.07 * L = 0.07 m (turbulent length scale ~ 7% of plate length)         |
+| omega = sqrt(0.0759375) / (0.5477 * 0.07) = 0.2756 / 0.0383 = 7.19 1/s      |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+
+dimensions      [0 0 -1 0 0 0 0];
+internalField   uniform 7.19;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 7.19;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 7.19;
+        value           uniform 7.19;
+    }
+    plate
+    {
+        type            omegaWallFunction;
+        value           uniform 7.19;
+    }
+    top             { type slip; }
+    frontAndBack    { type empty; }
+}
+
+// ************************************************************************* //
