@@ -12,9 +12,9 @@
 ## Done dim checklist (7 dims · all required for V68-C close · FULL delivery only)
 
 - [x] **V68-C-DONE-1 · M3 MaterialCard real-data wiring** — `usePhysicsState` hook hits `/api/cases/:id/physics` · MaterialCard renders material + regime · committed (200) + reference (404→CaseDetail fallback) · 21 new vitest · B141
-- [ ] **V68-C-DONE-2 · ProposalCard AI review real route** — Real `/ai-review` returns ReviewResponse · displayed in ProposalCard
-- [ ] **V68-C-DONE-3 · ProposalCard AI diagnose real route** — Real `/ai-diagnose` returns DiagnoseResponse
-- [ ] **V68-C-DONE-4 · LLM-offline graceful fallback** — AI hooks return 'advisor offline' state on 503/500 · UI doesn't crash · V130 preserved · 4 fallback tests
+- [x] **V68-C-DONE-2 · ProposalCard AI review real route** — MET by V68-A inheritance (AIAdvisorPanel + api.getAIReview shipped DEC-V61-160 / N6.4); charter "ProposalCard" = AIAdvisorPanel surface · B143
+- [x] **V68-C-DONE-3 · ProposalCard AI diagnose real route** — MET by V68-A inheritance (same path · /ai-diagnose returns DiagnoseResponse with hypotheses + citation) · B143
+- [x] **V68-C-DONE-4 · LLM-offline graceful fallback** — classifyAdvisorFailure() · 5xx + network failures → calm amber offline banner · 4xx → harsh red error · V130 invariant tested at panel level · 5 new vitest · B143
 - [ ] **V68-C-DONE-5 · case_002a APU bay metadata entry** — Whitelist includes case_002a with `case_kind=imported_user`+`gold_pending=true` · listable + disclaimer surfaces
 - [ ] **V68-C-DONE-6 · E2E against real backend (extended)** — 41+ e2e PASS (+4 V68-C cases: physics + ai-review + ai-diagnose + case_002a)
 - [ ] **V68-C-DONE-7 · Pillar 6 ≥98 + Pillar 7 ≥85 dual re-anchor + V68-D continued spike** — SCORING-FRAMEWORK.md updated + iter-2 WASM spike artifact
@@ -22,7 +22,7 @@
 ## Sub-DEC progress
 
 - [x] **V68-C.1 · MaterialCard real-data wiring** — usePhysicsState hook + Step 3 surface · B141
-- [ ] **V68-C.2 · ProposalCard AI advisor real route** — ai-review + ai-diagnose wired + 4 fallback tests
+- [x] **V68-C.2 · ProposalCard AI advisor real route** — ai-review + ai-diagnose wired (V68-A inheritance) + classifyAdvisorFailure offline classifier + 5 fallback tests · B143
 - [ ] **V68-C.3 · case_002a APU bay metadata entry** — whitelist YAML + gold_pending flag
 - [ ] **V68-C.4 · E2E + V68-D iter-2 spike + close** — 4 new playwright + docker emsdk + close DEC
 - (V68-D iter-2 spike inside .4 · spike-class · doesn't count as sub-DEC)
