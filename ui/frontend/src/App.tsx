@@ -17,6 +17,7 @@ import { NewCaseWizardPage } from "@/pages/workbench/NewCaseWizardPage";
 import { RunComparePage } from "@/pages/workbench/RunComparePage";
 import { RunDetailPage } from "@/pages/workbench/RunDetailPage";
 import { RunHistoryPage } from "@/pages/workbench/RunHistoryPage";
+import { BeginnerPowerProvider } from "@/pages/workbench/step_panel_shell/BeginnerPowerContext";
 import { StepPanelShell } from "@/pages/workbench/StepPanelShell";
 import { WorkbenchIndexPage } from "@/pages/workbench/WorkbenchIndexPage";
 import { WorkbenchRunPage } from "@/pages/workbench/WorkbenchRunPage";
@@ -37,7 +38,8 @@ import { WorkbenchTodayPage } from "@/pages/workbench/WorkbenchTodayPage";
 // north star. /pro / /cases / /decisions / /audit-package routing unchanged.
 export default function App() {
   return (
-    <Routes>
+    <BeginnerPowerProvider>
+      <Routes>
       {/* DEC-V61-115: default redirect / → /workbench (was /learn). */}
       <Route index element={<Navigate to="/workbench" replace />} />
 
@@ -106,6 +108,7 @@ export default function App() {
         {/* DEC-V61-115: catch-all redirects to /workbench (was /learn). */}
         <Route path="*" element={<Navigate to="/workbench" replace />} />
       </Route>
-    </Routes>
+      </Routes>
+    </BeginnerPowerProvider>
   );
 }

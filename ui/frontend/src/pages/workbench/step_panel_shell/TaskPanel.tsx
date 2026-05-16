@@ -20,6 +20,7 @@ import type { ComponentType } from "react";
 
 import { AIAdvisorPanel } from "./AIAdvisorPanel";
 import { AICoachPanel } from "./AICoachPanel";
+import { BeginnerPowerToggle } from "./BeginnerPowerToggle";
 import { CompletenessCard } from "./CompletenessCard";
 import { StepNavigation } from "./StepNavigation";
 import type {
@@ -53,10 +54,11 @@ export function TaskPanel({
       data-step-id={step.id}
       className="flex h-full min-h-0 flex-col border-l border-surface-800 bg-surface-950/40"
     >
-      <header className="border-b border-surface-800 px-3 py-2">
+      <header className="flex items-center justify-between gap-2 border-b border-surface-800 px-3 py-2">
         <h2 className="text-xs font-mono uppercase tracking-wider text-surface-300">
           {step.longLabel}
         </h2>
+        <BeginnerPowerToggle size="xs" />
       </header>
       <div className="flex-1 min-h-0 overflow-y-auto">
         {caseId && <CompletenessCard caseId={caseId} />}

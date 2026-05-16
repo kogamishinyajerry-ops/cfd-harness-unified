@@ -13,7 +13,7 @@
 
 - [x] **V67-C-DONE-1 · TopBar 6-field information density** — case · OF truth · TrustGate · LLM offline · Audit % · AI=advisor (all 6 visible + tested) · evidence: `TopBar.test.tsx` 9/9 PASS · `e2e/topbar.spec.ts` bootstrap · TopBar.tsx 50→180 LOC chip-based 6-field layout
 - [x] **V67-C-DONE-2 · StatusStrip live indicators** — 4 fields (lastAction · progress + step status · trustState · validation) · evidence: `StatusStrip.test.tsx` 11/11 PASS · StatusStrip.tsx 30→130 LOC
-- [ ] **V67-C-DONE-3 · Engineer Control Rail integrated** — Beginner/Power toggle on every step · CompletenessCard top-fixed · advanced disclosure pattern · evidence: `EngineerControlRail.test.tsx` + Playwright + visual snapshot
+- [x] **V67-C-DONE-3 · Engineer Control Rail integrated** — Beginner/Power toggle in TaskPanel header (xs · 14 tests PASS) · CompletenessCard top of scroll region (existing) · BeginnerPowerProvider wired at App.tsx root · localStorage + cross-tab sync · evidence: `BeginnerPowerToggle.test.tsx` 14/14 PASS · step-body advanced-disclosure adoption deferred to V67-C.3.1 follow-on
 - [ ] **V67-C-DONE-4 · 5-step spine visual polish** — step status icons (✓/●/○) · transition animations · Apple-tier consistency · evidence: visual diff baseline + Playwright transition test
 - [ ] **V67-C-DONE-5 · Viewport mode switching** — geometry/mesh/BC/field/residuals/report-grid · ≤200ms transition · evidence: `Viewport.test.tsx` + `e2e/viewport-mode.spec.ts`
 - [x] **V67-C-DONE-6 · AI panel strict advisory-only** — 0 mutation patterns in AI panels · MUTATING_ROUTES = 9 (baseline) · KNOWN_MUTATION_FUNCTIONS = 12 (baseline) · evidence: `scripts/governance/v67c_fleet/audit_ai_advisory.sh` VERDICT PASS · audit report `.planning/scores/V67-C_advisory_audit_b121.md`
@@ -25,7 +25,7 @@
 - [x] **V67-C.0 · Bootstrap** (sub-DEC) — npm install + ESLint 9 flat config + 3 fleet script fixes + ARC-GOAL · commit `19253bf` · B118
 - [x] **V67-C.1 · TopBar 6-field upgrade** — Done dim #1 MET · TopBar.tsx 50→180 LOC + TopBar.test.tsx 9 tests + Playwright bootstrap (`playwright.config.ts` + `e2e/topbar.spec.ts`) · B119
 - [x] **V67-C.2 · StatusStrip live indicators** — Done dim #2 MET · StatusStrip.tsx 30→130 LOC + 11 tests · B120
-- [ ] **V67-C.3 · Engineer Control Rail integration** — Done dim #3 · ~200 prod + 150 test
+- [x] **V67-C.3 · Engineer Control Rail (partial)** — BeginnerPowerContext + Toggle + App Provider wire + TaskPanel header render + 14 tests · B122 · step-body adoption → V67-C.3.1
 - [ ] **V67-C.4 · 5-step spine visual polish** — Done dim #4 · ~150 prod + 100 test + visual baseline
 - [ ] **V67-C.5 · Viewport mode switching** — Done dim #5 · ~180 prod + 140 test
 - [x] **V67-C.6 · AI panel advisory-only audit** — Done dim #6 MET · `audit_ai_advisory.sh` 75 LOC · 4/4 invariants PASS · B121 (Truth-chain e2e deferred to V67-C.6.1)
