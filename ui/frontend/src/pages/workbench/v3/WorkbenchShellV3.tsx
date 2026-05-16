@@ -32,6 +32,12 @@ import { ActivityBarV3 } from "./components/ActivityBarV3";
 import { TopBarV3 } from "./components/TopBarV3";
 import { MainCanvasV3 } from "./components/MainCanvasV3";
 import { MultiCaseRibbonV3 } from "./components/MultiCaseRibbonV3";
+import {
+  RightPanelErrorBoundary,
+  BottomPanelErrorBoundary,
+  MainCanvasErrorBoundary,
+  MultiCaseRibbonErrorBoundary,
+} from "./components/ErrorBoundaryV3";
 import { useV3Keyboard } from "./hooks/useV3Keyboard";
 
 export type StepId = 1 | 2 | 3 | 4 | 5;
@@ -161,21 +167,27 @@ export function WorkbenchShellV3({
         />
         <div className="flex-1 min-h-0 overflow-hidden">
           {canvasSlot ?? (
-            <MainCanvasV3
-              caseId={caseId}
-              stepId={stepId}
-              viewportMode={viewportMode}
-            />
+            <MainCanvasErrorBoundary panelName="Main canvas">
+              <MainCanvasV3
+                caseId={caseId}
+                stepId={stepId}
+                viewportMode={viewportMode}
+              />
+            </MainCanvasErrorBoundary>
           )}
         </div>
         {stepId === 5 && caseId && (
-          <MultiCaseRibbonV3 caseId={caseId} />
+          <MultiCaseRibbonErrorBoundary panelName="Multi-case ribbon">
+            <MultiCaseRibbonV3 caseId={caseId} />
+          </MultiCaseRibbonErrorBoundary>
         )}
-        <BottomPanelV3
-          collapsed={bottomCollapsed}
-          onToggle={() => setBottomCollapsed((v) => !v)}
-          stepId={stepId}
-        />
+        <BottomPanelErrorBoundary panelName="Bottom panel">
+          <BottomPanelV3
+            collapsed={bottomCollapsed}
+            onToggle={() => setBottomCollapsed((v) => !v)}
+            stepId={stepId}
+          />
+        </BottomPanelErrorBoundary>
       </div>
 
       {/* Row 2 · Col 4: Right Panel */}
@@ -183,13 +195,15 @@ export function WorkbenchShellV3({
         data-testid="workbench-right-panel"
         className="row-start-2 border-l border-v3-border overflow-y-auto"
       >
-        <RightPanelV3
-          activeTab={rightTab}
-          onSetTab={setRightTab}
-          caseId={caseId}
-          stepId={stepId}
-          viewportMode={viewportMode}
-        />
+        <RightPanelErrorBoundary panelName="Right panel">
+          <RightPanelV3
+            activeTab={rightTab}
+            onSetTab={setRightTab}
+            caseId={caseId}
+            stepId={stepId}
+            viewportMode={viewportMode}
+          />
+        </RightPanelErrorBoundary>
       </div>
     </div>
   );
