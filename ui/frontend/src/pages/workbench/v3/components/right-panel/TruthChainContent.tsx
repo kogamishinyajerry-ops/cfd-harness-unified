@@ -20,6 +20,7 @@ import type { StepId } from "../../WorkbenchShellV3";
 import { VerdictPill as SharedVerdictPill } from "../VerdictPill";
 import { GoldDeltaPanel } from "../GoldDeltaPanel";
 import { AuditPackageDownload } from "../AuditPackageDownload";
+import { SkeletonTruthChain } from "../SkeletonV3";
 
 interface TruthChainContentProps {
   caseId: string | null;
@@ -217,10 +218,8 @@ export function TruthChainContent({
 
   if (isLoading) {
     return (
-      <div className="text-[13px] text-v3-textTertiary">
-        <Section label="Loading provenance…">
-          <p className="text-[12px]">Querying /api/cases/{caseId}/completeness…</p>
-        </Section>
+      <div className="text-[13px]">
+        <SkeletonTruthChain />
       </div>
     );
   }

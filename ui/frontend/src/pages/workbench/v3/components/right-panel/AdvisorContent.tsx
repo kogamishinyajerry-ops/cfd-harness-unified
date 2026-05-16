@@ -23,6 +23,7 @@ import type {
 } from "@/types/ai_advisor";
 import type { CaseIndexEntry } from "@/types/validation";
 import type { StepId } from "../../WorkbenchShellV3";
+import { SkeletonAdvisor } from "../SkeletonV3";
 
 interface AdvisorContentProps {
   caseId: string | null;
@@ -191,7 +192,7 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
   // The advisor backend only accepts imported_user cases (its case_dir
   // resolver lives under user_drafts/imported). Whitelist cases would 404
   // with a raw error — V73 explains the architecture instead.
-  const { data: cases } = useCaseList();
+  const { data: cases, isLoading: casesLoading } = useCaseList();
   const thisCase = Array.isArray(cases)
     ? cases.find((c) => c.case_id === caseId)
     : undefined;
@@ -242,6 +243,18 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
           The advisor reads case files + corpus citations and emits text
           recommendations. It never modifies the case.
         </p>
+      </div>
+    );
+  }
+
+  // V75.2 · skeleton while the pre-flight case-kind classification is in flight
+  if (casesLoading) {
+    return (
+      <div className="text-[13px]">
+        <AdvisoryBadge />
+        <div className="mt-4">
+          <SkeletonAdvisor />
+        </div>
       </div>
     );
   }

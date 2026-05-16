@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { CaseDetail } from "@/types/validation";
 import type { StepId, ViewportMode } from "../../WorkbenchShellV3";
+import { SkeletonInspector } from "../SkeletonV3";
 
 interface InspectorContentProps {
   caseId: string | null;
@@ -158,14 +159,7 @@ function Step1Inspector({ caseId }: { caseId: string }) {
               : "canonical"
           }
         />
-        {isLoading && (
-          <div
-            data-testid="step1-loading"
-            className="text-[11px] text-v3-textTertiary italic"
-          >
-            loading from /api/cases/{caseId}…
-          </div>
-        )}
+        {isLoading && <SkeletonInspector />}
         {isError && (
           <div
             data-testid="step1-offline-hint"

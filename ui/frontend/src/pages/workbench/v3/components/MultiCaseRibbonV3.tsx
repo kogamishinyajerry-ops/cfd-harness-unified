@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { CaseIndexEntry } from "@/types/validation";
 import { verdictTone, normalizeVerdict } from "./VerdictPill";
+import { SkeletonMultiCase } from "./SkeletonV3";
 
 interface MultiCaseRibbonV3Props {
   caseId: string;
@@ -134,14 +135,7 @@ export function MultiCaseRibbonV3({ caseId }: MultiCaseRibbonV3Props) {
   }, [cases, caseId]);
 
   if (isLoading) {
-    return (
-      <div
-        data-testid="multi-case-ribbon-loading"
-        className="h-[90px] border-t border-v3-border bg-v3-bg flex items-center justify-center text-[11px] text-v3-textTertiary"
-      >
-        loading reference cases…
-      </div>
-    );
+    return <SkeletonMultiCase />;
   }
 
   if (isError || refs.length === 0) {

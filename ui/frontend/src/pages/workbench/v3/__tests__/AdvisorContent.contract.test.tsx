@@ -184,7 +184,7 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
   it("after consult review · zero mutating affordance on rendered findings", async () => {
     const user = userEvent.setup();
     render(<AdvisorContent caseId={CASE_ID} stepId={3} />);
-    await user.click(screen.getByTestId("advisor-run-review"));
+    await user.click(await screen.findByTestId("advisor-run-review"));
     await waitFor(() =>
       expect(
         screen.getByTestId("advisor-review-findings"),
@@ -201,8 +201,8 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
   it("after diagnose · suggested_fix rendered as text · no fix button", async () => {
     const user = userEvent.setup();
     render(<AdvisorContent caseId={CASE_ID} stepId={4} />);
-    await user.click(screen.getByTestId("advisor-mode-diagnose"));
-    await user.click(screen.getByTestId("advisor-run-diagnose"));
+    await user.click(await screen.findByTestId("advisor-mode-diagnose"));
+    await user.click(await screen.findByTestId("advisor-run-diagnose"));
     await waitFor(() =>
       expect(
         screen.getByTestId("advisor-diagnose-hypotheses"),
@@ -221,7 +221,7 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
   it("citation chip click expands corpus chunk text inline", async () => {
     const user = userEvent.setup();
     render(<AdvisorContent caseId={CASE_ID} stepId={3} />);
-    await user.click(screen.getByTestId("advisor-run-review"));
+    await user.click(await screen.findByTestId("advisor-run-review"));
     await waitFor(() =>
       expect(
         screen.getByTestId("advisor-review-findings"),
@@ -242,7 +242,10 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
     );
     const user = userEvent.setup();
     render(<AdvisorContent caseId={CASE_ID} stepId={4} />);
-    await user.click(screen.getByTestId("advisor-run-review"));
+    // V75.2 · useCaseList retries on 503 · bump findBy timeout past retry delay
+    await user.click(
+      await screen.findByTestId("advisor-run-review", {}, { timeout: 4_000 }),
+    );
     await waitFor(() =>
       expect(
         screen.getByTestId("advisor-offline-banner"),
@@ -262,7 +265,10 @@ describe("V71.O · AdvisorContent V130/V132 contract", () => {
     );
     const user = userEvent.setup();
     render(<AdvisorContent caseId={CASE_ID} stepId={4} />);
-    await user.click(screen.getByTestId("advisor-run-review"));
+    // V75.2 · useCaseList retries on 400 · bump findBy timeout
+    await user.click(
+      await screen.findByTestId("advisor-run-review", {}, { timeout: 4_000 }),
+    );
     await waitFor(() =>
       expect(
         screen.getByTestId("advisor-error"),
