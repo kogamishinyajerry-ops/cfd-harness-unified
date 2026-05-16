@@ -48,7 +48,9 @@ elif [ ! -f "$viz_spec" ] || [ ! -f "$truth_spec" ]; then
   failures+=("missing viz specs: viewport-mode.spec.ts or truth-chain.spec.ts")
 else
   cd ui/frontend
-  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+  pw_bin="./node_modules/.bin/playwright"
+  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+  if $pw_bin test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
     pw_exit=0
   else
     pw_exit=$?

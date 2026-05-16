@@ -17,25 +17,25 @@ Engineer navigates `/workbench/v3/case/lid_driven_cavity?step=1` and **everythin
 
 ## Done dim checklist (10 dims · all required)
 
-- [ ] **V72-DONE-1 · CaseBrowserV3 real-data wire** — `/api/cases` GET · skeleton state during fetch · error state if backend down
-- [ ] **V72-DONE-2 · Step1Inspector real metadata** — `/api/cases/:id` GET · falls back to mock when offline
-- [ ] **V72-DONE-3 · TruthChain real verdict** — `/api/cases/:id/completeness` (verify post-V71 hoist still working)
-- [ ] **V72-DONE-4 · Keyboard navigation spec PASS** — ≥4 tests · Tab cycle · ⌘K palette · Esc · ?-help
-- [ ] **V72-DONE-5 · Motion polish** — ≥12 transition-* usages in v3 · `prefers-reduced-motion` respected
-- [ ] **V72-DONE-6 · Focus management** — ≥20 ARIA/role/tabIndex usages · autoFocus on tab change
-- [ ] **V72-DONE-7 · Sub-agent journey test** — `user-journey-v3.spec.ts` PASSES Steps 1→5 + advisor
-- [ ] **V72-DONE-8 · 6 new visual baselines (31-36)** — keyboard-focus · motion-mid · advisor-expanded · etc.
-- [ ] **V72-DONE-9 · Pillar 11 (interaction_polish) ≥99**
-- [ ] **V72-DONE-10 · 11-pillar 2-consecutive close gate**
+- [x] **V72-DONE-1 · CaseBrowserV3 real-data wire** — `/api/cases` GET · skeleton state during fetch · error state if backend down
+- [x] **V72-DONE-2 · Step1Inspector real metadata** — `/api/cases/:id` GET · falls back to mock when offline
+- [x] **V72-DONE-3 · TruthChain real verdict** — `/api/cases/:id/completeness` (verify post-V71 hoist still working)
+- [x] **V72-DONE-4 · Keyboard navigation spec PASS** — ≥4 tests · Tab cycle · ⌘K palette · Esc · ?-help
+- [x] **V72-DONE-5 · Motion polish** — ≥12 transition-* usages in v3 · `prefers-reduced-motion` respected
+- [x] **V72-DONE-6 · Focus management** — ≥20 ARIA/role/tabIndex usages · autoFocus on tab change
+- [x] **V72-DONE-7 · Sub-agent journey test** — `user-journey-v3.spec.ts` PASSES Steps 1→5 + advisor
+- [x] **V72-DONE-8 · 6 new visual baselines (31-36)** — keyboard-focus · motion-mid · advisor-expanded · etc.
+- [x] **V72-DONE-9 · Pillar 11 (interaction_polish) ≥99**
+- [x] **V72-DONE-10 · 11-pillar 2-consecutive close gate**
 
 ## Sub-DEC progress
 
-- [ ] **V72.1 · CaseBrowser + Step1Inspector real-data wire** — `useQuery` integration
-- [ ] **V72.2 · Keyboard navigation** — `useKeyboardShortcuts` hook + Tab/Esc/⌘K handlers
-- [ ] **V72.3 · Motion polish + reduced-motion** — Tailwind transitions + global CSS media query
-- [ ] **V72.4 · Focus management + ARIA** — autoFocus + comprehensive ARIA labels
-- [ ] **V72.5 · Sub-agent test harness** — `user-journey-v3.spec.ts` + .planning/methodology/autonomous-test-agent.md
-- [ ] **V72.6 · 6 visual baselines + close + retro**
+- [x] **V72.1 · CaseBrowser + Step1Inspector real-data wire** — `useQuery` integration
+- [x] **V72.2 · Keyboard navigation** — `useKeyboardShortcuts` hook + Tab/Esc/⌘K handlers
+- [x] **V72.3 · Motion polish + reduced-motion** — Tailwind transitions + global CSS media query
+- [x] **V72.4 · Focus management + ARIA** — autoFocus + comprehensive ARIA labels
+- [x] **V72.5 · Sub-agent test harness** — `user-journey-v3.spec.ts` + .planning/methodology/autonomous-test-agent.md
+- [x] **V72.6 · 6 visual baselines + close + retro** · LANDED B181 · DEC-V72-6
 
 ## Fleet criteria (11 pillars · V72 NEW Pillar 11)
 
@@ -57,7 +57,9 @@ Engineer navigates `/workbench/v3/case/lid_driven_cavity?step=1` and **everythin
 
 | Iter | Date | min(11) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V72 baseline) | 2026-05-16 | TBD | TBD | TBD | charter LANDED · expected lows: interaction_polish (0 → new pillar) · functional (0 sub-DECs landed yet) | TBD |
+| 0 (V72 baseline) | 2026-05-16 | 27 | 101.89 | interaction_polish (27) | charter LANDED · NEW pillar 11 starts low (no kbd nav spec yet) · 10 of 11 pillars carry V71 close at 100 | `.planning/scores/V72_iter_0.md` |
+| 1 (V72.1-6 LANDED) | 2026-05-16 | **100** | **107.00** | quality (100) | All 6 sub-DECs LANDED · all 10 Done dims MET · pillar 11 (interaction_polish) 27 → 100 | `.planning/scores/V72_iter_1.md` |
+| 2 (CLOSE-CONFIRM) | 2026-05-16 | **100** | **107.00** | quality (100) | 2-consecutive close gate MET · V72 arc closes | `.planning/scores/V72_iter_2.md` |
 
 ## Reverse-stop log
 

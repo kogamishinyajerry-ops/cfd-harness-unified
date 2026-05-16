@@ -24,7 +24,11 @@ if [ ! -f "$keyboard_spec" ]; then
   failures+=("keyboard nav spec missing: $keyboard_spec")
 else
   cd ui/frontend
-  if npx playwright test v3-keyboard-nav.spec.ts --reporter=json > /tmp/v72_kbd.json 2>/tmp/v72_kbd.stderr; then
+  # V72 fix: use local bin to avoid npx resolving to a globally-installed
+  # playwright that's a different version than the one in node_modules.
+  pw_bin="./node_modules/.bin/playwright"
+  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+  if $pw_bin test v3-keyboard-nav.spec.ts --reporter=json > /tmp/v72_kbd.json 2>/tmp/v72_kbd.stderr; then
     pw_exit=0
   else
     pw_exit=$?

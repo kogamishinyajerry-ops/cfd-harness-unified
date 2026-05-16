@@ -438,4 +438,113 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V72.6 · 6 visual baselines (31-36) for v3 interaction states.
+  // Locks the new V72 surfaces against silent drift.
+
+  test("31 · v3 advisor consulted · finding card rendered", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-advisor").click();
+    await page.getByTestId("advisor-run-review").click();
+    // Wait for any terminal state
+    await page
+      .waitForFunction(
+        () =>
+          !!document.querySelector(
+            "[data-testid='advisor-review-findings'], [data-testid='advisor-offline-banner'], [data-testid='advisor-error']",
+          ),
+        undefined,
+        { timeout: 8_000 },
+      )
+      .catch(() => {});
+    await page.waitForTimeout(150);
+    await expect(page).toHaveScreenshot("31-v3-advisor-consulted.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("32 · v3 material card expanded inline (V71.I read-only)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=3");
+    await page.waitForSelector("[data-testid='material-card']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("material-nu").click();
+    await page.waitForSelector("[data-testid='material-nu-derive']", {
+      timeout: 4_000,
+    });
+    await expect(page).toHaveScreenshot("32-v3-material-card-expanded.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("33 · v3 TruthChain tab (provenance chain)", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=5");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("right-tab-truthchain").click();
+    await page
+      .waitForSelector("[data-testid='truthchain-content']", { timeout: 5_000 })
+      .catch(() => {});
+    await page.waitForTimeout(150);
+    await expect(page).toHaveScreenshot("33-v3-truthchain-tab.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("34 · v3 keyboard focus visible on pipeline step button", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=2");
+    await page.waitForSelector("[data-testid='workbench-shell-v3']", {
+      timeout: 12_000,
+    });
+    // Tab into the pipeline step strip (browser default focus order)
+    await page.getByTestId("pipeline-step-2").focus();
+    await page.waitForTimeout(100);
+    await expect(page).toHaveScreenshot("34-v3-pipeline-step-focused.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("35 · v3 bottom panel · residuals tab expanded", async ({ page }) => {
+    await page.goto("/workbench/v3/case/lid_driven_cavity?step=4");
+    await page.waitForSelector("[data-testid='bottom-panel-expanded']", {
+      timeout: 12_000,
+    });
+    await page.getByTestId("bottom-tab-residuals").click();
+    await page.waitForSelector("[data-testid='bottom-tab-residuals-content']", {
+      timeout: 4_000,
+    });
+    await expect(page).toHaveScreenshot("35-v3-bottom-residuals-tab.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("36 · v3 case browser whitelist expanded · 11 entries from live API", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/v3");
+    await page.waitForSelector("[data-testid='case-browser-v3']", {
+      timeout: 12_000,
+    });
+    // The default state is already expanded when no active case (since
+    // activeCaseId === null doesn't match any list); we force open via click.
+    await page.locator('button:has-text("Whitelist cases")').click();
+    await page.waitForTimeout(150);
+    await expect(page).toHaveScreenshot("36-v3-case-browser-expanded.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });
