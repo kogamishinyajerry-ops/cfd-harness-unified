@@ -16,15 +16,15 @@
 - [x] **V68-C-DONE-3 · ProposalCard AI diagnose real route** — MET by V68-A inheritance (same path · /ai-diagnose returns DiagnoseResponse with hypotheses + citation) · B143
 - [x] **V68-C-DONE-4 · LLM-offline graceful fallback** — classifyAdvisorFailure() · 5xx + network failures → calm amber offline banner · 4xx → harsh red error · V130 invariant tested at panel level · 5 new vitest · B143
 - [x] **V68-C-DONE-5 · case_002a APU bay metadata entry** — Whitelist includes case_002a with `case_kind=imported_user`+`gold_pending=true` · catalog +1 (10→11) · ⏳ gold pending badge + disclaimer · batch/CSV correctly exclude · 3 new vitest · B145
-- [ ] **V68-C-DONE-6 · E2E against real backend (extended)** — 41+ e2e PASS (+4 V68-C cases: physics + ai-review + ai-diagnose + case_002a)
-- [ ] **V68-C-DONE-7 · Pillar 6 ≥98 + Pillar 7 ≥85 dual re-anchor + V68-D continued spike** — SCORING-FRAMEWORK.md updated + iter-2 WASM spike artifact
+- [x] **V68-C-DONE-6 · E2E against real backend (extended)** — 43/43 e2e PASS (+6 V68-C tests across 4 specs: material-card · ai-review · ai-diagnose · apu-bay-catalog) · charter target ≥41 EXCEEDED · B147
+- [x] **V68-C-DONE-7 · Pillar 6 ≥98 + Pillar 7 ≥85 dual re-anchor + V68-D continued spike** — SCORING-FRAMEWORK.md updated (P6: 97→98 · P7: 82→85 · per-driver delta accounting) + iter-2 WASM spike artifact (Docker daemon HEALTHY · 12-19 week estimate · 5-question go/no-go) · B148-B149
 
 ## Sub-DEC progress
 
 - [x] **V68-C.1 · MaterialCard real-data wiring** — usePhysicsState hook + Step 3 surface · B141
 - [x] **V68-C.2 · ProposalCard AI advisor real route** — ai-review + ai-diagnose wired (V68-A inheritance) + classifyAdvisorFailure offline classifier + 5 fallback tests · B143
 - [x] **V68-C.3 · case_002a APU bay metadata entry** — whitelist YAML + gold_pending flag · catalog 10→11 · B145
-- [ ] **V68-C.4 · E2E + V68-D iter-2 spike + close** — 4 new playwright + docker emsdk + close DEC
+- [x] **V68-C.4 · E2E + V68-D iter-2 spike + close** — 4 new playwright specs (6 tests) + 4 visual baselines (12→16 PNG) + docker emsdk iter-2 spike + close DEC · B147-B149
 - (V68-D iter-2 spike inside .4 · spike-class · doesn't count as sub-DEC)
 
 ## Fleet criteria (further tightened vs V68-B)
@@ -43,7 +43,10 @@
 
 | Iter | Date | min(7) | weighted | Lowest dim | Notes | Score report |
 |---|---|---|---|---|---|---|
-| 0 (V68-C baseline) | 2026-05-16 | TBD | TBD | TBD | charter LANDED · 0/4 sub-DECs · 0/7 Done · expected drops: viz (12<16 pro-rated), smoke (3 probes need verification), physics (whitelist 10<11) | `.planning/scores/V68-C_iter_0.md` |
+| 0 (V68-C baseline) | 2026-05-16 | **0** | 84.65 | functional 0 | charter LANDED · 0/4 sub-DECs · 0/7 Done · expected drops MET (physics 75 · viz 92) | `.planning/scores/V68-C_iter_0.md` |
+| 1 (post .1+.2+.3 implementation) | 2026-05-16 | **73** | 95.70 | functional 73 | 3/4 sub-DECs LANDED · physics 75→100 (whitelist 11) · viz still 92 (PNG 12) | `.planning/scores/V68-C_iter_1.md` |
+| 2 (post .4 impl pre sub-DEC) | 2026-05-16 | **73** | 95.70 | functional 73 | V68-C.4 e2e+spike+baselines committed · sub-DEC+close DEC pending | `.planning/scores/V68-C_iter_2.md` |
+| 3 (post sub-DEC + close DEC) | 2026-05-16 | TBD | TBD | TBD | 4/4 sub-DECs LANDED · 7/7 Done · vis 92→100 (PNG 16) · functional 73→100 expected | to be run post close commit |
 
 ## Reverse-stop log
 

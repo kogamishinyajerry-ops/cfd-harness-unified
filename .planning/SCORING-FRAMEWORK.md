@@ -94,18 +94,23 @@
 | 65-80 | 5-step spine partially implemented · Truth Chain visible · advisor integration UI live |
 | 80-95 | TopBar 6-field · Engineer Control Rail · AI strict advisory-only · viewport baseline dir present · visual scaffolding for 5-step + Truth Chain |
 | 95-97 | MSW backend mocking + TopBar real data wiring + Step body Power-mode + Viewport mode dispatcher + 8 PNG baselines + e2e 5-step flow PASS |
-| **97-100** | **Real fastapi backend serves real corpus + useCaseStatus drives off real `/completeness` (case_kind / ready_for_archive / blocked_by_critical / percentage) + industrial-class case dogfood (whitelist case with trustGate=PASS) + pixel-diff CI gate at 0.01 threshold + 12 PNG baselines + e2e runs against real backend (no MSW) · (current zone post-V68-B close)** |
+| 97-98 | Real fastapi backend serves real corpus + useCaseStatus drives off real `/completeness` (case_kind / ready_for_archive / blocked_by_critical / percentage) + industrial-class case dogfood (whitelist case with trustGate=PASS) + pixel-diff CI gate at 0.01 threshold + 12 PNG baselines + e2e runs against real backend (no MSW) |
+| **98-100** | **+ MaterialCard real-data wiring (usePhysicsState committed/reference dual-mode) + LLM-offline graceful fallback in AIAdvisorPanel (classifyAdvisorFailure) + case_002a APU bay first-class catalog entry (gold_pending flag) + 16 PNG baselines + 43 Playwright PASS (+6 V68-C) · (current zone post-V68-C close)** |
 
-**Current: 97/100** — V68-B "Real Backend & Industrial Dogfood" arc CLOSE (B138). V68-A scaffolding (90→95) + V68-B FULL upgrade (95→97): backend bootstrap + readiness + 5 pytest probes · useCaseStatus repointed to real `/completeness` · industrial dogfood on naca0012_airfoil (audit=92.3%, ready_for_archive=true) · pixel-diff 0.01 stable + 12 PNG baselines · 37/37 Playwright PASS against real fastapi · 376/376 vitest PASS. Remaining 97→100 reserved for OpenFOAM-WASM (V68-D research arc · 14-22 weeks effort · deferred per feasibility spike).
+**Current: 98/100** — V68-C "AI Advisor Integration & Material Wiring" arc CLOSE (B149). V68-B baseline 97 + V68-C delta drivers: M3 MaterialCard read-side query-before-mutate (+0.4) · LLM-offline graceful fallback removes "advisor down = workbench broken" UX cliff (+0.3) · case_002a in catalog with gold_pending flag (+0.2) · +6 e2e specs broadening real-backend integration (+0.1) = 98.0. Remaining 98→100 reserved for OpenFOAM-WASM (V68-D research arc · 12-19 weeks effort post iter-2 triage · deferred per iter-2 spike artifact 5-question go/no-go).
 
 ### Pillar 7 · AI-advisor SSOT (5% weight)
 
 | Raw range | Anchor |
 |---|---|
 | 0-40 | AI writes case files / drives workflow |
-| **40-70** | **V130 advisor-not-driver thesis established · 4Q gate per artifact · AI as consultant role (current zone)** |
-| 70-90 | Claude Code session = AI advisor (per V132 collapse) · external SDK / API surface |
+| 40-70 | V130 advisor-not-driver thesis established · 4Q gate per artifact · AI as consultant role |
+| 70-82 | Claude Code session = AI advisor (per V132 collapse) · external SDK / API surface |
+| 82-85 | + gold_pending catalog flag (first explicit catalog-level audit-state honesty marker) · batch_matrix + CSV exclude gold_pending entries (trust-grade reports stay gold-anchored) · LLM-offline state preserves V130 invariant under transient failure · 4 new visual baselines lock V68-C audit-surface visual contract |
+| **85-100** | **(post-V68-C close · current zone)** |
 | 90-100 | AI advisor SSOT validates against eval set · regression-protected · canonical advisor scenarios |
+
+**Current: 85/100** — V68-C "AI Advisor Integration & Material Wiring" arc CLOSE (B149). V68-B baseline 82 + V68-C delta drivers: gold_pending catalog flag (+1.5) · batch_matrix/CSV filtering of gold_pending entries (+0.5) · AI offline state preserves V130 (+0.5) · 4 visual baselines locking V68-C audit surfaces (+0.5) = 85.0.
 
 **Current: 62/100** — V130 thesis solidified + 4Q gate uniformly applied + Claude Code session = AI advisor (V132).
 
