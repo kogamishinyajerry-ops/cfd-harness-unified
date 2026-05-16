@@ -256,4 +256,74 @@ test.describe("V68-A.4 · visual baseline snapshots (8 canonical states)", () =>
       animations: "disabled",
     });
   });
+
+  // V70.6 · 4 new baselines for V70-introduced UI surfaces.
+  // Locks the V70.3 (novice onboarding) + V70.4 (industrial-UI improvements)
+  // surfaces visually so future arcs can't drift them silently.
+
+  test("19 · /workbench with FirstTimeBanner mounted (V70.3 novice surface)", async ({
+    page,
+  }) => {
+    // Clear any prior dismiss state so the banner appears
+    await page.goto("/workbench");
+    await page.evaluate(() => localStorage.removeItem("v70-first-time-banner-dismissed"));
+    await page.reload();
+    await page.waitForSelector("[data-testid='first-time-banner']", {
+      timeout: 12_000,
+    });
+    await page.waitForSelector("[data-testid='case-card-case_002a']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("19-workbench-with-first-time-banner.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("20 · /workbench/tutorial 5-step walkthrough page (V70.3)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/tutorial");
+    await page.waitForSelector("[data-testid='workbench-tutorial-page']", {
+      timeout: 12_000,
+    });
+    await expect(page).toHaveScreenshot("20-workbench-tutorial-page.png", {
+      fullPage: true,
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("21 · ShortcutPalette overlay open (V70.4 V70-UI-IMPROVEMENT-A)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench");
+    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+    // Dismiss banner so the palette overlays a clean page
+    await page.evaluate(() => localStorage.setItem("v70-first-time-banner-dismissed", "1"));
+    await page.reload();
+    await page.keyboard.type("?");
+    await page.waitForSelector("[data-testid='shortcut-palette']", {
+      timeout: 8_000,
+    });
+    await expect(page).toHaveScreenshot("21-shortcut-palette-open.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
+
+  test("22 · /workbench/tutorial scrolled to Step 4 (V70.3 mid-tutorial state)", async ({
+    page,
+  }) => {
+    await page.goto("/workbench/tutorial#step-4");
+    await page.waitForSelector("[data-testid='workbench-tutorial-page']", {
+      timeout: 12_000,
+    });
+    // Scroll to step-4 anchor
+    await page.locator("#step-4").scrollIntoViewIfNeeded();
+    await expect(page).toHaveScreenshot("22-tutorial-step-4.png", {
+      maxDiffPixelRatio: 0.01,
+      animations: "disabled",
+    });
+  });
 });
