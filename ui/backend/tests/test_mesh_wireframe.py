@@ -8,6 +8,7 @@ glTF builder, and the route.
 from __future__ import annotations
 
 import os
+import json
 import struct
 from pathlib import Path
 
@@ -26,6 +27,7 @@ from ui.backend.services.render.gltf_lines_builder import build_lines_glb
 from ui.backend.services.render.polymesh_parser import (
     PolyMeshParseError,
     extract_unique_edges,
+    parse_boundary_patches,
     parse_faces,
     parse_points,
     validate_face_indices,
@@ -78,6 +80,27 @@ FoamFile
 )
 """
 
+_BOUNDARY_TEXT = """\
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+1
+(
+    walls
+    {
+        type            wall;
+        nFaces          6;
+        startFace       1;
+    }
+)
+"""
+
 
 def _stage_polymesh(case_dir: Path) -> tuple[Path, Path]:
     polymesh = case_dir / "constant" / "polyMesh"
@@ -87,6 +110,56 @@ def _stage_polymesh(case_dir: Path) -> tuple[Path, Path]:
     points.write_text(_POINTS_TEXT, encoding="utf-8")
     faces.write_text(_FACES_TEXT, encoding="utf-8")
     return points, faces
+
+
+def _stage_polymesh_with_internal_face(case_dir: Path) -> None:
+    polymesh = case_dir / "constant" / "polyMesh"
+    polymesh.mkdir(parents=True)
+    (polymesh / "points").write_text(
+        """\
+FoamFile{}
+12
+(
+(0 0 0)
+(1 0 0)
+(1 1 0)
+(0 1 0)
+(0 0 1)
+(1 0 1)
+(1 1 1)
+(0 1 1)
+(0.25 0.25 0.5)
+(0.75 0.25 0.5)
+(0.75 0.75 0.5)
+(0.25 0.75 0.5)
+)
+""",
+        encoding="utf-8",
+    )
+    (polymesh / "faces").write_text(
+        """\
+FoamFile{}
+7
+(
+4(8 9 10 11)
+4(0 1 2 3)
+4(4 5 6 7)
+4(0 1 5 4)
+4(2 3 7 6)
+4(1 2 6 5)
+4(0 3 7 4)
+)
+""",
+        encoding="utf-8",
+    )
+    (polymesh / "boundary").write_text(_BOUNDARY_TEXT, encoding="utf-8")
+
+
+def _read_glb_json(glb: bytes) -> dict:
+    assert glb[:4] == b"glTF"
+    json_len, json_type = struct.unpack("<II", glb[12:20])
+    assert json_type == 0x4E4F534A
+    return json.loads(glb[20 : 20 + json_len].decode("utf-8"))
 
 
 @pytest.fixture
@@ -126,6 +199,36 @@ def test_parse_faces_rejects_count_mismatch(tmp_path: Path):
     faces_path.write_text("1\n(\n4(0 1 2)\n)\n", encoding="utf-8")
     with pytest.raises(PolyMeshParseError, match="did not match"):
         parse_faces(faces_path)
+
+
+def test_parse_boundary_patches_skips_zero_face_patches(tmp_path: Path):
+    boundary = tmp_path / "boundary"
+    boundary.write_text(
+        """\
+FoamFile{}
+2
+(
+    unused
+    {
+        type            patch;
+        nFaces          0;
+        startFace       0;
+    }
+    walls
+    {
+        type            wall;
+        nFaces          6;
+        startFace       1;
+    }
+)
+""",
+        encoding="utf-8",
+    )
+
+    patches = parse_boundary_patches(boundary)
+
+    assert [patch.name for patch in patches] == ["walls"]
+    assert patches[0].n_faces == 6
 
 
 def test_validate_face_indices_passes_for_in_range_faces():
@@ -286,6 +389,29 @@ def test_build_mesh_wireframe_glb_status_progression(isolated_imported: Path):
     assert second.cache_path == first.cache_path
 
 
+def test_build_mesh_render_glb_uses_boundary_surface_not_internal_volume_edges(
+    isolated_imported: Path,
+):
+    """Mesh render should show a surface with face grid lines, not every
+    internal polyMesh edge. The fixture has one deliberately internal
+    quad before the six boundary faces; the GLB must export only the
+    six boundary quads as 12 triangles + 12 boundary edges."""
+    case_id = "imported_2026-04-28T00-00-00Z_surface_mesh"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh_with_internal_face(case_dir)
+
+    result = build_mesh_wireframe_glb(case_id)
+    doc = _read_glb_json(result.cache_path.read_bytes())
+    primitives = doc["meshes"][0]["primitives"]
+
+    assert [p["mode"] for p in primitives] == [4, 1]  # TRIANGLES, then LINES
+    surface_accessor = doc["accessors"][primitives[0]["indices"]]
+    line_accessor = doc["accessors"][primitives[1]["indices"]]
+    assert surface_accessor["count"] == 36
+    assert line_accessor["count"] == 24
+
+
 def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported: Path):
     case_id = "imported_2026-04-28T00-00-00Z_meshinval"
     case_dir = isolated_imported / case_id
@@ -300,6 +426,28 @@ def test_build_mesh_wireframe_glb_invalidates_on_mtime_change(isolated_imported:
 
     second = build_mesh_wireframe_glb(case_id)
     assert second.status == "rebuild"
+
+
+def test_build_mesh_wireframe_glb_invalidates_when_boundary_removed(
+    isolated_imported: Path,
+):
+    case_id = "imported_2026-04-28T00-00-00Z_boundary_removed"
+    case_dir = isolated_imported / case_id
+    case_dir.mkdir()
+    _stage_polymesh_with_internal_face(case_dir)
+
+    first = build_mesh_wireframe_glb(case_id)
+    first_doc = _read_glb_json(first.cache_path.read_bytes())
+    first_surface = first_doc["meshes"][0]["primitives"][0]
+    assert first_doc["accessors"][first_surface["indices"]]["count"] == 36
+
+    (case_dir / "constant" / "polyMesh" / "boundary").unlink()
+
+    second = build_mesh_wireframe_glb(case_id)
+    second_doc = _read_glb_json(second.cache_path.read_bytes())
+    second_surface = second_doc["meshes"][0]["primitives"][0]
+    assert second.status == "rebuild"
+    assert second_doc["accessors"][second_surface["indices"]]["count"] == 42
 
 
 def test_build_mesh_wireframe_glb_404_for_unknown_case(isolated_imported: Path):
@@ -441,4 +589,4 @@ def test_atomic_write_leaves_no_tempfile(isolated_imported: Path):
     build_mesh_wireframe_glb(case_id)
     cache_dir = case_dir / ".render_cache"
     children = sorted(p.name for p in cache_dir.iterdir())
-    assert children == ["mesh.glb"]
+    assert children == ["mesh.glb", "mesh.glb.version"]

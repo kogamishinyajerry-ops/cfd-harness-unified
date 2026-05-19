@@ -14,9 +14,9 @@ Source paths (in resolution order):
     2. <case_dir>/<imported_case_id>/constant/polyMesh/{points,faces}
        — fallback for cases scaffolded under user_drafts/imported/
 
-Tier-A scope is internal-edge wireframe: every face's ring is
-serialised as line segments, deduplicated. Patch-aware coloring is
-M-VIZ.advanced. Boundary-only wireframe is M-VIZ.results.
+V4 mesh inspection exports boundary faces plus boundary-face line rings:
+engineers should see an opaque surface with grid lines on the visible
+faces, not a full-volume line cloud.
 """
 from __future__ import annotations
 
@@ -29,10 +29,11 @@ from typing import Literal
 from ui.backend.services.case_drafts import is_safe_case_id
 from ui.backend.services.case_scaffold import template_clone
 
-from .gltf_lines_builder import build_lines_glb
+from .gltf_lines_builder import build_surface_lines_glb
 from .polymesh_parser import (
     PolyMeshParseError,
     extract_unique_edges,
+    parse_boundary_patches,
     parse_faces,
     parse_points,
     validate_face_indices,
@@ -40,6 +41,7 @@ from .polymesh_parser import (
 
 
 CacheStatus = Literal["hit", "miss", "rebuild"]
+_CACHE_VERSION = "surface-lines-v5"
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +87,7 @@ def _resolve_polymesh_dir(case_dir: Path) -> Path:
 
 def _polymesh_source_files(
     polymesh_dir: Path, case_dir: Path
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path | None]:
     """Return ``(points_path, faces_path)`` or raise no_polymesh.
 
     Round-2 Finding 1: each chosen path is ``resolve(strict=True)``'d and
@@ -95,6 +97,7 @@ def _polymesh_source_files(
     """
     points = polymesh_dir / "points"
     faces = polymesh_dir / "faces"
+    boundary = polymesh_dir / "boundary"
     if not points.is_file():
         raise MeshRenderError(
             failing_check="no_polymesh",
@@ -111,20 +114,47 @@ def _polymesh_source_files(
         faces_resolved = faces.resolve(strict=True)
         points_resolved.relative_to(case_root)
         faces_resolved.relative_to(case_root)
+        boundary_resolved: Path | None = None
+        if boundary.is_file():
+            boundary_resolved = boundary.resolve(strict=True)
+            boundary_resolved.relative_to(case_root)
     except (FileNotFoundError, OSError, ValueError):
         raise MeshRenderError(
             failing_check="no_polymesh",
             message="polyMesh source resolved outside case dir",
         )
-    return points_resolved, faces_resolved
+    return points_resolved, faces_resolved, boundary_resolved
 
 
 def _cache_target(case_dir: Path) -> Path:
     return case_dir / ".render_cache" / "mesh.glb"
 
 
-def _is_cache_fresh(cache: Path, *sources: Path) -> bool:
+def _cache_version_target(cache: Path) -> Path:
+    return cache.with_name(f"{cache.name}.version")
+
+
+def _cache_version_payload(boundary_path: Path | None) -> str:
+    boundary_state = "present" if boundary_path is not None else "absent"
+    return f"{_CACHE_VERSION}\nboundary={boundary_state}"
+
+
+def _is_cache_fresh(
+    cache: Path,
+    boundary_path: Path | None,
+    *sources: Path,
+) -> bool:
     if not cache.exists():
+        return False
+    version = _cache_version_target(cache)
+    if not version.exists():
+        return False
+    try:
+        if version.read_text(encoding="utf-8").strip() != _cache_version_payload(
+            boundary_path
+        ):
+            return False
+    except OSError:
         return False
     try:
         cache_mtime = cache.stat().st_mtime
@@ -188,7 +218,42 @@ def _atomic_write_guarded_multi(
         )
 
 
-def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
+def _select_boundary_faces(
+    faces: list[list[int]],
+    boundary_path: Path | None,
+) -> list[list[int]]:
+    if boundary_path is None:
+        return faces
+    patches = parse_boundary_patches(boundary_path)
+    wall_patches = [
+        patch
+        for patch in patches
+        if patch.patch_type == "wall"
+        or "wall" in patch.name.lower()
+        or "engine" in patch.name.lower()
+    ]
+    selected_patches = wall_patches or patches
+    selected: list[list[int]] = []
+    for patch in selected_patches:
+        start = patch.start_face
+        count = patch.n_faces
+        end = start + count
+        if start < 0 or end > len(faces):
+            raise PolyMeshParseError(
+                f"boundary range startFace={start} nFaces={count} exceeds "
+                f"{len(faces)} parsed faces"
+            )
+        selected.extend(faces[start:end])
+    if not selected:
+        raise PolyMeshParseError("boundary file selected zero faces")
+    return selected
+
+
+def _build_wireframe_bytes(
+    points_path: Path,
+    faces_path: Path,
+    boundary_path: Path | None,
+) -> bytes:
     try:
         points = parse_points(points_path)
         faces = parse_faces(faces_path)
@@ -198,13 +263,14 @@ def _build_wireframe_bytes(points_path: Path, faces_path: Path) -> bytes:
         # edge extraction and produce an indices accessor pointing past
         # the POSITION buffer. Validate before building the GLB.
         validate_face_indices(faces, n_points=len(points))
-        edges = extract_unique_edges(faces)
+        surface_faces = _select_boundary_faces(faces, boundary_path)
+        edges = extract_unique_edges(surface_faces)
     except PolyMeshParseError as exc:
         raise MeshRenderError(
             failing_check="polymesh_parse_error",
             message=str(exc),
         )
-    return build_lines_glb(points, edges)
+    return build_surface_lines_glb(points, surface_faces, edges)
 
 
 def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
@@ -228,10 +294,15 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
         )
 
     polymesh_dir = _resolve_polymesh_dir(case_dir)
-    points_path, faces_path = _polymesh_source_files(polymesh_dir, case_dir)
+    points_path, faces_path, boundary_path = _polymesh_source_files(
+        polymesh_dir, case_dir
+    )
 
     cache = _cache_target(case_dir)
-    if _is_cache_fresh(cache, points_path, faces_path):
+    sources = tuple(
+        p for p in (points_path, faces_path, boundary_path) if p is not None
+    )
+    if _is_cache_fresh(cache, boundary_path, *sources):
         return WireframeBuildResult(cache_path=cache, status="hit")
 
     # Round-3+4 Finding 3 closure: source mtimes (points + faces) are
@@ -240,9 +311,8 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
     # helper aborts BEFORE os.replace (no stale cache visible to
     # concurrent readers); the post-replace check unlinks if a syscall-
     # window mutation slipped through.
-    sources = (points_path, faces_path)
     src_mtimes_before = tuple(s.stat().st_mtime_ns for s in sources)
-    glb_bytes = _build_wireframe_bytes(points_path, faces_path)
+    glb_bytes = _build_wireframe_bytes(points_path, faces_path, boundary_path)
     src_mtimes_after_build = tuple(s.stat().st_mtime_ns for s in sources)
     if src_mtimes_after_build != src_mtimes_before:
         raise MeshRenderError(
@@ -262,4 +332,8 @@ def build_mesh_wireframe_glb(case_id: str) -> WireframeBuildResult:
             failing_check="polymesh_parse_error",
             message=f"{exc} (retry the request)",
         )
+    _cache_version_target(cache).write_text(
+        _cache_version_payload(boundary_path) + "\n",
+        encoding="utf-8",
+    )
     return WireframeBuildResult(cache_path=cache, status=status)

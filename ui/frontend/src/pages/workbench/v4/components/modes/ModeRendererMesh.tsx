@@ -1,8 +1,10 @@
 /**
  * V4 · Mode renderer · 网格 (Mesh) · per UI-SPEC §4.3 · Phase C-R3 wired.
  *
- * Real polyMesh wireframe (mesh.glb · LINES primitive) when the case
- * has run sHM; falls back to the stylised SVG enclosure otherwise.
+ * Real mesh inspection uses geometry.glb as the opaque surface and
+ * mesh.glb as the surface edge overlay. The surface depth-occludes
+ * internal volume edges, so the viewport reads as "solid body with
+ * face grid lines" instead of a standalone line cloud.
  *
  * Blueprint image 4: MainCanvas owns the wireframe mesh layer, while the
  * global KpiStripV4 renders the 5 horizontal mesh-quality histograms +
@@ -10,6 +12,7 @@
  */
 import { useV4WorkbenchContext } from "../../hooks/useV4WorkbenchContext";
 import {
+  geometryGlbUrl,
   meshGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
@@ -75,9 +78,15 @@ interface Props {
 
 export function ModeRendererMesh({ caseId, cameraPreset }: Props) {
   const ctx = useV4WorkbenchContext(caseId ?? null);
-  const glbUrl = meshGlbUrl(caseId);
-  const probe = useGlbAvailability(glbUrl);
-  const showViewport = probe.available === true;
+  const meshUrl = meshGlbUrl(caseId);
+  const surfaceUrl = geometryGlbUrl(caseId);
+  const meshProbe = useGlbAvailability(meshUrl);
+  const surfaceProbe = useGlbAvailability(
+    meshProbe.available === true ? surfaceUrl : null,
+  );
+  const showSurfaceMesh = meshProbe.available === true && surfaceProbe.available === true;
+  const showMeshOnly = meshProbe.available === true && surfaceProbe.available === false;
+  const showViewport = showSurfaceMesh || showMeshOnly;
 
   const mesh = ctx.meshMetrics;
   const gci = mesh?.gci;
@@ -100,7 +109,11 @@ export function ModeRendererMesh({ caseId, cameraPreset }: Props) {
       />
       <div className="relative flex min-h-0 flex-1 items-center justify-center">
         {showViewport ? (
-          <ViewportV4 glbUrl={glbUrl} cameraPreset={cameraPreset ?? "iso"} />
+          <ViewportV4
+            glbUrl={showSurfaceMesh ? surfaceUrl : meshUrl}
+            meshOverlayGlbUrl={showSurfaceMesh ? meshUrl : null}
+            cameraPreset={cameraPreset ?? "iso"}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center px-6 py-4">
             <IndustrialBoxScene variant="mesh" className="h-full max-h-[400px] w-full max-w-3xl">
@@ -108,12 +121,12 @@ export function ModeRendererMesh({ caseId, cameraPreset }: Props) {
             </IndustrialBoxScene>
           </div>
         )}
-        {probe.isLoading && (
+        {(meshProbe.isLoading || (meshProbe.available === true && surfaceProbe.isLoading)) && (
           <div className="pointer-events-none absolute left-3 top-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary">
             检查网格…
           </div>
         )}
-        {probe.available === false && caseId && (
+        {meshProbe.available === false && caseId && (
           <div
             className="pointer-events-none absolute right-3 bottom-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
             data-testid="v4-mode-mesh-empty-state"
@@ -121,12 +134,14 @@ export function ModeRendererMesh({ caseId, cameraPreset }: Props) {
             当前算例无 polyMesh · 显示示意场景
           </div>
         )}
-        {probe.available === true && (
+        {meshProbe.available === true && (
           <div
             className="pointer-events-none absolute left-3 bottom-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
             data-testid="v4-mode-mesh-wireframe-source"
           >
-            mesh.glb 线框层 · QA histogram 已接入
+            {showSurfaceMesh
+              ? "geometry.glb 表面 + mesh.glb 表面网格线"
+              : "mesh.glb 线框层 · geometry surface 缺失"}
           </div>
         )}
         {gci && (

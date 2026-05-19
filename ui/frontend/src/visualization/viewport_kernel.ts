@@ -73,6 +73,13 @@ type VtkTubeFilterLike = {
   getOutputData(idx?: number): VtkPolyDataLike;
   delete(): void;
 };
+type VtkCoincidentMapperLike = {
+  setResolveCoincidentTopologyToPolygonOffset?: () => unknown;
+  setRelativeCoincidentTopologyLineOffsetParameters?: (
+    factor: number,
+    offset: number,
+  ) => unknown;
+};
 
 // V4 Phase R4 · token SSOT for runtime highlight colors. Replaces the
 // old hard-coded cyan/yellow RGB at the applyHighlight call sites so
@@ -86,6 +93,7 @@ import {
 } from "@/theme/industrial_minimalist";
 const PICK_HIGHLIGHT_RGB = hexToRgbFloat(V4_PALETTE.brand);
 const HOVER_HIGHLIGHT_RGB = hexToRgbFloat(V4_PALETTE.active);
+const MESH_BOUNDARY_LINE_RGB = hexToRgbFloat(V4_PALETTE.textPrimary);
 
 /** Result of a successful vtkCellPicker hit. The frontend pickMode
  *  uses ``patchName`` + ``cellId`` to look up the face_id in the
@@ -139,11 +147,34 @@ export interface VtpAttachHandle {
   readonly scalarRange: [number, number];
 }
 
+export type GltfRenderRole = "default" | "mesh-surface" | "mesh-lines";
+
+export interface GltfAttachOptions {
+  /** Semantic role used by mode renderers to keep style intent auditable. */
+  role?: GltfRenderRole;
+  /** Reset camera after import. Defaults to true for the base actor. */
+  resetCamera?: boolean;
+  /** Clear actor→patch map before recording this import. Defaults to true. */
+  clearActorPatchNames?: boolean;
+  color?: [number, number, number];
+  opacity?: number;
+  lineWidth?: number;
+}
+
+export interface GltfAttachHandle {
+  readonly id: number;
+  readonly role: GltfRenderRole;
+}
+
 export interface ViewportKernel {
   setBackground(rgb: [number, number, number]): void;
   attachStl(reader: vtkSTLReader): void;
   /** glb path · adds the importer's actors to the renderer (M-RENDER-API). */
-  attachGltf(importer: vtkGLTFImporter): void;
+  attachGltf(
+    importer: vtkGLTFImporter,
+    options?: GltfAttachOptions,
+  ): GltfAttachHandle;
+  detachGltf(handle: GltfAttachHandle): void;
   /** B2.5 · VTP polydata path · adds an XML-PolyData reader's output as
    *  a new actor with U-magnitude colormap. Mapper kind controls
    *  scalar mode + line/surface representation:
@@ -302,7 +333,15 @@ export function createKernel(
   let mapper: ReturnType<typeof vtkMapper.newInstance> | undefined;
   let actor: ReturnType<typeof vtkActor.newInstance> | undefined;
   let reader: vtkSTLReader | undefined;
-  let importer: vtkGLTFImporter | undefined;
+  let nextGltfAttachId = 1;
+  const gltfAttachments = new Map<
+    number,
+    {
+      importer: vtkGLTFImporter;
+      actors: Array<ReturnType<typeof vtkActor.newInstance>>;
+      role: GltfRenderRole;
+    }
+  >();
 
   // Picking infrastructure. The picker is constructed on first
   // setPickHandler() call and torn down on dispose. We track each
@@ -377,7 +416,92 @@ export function createKernel(
     grw.getRenderWindow().render();
   }
 
-  function attachGltf(imp: vtkGLTFImporter): void {
+  function getImporterActors(
+    imp: vtkGLTFImporter,
+  ): Map<string, ReturnType<typeof vtkActor.newInstance>> | null {
+    const importerWithGetters = imp as unknown as {
+      getActors?: () => Map<string, ReturnType<typeof vtkActor.newInstance>>;
+    };
+    const actorsMap = importerWithGetters.getActors?.();
+    return actorsMap && typeof actorsMap.forEach === "function"
+      ? actorsMap
+      : null;
+  }
+
+  function applyGltfStyle(
+    a: ReturnType<typeof vtkActor.newInstance>,
+    options: GltfAttachOptions,
+    actorKey?: string,
+    actorIndex = 0,
+  ): void {
+    const prop = a.getProperty();
+    const role = options.role ?? "default";
+    const hasPrimitiveKey =
+      typeof actorKey === "string" && actorKey.includes("_");
+    const primitiveName =
+      hasPrimitiveKey
+        ? actorKey.slice(actorKey.indexOf("_") + 1)
+        : "";
+    const hasActorKey = typeof actorKey === "string" && actorKey.length > 0;
+    const isFallbackMeshSurface =
+      role === "mesh-lines" && !hasActorKey && actorIndex === 0;
+    const isFallbackMeshLines =
+      role === "mesh-lines" && !hasActorKey && actorIndex > 0;
+    const isMeshSurfacePrimitive =
+      primitiveName === "mesh-surface" ||
+      primitiveName === "primitive-0" ||
+      isFallbackMeshSurface;
+    const isMeshLinesPrimitive =
+      primitiveName === "mesh-lines" ||
+      primitiveName === "primitive-1" ||
+      isFallbackMeshLines;
+    if (role === "mesh-surface") {
+      prop.setRepresentation(2);
+      prop.setOpacity(options.opacity ?? 0.88);
+    } else if (role === "mesh-lines") {
+      if (isMeshSurfacePrimitive) {
+        prop.setRepresentation(1);
+        prop.setLineWidth(options.lineWidth ?? 1.25);
+        prop.setColor(
+          MESH_BOUNDARY_LINE_RGB[0],
+          MESH_BOUNDARY_LINE_RGB[1],
+          MESH_BOUNDARY_LINE_RGB[2],
+        );
+        prop.setOpacity(options.opacity ?? 0.82);
+        const mapper = a.getMapper?.() as VtkCoincidentMapperLike | undefined;
+        mapper?.setResolveCoincidentTopologyToPolygonOffset?.();
+        mapper?.setRelativeCoincidentTopologyLineOffsetParameters?.(0, -6);
+      } else if (isMeshLinesPrimitive) {
+        prop.setLineWidth(options.lineWidth ?? 1.25);
+        prop.setColor(
+          MESH_BOUNDARY_LINE_RGB[0],
+          MESH_BOUNDARY_LINE_RGB[1],
+          MESH_BOUNDARY_LINE_RGB[2],
+        );
+        prop.setOpacity(options.opacity ?? 0.95);
+        const mapper = a.getMapper?.() as VtkCoincidentMapperLike | undefined;
+        mapper?.setResolveCoincidentTopologyToPolygonOffset?.();
+        mapper?.setRelativeCoincidentTopologyLineOffsetParameters?.(0, -6);
+      } else {
+        prop.setLineWidth(options.lineWidth ?? 1.25);
+      }
+    }
+    if (options.color) {
+      prop.setColor(options.color[0], options.color[1], options.color[2]);
+    }
+    if (options.opacity != null) {
+      prop.setOpacity(options.opacity);
+    }
+    if (options.lineWidth != null) {
+      prop.setLineWidth(options.lineWidth);
+    }
+    a.modified?.();
+  }
+
+  function attachGltf(
+    imp: vtkGLTFImporter,
+    options: GltfAttachOptions = {},
+  ): GltfAttachHandle {
     // GLTFImporter brings its own actors via importActors(); we just
     // bind the renderer and let the importer populate it. The importer
     // itself owns the actors so dispose only needs to delete the
@@ -400,9 +524,9 @@ export function createKernel(
       }
       throw err;
     }
-    importer = imp;
 
     const renderer = grw.getRenderer();
+    const role = options.role ?? "default";
     // Build the actor → patch_name map by walking the importer's
     // internal actor map. vtk.js GLTFImporter sets keys as
     // ``${node.id}`` for node actors and ``${node.id}_${primitive.name}``
@@ -410,13 +534,18 @@ export function createKernel(
     // underscore are node actors (skip — they have no primitive); keys
     // with underscore embed the patch_name as the suffix (we set
     // primitive.name=patch_name in bc_glb.py to make these distinct).
-    actorPatchNames.clear();
-    const importerWithGetters = imp as unknown as {
-      getActors?: () => Map<string, ReturnType<typeof vtkActor.newInstance>>;
-    };
-    const actorsMap = importerWithGetters.getActors?.();
-    if (actorsMap && typeof actorsMap.forEach === "function") {
+    if (options.clearActorPatchNames ?? true) {
+      actorPatchNames.clear();
+    }
+    const actors: Array<ReturnType<typeof vtkActor.newInstance>> = [];
+    const actorsMap = getImporterActors(imp);
+    if (actorsMap) {
       actorsMap.forEach((a, key) => {
+        if (!actors.includes(a)) {
+          const actorIndex = actors.length;
+          actors.push(a);
+          applyGltfStyle(a, { ...options, role }, key, actorIndex);
+        }
         const underscoreIdx = typeof key === "string" ? key.indexOf("_") : -1;
         if (underscoreIdx <= 0) {
           // Node actor (just the node id, no primitive suffix). Skip.
@@ -426,7 +555,35 @@ export function createKernel(
         actorPatchNames.set(a, patchName);
       });
     }
-    renderer.resetCamera();
+
+    const id = nextGltfAttachId++;
+    gltfAttachments.set(id, { importer: imp, actors, role });
+    if (options.resetCamera ?? true) {
+      renderer.resetCamera();
+    }
+    grw.getRenderWindow().render();
+    return { id, role };
+  }
+
+  function detachGltf(handle: GltfAttachHandle): void {
+    const entry = gltfAttachments.get(handle.id);
+    if (!entry) return;
+    const renderer = grw.getRenderer();
+    for (const a of entry.actors) {
+      try {
+        renderer.removeActor(a);
+      } catch {
+        // vtk.js actor removal is best-effort during React cleanup.
+      }
+      actorPatchNames.delete(a);
+      coplanarGroups.delete(a);
+    }
+    try {
+      entry.importer.delete();
+    } catch {
+      // delete() is not formally idempotent in vtk.js.
+    }
+    gltfAttachments.delete(handle.id);
     grw.getRenderWindow().render();
   }
 
@@ -1688,15 +1845,15 @@ export function createKernel(
     } catch {
       // see above
     }
-    try {
-      // GLTFImporter cascades dispose to its imported actors per
-      // vtk.js semantics, so deleting the importer here is sufficient
-      // for the glb path. If both stl and glb were ever attached on
-      // the same kernel (not currently exercised), each cleanup is
-      // independent.
-      importer?.delete();
-    } catch {
-      // see above
+    for (const handle of Array.from(gltfAttachments.keys()).map((id) => ({
+      id,
+      role: gltfAttachments.get(id)?.role ?? "default",
+    }))) {
+      try {
+        detachGltf(handle);
+      } catch {
+        // see above
+      }
     }
     // B2.5 · clean up any VTP attachments. Walk a copy of the entries
     // so detachVtp can mutate the map without throwing.
@@ -1768,6 +1925,7 @@ export function createKernel(
     setBackground,
     attachStl,
     attachGltf,
+    detachGltf,
     attachVtp,
     detachVtp,
     resetCamera,

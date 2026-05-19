@@ -36,6 +36,7 @@ gmsh-toFoam output we expect to consume.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -49,6 +50,10 @@ _POINT_RE = re.compile(
 # faces are <count>(v0 v1 ... v_{count-1}) — count is a separate
 # integer prefix, not part of the parenthesised vertex list itself.
 _FACE_RE = re.compile(r"(\d+)\s*\(\s*([\d\s]+?)\s*\)")
+_BOUNDARY_PATCH_RE = re.compile(r"\b(?P<name>[A-Za-z_]\w*)\s*\{(?P<body>.*?)\}", re.DOTALL)
+_NFACES_RE = re.compile(r"\bnFaces\s+(?P<n>\d+)\s*;")
+_START_FACE_RE = re.compile(r"\bstartFace\s+(?P<start>\d+)\s*;")
+_PATCH_TYPE_RE = re.compile(r"\btype\s+(?P<type>[A-Za-z_]\w*)\s*;")
 
 
 class PolyMeshParseError(ValueError):
@@ -57,6 +62,14 @@ class PolyMeshParseError(ValueError):
     The message is route-safe (carries no untrusted user input verbatim
     beyond a path basename) so it can flow through HTTPException detail.
     """
+
+
+@dataclass(frozen=True, slots=True)
+class BoundaryPatchRange:
+    name: str
+    patch_type: str
+    start_face: int
+    n_faces: int
 
 
 def _strip_comments(text: str) -> str:
@@ -180,3 +193,42 @@ def extract_unique_edges(faces: list[list[int]]) -> np.ndarray:
         raise PolyMeshParseError("face list produced zero edges")
     edges = np.asarray(sorted(seen), dtype=np.uint32)
     return edges
+
+
+def parse_boundary_patches(boundary_path: Path) -> list[BoundaryPatchRange]:
+    """Return patch ranges from an OpenFOAM boundary file."""
+    raw = boundary_path.read_text(encoding="utf-8", errors="replace")
+    body = _strip_foamfile_header(_strip_comments(raw))
+    patches: list[BoundaryPatchRange] = []
+    for match in _BOUNDARY_PATCH_RE.finditer(body):
+        patch_body = match.group("body")
+        n_match = _NFACES_RE.search(patch_body)
+        start_match = _START_FACE_RE.search(patch_body)
+        type_match = _PATCH_TYPE_RE.search(patch_body)
+        if not n_match or not start_match:
+            continue
+        n_faces = int(n_match.group("n"))
+        start_face = int(start_match.group("start"))
+        if n_faces == 0:
+            continue
+        patches.append(
+            BoundaryPatchRange(
+                name=match.group("name"),
+                patch_type=type_match.group("type") if type_match else "",
+                start_face=start_face,
+                n_faces=n_faces,
+            )
+        )
+    if not patches:
+        raise PolyMeshParseError(
+            f"no boundary face ranges parsed from {boundary_path.name}"
+        )
+    return patches
+
+
+def parse_boundary_face_ranges(boundary_path: Path) -> list[tuple[int, int]]:
+    """Return ``(startFace, nFaces)`` ranges from an OpenFOAM boundary file."""
+    return [
+        (patch.start_face, patch.n_faces)
+        for patch in parse_boundary_patches(boundary_path)
+    ]

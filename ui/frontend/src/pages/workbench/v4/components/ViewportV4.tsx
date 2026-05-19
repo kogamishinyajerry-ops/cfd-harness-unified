@@ -27,10 +27,11 @@ import { api } from "@/api/client";
 import { GlbLoadError, loadGlbFromUrl } from "@/visualization/glb_loader";
 import {
   createKernel,
+  type GltfAttachHandle,
   type PickResult,
   type ViewportKernel,
 } from "@/visualization/viewport_kernel";
-import { V4_PALETTE } from "@/theme/industrial_minimalist";
+import { V4_PALETTE, hexToRgbFloat } from "@/theme/industrial_minimalist";
 
 import type { FaceIndexDocument } from "@/pages/workbench/step_panel_shell/types";
 
@@ -66,6 +67,11 @@ export interface V4ViewportAnnotation {
 
 interface ViewportV4Props {
   glbUrl: string | null | undefined;
+  /** Optional mesh-line overlay rendered in the same vtk scene as
+   *  ``glbUrl``. Mesh mode passes geometry.glb as the solid surface
+   *  and mesh.glb here, so the opaque surface depth-occludes internal
+   *  volume edges and only face-riding grid lines remain visible. */
+  meshOverlayGlbUrl?: string | null;
   stlUrl?: string | null;
   cameraPreset?: V4CameraPreset;
   onReady?: () => void;
@@ -117,6 +123,7 @@ const V4_CANVAS_RGB: [number, number, number] = [
   parseInt(V4_PALETTE.canvas.slice(3, 5), 16) / 255,
   parseInt(V4_PALETTE.canvas.slice(5, 7), 16) / 255,
 ];
+const MESH_SURFACE_RGB = hexToRgbFloat(V4_PALETTE.scene.bodyDarkSlateHi);
 
 /** face_id → list of cellIds where face_ids[i] === face_id. Built once
  *  per primitive so the pick handler (which fires every RAF) is an O(1)
@@ -153,6 +160,7 @@ function isNonDegenerateScalarRange(range: [number, number]): boolean {
 
 export function ViewportV4({
   glbUrl,
+  meshOverlayGlbUrl = null,
   cameraPreset = "iso",
   onReady,
   showGrid = true,
@@ -214,7 +222,16 @@ export function ViewportV4({
           importer.delete();
           return;
         }
-        kernel.attachGltf(importer);
+        kernel.attachGltf(
+          importer,
+          meshOverlayGlbUrl
+            ? {
+                role: "mesh-surface",
+                color: MESH_SURFACE_RGB,
+                opacity: 1,
+              }
+            : undefined,
+        );
         kernel.setCameraPreset(cameraPreset);
         setLoadState({ status: "ready" });
         onReady?.();
@@ -237,6 +254,48 @@ export function ViewportV4({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [glbUrl]);
+
+  useEffect(() => {
+    if (loadState.status !== "ready" || !meshOverlayGlbUrl) return;
+    const kernel = kernelRef.current;
+    if (!kernel) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+    let handle: GltfAttachHandle | null = null;
+
+    loadGlbFromUrl(meshOverlayGlbUrl, controller.signal)
+      .then(({ importer }) => {
+        if (cancelled) {
+          importer.delete();
+          return;
+        }
+        handle = kernel.attachGltf(importer, {
+          role: "mesh-lines",
+          clearActorPatchNames: false,
+          resetCamera: false,
+          lineWidth: 1.9,
+        });
+      })
+      .catch(() => {
+        // Mesh-line overlay is an inspection aid. If it fails, keep
+        // the solid geometry viewport alive instead of replacing it
+        // with an error surface.
+      });
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (handle) {
+        try {
+          kernel.detachGltf(handle);
+        } catch {
+          // vtk cleanup can race React unmount; the base kernel
+          // disposal remains authoritative.
+        }
+      }
+    };
+  }, [meshOverlayGlbUrl, loadState.status]);
 
   // Camera preset prop sync.
   useEffect(() => {

@@ -52,3 +52,11 @@ export const MESH_BLUEPRINT_NUMERICS = {
   maxNonOrthogonalityDeg: 67.4,
   timeEstimateMin: 28.6,
 } as const;
+
+export const MESH_BLUEPRINT_VISUAL_CONTRACT = {
+  sourceImage: ".planning/blueprints/v3/03-mesh.png",
+  viewportTask: "show solid case surface with mesh lines riding on the visible faces",
+  surfaceLayer: "geometry.glb",
+  lineLayer: "mesh.glb",
+  occlusionModel: "opaque surface depth-occludes internal volume edges",
+} as const;
