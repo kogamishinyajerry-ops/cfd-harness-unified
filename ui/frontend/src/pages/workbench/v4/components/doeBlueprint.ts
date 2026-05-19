@@ -5,6 +5,7 @@ export interface DoeBlueprintSample {
   variableLabel: string;
   pressurePa: number;
   temperatureC: number;
+  deltaPct: number;
   optimal?: boolean;
   seed: number;
 }
@@ -43,6 +44,17 @@ export const DOE_BLUEPRINT_TOOLBAR: DoeBlueprintToolbarItem[] = [
   { id: "settings", label: "设置" },
 ];
 
+export const DOE_BLUEPRINT_TASK = {
+  sourceImage: "AI CFD workbench Blueprint image 8 · design exploration",
+  sourceCompanion:
+    ".planning/transitions/2026-05-18_blueprint_read.md#image-8-design-exploration",
+  pageTask:
+    "设计探索页用 3x3 真实 CAD/场缩略图矩阵承载样点对比，并在下方保留 Pareto scatter",
+  thumbnailRenderer: "ViewportV4 + /blueprints/v4/apu-cad-assembly.glb",
+  forbiddenThumbnailFallback:
+    "IndustrialBoxScene / StreamlineField hand-drawn SVG thumbnail",
+} as const;
+
 export const DOE_BLUEPRINT_KPIS = {
   sampleCount: 28,
   completedCount: 28,
@@ -50,7 +62,7 @@ export const DOE_BLUEPRINT_KPIS = {
   queuedCount: 0,
   bestPressurePa: 212.6,
   bestTemperatureC: 94.1,
-  estimatedComputeTime: "18 h 42 m",
+  bestFlowM3S: 18.42,
   elapsedComputeTime: "16 h 08 m",
   remainingComputeTime: "2 h 34 m",
 } as const;
@@ -61,6 +73,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "进风口面积 +20%",
     pressurePa: 298.7,
     temperatureC: 98.8,
+    deltaPct: 1.1,
     seed: 3,
   },
   {
@@ -68,6 +81,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "进风口面积 +40%",
     pressurePa: 262.1,
     temperatureC: 96.3,
+    deltaPct: 2.4,
     seed: 7,
   },
   {
@@ -75,6 +89,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "风道角度 +5°",
     pressurePa: 231.4,
     temperatureC: 95.7,
+    deltaPct: 3.0,
     seed: 11,
   },
   {
@@ -82,6 +97,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "风道角度 +10°",
     pressurePa: 218.9,
     temperatureC: 94.9,
+    deltaPct: 3.6,
     seed: 13,
   },
   {
@@ -89,6 +105,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "风扇转速 +10%",
     pressurePa: 247.5,
     temperatureC: 93.6,
+    deltaPct: 3.2,
     seed: 17,
   },
   {
@@ -96,6 +113,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "风扇转速 +20%",
     pressurePa: DOE_BLUEPRINT_KPIS.bestPressurePa,
     temperatureC: DOE_BLUEPRINT_KPIS.bestTemperatureC,
+    deltaPct: 4.2,
     optimal: true,
     seed: 19,
   },
@@ -104,6 +122,7 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "散热片间距 -10%",
     pressurePa: 226.3,
     temperatureC: 95.4,
+    deltaPct: 3.7,
     seed: 23,
   },
   {
@@ -111,26 +130,21 @@ export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
     variableLabel: "网格等级（中→细）",
     pressurePa: 214.8,
     temperatureC: 94.0,
+    deltaPct: 4.0,
     seed: 29,
   },
-];
-
-export const DOE_BLUEPRINT_SCATTER_POINTS = [
-  ...DOE_BLUEPRINT_VISIBLE_SAMPLES,
   {
     id: "V-15",
     variableLabel: "出口面积 +10%",
     pressurePa: 195.4,
     temperatureC: 96.8,
+    deltaPct: 2.9,
     seed: 31,
   },
-  {
-    id: "V-16",
-    variableLabel: "局部细化",
-    pressurePa: 360.0,
-    temperatureC: 93.0,
-    seed: 37,
-  },
+];
+
+export const DOE_BLUEPRINT_SCATTER_POINTS = [
+  ...DOE_BLUEPRINT_VISIBLE_SAMPLES,
 ];
 
 export const DOE_BLUEPRINT_VERDICT = {
@@ -206,7 +220,7 @@ export const DOE_BLUEPRINT_LEFT_TREE: DoeBlueprintTreeSection[] = [
 
 export const DOE_BLUEPRINT_RIGHT_CARDS: DoeBlueprintRightCard[] = [
   {
-    title: "推荐 3 个新方案",
+    title: "推荐 5 个设计",
     facts: [
       { label: "基于当前结果", value: "预计更优", tone: "healthy" },
       { label: "建议方向", value: "局部细化" },
@@ -216,33 +230,23 @@ export const DOE_BLUEPRINT_RIGHT_CARDS: DoeBlueprintRightCard[] = [
     footer: "仅展示候选方向，不自动触发新求解",
   },
   {
-    title: "发现最优点",
+    title: "实验比对就绪",
     facts: [
       { label: "方案", value: "V-12", tone: "healthy" },
       { label: "压降", value: "212.6 Pa", tone: "healthy" },
       { label: "最高温度", value: "94.1 °C", tone: "healthy" },
     ],
-    cta: "查看详情",
-    footer: "建议开展局部细化验证",
+    cta: "查看比对",
+    footer: "9 个样点已进入同一坐标系",
   },
   {
-    title: "生成对比报告",
+    title: "导出报告",
     facts: [
-      { label: "图表", value: "函数与结论" },
+      { label: "图表", value: "缩略图 + Pareto" },
       { label: "设计数", value: "28" },
     ],
     cta: "生成报告",
     ctaTone: "active",
     footer: "对比最优方案与基线设计",
-  },
-  {
-    title: "导出模板",
-    facts: [
-      { label: "对象", value: "探索设置" },
-      { label: "复用", value: "新项目" },
-    ],
-    cta: "导出模板",
-    ctaTone: "active",
-    footer: "导出当前探索设置与最优方案导出为模板",
   },
 ];

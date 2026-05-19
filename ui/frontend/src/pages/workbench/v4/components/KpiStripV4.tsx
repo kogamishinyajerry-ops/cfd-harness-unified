@@ -121,10 +121,11 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
         deltaTone: "healthy",
       },
       {
-        value: DOE_BLUEPRINT_KPIS.estimatedComputeTime,
-        label: "预计计算时长",
-        delta: `剩余 ${DOE_BLUEPRINT_KPIS.remainingComputeTime}`,
-        deltaTone: "warn",
+        value: DOE_BLUEPRINT_KPIS.bestFlowM3S.toFixed(2),
+        label: "最优流量",
+        unit: "m³/s",
+        delta: "V-12",
+        deltaTone: "healthy",
       },
     ];
   }
