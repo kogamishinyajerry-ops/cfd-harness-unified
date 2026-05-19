@@ -1,21 +1,18 @@
 /**
- * V71-UI-V3 · MainCanvasV3 · placeholder canvas that switches content by
- * (stepId, viewportMode). Per Images 02-08.
+ * V71-UI-V3 / V76 · MainCanvasV3 · viewport router
  *
- * V71 scope: render canonical placeholders for each (step, mode) combo —
- * NOT a full WebGL 3D viewport. The placeholders show what each surface
- * communicates (e.g., "geometry wireframe" / "residuals chart") at
- * Claude-tier polish without backend dependencies.
- *
- * V72+: replace each placeholder with real renderers (vtk.js / chart libs).
+ * V71 used SVG placeholders for every mode. V76 wires real WebGL vtk.js
+ * for geometry + mesh modes (Pillar 15 · 3D Visualization Fidelity) and
+ * keeps the substrate placeholders for bc / field / residuals / report
+ * (those are 2D / chart surfaces, not 3D scenes).
  */
 import type { StepId, ViewportMode } from "../WorkbenchShellV3";
 import { GeometryPlaceholder } from "./canvas/GeometryPlaceholder";
-import { MeshPlaceholder } from "./canvas/MeshPlaceholder";
 import { BCPlaceholder } from "./canvas/BCPlaceholder";
 import { ResidualsChartV3 } from "./canvas/ResidualsChartV3";
 import { ReportComparisonV3 } from "./canvas/ReportComparisonV3";
 import { EmptyCanvasV3 } from "./canvas/EmptyCanvasV3";
+import { VtkCanvasV3 } from "./canvas/VtkCanvasV3";
 
 interface MainCanvasV3Props {
   caseId: string | null;
@@ -33,9 +30,9 @@ export function MainCanvasV3({
   }
   switch (viewportMode) {
     case "geometry":
-      return <GeometryPlaceholder caseId={caseId} />;
+      return <VtkCanvasV3 caseId={caseId} mode="geometry" />;
     case "mesh":
-      return <MeshPlaceholder caseId={caseId} />;
+      return <VtkCanvasV3 caseId={caseId} mode="mesh" />;
     case "bc":
       return <BCPlaceholder caseId={caseId} />;
     case "field":

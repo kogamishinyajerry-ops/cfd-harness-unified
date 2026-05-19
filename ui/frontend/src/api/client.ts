@@ -28,6 +28,7 @@ import type {
 import type { ExportManifest } from "@/types/exports";
 import type { MeshMetrics } from "@/types/mesh_metrics";
 import type { PreflightSummary } from "@/types/preflight";
+import type { ResidualSeriesPayload } from "@/types/residual_series";
 import type {
   DraftCreateRequest,
   DraftCreateResponse,
@@ -187,6 +188,13 @@ export const api = {
   getCaseCompleteness: (caseId: string) =>
     request<CaseCompletenessReport>(
       `/api/cases/${encodeURIComponent(caseId)}/completeness`,
+    ),
+
+  // V4 R6 (Codex-driven) · structured residual time-series for the
+  // Post-mode multi-line chart. Source = "log" | "runs" | "empty".
+  getResidualSeries: (caseId: string) =>
+    request<ResidualSeriesPayload>(
+      `/api/cases/${encodeURIComponent(caseId)}/residual-series`,
     ),
 
   // Stage 5 — GoldOps batch matrix

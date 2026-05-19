@@ -24,10 +24,23 @@ import type {
 import type { CaseIndexEntry } from "@/types/validation";
 import type { StepId } from "../../WorkbenchShellV3";
 import { SkeletonAdvisor } from "../SkeletonV3";
+import { AdvisorCommentaryV4 } from "./AdvisorCommentaryV4";
+import { FailureModeShowcaseV5 } from "./FailureModeShowcaseV5";
+import { PostRunAdvisorV9 } from "./PostRunAdvisorV9";
+import type { MatchedCommentary } from "@/data/advisor_pattern_matcher";
 
 interface AdvisorContentProps {
   caseId: string | null;
   stepId: StepId;
+  /** V83.3 · V5.B failure-mode showcase opt-in · plumbed from
+   *  WorkbenchShellV3 which is already inside a Router context. */
+  failmodeActive?: boolean;
+  /** V90.4 · V9.A post-run advisor surface props · optional ·
+   *  parent (WorkbenchShellV3) supplies these when a completed run is
+   *  available (V7.D handoff). When missing, V9.A renders empty-state. */
+  postRunRunId?: string | null;
+  postRunMatches?: MatchedCommentary[];
+  postRunRulesetVersion?: string;
 }
 
 type AdvisorMode = "review" | "diagnose";
@@ -186,7 +199,14 @@ function useCaseList() {
   });
 }
 
-export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
+export function AdvisorContent({
+  caseId,
+  stepId,
+  failmodeActive = false,
+  postRunRunId = null,
+  postRunMatches = [],
+  postRunRulesetVersion = "v9.0.0",
+}: AdvisorContentProps) {
   const [mode, setMode] = useState<AdvisorMode>("review");
   // V73.1 · pre-flight check · is this a whitelist (gold-reference) case?
   // The advisor backend only accepts imported_user cases (its case_dir
@@ -294,6 +314,25 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
           cases live at a different path. The pre-flight prevents a confusing
           404 from the backend.
         </p>
+
+        {/* V80.3 · depth commentary still surfaces for whitelist cases ·
+            it's the canonical demo target (lid_driven_cavity), so the curated
+            mesh/convergence/result narrative is the point of the Advisor tab
+            here even without a live consult call. */}
+        <AdvisorCommentaryV4 caseId={caseId} stepId={stepId} />
+
+        {/* V83.3 · V5.B failure-mode showcase available in whitelist branch
+            too · ?failmode=1 opt-in */}
+        <FailureModeShowcaseV5 active={failmodeActive} />
+
+        {/* V90.4 · V9.A post-run advisor surface · pure presentational ·
+            human-curated rule matching · NO LLM call · empty-state graceful */}
+        <PostRunAdvisorV9
+          caseId={caseId}
+          runId={postRunRunId}
+          matches={postRunMatches}
+          rulesetVersion={postRunRulesetVersion}
+        />
       </div>
     );
   }
@@ -312,6 +351,12 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
   return (
     <div className="text-[13px]">
       <AdvisoryBadge />
+
+      {/* V80.3 · depth commentary · 3 curated cards · advisory only */}
+      <AdvisorCommentaryV4 caseId={caseId} stepId={stepId} />
+
+      {/* V83.3 · V5.B · failure-mode showcase · ?failmode=1 opt-in */}
+      <FailureModeShowcaseV5 active={failmodeActive} />
 
       <div
         data-testid="advisor-mode-tabs"
@@ -439,6 +484,15 @@ export function AdvisorContent({ caseId, stepId }: AdvisorContentProps) {
             : "AI 诊断 reads the most recent run residuals + log and lists failure-mode hypotheses ranked by likelihood. Each hypothesis carries a corpus citation."}
         </p>
       )}
+
+      {/* V90.4 · V9.A post-run advisor surface · pure presentational ·
+          human-curated rule matching · NO LLM call · empty-state graceful */}
+      <PostRunAdvisorV9
+        caseId={caseId}
+        runId={postRunRunId}
+        matches={postRunMatches}
+        rulesetVersion={postRunRulesetVersion}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@
  */
 import type { StepId } from "../../WorkbenchShellV3";
 import { TrustGateVerdict } from "./TrustGateVerdict";
+import { ComparatorV4 } from "./ComparatorV4";
 
 interface ReportComparisonV3Props {
   caseId: string;
@@ -176,6 +177,9 @@ export function ReportComparisonV3({ caseId }: ReportComparisonV3Props) {
           </text>
         </g>
       </svg>
+      {/* V80.4 · V4.C contract gold-vs-actual comparator · complement to
+          TrustGate verdict + GoldDeltaPanel · worst-point highlight */}
+      <ComparatorV4 caseId={caseId} quantity="u_centerline" />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 """Structural integrity verification for the V66-B canonical eval set.
 
 Checks:
-  1. INDEX.md exists and contains a roster table referencing E01..E20
+  1. INDEX.md exists and contains a roster table referencing E01..E30
   2. Each Ennn case is documented either as detail file (E*_*.md) or in a
      batched file (B*_*.md) whose body mentions the case ID
   3. Every advisor rule cited in INDEX.md actually exists in
@@ -28,7 +28,7 @@ ADVISOR_RULES_V66B = ROOT / ".planning" / "methodology" / "advisor_rules_v66b_ex
 SDK_DOC = ROOT / ".planning" / "sdk" / "V66B_advisor_sdk.md"
 
 # Eval case IDs the framework defines
-EXPECTED_CASE_IDS = [f"E{n:02d}" for n in range(1, 21)]
+EXPECTED_CASE_IDS = [f"E{n:02d}" for n in range(1, 31)]
 
 
 def check_index_roster() -> tuple[int, list[str]]:
@@ -83,8 +83,14 @@ def collect_advisor_rules() -> set:
 
 
 KNOWN_V13X_CANDIDATES = {
+    "compressibility_regime_advisor",
+    "mesh_resolution_advisor",
     "rhoCentralFoam_compatibility_advisor",
+    "separation_resolution_advisor",
+    "shock_capture_quality_advisor",
     "substrate_inspection_advisor",
+    "statistics_averaging_advisor",
+    "turbulence_model_advisor",
     "yplus_target_validation_advisor",
     "residual_gate_qualifier_advisor",
     "transition_onset_validator_advisor",
@@ -129,7 +135,7 @@ def main() -> int:
         print(f"FAIL · INDEX missing case IDs: {missing_idx}", file=sys.stderr)
         overall = max(overall, rc)
     else:
-        print(f"OK · INDEX roster references all 20 case IDs")
+        print(f"OK · INDEX roster references all {len(EXPECTED_CASE_IDS)} case IDs")
 
     rc, missing_doc = check_case_documentation()
     if rc:
@@ -138,7 +144,7 @@ def main() -> int:
             print(f"  {cid}: {why}", file=sys.stderr)
         overall = max(overall, rc)
     else:
-        print(f"OK · All 20 cases documented (detail or batched)")
+        print(f"OK · All {len(EXPECTED_CASE_IDS)} cases documented (detail or batched)")
 
     rc, orphans = check_advisor_references()
     if rc:

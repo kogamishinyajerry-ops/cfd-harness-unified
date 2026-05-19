@@ -1,12 +1,16 @@
 /**
- * V71-UI-V3 · ResidualsChartV3 · log-scale multi-line residual chart
+ * V71-UI-V3 / V77 · ResidualsChartV3 · log-scale multi-line residual chart
  * Per Image 05 · 5 lines (Ux Uy Uz p continuity) · p in sand-coral as
  * watched curve · target convergence dashed at 10^-5 · current iter
  * dotted vertical.
  *
- * V71 scope: static SVG mock with hand-tuned data points · NOT a live
- * streaming chart. V72+ wires real /api/runs/:id/residuals SSE.
+ * V77 update: mounts ResidualLiveStreamV3 + SolverStateBadge +
+ * SolverInflightTicker sidecar — turns the static chart into a real
+ * live-telemetry surface (closes 7-arc-aged V71.L bookmark).
  */
+import { ResidualLiveStreamV3 } from "../solver/ResidualLiveStreamV3";
+import { SolverStateBadge } from "../solver/SolverStateBadge";
+import { SolverInflightTicker } from "../solver/SolverInflightTicker";
 type ResidualKey = "Ux" | "Uy" | "Uz" | "p" | "continuity";
 
 interface ResidualsChartV3Props {
@@ -52,8 +56,11 @@ export function ResidualsChartV3({
 
   return (
     <div data-testid="canvas-residuals" className="h-full w-full flex flex-col">
-      <div className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary px-6 pt-4">
-        {caseId} · residual convergence
+      <div className="flex items-center justify-between px-6 pt-4">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-v3-textTertiary">
+          {caseId} · residual convergence
+        </span>
+        <SolverStateBadge caseId={caseId} />
       </div>
       <svg viewBox="0 0 800 400" className="flex-1 w-full">
         {/* Y-axis gridlines (log decade) */}
@@ -200,6 +207,10 @@ export function ResidualsChartV3({
           })}
         </g>
       </svg>
+      <div className="grid grid-cols-2 gap-3 px-6 pb-4">
+        <ResidualLiveStreamV3 caseId={caseId} />
+        <SolverInflightTicker caseId={caseId} />
+      </div>
     </div>
   );
 }

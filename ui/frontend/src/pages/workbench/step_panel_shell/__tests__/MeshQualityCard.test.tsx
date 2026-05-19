@@ -104,10 +104,13 @@ describe("MeshQualityCard · V126 happy path", () => {
   it("renders Mesh OK pill and green-band skewness", async () => {
     apiMock.getMeshQuality.mockResolvedValue(v126Healthy);
     render(<MeshQualityCard caseId="ldc" meshGenSeq={1} />);
-    await waitFor(() =>
-      expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("Mesh OK")).toBeInTheDocument();
+    // V82.3 · use findByText instead of getByText so the assertion waits for
+    // the async data hydration to render "Mesh OK" — previously only the
+    // parent testid was wait-gated, leaving a race where the parent had
+    // mounted but the inner data-dependent text hadn't yet rendered.
+    // Reproduced at ~7% rate (1-of-15 sequential vitest runs) before fix.
+    expect(await screen.findByText("Mesh OK")).toBeInTheDocument();
+    expect(screen.getByTestId("mesh-quality-card")).toBeInTheDocument();
     // Skewness 0.32 → "good" band label.
     const skew = screen.getByTestId("mesh-quality-gauge-max-skewness");
     expect(skew.textContent).toContain("0.32");
@@ -324,7 +327,8 @@ describe("MeshQualityCard · re-fetch on meshGenSeq bump", () => {
     // with meshGenSeq=0 (local state reset). The cache must still
     // hit on caseId alone, not block on the gen counter.
     render(<MeshQualityCard caseId="ldc" meshGenSeq={0} />);
-    expect(screen.getByText("Mesh OK")).toBeInTheDocument();
+    // V82.3 · findByText for the same race-class reason documented above.
+    expect(await screen.findByText("Mesh OK")).toBeInTheDocument();
     expect(apiMock.getMeshQuality).toHaveBeenCalledTimes(1);
   });
 

@@ -12,33 +12,100 @@
  */
 import { useState } from "react";
 import type { StepId } from "../WorkbenchShellV3";
+import { RunSolverButtonV7 } from "./RunSolverButtonV7";
+import { SolverConfigEditorV8 } from "./SolverConfigEditorV8";
+import type { SolverRunState } from "../hooks/useSolverRunStateV7";
+import type {
+  ControlDictField,
+  ValidationError,
+} from "./solver_config_validator";
+import type { SolverConfigEditorState } from "./SolverConfigEditorV8";
 
-type BottomTab = "console" | "residuals" | "forces" | "log";
+type BottomTab = "console" | "residuals" | "forces" | "log" | "config";
+
+interface SolverConfigSlice {
+  fields: Partial<Record<ControlDictField, string>>;
+  baseline: Partial<Record<ControlDictField, string>>;
+  state: SolverConfigEditorState;
+  validationErrors: ValidationError[];
+  errorMessage: string | null;
+  readOnlyMode: boolean;
+  onFieldChange: (field: ControlDictField, value: string) => void;
+  onConfirmCommit: () => void;
+  onDiscard: () => void;
+  /** V89.2 injection harness · dev/test only · production never sets. */
+  forceDiffOpen?: boolean;
+  /** V89.2 injection harness · dev/test only · exposed for inspection. */
+  injectionKey?: "dirty" | "diff_open" | "error" | null;
+}
 
 interface BottomPanelV3Props {
   collapsed: boolean;
   onToggle: () => void;
   stepId: StepId;
+  /** V87.1 · V7 substantiation · optional integration props.
+   *  When all 5 are supplied, the Run Solver button + state-aware
+   *  affordances render in the collapsed bar at Step ≥4. When any are
+   *  missing (legacy contexts · tests not exercising V7), the panel
+   *  renders unchanged. */
+  caseId?: string | null;
+  solverRunState?: SolverRunState;
+  meshReady?: boolean;
+  bcSetup?: boolean;
+  onRequestRun?: () => void;
+  onCancelRun?: () => void;
+  /** V88.2 · V8 substantiation · optional integration props.
+   *  When supplied, the "Config" tab mounts SolverConfigEditorV8 in the
+   *  expanded panel. When missing (legacy contexts · tests not exercising
+   *  V8), the Config tab is hidden and the panel renders unchanged. */
+  solverConfig?: SolverConfigSlice;
 }
 
-const TABS: { id: BottomTab; label: string }[] = [
+const BASE_TABS: { id: BottomTab; label: string }[] = [
   { id: "console", label: "Console" },
   { id: "residuals", label: "Residuals" },
   { id: "forces", label: "Forces" },
   { id: "log", label: "Log" },
 ];
 
+const CONFIG_TAB: { id: BottomTab; label: string } = {
+  id: "config",
+  label: "Config",
+};
+
 function CollapsedBar({
   onToggle,
   stepId,
+  caseId,
+  solverRunState,
+  meshReady,
+  bcSetup,
+  onRequestRun,
+  onCancelRun,
 }: {
   onToggle: () => void;
   stepId: StepId;
+  caseId?: string | null;
+  solverRunState?: SolverRunState;
+  meshReady?: boolean;
+  bcSetup?: boolean;
+  onRequestRun?: () => void;
+  onCancelRun?: () => void;
 }) {
   const hint =
     stepId >= 4
       ? "solver streams · residuals · forces · console"
       : "expand for console / residuals / forces / log";
+  // V87.1 · Run button mounts at Step ≥4 when integration props supplied.
+  // All 5 V7 props must be present (V87 reverse-stop carry from V86):
+  // partial wiring would surface a broken affordance to the user.
+  const showRunButton =
+    stepId >= 4 &&
+    solverRunState !== undefined &&
+    meshReady !== undefined &&
+    bcSetup !== undefined &&
+    onRequestRun !== undefined &&
+    onCancelRun !== undefined;
   return (
     <div
       data-testid="bottom-panel-collapsed"
@@ -55,7 +122,19 @@ function CollapsedBar({
         ▴
       </button>
       <span className="uppercase tracking-[0.08em]">{hint}</span>
-      {stepId >= 4 && (
+      {showRunButton && (
+        <div className="ml-auto flex items-center gap-3">
+          <RunSolverButtonV7
+            caseId={caseId ?? null}
+            meshReady={meshReady!}
+            bcSetup={bcSetup!}
+            runState={solverRunState!}
+            onRequestRun={onRequestRun!}
+            onCancelRun={onCancelRun!}
+          />
+        </div>
+      )}
+      {!showRunButton && stepId >= 4 && (
         <span className="ml-auto inline-flex items-center text-v3-accent text-[11px]">
           <span
             aria-hidden
@@ -187,11 +266,37 @@ export function BottomPanelV3({
   collapsed,
   onToggle,
   stepId,
+  caseId,
+  solverRunState,
+  meshReady,
+  bcSetup,
+  onRequestRun,
+  onCancelRun,
+  solverConfig,
 }: BottomPanelV3Props) {
   const [activeTab, setActiveTab] = useState<BottomTab>("console");
+  // V88.2 · Config tab visibility · only when V8 wiring supplied AND the
+  // engineer is on a step where solver-config edits matter (≥3 = post-BC).
+  // Hidden in read-only modes per V88 reverse-stop #20 (the V8 component
+  // also enforces this internally, but suppressing the tab too keeps the
+  // tab strip clean).
+  const showConfigTab =
+    solverConfig !== undefined && stepId >= 3 && !solverConfig.readOnlyMode;
+  const TABS = showConfigTab ? [...BASE_TABS, CONFIG_TAB] : BASE_TABS;
 
   if (collapsed) {
-    return <CollapsedBar onToggle={onToggle} stepId={stepId} />;
+    return (
+      <CollapsedBar
+        onToggle={onToggle}
+        stepId={stepId}
+        caseId={caseId}
+        solverRunState={solverRunState}
+        meshReady={meshReady}
+        bcSetup={bcSetup}
+        onRequestRun={onRequestRun}
+        onCancelRun={onCancelRun}
+      />
+    );
   }
 
   return (
@@ -257,6 +362,21 @@ export function BottomPanelV3({
         {activeTab === "residuals" && <ResidualsTab stepId={stepId} />}
         {activeTab === "forces" && <ForcesTab stepId={stepId} />}
         {activeTab === "log" && <LogTab stepId={stepId} />}
+        {activeTab === "config" && solverConfig && (
+          <SolverConfigEditorV8
+            caseId={caseId ?? null}
+            readOnlyMode={solverConfig.readOnlyMode}
+            fields={solverConfig.fields}
+            baseline={solverConfig.baseline}
+            state={solverConfig.state}
+            validationErrors={solverConfig.validationErrors}
+            errorMessage={solverConfig.errorMessage}
+            onFieldChange={solverConfig.onFieldChange}
+            onConfirmCommit={solverConfig.onConfirmCommit}
+            onDiscard={solverConfig.onDiscard}
+            forceDiffOpen={solverConfig.forceDiffOpen}
+          />
+        )}
       </div>
     </div>
   );

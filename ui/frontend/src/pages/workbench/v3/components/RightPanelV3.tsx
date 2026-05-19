@@ -11,6 +11,7 @@ import type {
 import { InspectorContent } from "./right-panel/InspectorContent";
 import { AdvisorContent } from "./right-panel/AdvisorContent";
 import { TruthChainContent } from "./right-panel/TruthChainContent";
+import type { MatchedCommentary } from "@/data/advisor_pattern_matcher";
 
 interface RightPanelV3Props {
   activeTab: RightPanelTab;
@@ -18,6 +19,12 @@ interface RightPanelV3Props {
   caseId: string | null;
   stepId: StepId;
   viewportMode: ViewportMode;
+  /** V83.3 · V5.B opt-in via ?failmode=1 · plumbed from WorkbenchShellV3 */
+  failmodeActive?: boolean;
+  /** V90.4 · V9.A post-run advisor props · optional · forwarded to AdvisorContent */
+  postRunRunId?: string | null;
+  postRunMatches?: MatchedCommentary[];
+  postRunRulesetVersion?: string;
 }
 
 const TABS: { id: RightPanelTab; label: string }[] = [
@@ -32,6 +39,10 @@ export function RightPanelV3({
   caseId,
   stepId,
   viewportMode,
+  failmodeActive = false,
+  postRunRunId = null,
+  postRunMatches = [],
+  postRunRulesetVersion = "v9.0.0",
 }: RightPanelV3Props) {
   return (
     <div
@@ -96,7 +107,14 @@ export function RightPanelV3({
           />
         )}
         {activeTab === "advisor" && (
-          <AdvisorContent caseId={caseId} stepId={stepId} />
+          <AdvisorContent
+            caseId={caseId}
+            stepId={stepId}
+            failmodeActive={failmodeActive}
+            postRunRunId={postRunRunId}
+            postRunMatches={postRunMatches}
+            postRunRulesetVersion={postRunRulesetVersion}
+          />
         )}
         {activeTab === "truthchain" && (
           <TruthChainContent caseId={caseId} stepId={stepId} />

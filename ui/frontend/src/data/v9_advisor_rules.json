@@ -1,0 +1,53 @@
+{
+  "rules": [
+    {
+      "commentary": "Pressure residual is oscillating rather than decreasing monotonically — the last few iterations show alternating amplitude > 30% of the mean. This commonly indicates the pressure-relaxation factor is too aggressive for the case's coupling strength. Consider lowering `relaxationFactors.p` in system/fvSolution (e.g., 0.3 → 0.2) and re-running. If oscillation persists, check the under-relaxation on the momentum equation as well. Reference: V32 residual-oscillation playbook.",
+      "id": "RESIDUAL_OSCILLATION_P_V9_R1",
+      "provenance": ".planning/intel/v_series/V32_residual_oscillation.md",
+      "severity": "warn"
+    },
+    {
+      "commentary": "Solver reached its iteration cap (maxIters from system/fvSolution → solvers section) WITHOUT meeting the convergence tolerance. The case is technically not finished — the residuals at the final iter represent the best the solver achieved in the budget. Three common causes: (1) under-relaxation too aggressive (lower the values), (2) mesh quality issue creating an ill-conditioned linear system (run checkMesh and look at maxNonOrtho / maxSkewness), (3) BC/IC inconsistency producing an unsolvable steady state. Inspect the residual trajectory: if it was still decreasing at termination, simply increase maxIters. If it had plateaued, root-cause one of the three above. Reference: V18 max-iters-reached playbook.",
+      "id": "MAX_ITERS_REACHED_V9_R2",
+      "provenance": ".planning/intel/v_series/V18_max_iters.md",
+      "severity": "advise"
+    },
+    {
+      "commentary": "The solver process exited with a non-zero status code, which means it died before reporting convergence. This is distinct from \"hit maxIters but kept running cleanly\" (see R2). Likely causes: floating-point exception (NaN in a field — often from an unstable initial timestep), missing dictionary entry that wasn't caught by case validation, or an unsupported solver feature for the case configuration. Check the log file (BottomPanel → Log tab) for the FOAM error message; that text typically pins the root cause within a few lines. Reference: Ferziger & Perić §8.7 on stability and Versteeg & Malalasekera §7.5 on debugging.",
+      "id": "RUN_FAILED_NONZERO_EXIT_V9_R3",
+      "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · §8.7",
+      "severity": "advise"
+    },
+    {
+      "commentary": "Maximum absolute deviation from the gold-standard reference exceeds 5%. For canonical cases (Ghia 1982 lid-driven cavity, etc.), agreement within 1-3% is the expected bar. Drift of this magnitude usually points to: (1) mesh too coarse near the wall (yPlus too high — try refining boundary layers), (2) wrong turbulence model selection for the Reynolds regime, (3) compressibility/incompressibility mismatch (check whether the case is actually low-Mach). Cross-check the case profile in `.planning/case_profiles/` for the canonical solver/mesh choices that match the gold reference. Reference: V46 gold-delta-drift catalog.",
+      "id": "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4",
+      "provenance": ".planning/intel/v_series/V46_gold_delta_drift.md",
+      "severity": "warn"
+    },
+    {
+      "commentary": "Drag/lift coefficients are still changing >1% between the last 10 iterations — the integral quantities haven't settled even though residuals may have. This often happens in steady-state cases that are actually transient (vortex shedding off bluff bodies, separated flow regions). Three things to check: (1) is this a Re/geometry regime that should be running pimpleFoam (transient) rather than simpleFoam (steady)? (2) are the force-monitoring patches the right ones? (3) is the case at a long-enough integration time? Reference: Ferziger & Perić §13.6 on unsteady RANS vs steady RANS regimes.",
+      "id": "FORCES_NOT_CONVERGED_V9_R5",
+      "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · §13.6",
+      "severity": "warn"
+    },
+    {
+      "commentary": "Run took 5000+ iterations to converge — the case worked, but at the long end of typical effort. This is often a hint that (a) the initial guess (potentialFoam pre-step, or zero initialization) was far from the final state, or (b) the under-relaxation is conservative enough that you're trading robustness for speed. If you're iterating on this case, consider warmer starts (use the previous run's final fields as IC) or slightly more aggressive relaxation factors. Reference: V25 startup-speedup notes.",
+      "id": "SLOW_CONVERGENCE_V9_R6",
+      "provenance": ".planning/intel/v_series/V25_startup_speedup.md",
+      "severity": "info"
+    },
+    {
+      "commentary": "Velocity residual has plateaued (last 20 iterations show variation <2% but value is still 10× above the convergence tolerance). The solver isn't going to improve from here without intervention. Likely causes: (1) under-relaxation too conservative for this regime — try increasing relaxationFactors.U from 0.7 → 0.85, (2) the linear-solver tolerance (in fvSolution → solvers → U) is set too loose so each outer iteration leaves residual behind, (3) the boundary conditions are over-constraining the system (e.g., velocity prescribed on too many patches without a free outlet). Reference: V37 residual-plateau triage.",
+      "id": "RESIDUAL_PLATEAU_U_V9_R7",
+      "provenance": ".planning/intel/v_series/V37_residual_plateau.md",
+      "severity": "warn"
+    },
+    {
+      "commentary": "Pressure residual decreased monotonically over the last 8 iterations and the run converged within budget — this is the textbook \"things going right\" pattern. No action needed. If you're tuning this case for a parameter sweep, this is a good baseline to reuse the relaxation/scheme choices from. Reference: Versteeg & Malalasekera §11.3 on convergence acceleration.",
+      "id": "HEALTHY_CONVERGENCE_V9_R8",
+      "provenance": "Versteeg & Malalasekera · An Introduction to CFD · §11.3",
+      "severity": "info"
+    }
+  ],
+  "version": "v9.0.0"
+}

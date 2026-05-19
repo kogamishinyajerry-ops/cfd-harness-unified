@@ -21,8 +21,10 @@
  * V71 does NOT migrate legacy /workbench routes · those continue working.
  * V72+ may migrate. This file is the v3 SSOT.
  */
-import { useState, useCallback, type ReactNode } from "react";
+import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
 import { CaseBrowserV3 } from "./components/CaseBrowserV3";
 import { PipelineStripV3 } from "./components/PipelineStripV3";
 import { ViewportToolbarV3 } from "./components/ViewportToolbarV3";
@@ -30,6 +32,51 @@ import { RightPanelV3 } from "./components/RightPanelV3";
 import { BottomPanelV3 } from "./components/BottomPanelV3";
 import { ActivityBarV3 } from "./components/ActivityBarV3";
 import { TopBarV3 } from "./components/TopBarV3";
+import { DemoBannerV4 } from "./components/DemoBannerV4";
+import { DemoSandboxV5 } from "./components/DemoSandboxV5";
+import { ProvenanceCardV5 } from "./components/ProvenanceCardV5";
+import { LiveSolverPillV7 } from "./components/LiveSolverPillV7";
+import { useSolverRunStateV7 } from "./hooks/useSolverRunStateV7";
+import { usePostRunHandoffV7 } from "./hooks/usePostRunHandoffV7";
+import { useSolverConfigStateV8 } from "./hooks/useSolverConfigStateV8";
+import { readInjectionState } from "./components/solver_config_injection";
+import type { BridgeArtifact } from "@/data/run_artifact_reader";
+import {
+  matchAdvisorPatterns,
+  type RunArtifactSlice,
+} from "@/data/advisor_pattern_matcher";
+import {
+  V9_ADVISOR_RULES,
+  V9_RULESET_VERSION,
+} from "@/data/v9_advisor_rules";
+
+const TOUR_LAST_STEP = 6;
+
+/**
+ * V90.4 · adapt BridgeArtifact (V6 shape) → RunArtifactSlice (V9.B input).
+ * BridgeArtifact's `residuals` is `Record<string, number>` (single value);
+ * V9.B's slice expects `Record<string, number[]>` (history). When history
+ * unavailable, we pass undefined so history-dependent rules return null
+ * gracefully (graceful degrade · matcher won't crash).
+ */
+function adaptBridgeArtifactToSlice(
+  bridge: BridgeArtifact,
+): RunArtifactSlice {
+  return {
+    run_id: bridge.run_id,
+    case_id: bridge.case_id,
+    success: bridge.success,
+    exit_code: bridge.exit_code,
+    // V90 scope: BridgeArtifact shape only carries single-value residuals.
+    // History-based rules (R1 oscillation, R7 plateau) won't fire without
+    // a history array. V91+ candidate: extend BridgeArtifact / RunDetail
+    // to expose per-iter history.
+    residuals: undefined,
+    forces: undefined,
+    convergence_stats: undefined,
+    gold_delta: undefined,
+  };
+}
 import { MainCanvasV3 } from "./components/MainCanvasV3";
 import { MultiCaseRibbonV3 } from "./components/MultiCaseRibbonV3";
 import {
@@ -99,6 +146,127 @@ export function WorkbenchShellV3({
   const urlView = searchParams.get("view");
   const urlTab = searchParams.get("tab");
   const urlBtab = searchParams.get("btab");
+  // V83.3 · V5.B · ?failmode=1 mounts the failure-mode showcase in Advisor.
+  const failmodeActive = searchParams.get("failmode") === "1";
+  // V83.5 · V5.D · detect tour completion (last beat → Finish press clears
+  // tour while demo stays 1, then both clear) · track prev tour-step in a
+  // ref to spot the "was-at-last → now-cleared" transition.
+  const tourStepNum = Number(searchParams.get("tour")) || 0;
+  const prevTourStepRef = useRef<number>(tourStepNum);
+  const maxStepWalkedRef = useRef<number>(1);
+  const [provenanceJustFinished, setProvenanceJustFinished] =
+    useState<boolean>(false);
+  useEffect(() => {
+    const prev = prevTourStepRef.current;
+    // Track furthest step reached during tour (used by provenance card)
+    if (tourStepNum > maxStepWalkedRef.current) {
+      maxStepWalkedRef.current = tourStepNum;
+    }
+    // Only count "Finish" — went from last beat to 0/cleared (NOT a Skip
+    // from middle of the tour, NOT a back-step in cinematic mode).
+    if (prev === TOUR_LAST_STEP && tourStepNum === 0) {
+      setProvenanceJustFinished(true);
+    } else if (tourStepNum > 0) {
+      // User started a new tour (or moved in one) · reset card state
+      setProvenanceJustFinished(false);
+    }
+    prevTourStepRef.current = tourStepNum;
+  }, [tourStepNum]);
+
+  // V87.1 · V7 substantiation · wire solver state machine + post-run handoff.
+  // V130 invariant: handoff.notifyCompleted is passed as the onRunCompleted
+  // callback · the chain user-click → V7.B request → SSE done → handoff
+  // is fully user-initiated · no useEffect that calls request() exists.
+  const postRunHandoff = usePostRunHandoffV7();
+  const solverRunState = useSolverRunStateV7({
+    onRunCompleted: postRunHandoff.notifyCompleted,
+  });
+
+  // V87.1 · V6 bridge hand-off · GET /api/cases/{id}/run-history/{runId}
+  // when a real run completes, feed the resulting RunDetail into the V6
+  // bridgeArtifact pipeline for V6.B/V6.C/V6.D consumption.
+  const handoffRunId = postRunHandoff.lastCompletedRunId;
+  const handoffCaseId = postRunHandoff.lastCompletedCaseId;
+  const runDetailQuery = useQuery({
+    queryKey: ["v87-bridge-run-detail", handoffCaseId, handoffRunId],
+    queryFn: () =>
+      api.getRunDetail(handoffCaseId as string, handoffRunId as string),
+    enabled: Boolean(handoffCaseId) && Boolean(handoffRunId),
+    staleTime: 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+  });
+  // RunDetail is structurally compatible with BridgeArtifact (V6.A subset).
+  const bridgeArtifact: BridgeArtifact | null =
+    runDetailQuery.data
+      ? (runDetailQuery.data as unknown as BridgeArtifact)
+      : null;
+
+  // V90.4 · V9.A wiring · compute post-run advisor matches from
+  // bridgeArtifact (the completed run's RunDetail). Pure-function call
+  // · no I/O · no LLM · deterministic. When bridgeArtifact is null
+  // (no completed run yet OR query in flight), V9.A renders empty-state.
+  const v9AdvisorMatches = bridgeArtifact
+    ? matchAdvisorPatterns(
+        adaptBridgeArtifactToSlice(bridgeArtifact),
+        V9_ADVISOR_RULES,
+      )
+    : [];
+
+  // V87.1 · Reverse-stop #20 · disable Run button (still mount-visible · the
+  // button itself handles disabled state) when URL mode is read-only:
+  // sandbox / cinematic tour / bridge. Compute meshReady/bcSetup from
+  // stepId for V87 (Step ≥4 implies the pipeline gated mesh + BC). A
+  // proper readiness check would consult /api/cases/{id} completeness;
+  // V87 keeps the heuristic simple to stay scoped to wiring.
+  const demoActive = searchParams.get("demo");
+  const bridgeRequested = searchParams.get("bridge") === "1";
+  const readOnlyMode =
+    demoActive === "1" || demoActive === "2" || bridgeRequested;
+  const meshReady = stepId >= 2 && !readOnlyMode;
+
+  // V88.2 · V8 wiring · GET controlDict to seed editor + state machine.
+  // Skipped in read-only modes (sandbox/cinematic/bridge). Errors do not
+  // crash the shell — V8.D hook hydrates from null and configReady stays
+  // false until the user opens + commits an edit OR the GET succeeds.
+  const controlDictQuery = useQuery({
+    queryKey: ["v88-controldict", caseId],
+    queryFn: () => api.getRawDict(caseId!, "system/controlDict"),
+    enabled: Boolean(caseId) && !readOnlyMode,
+    staleTime: 60_000,
+    retry: 0,
+    refetchOnWindowFocus: false,
+  });
+  const initialControlDict = controlDictQuery.data
+    ? {
+        content: controlDictQuery.data.content,
+        etag: controlDictQuery.data.etag,
+      }
+    : null;
+  const solverConfig = useSolverConfigStateV8({
+    caseId,
+    initial: initialControlDict,
+  });
+  // V88 reverse-stop #25 · V7.A gating uses shell-level shared state ·
+  // V7.A does NOT import V8.D directly. Composition rules:
+  //   - When the controlDict GET has NOT yet resolved (loading · error ·
+  //     404 — no dict on disk), V8 does NOT gate V7.A · the solver runs
+  //     with defaults · V8 is an additive opt-in editor.
+  //   - When the GET succeeded AND the user later edited an invalid
+  //     value (configReady → false), V7.A IS gated until they fix +
+  //     commit or discard.
+  // This preserves V7 happy-path behavior + provides the documented V8
+  // gating without forcing every case to have a fetchable controlDict.
+  const v8Hydrated = controlDictQuery.isSuccess;
+  const bcSetup =
+    stepId >= 4 &&
+    !readOnlyMode &&
+    (!v8Hydrated || solverConfig.configReady);
+
+  const requestSolverRun = useCallback(() => {
+    if (!caseId) return;
+    void solverRunState.request(caseId);
+  }, [caseId, solverRunState]);
 
   const [viewportMode, setViewportModeState] = useState<ViewportMode>(
     (VALID_VIEWPORTS.includes(urlView as ViewportMode)
@@ -215,8 +383,27 @@ export function WorkbenchShellV3({
       }}
     >
       {/* Row 1: TopBar spans all 4 columns */}
-      <div className="col-span-4 row-start-1 border-b border-v3-border">
+      <div className="col-span-4 row-start-1 border-b border-v3-border relative">
         <TopBarV3 caseId={caseId} stepId={stepId} />
+        {/* V80.2 · Demo banner / first-time hint overlay · opt-in only */}
+        <DemoBannerV4 />
+        {/* V83.2 · V5.A · Demo sandbox mode pill + transition banner · ?demo=2
+            V84.5 · multi-case · per-case curated step state
+            V87.1 · V6.A bridge artifact feed from V7.D handoff */}
+        <DemoSandboxV5
+          stepId={stepId}
+          caseId={caseId}
+          bridgeArtifact={bridgeArtifact}
+        />
+        {/* V87.1 · V7.C · Live solver run pill in TopBar · sand-coral accent
+            · renders only when runState ∈ {starting, running} */}
+        <LiveSolverPillV7 runState={solverRunState.state} />
+        {/* V83.5 · V5.D · Provenance card on tour completion */}
+        <ProvenanceCardV5
+          justFinished={provenanceJustFinished}
+          caseId={caseId}
+          maxStepWalked={maxStepWalkedRef.current}
+        />
       </div>
 
       {/* Row 2 · Col 1: Activity Bar */}
@@ -269,6 +456,50 @@ export function WorkbenchShellV3({
             collapsed={bottomCollapsed}
             onToggle={() => setBottomCollapsed((v) => !v)}
             stepId={stepId}
+            caseId={caseId}
+            solverRunState={solverRunState.state}
+            meshReady={meshReady}
+            bcSetup={bcSetup}
+            onRequestRun={requestSolverRun}
+            onCancelRun={solverRunState.cancel}
+            solverConfig={(() => {
+              // V89.2 · state-injection harness · env-gated · production
+              // discards the URL param silently. When `_v89_inject` is
+              // active, override the real V8.D slice with synthetic
+              // dirty/diff_open/error data so visual baselines can
+              // deterministically capture hard-to-reach UI states.
+              const injected = readInjectionState(
+                searchParams.get("_v89_inject"),
+              );
+              if (injected) {
+                return {
+                  fields: injected.fields,
+                  baseline: injected.baseline,
+                  state: injected.state,
+                  validationErrors: injected.validationErrors,
+                  errorMessage: injected.errorMessage,
+                  readOnlyMode,
+                  // Injection MUST NOT fire mutating fetch (reverse-stop
+                  // #29). These handlers are no-ops in injection mode.
+                  onFieldChange: () => {},
+                  onConfirmCommit: () => {},
+                  onDiscard: () => {},
+                  forceDiffOpen: injected.forceDiffOpen,
+                  injectionKey: injected.injectionKey,
+                };
+              }
+              return {
+                fields: solverConfig.fields,
+                baseline: solverConfig.baseline,
+                state: solverConfig.state,
+                validationErrors: solverConfig.validationErrors,
+                errorMessage: solverConfig.errorMessage,
+                readOnlyMode,
+                onFieldChange: solverConfig.setField,
+                onConfirmCommit: () => void solverConfig.confirmCommit(),
+                onDiscard: solverConfig.discard,
+              };
+            })()}
           />
         </BottomPanelErrorBoundary>
       </div>
@@ -285,6 +516,10 @@ export function WorkbenchShellV3({
             caseId={caseId}
             stepId={stepId}
             viewportMode={viewportMode}
+            failmodeActive={failmodeActive}
+            postRunRunId={handoffRunId}
+            postRunMatches={v9AdvisorMatches}
+            postRunRulesetVersion={V9_RULESET_VERSION}
           />
         </RightPanelErrorBoundary>
       </div>

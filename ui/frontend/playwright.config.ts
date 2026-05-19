@@ -22,12 +22,62 @@ export default defineConfig({
     screenshot: "only-on-failure",
     headless: true,
   },
-  projects: [
-    {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-  ],
+  // V79.2 · Cross-browser matrix · env-gated to keep default `npx playwright
+  // test` chromium-only (CI default), while `CROSSBROWSER=1 npx playwright
+  // test` runs the full firefox + webkit + chromium matrix.
+  //
+  // Browsers must be installed first: `npx playwright install firefox webkit`.
+  // V79.2 disclosed at close DEC §5 that browsers may not be installed in the
+  // session that opens the arc; the config-level enablement is the landed
+  // substrate either way.
+  projects:
+    process.env.CROSSBROWSER === "1"
+      ? [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+          {
+            name: "firefox",
+            use: { ...devices["Desktop Firefox"] },
+          },
+          {
+            name: "webkit",
+            use: { ...devices["Desktop Safari"] },
+          },
+        ]
+      : [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              // V76.5 · V77.6 · enable software WebGL (SwiftShader) so headless
+              // Chromium renders vtk.js canvases. Without these flags, WebGL is
+              // disabled in headless mode and VtkCanvasV3 takes the fallback
+              // branch — that's fine for graceful-degradation tests but the
+              // baselines that snapshot WebGL-only overlays (camera reset, axes
+              // widget, color legend, FPS indicator) can't render.
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+        ],
   // V68-B.5 · webServer is an ARRAY · spawns BOTH fastapi backend (port 8001
   // to avoid colliding with a developer's already-running :8000 backend) AND
   // vite frontend (port 5173 · proxies /api → 127.0.0.1:8001).

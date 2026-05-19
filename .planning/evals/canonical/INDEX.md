@@ -1,6 +1,6 @@
 # Canonical Eval Set · V66-B AI Advisor Stack Build-out
 
-> 20-case canonical eval set for AI advisor regression protection. Each case has known V-row attribution + expected advisor rule firings. Per V64-A V130 thesis + V132 collapse (Claude Code session = AI advisor).
+> 30-case canonical eval set for AI advisor regression protection. Each case has known V-row attribution + expected advisor rule firings. Per V64-A V130 thesis + V132 collapse (Claude Code session = AI advisor).
 >
 > **Established**: 2026-05-16 (V66-B B100 charter execution · DEC-V66-B-charter)
 > **Format**: 1 file per case · YAML frontmatter for machine readability · Markdown body for human readability
@@ -8,7 +8,7 @@
 
 ---
 
-## 20-case selection criteria
+## 30-case selection criteria
 
 1. ≥1 case per LANDED V101-V107 row (7 cases minimum)
 2. ≥3 cases for V51-V100 carry-forward witnesses
@@ -22,7 +22,7 @@
 
 ---
 
-## Eval case roster (20 cases)
+## Eval case roster (30 cases)
 
 ### Group A · V101-V107 LANDED V-row witnesses (7 cases)
 
@@ -69,13 +69,28 @@
 | E19 | case_025 Poiseuille (V64-A FULL) | strict analytical | virtual_interface, solver_block, unit_detector (3/11 — minimal) |
 | E20 | case_026 Couette (V64-A FULL) | strict analytical | virtual_interface, solver_block, unit_detector (3/11 — minimal) |
 
+### Group F · V70 turbulence/compressibility breadth expansion (10 cases)
+
+| # | Case ID | V-row / gap | Physics regime | Expected advisors |
+|---|---|---|---|---|
+| E21 | case_036_kOmegaSST_lowRe | F-NEW-kOmegaSST-lowRe | low-Re k-omega-SST steady | turbulence_model_advisor, mesh_resolution_advisor, separation_resolution_advisor |
+| E22 | case_037_rhoCentralFoam_supersonic | GAP-rhoCentralFoam-anchor | supersonic wedge / oblique shock | rhoCentralFoam_compatibility_advisor, compressibility_regime_advisor, shock_capture_quality_advisor |
+| E23 | case_038_rhoPimpleFoam_transonic_transient | GAP-rhoPimpleFoam-anchor | transonic transient buffet | compressibility_regime_advisor, shock_capture_quality_advisor, statistics_averaging_advisor |
+| E24 | case_039_SpalartAllmaras_stall | GAP-SA-anchor | separated NACA0012 S-A | turbulence_model_advisor, separation_resolution_advisor, mesh_resolution_advisor |
+| E25 | case_040_pimpleFoam_kEpsilon_transient | F-NEW-kEpsilon-transient | transient k-epsilon channel | turbulence_model_advisor, statistics_averaging_advisor |
+| E26 | case_041_kOmegaSST_lowMach | GAP-weakly-compressible | weakly-compressible low-Mach | compressibility_regime_advisor, turbulence_model_advisor |
+| E27 | case_042_DNS_channel_highRe | V70-DONE-2 | DNS channel Re_tau=590 | mesh_resolution_advisor, statistics_averaging_advisor |
+| E28 | case_043_LES_backstep | F-NEW-LES-anchor | LES backward-facing step | separation_resolution_advisor, mesh_resolution_advisor, statistics_averaging_advisor |
+| E29 | case_044_CHT_laminar | case_002a-CHT-laminar | laminar CHT | substrate_inspection_advisor, mesh_resolution_advisor |
+| E30 | case_045_2D_symmetry_empty | BC-coverage-2D | 2D extrusion / empty BC | virtual_interface_detector, bc_type_name_validity_advisor |
+
 ---
 
 ## Expected advisor stack performance
 
-For canonical eval set V66-B Done #3 regression protection:
+For canonical eval set V66-B Done #3 regression protection, expanded by V70 breadth coverage:
 
-| Advisor | Expected fire count across 20 cases | Coverage |
+| Advisor | Expected fire count across 30 cases | Coverage |
 |---|---|---|
 | face_orientation_advisor | 5+ (E01, E07, E08, E09, E11) | broad |
 | inlet_outlet_validator | 8+ (most cases) | broad |
@@ -94,13 +109,13 @@ For canonical eval set V66-B Done #3 regression protection:
 | **NEW (V66-B)** advisor_v107 (low-Re kOmegaSST trigger) | 3+ (low-Re-band TBL with I=0.5%) | narrow |
 | **NEW (V66-B)** advisor_yplus_regime_match | 5+ (any case with explicit y+ target) | broad |
 
-**Target**: post-V66-B advisor stack ≥ 14 dispatched advisors (current 11 + 3 new) · cumulative fire rate ≥ 100 across 20 cases.
+**Target**: post-V66-B advisor stack ≥ 14 dispatched advisors (current 11 + 3 new) · cumulative fire rate ≥ 100 across 30 cases.
 
 ---
 
 ## V69.1 layout update (2026-05-16 · DEC-V69.1)
 
-20 individual case files (E01-E20) replace the V66-B B104/B105 batched
+30 individual case files (E01-E30) replace the V66-B B104/B105 batched
 documents. Batched docs preserved at `_archive_batched/` for audit.
 Schema for individual files: YAML frontmatter (eval_case_id · case_id ·
 title · v_row_attribution · v_row_class · physics_regime · status ·
