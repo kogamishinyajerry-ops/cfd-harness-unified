@@ -64,6 +64,39 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
 }
 
 function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
+  if (
+    step === "geometry" &&
+    (!ctx.basics || !hasAuthoredCadParts(ctx.basics.patches?.length))
+  ) {
+    return [
+      {
+        value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+        label: "零件总数",
+        unit: "个",
+      },
+      {
+        value: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+        label: "缝隙检测",
+        unit: "处",
+        delta: "待采纳",
+        deltaTone: "warn",
+      },
+      {
+        value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
+        label: "包裹尺寸",
+        unit: "mm",
+        delta: "建议全局",
+      },
+      {
+        value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
+        label: "流体域体积",
+        unit: "m³",
+        delta: "±2.1%",
+        deltaTone: "healthy",
+      },
+    ];
+  }
+
   if (step === "doe") {
     return [
       {
@@ -128,21 +161,28 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
         return [
           {
             value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
-            label: "部件",
+            label: "零件总数",
+            unit: "个",
           },
           {
-            value: String(GEOMETRY_BLUEPRINT_SUMMARY.instanceCount),
-            label: "实例",
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+            label: "缝隙检测",
+            unit: "处",
+            delta: "待采纳",
+            deltaTone: "warn",
           },
           {
             value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
-            label: "容差",
+            label: "包裹尺寸",
             unit: "mm",
+            delta: "建议全局",
           },
           {
             value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
-            label: "估算单元",
-            unit: "M",
+            label: "流体域体积",
+            unit: "m³",
+            delta: "±2.1%",
+            deltaTone: "healthy",
           },
         ];
       }
@@ -450,7 +490,9 @@ interface KpiStripV4Props {
 }
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
-  const ctx = useV4WorkbenchContext(activeStep === "doe" ? null : caseId);
+  const ctx = useV4WorkbenchContext(
+    activeStep === "doe" || activeStep === "geometry" ? null : caseId,
+  );
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
   }

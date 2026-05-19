@@ -29,7 +29,7 @@ import {
   useResidualSeries,
 } from "../hooks/useResidualSeries";
 import {
-  GEOMETRY_BLUEPRINT_SUMMARY,
+  GEOMETRY_BLUEPRINT_RIGHT_CARDS,
   hasAuthoredCadParts,
 } from "./geometryBlueprint";
 import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
@@ -159,10 +159,18 @@ interface FactCardProps {
   }>;
   footer?: string;
   cta?: string;
+  secondaryCta?: string;
   ctaTone?: "active" | "neutral";
 }
 
-function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardProps) {
+function FactCard({
+  title,
+  facts,
+  footer,
+  cta,
+  secondaryCta,
+  ctaTone = "neutral",
+}: FactCardProps) {
   return (
     <article
       className="flex flex-col gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
@@ -203,8 +211,8 @@ function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardPr
           {footer}
         </div>
       )}
-      {cta && (
-        <div className="flex justify-end border-t border-v4-border pt-1.5">
+      {(cta || secondaryCta) && (
+        <div className="flex justify-end gap-2 border-t border-v4-border pt-1.5">
           <span
             className={[
               "rounded border px-2 py-0.5 text-[10px] font-medium",
@@ -217,6 +225,15 @@ function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardPr
           >
             {cta}
           </span>
+          {secondaryCta && (
+            <span
+              className="rounded border border-v4-border px-2 py-0.5 text-[10px] font-medium text-v4-textSecondary"
+              data-testid={`rightpanel-v4-factcard-secondary-cta-${title}`}
+              data-advisory-only="true"
+            >
+              {secondaryCta}
+            </span>
+          )}
         </div>
       )}
     </article>
@@ -282,49 +299,21 @@ function modeCardsFor(
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
       if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {
-        return [
-          {
-            title: "几何已就绪",
-            facts: [
-              {
-                label: "CAD 分件",
-                value: `${GEOMETRY_BLUEPRINT_SUMMARY.partCount} 部件`,
-                tone: "healthy",
-              },
-              {
-                label: "实例",
-                value: `${GEOMETRY_BLUEPRINT_SUMMARY.instanceCount} 个`,
-              },
-              {
-                label: "容差",
-                value: `${GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1)} mm`,
-              },
-            ],
-            footer: "GLB 可用 · 单壳 STL 的 CAD 分件语义待命名",
-          },
-          {
-            title: "启动几何分析",
-            facts: [
-              { label: "水密性", value: "已通过", tone: "healthy" },
-              { label: "单位", value: "mm" },
-              {
-                label: "估算单元",
-                value: `${GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2)} M`,
-              },
-            ],
-            cta: "启动几何分析",
-            ctaTone: "active",
-          },
-          {
-            title: "建议合并 2 实例",
-            facts: [
-              { label: "重复实例", value: "2", tone: "warn" },
-              { label: "策略", value: "保留母体" },
-              { label: "影响", value: "网格更稳定" },
-            ],
-            cta: "查看建议",
-          },
-        ];
+        return GEOMETRY_BLUEPRINT_RIGHT_CARDS.map((card) => ({
+          title: card.title,
+          facts: [
+            {
+              label: "置信度",
+              value: `${card.confidencePct}%`,
+              tone: "healthy" as const,
+            },
+            ...card.facts,
+          ],
+          footer: card.footer,
+          cta: "采纳",
+          secondaryCta: "编辑",
+          ctaTone: "active" as const,
+        }));
       }
       return [
         {
@@ -705,6 +694,24 @@ function DoeConfidenceCard() {
   );
 }
 
+function geometryCards(): FactCardProps[] {
+  return GEOMETRY_BLUEPRINT_RIGHT_CARDS.map((card) => ({
+    title: card.title,
+    facts: [
+      {
+        label: "置信度",
+        value: `${card.confidencePct}%`,
+        tone: "healthy" as const,
+      },
+      ...card.facts,
+    ],
+    footer: card.footer,
+    cta: "采纳",
+    secondaryCta: "编辑",
+    ctaTone: "active" as const,
+  }));
+}
+
 interface RightPanelV4Props {
   activeStep: V4PipelineStepId;
   caseId?: string | null;
@@ -712,7 +719,8 @@ interface RightPanelV4Props {
 
 export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
   const isDoe = activeStep === "doe";
-  const effectiveCaseId = isDoe ? null : caseId;
+  const isGeometry = activeStep === "geometry";
+  const effectiveCaseId = isDoe || isGeometry ? null : caseId;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const matcher = useV4AdvisorMatches(effectiveCaseId);
   const solverResiduals = useResidualSeries(
@@ -733,7 +741,13 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
       data-real-matcher={realMatcherMode ? "true" : "false"}
     >
       <div className="flex h-8 items-center justify-between border-b border-v4-border px-3 text-[11px] uppercase tracking-wider text-v4-textSecondary">
-        <span>{isDoe ? "AI 副驾" : "AI 助理"}</span>
+        <span>
+          {isDoe
+            ? "AI 副驾"
+            : isGeometry
+              ? "AI 辅助几何准备"
+              : "AI 助理"}
+        </span>
         <span
           className="text-v4-textTertiary"
           data-testid="rightpanel-v4-advisory-note"
@@ -749,6 +763,15 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
             {DOE_BLUEPRINT_RIGHT_CARDS.map((card, i) => (
               <FactCard key={`doe-${i}`} {...card} />
             ))}
+          </>
+        ) : isGeometry ? (
+          <>
+            {geometryCards().map((card, i) => (
+              <FactCard key={`geometry-${i}`} {...card} />
+            ))}
+            <div className="pt-1 text-center text-[10px] text-v4-active">
+              查看全部建议 (4) ›
+            </div>
           </>
         ) : realMatcherMode ? (
           <>

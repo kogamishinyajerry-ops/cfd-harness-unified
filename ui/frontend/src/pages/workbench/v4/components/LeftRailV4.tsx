@@ -19,6 +19,7 @@ import {
   BOUNDARY_BLUEPRINT_TREE_COUNTS,
 } from "./boundaryBlueprint";
 import { DOE_BLUEPRINT_LEFT_TREE } from "./doeBlueprint";
+import { GEOMETRY_BLUEPRINT_SUMMARY } from "./geometryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 import { type V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -308,6 +309,50 @@ function buildDoeTree(): TreeNode[] {
   });
 }
 
+function buildGeometryTree(): TreeNode[] {
+  return [
+    {
+      label: "R-042_ApuVent",
+      kind: "section",
+      step: "import",
+      status: "ok",
+    },
+    section("geometry", "几何", "geometry", "active"),
+    {
+      label: "零件",
+      kind: "item",
+      depth: 1,
+      status: "ok",
+      count: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+    },
+    {
+      label: "修复",
+      kind: "item",
+      depth: 1,
+      status: "warn",
+      count: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+    },
+    {
+      label: "包裹",
+      kind: "item",
+      depth: 1,
+      status: "muted",
+      count: "1",
+    },
+    {
+      label: "区域",
+      kind: "item",
+      depth: 1,
+      status: "muted",
+      count: "5",
+    },
+    section("mesh", "网格", "geometry", "muted"),
+    section("physics", "物理模型", "geometry", "muted"),
+    section("solver", "工况与求解", "geometry", "muted"),
+    section("post", "结果", "geometry", "muted"),
+  ];
+}
+
 function StatusDot({ status }: { status?: TreeNode["status"] }) {
   const color =
     status === "ok"
@@ -337,10 +382,15 @@ export function LeftRailV4({
   caseId = null,
 }: LeftRailV4Props) {
   const isDoe = activeStep === "doe";
-  const effectiveCaseId = isDoe ? null : caseId;
+  const isGeometry = activeStep === "geometry";
+  const effectiveCaseId = isDoe || isGeometry ? null : caseId;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const residuals = useResidualSeries(effectiveCaseId);
-  const tree = isDoe ? buildDoeTree() : buildCaseTree(activeStep, ctx, residuals.data);
+  const tree = isDoe
+    ? buildDoeTree()
+    : isGeometry
+      ? buildGeometryTree()
+      : buildCaseTree(activeStep, ctx, residuals.data);
 
   return (
     <aside
@@ -377,7 +427,7 @@ export function LeftRailV4({
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto py-2">
         <div className="mb-1 flex items-center justify-between px-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
           <span>{isDoe ? "设计探索" : "案例树"}</span>
-          {isDoe ? (
+          {isDoe || isGeometry ? (
             <span>LIVE</span>
           ) : ctx.isLoading || residuals.isLoading ? (
             <span>加载中</span>

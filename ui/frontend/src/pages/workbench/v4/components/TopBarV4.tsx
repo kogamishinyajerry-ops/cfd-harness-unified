@@ -77,30 +77,34 @@ function compactCaseLabel(caseId: string | undefined, display: string | null): s
 
 export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
   const isDoe = activeStep === "doe";
-  const effectiveCaseId = isDoe ? null : caseId ?? null;
+  const isGeometryBlueprint = activeStep === "geometry";
+  const useStaticBlueprintHeader = isDoe || isGeometryBlueprint;
+  const effectiveCaseId = useStaticBlueprintHeader ? null : caseId ?? null;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const residuals = useResidualSeries(effectiveCaseId);
   const gauge = convergenceGaugeFromSeries(residuals.data);
 
   const caseLabel = compactCaseLabel(
-    isDoe ? "R-042" : caseId,
+    useStaticBlueprintHeader ? "R-042" : caseId,
     ctx.displayNameZh ?? ctx.displayName ?? null,
   );
-  const projectLabel = isDoe
+  const projectLabel = useStaticBlueprintHeader
     ? "APU 航通风"
     : caseId
       ? "Imported CFD"
       : "V4 工作台";
   const runLabel = isDoe
     ? "探索集_02"
+    : isGeometryBlueprint
+      ? "CAD 准备"
     : ctx.latestRun?.run_id
       ? ctx.latestRun.run_id.slice(0, 10)
       : residuals.data && residuals.data.source !== "empty"
         ? `${residuals.data.source} · ${residuals.data.sample_count} iter`
         : PLACEHOLDER_RUN;
-  const elapsedLabel = isDoe ? "16 h 08 m" : ctx.elapsedDisplay;
+  const elapsedLabel = isDoe ? "16 h 08 m" : isGeometryBlueprint ? "—" : ctx.elapsedDisplay;
   const runState =
-    isDoe
+    useStaticBlueprintHeader
       ? "运行中"
       : residuals.data && residuals.data.source !== "empty"
         ? gauge.achieved
@@ -112,7 +116,7 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
             : "失败"
           : "待运行";
   const runStateTone =
-    isDoe
+    useStaticBlueprintHeader
       ? V4_PALETTE.healthy
       : residuals.data && residuals.data.source !== "empty"
         ? gauge.achieved
@@ -158,7 +162,7 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
           type="button"
           className="flex min-w-0 shrink items-center gap-1 rounded px-1.5 py-0.5 text-v4-textPrimary transition-colors hover:bg-v4-surfaceRaised disabled:opacity-60"
           data-testid="topbar-v4-case-picker"
-          title={isDoe ? "R-042" : caseId ?? "未选择算例"}
+          title={useStaticBlueprintHeader ? "R-042" : caseId ?? "未选择算例"}
         >
           <span className="shrink-0 text-v4-textTertiary">案例</span>
           <span className="max-w-[18ch] truncate">{caseLabel}</span>
@@ -169,7 +173,7 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
           type="button"
           className="flex min-w-0 shrink items-center gap-1 rounded px-1.5 py-0.5 text-v4-textPrimary transition-colors hover:bg-v4-surfaceRaised disabled:opacity-60"
           data-testid="topbar-v4-run-picker"
-          disabled={!isDoe && !ctx.latestRun && !residuals.data}
+          disabled={!useStaticBlueprintHeader && !ctx.latestRun && !residuals.data}
           title={runLabel}
         >
           <span className="shrink-0 text-v4-textTertiary">运行</span>

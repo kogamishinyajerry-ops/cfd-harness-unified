@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GEOMETRY_BLUEPRINT_CALLOUTS,
+  GEOMETRY_BLUEPRINT_RIGHT_CARDS,
   GEOMETRY_BLUEPRINT_PARTS,
   GEOMETRY_BLUEPRINT_SUMMARY,
+  GEOMETRY_BLUEPRINT_TABS,
+  GEOMETRY_BLUEPRINT_TOOLBAR,
   hasAuthoredCadParts,
 } from "../components/geometryBlueprint";
 
@@ -32,5 +36,46 @@ describe("Geometry blueprint contract", () => {
     expect(hasAuthoredCadParts(0)).toBe(false);
     expect(hasAuthoredCadParts(1)).toBe(false);
     expect(hasAuthoredCadParts(2)).toBe(true);
+  });
+
+  it("keeps image-2 CAD preparation tabs and toolbar aligned to the original workbench", () => {
+    expect(GEOMETRY_BLUEPRINT_TABS.map((tab) => tab.label)).toEqual([
+      "几何与 CAD 准备",
+      "模型设置",
+    ]);
+    expect(GEOMETRY_BLUEPRINT_TOOLBAR.map((tool) => tool.label)).toEqual([
+      "修复",
+      "简化",
+      "缝隙检查",
+      "印模",
+      "包裹",
+      "区域提取",
+      "布尔",
+      "测量",
+      "视图",
+      "显示",
+    ]);
+  });
+
+  it("keeps image-2 callouts and AI geometry recommendations mechanically auditable", () => {
+    expect(GEOMETRY_BLUEPRINT_CALLOUTS.map((callout) => callout.label)).toEqual([
+      "入口",
+      "风扇区",
+      "散热件",
+      "壳体",
+      "出口",
+    ]);
+    expect(GEOMETRY_BLUEPRINT_RIGHT_CARDS.map((card) => card.title)).toEqual([
+      "自动识别零件",
+      "缝隙检查",
+      "包裹建议",
+      "流体域提取",
+    ]);
+    expect(GEOMETRY_BLUEPRINT_RIGHT_CARDS.map((card) => card.confidencePct)).toEqual([
+      94,
+      91,
+      92,
+      93,
+    ]);
   });
 });

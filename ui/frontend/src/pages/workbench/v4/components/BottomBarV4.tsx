@@ -124,7 +124,8 @@ export function BottomBarV4({
   caseId = null,
 }: BottomBarV4Props) {
   const isDoe = activeStep === "doe";
-  const ctx = useV4WorkbenchContext(isDoe ? null : caseId);
+  const isGeometryBlueprint = activeStep === "geometry";
+  const ctx = useV4WorkbenchContext(isDoe || isGeometryBlueprint ? null : caseId);
   const doneSteps = isDoe
     ? new Set<V4PipelineStepId>([
         "import",
@@ -135,6 +136,8 @@ export function BottomBarV4({
         "solver",
         "post",
       ])
+    : isGeometryBlueprint
+      ? new Set<V4PipelineStepId>(["import"])
     : deriveDoneSteps(ctx);
 
   // DOE remains conditional: include it only when the DOE cockpit is active.
