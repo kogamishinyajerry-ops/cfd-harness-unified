@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -64,6 +66,28 @@ describe("Geometry blueprint contract", () => {
       imageUrl: "/blueprints/v4/geometry-apu-exploded.png",
     });
     expect(GEOMETRY_BLUEPRINT_SCENE.sourceBlueprint).toContain("22_58_28");
+  });
+
+  it("does not keep the legacy SVG CAD fallback in the geometry renderer", () => {
+    const rendererSource = readFileSync(
+      `${process.cwd()}/src/pages/workbench/v4/components/modes/ModeRendererGeometry.tsx`,
+      "utf8",
+    );
+
+    expect(rendererSource).toContain("v4-mode-geometry-bitmap-scene");
+    expect(rendererSource).not.toContain("IndustrialBoxScene");
+    expect(rendererSource).not.toContain("v4-mode-geometry-cad-callouts");
+  });
+
+  it("keeps the visible geometry shell free of inline SVG chrome", () => {
+    const shellFiles = [
+      `${process.cwd()}/src/pages/workbench/v4/components/TopBarV4.tsx`,
+      `${process.cwd()}/src/pages/workbench/v4/components/BottomBarV4.tsx`,
+    ];
+
+    for (const filePath of shellFiles) {
+      expect(readFileSync(filePath, "utf8")).not.toContain("<svg");
+    }
   });
 
   it("keeps image-2 callouts and AI geometry recommendations mechanically auditable", () => {

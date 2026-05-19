@@ -733,10 +733,11 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
   const placeholderPills = realMatcherMode
     ? []
     : PLACEHOLDER_BY_STEP[activeStep] ?? [];
+  const panelWidth = isGeometry ? "w-[246px]" : "w-[300px]";
 
   return (
     <aside
-      className="flex w-[300px] shrink-0 flex-col border-l border-v4-border bg-v4-surface"
+      className={`flex ${panelWidth} shrink-0 flex-col border-l border-v4-border bg-v4-surface`}
       data-testid="rightpanel-v4"
       data-real-matcher={realMatcherMode ? "true" : "false"}
     >

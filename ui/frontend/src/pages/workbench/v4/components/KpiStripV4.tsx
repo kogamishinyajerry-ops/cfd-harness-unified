@@ -497,10 +497,14 @@ export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
     return <MeshKpiStrip ctx={ctx} />;
   }
   const chips = chipsFor(activeStep, ctx);
+  const isGeometry = activeStep === "geometry";
 
   return (
     <div
-      className="flex h-24 shrink-0 items-center gap-6 border-t border-v4-border bg-v4-shell px-6"
+      className={[
+        "flex shrink-0 items-center border-t border-v4-border bg-v4-shell",
+        isGeometry ? "h-[104px] gap-4 px-4" : "h-24 gap-6 px-6",
+      ].join(" ")}
       data-testid="kpistrip-v4"
       data-active-step={activeStep}
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
@@ -508,7 +512,12 @@ export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
       {chips.map((chip, i) => (
         <div
           key={i}
-          className="flex min-w-[110px] flex-col justify-center"
+          className={[
+            "flex flex-col justify-center",
+            isGeometry
+              ? "h-[72px] min-w-0 flex-1 border border-v4-border bg-v4-surfaceRaised/40 px-4"
+              : "min-w-[110px]",
+          ].join(" ")}
           data-testid={`kpistrip-v4-chip-${i}`}
         >
           <div className="flex items-baseline gap-1.5">

@@ -391,14 +391,19 @@ export function LeftRailV4({
     : isGeometry
       ? buildGeometryTree()
       : buildCaseTree(activeStep, ctx, residuals.data);
+  const railWidth = isGeometry ? "w-[242px]" : "w-[224px]";
+  const navWidth = isGeometry ? "w-14" : "w-8";
+  const navButtonClass = isGeometry
+    ? "flex h-[54px] w-14 flex-col items-center justify-center gap-1 text-[10px] leading-none transition-colors"
+    : "flex h-8 w-8 items-center justify-center text-[13px] transition-colors";
 
   return (
     <aside
-      className="flex w-[224px] shrink-0 border-r border-v4-border bg-v4-surface"
+      className={`flex ${railWidth} shrink-0 border-r border-v4-border bg-v4-surface`}
       data-testid="leftrail-v4"
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
     >
-      <nav className="flex w-8 flex-col items-center gap-0.5 border-r border-v4-border py-1.5">
+      <nav className={`flex ${navWidth} flex-col items-center gap-0.5 border-r border-v4-border py-1.5`}>
         {ICON_TABS.map((tab) => {
           const isActive = tab.id === activeStep;
           const isInteractive = tab.id !== "instruments" && tab.id !== "tools";
@@ -411,14 +416,17 @@ export function LeftRailV4({
               }}
               title={tab.label}
               className={[
-                "flex h-8 w-8 items-center justify-center text-[13px] transition-colors",
+                navButtonClass,
                 isActive
                   ? "border-l border-v4-active bg-v4-surfaceRaised text-v4-active"
                   : "text-v4-textSecondary hover:bg-v4-surfaceRaised hover:text-v4-textPrimary",
               ].join(" ")}
               data-testid={`leftrail-v4-icon-${tab.id}`}
             >
-              {tab.glyph}
+              <span className={isGeometry ? "text-[15px]" : undefined}>
+                {tab.glyph}
+              </span>
+              {isGeometry && <span>{tab.label}</span>}
             </button>
           );
         })}
@@ -435,10 +443,10 @@ export function LeftRailV4({
             <span>{ctx.hasBackend ? "LIVE" : "LOCAL"}</span>
           )}
         </div>
-        {isDoe && (
+        {(isDoe || isGeometry) && (
           <div className="mx-2 mb-1 flex h-7 items-center gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised px-2 text-[10px] text-v4-textTertiary">
             <span>⌕</span>
-            <span>搜索 (Ctrl+f)</span>
+            <span>搜索 (Ctrl+F)</span>
           </div>
         )}
         <ul className="flex flex-col">

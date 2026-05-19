@@ -27,22 +27,9 @@ interface TopBarV4Props {
 
 function Chevron() {
   return (
-    <svg
-      width="8"
-      height="8"
-      viewBox="0 0 24 24"
-      className="inline-block opacity-70"
-      aria-hidden
-    >
-      <path
-        d="M6 9l6 6 6-6"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className="inline-block text-[10px] leading-none opacity-70" aria-hidden>
+      ⌄
+    </span>
   );
 }
 
@@ -52,14 +39,9 @@ function Bullet() {
 
 function MenuIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-      <path
-        d="M2 4h12M2 8h12M2 12h12"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
+    <span className="font-mono text-[14px] leading-none" aria-hidden>
+      ≡
+    </span>
   );
 }
 
@@ -127,15 +109,18 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
           : ctx.latestRun
             ? V4_PALETTE.crit
             : V4_PALETTE.textTertiary;
+  const headerHeight = isGeometryBlueprint ? "h-11 px-4 text-[12px]" : "h-8 px-3 text-[11px]";
+  const leftWidth = isGeometryBlueprint ? "w-[250px]" : "w-[220px]";
+  const rightWidth = isGeometryBlueprint ? "w-[280px]" : "w-[180px]";
 
   return (
     <header
-      className="flex h-8 shrink-0 items-center justify-between border-b border-v4-border bg-v4-shell px-3 text-[11px]"
+      className={`flex shrink-0 items-center justify-between border-b border-v4-border bg-v4-shell ${headerHeight}`}
       data-testid="topbar-v4"
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
     >
       {/* LEFT · wordmark */}
-      <div className="flex w-[220px] items-center gap-3">
+      <div className={`flex ${leftWidth} items-center gap-3`}>
         <button
           type="button"
           className="flex h-6 w-6 items-center justify-center border-r border-v4-border pr-2 text-v4-textSecondary hover:text-v4-textPrimary"
@@ -210,7 +195,7 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
       </div>
 
       {/* RIGHT · AI 助理 */}
-      <div className="flex w-[180px] items-center justify-end gap-2">
+      <div className={`flex ${rightWidth} items-center justify-end gap-2`}>
         <button
           type="button"
           className="flex items-center gap-1.5 rounded border border-v4-active/60 bg-v4-surfaceRaised px-2 py-0.5 text-v4-active transition-colors hover:border-v4-active"
@@ -220,6 +205,19 @@ export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
           <span aria-hidden className="text-[11px]">✦</span>
           AI 副驾
         </button>
+        {isGeometryBlueprint && (
+          <div className="flex items-center gap-1 text-v4-textSecondary">
+            {["▱", "◦", "?", "Z"].map((item) => (
+              <span
+                key={item}
+                className="flex h-6 w-6 items-center justify-center rounded border border-v4-border bg-v4-surfaceRaised text-[11px]"
+                aria-hidden
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </header>
   );
