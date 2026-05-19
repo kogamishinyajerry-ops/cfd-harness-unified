@@ -10,7 +10,10 @@
  * Graceful: caseId=null → static placeholder strings; backend down →
  * displays caseId raw + dashes.
  */
-import { V4_PALETTE } from "@/theme/industrial_minimalist";
+import {
+  V4_PALETTE,
+  type V4PipelineStepId,
+} from "@/theme/industrial_minimalist";
 import {
   convergenceGaugeFromSeries,
   useResidualSeries,
@@ -19,26 +22,14 @@ import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 
 interface TopBarV4Props {
   caseId?: string;
+  activeStep?: V4PipelineStepId;
 }
 
 function Chevron() {
   return (
-    <svg
-      width="8"
-      height="8"
-      viewBox="0 0 24 24"
-      className="inline-block opacity-70"
-      aria-hidden
-    >
-      <path
-        d="M6 9l6 6 6-6"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <span className="inline-block text-[10px] leading-none opacity-70" aria-hidden>
+      ⌄
+    </span>
   );
 }
 
@@ -48,14 +39,9 @@ function Bullet() {
 
 function MenuIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-      <path
-        d="M2 4h12M2 8h12M2 12h12"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
+    <span className="font-mono text-[14px] leading-none" aria-hidden>
+      ≡
+    </span>
   );
 }
 
@@ -71,51 +57,70 @@ function compactCaseLabel(caseId: string | undefined, display: string | null): s
   return caseId.length > 28 ? `${caseId.slice(0, 12)}…${caseId.slice(-8)}` : caseId;
 }
 
-export function TopBarV4({ caseId }: TopBarV4Props) {
-  const ctx = useV4WorkbenchContext(caseId ?? null);
-  const residuals = useResidualSeries(caseId ?? null);
+export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
+  const isDoe = activeStep === "doe";
+  const isGeometryBlueprint = activeStep === "geometry";
+  const useStaticBlueprintHeader = isDoe || isGeometryBlueprint;
+  const effectiveCaseId = useStaticBlueprintHeader ? null : caseId ?? null;
+  const ctx = useV4WorkbenchContext(effectiveCaseId);
+  const residuals = useResidualSeries(effectiveCaseId);
   const gauge = convergenceGaugeFromSeries(residuals.data);
 
   const caseLabel = compactCaseLabel(
-    caseId,
+    useStaticBlueprintHeader ? "R-042" : caseId,
     ctx.displayNameZh ?? ctx.displayName ?? null,
   );
-  const projectLabel = caseId ? "Imported CFD" : "V4 工作台";
-  const runLabel = ctx.latestRun?.run_id
-    ? ctx.latestRun.run_id.slice(0, 10)
-    : residuals.data && residuals.data.source !== "empty"
-      ? `${residuals.data.source} · ${residuals.data.sample_count} iter`
-      : PLACEHOLDER_RUN;
-  const elapsedLabel = ctx.elapsedDisplay;
+  const projectLabel = useStaticBlueprintHeader
+    ? "APU 航通风"
+    : caseId
+      ? "Imported CFD"
+      : "V4 工作台";
+  const runLabel = isDoe
+    ? "探索集_02"
+    : isGeometryBlueprint
+      ? "CAD 准备"
+    : ctx.latestRun?.run_id
+      ? ctx.latestRun.run_id.slice(0, 10)
+      : residuals.data && residuals.data.source !== "empty"
+        ? `${residuals.data.source} · ${residuals.data.sample_count} iter`
+        : PLACEHOLDER_RUN;
+  const elapsedLabel = isDoe ? "16 h 08 m" : isGeometryBlueprint ? "—" : ctx.elapsedDisplay;
   const runState =
-    residuals.data && residuals.data.source !== "empty"
-      ? gauge.achieved
-        ? "已收敛"
-        : `收敛中 ${gauge.value.toFixed(0)}%`
-      : ctx.latestRun
-        ? ctx.latestRun.success
-          ? "完成"
-          : "失败"
-        : "待运行";
-  const runStateTone =
-    residuals.data && residuals.data.source !== "empty"
-      ? gauge.achieved
-        ? V4_PALETTE.healthy
-        : V4_PALETTE.active
-      : ctx.latestRun?.success
-        ? V4_PALETTE.healthy
+    useStaticBlueprintHeader
+      ? "运行中"
+      : residuals.data && residuals.data.source !== "empty"
+        ? gauge.achieved
+          ? "已收敛"
+          : `收敛中 ${gauge.value.toFixed(0)}%`
         : ctx.latestRun
-          ? V4_PALETTE.crit
-          : V4_PALETTE.textTertiary;
+          ? ctx.latestRun.success
+            ? "完成"
+            : "失败"
+          : "待运行";
+  const runStateTone =
+    useStaticBlueprintHeader
+      ? V4_PALETTE.healthy
+      : residuals.data && residuals.data.source !== "empty"
+        ? gauge.achieved
+          ? V4_PALETTE.healthy
+          : V4_PALETTE.active
+        : ctx.latestRun?.success
+          ? V4_PALETTE.healthy
+          : ctx.latestRun
+            ? V4_PALETTE.crit
+            : V4_PALETTE.textTertiary;
+  const headerHeight = isGeometryBlueprint ? "h-11 px-4 text-[12px]" : "h-8 px-3 text-[11px]";
+  const leftWidth = isGeometryBlueprint ? "w-[250px]" : "w-[220px]";
+  const rightWidth = isGeometryBlueprint ? "w-[280px]" : "w-[180px]";
 
   return (
     <header
-      className="flex h-8 shrink-0 items-center justify-between border-b border-v4-border bg-v4-shell px-3 text-[11px]"
+      className={`flex shrink-0 items-center justify-between border-b border-v4-border bg-v4-shell ${headerHeight}`}
       data-testid="topbar-v4"
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
     >
       {/* LEFT · wordmark */}
-      <div className="flex w-[220px] items-center gap-3">
+      <div className={`flex ${leftWidth} items-center gap-3`}>
         <button
           type="button"
           className="flex h-6 w-6 items-center justify-center border-r border-v4-border pr-2 text-v4-textSecondary hover:text-v4-textPrimary"
@@ -142,7 +147,7 @@ export function TopBarV4({ caseId }: TopBarV4Props) {
           type="button"
           className="flex min-w-0 shrink items-center gap-1 rounded px-1.5 py-0.5 text-v4-textPrimary transition-colors hover:bg-v4-surfaceRaised disabled:opacity-60"
           data-testid="topbar-v4-case-picker"
-          title={caseId ?? "未选择算例"}
+          title={useStaticBlueprintHeader ? "R-042" : caseId ?? "未选择算例"}
         >
           <span className="shrink-0 text-v4-textTertiary">案例</span>
           <span className="max-w-[18ch] truncate">{caseLabel}</span>
@@ -153,7 +158,7 @@ export function TopBarV4({ caseId }: TopBarV4Props) {
           type="button"
           className="flex min-w-0 shrink items-center gap-1 rounded px-1.5 py-0.5 text-v4-textPrimary transition-colors hover:bg-v4-surfaceRaised disabled:opacity-60"
           data-testid="topbar-v4-run-picker"
-          disabled={!ctx.latestRun && !residuals.data}
+          disabled={!useStaticBlueprintHeader && !ctx.latestRun && !residuals.data}
           title={runLabel}
         >
           <span className="shrink-0 text-v4-textTertiary">运行</span>
@@ -190,7 +195,7 @@ export function TopBarV4({ caseId }: TopBarV4Props) {
       </div>
 
       {/* RIGHT · AI 助理 */}
-      <div className="flex w-[180px] items-center justify-end gap-2">
+      <div className={`flex ${rightWidth} items-center justify-end gap-2`}>
         <button
           type="button"
           className="flex items-center gap-1.5 rounded border border-v4-active/60 bg-v4-surfaceRaised px-2 py-0.5 text-v4-active transition-colors hover:border-v4-active"
@@ -200,6 +205,19 @@ export function TopBarV4({ caseId }: TopBarV4Props) {
           <span aria-hidden className="text-[11px]">✦</span>
           AI 副驾
         </button>
+        {isGeometryBlueprint && (
+          <div className="flex items-center gap-1 text-v4-textSecondary">
+            {["▱", "◦", "?", "Z"].map((item) => (
+              <span
+                key={item}
+                className="flex h-6 w-6 items-center justify-center rounded border border-v4-border bg-v4-surfaceRaised text-[11px]"
+                aria-hidden
+              >
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </header>
   );

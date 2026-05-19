@@ -130,7 +130,7 @@ export function WorkbenchShellV4() {
         zone="TopBar"
         renderFallback={thinZoneFallback("TopBar", "h-8")}
       >
-        <TopBarV4 caseId={caseId} />
+        <TopBarV4 caseId={caseId} activeStep={activeStep} />
       </V4ErrorBoundary>
 
       <div className="flex min-h-0 flex-1">

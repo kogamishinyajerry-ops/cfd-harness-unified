@@ -8,7 +8,7 @@
  *   - boundary: patch counts by role
  *   - solver:   RunDetail.residuals + key_quantities + duration
  *   - post:     RunDetail.key_quantities + success
- *   - doe:      stub (no DOE backend yet)
+ *   - doe:      blueprint image 8 DOE scoreboard
  *
  * Graceful: when caseId is null OR backend missing, falls back to em-dash
  * placeholder so the visual frame is preserved.
@@ -26,6 +26,8 @@ import {
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
+import { POST_BLUEPRINT_KPIS } from "./postBlueprint";
+import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -61,29 +63,76 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
   return counts;
 }
 
-/** Numeric-only filter for key_quantities · drops arrays/strings/null
- *  so a vector like `u_centerline: [0.0063, 0.0915, ...]` never lands
- *  in a 30px tabular-num KPI chip (Codex R3 Typography finding). */
-function scalarKqEntries(
-  kq: Record<string, unknown> | null | undefined,
-): [string, number][] {
-  if (!kq) return [];
-  return Object.entries(kq).filter(
-    ([, v]) => typeof v === "number" && Number.isFinite(v),
-  ) as [string, number][];
-}
-
 function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
+  if (
+    step === "geometry" &&
+    (!ctx.basics || !hasAuthoredCadParts(ctx.basics.patches?.length))
+  ) {
+    return [
+      {
+        value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+        label: "零件总数",
+        unit: "个",
+      },
+      {
+        value: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+        label: "缝隙检测",
+        unit: "处",
+        delta: "待采纳",
+        deltaTone: "warn",
+      },
+      {
+        value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
+        label: "包裹尺寸",
+        unit: "mm",
+        delta: "建议全局",
+      },
+      {
+        value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
+        label: "流体域体积",
+        unit: "m³",
+        delta: "±2.1%",
+        deltaTone: "healthy",
+      },
+    ];
+  }
+
+  if (step === "doe") {
+    return [
+      {
+        value: String(DOE_BLUEPRINT_KPIS.sampleCount),
+        label: "方案数",
+        delta: `已完成 ${DOE_BLUEPRINT_KPIS.completedCount}`,
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.bestPressurePa.toFixed(1),
+        label: "最优压降",
+        unit: "Pa",
+        delta: "V-12",
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.bestTemperatureC.toFixed(1),
+        label: "最高温度",
+        unit: "°C",
+        delta: "V-12",
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.estimatedComputeTime,
+        label: "预计计算时长",
+        delta: `剩余 ${DOE_BLUEPRINT_KPIS.remainingComputeTime}`,
+        deltaTone: "warn",
+      },
+    ];
+  }
+
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  // Post mode prefers the latest *successful* run so a failed-tail
-  // history doesn't show empty residuals / arrays as KPIs.
-  // Matches ModeRendererPost behaviour for consistency.
-  const postDetail = ctx.successfulRunDetail ?? ctx.runDetail;
-
   switch (step) {
     case "import": {
       const dim = basics?.dimension;
@@ -112,21 +161,28 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
         return [
           {
             value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
-            label: "部件",
+            label: "零件总数",
+            unit: "个",
           },
           {
-            value: String(GEOMETRY_BLUEPRINT_SUMMARY.instanceCount),
-            label: "实例",
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+            label: "缝隙检测",
+            unit: "处",
+            delta: "待采纳",
+            deltaTone: "warn",
           },
           {
             value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
-            label: "容差",
+            label: "包裹尺寸",
             unit: "mm",
+            delta: "建议全局",
           },
           {
             value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
-            label: "估算单元",
-            unit: "M",
+            label: "流体域体积",
+            unit: "m³",
+            delta: "±2.1%",
+            deltaTone: "healthy",
           },
         ];
       }
@@ -289,39 +345,34 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
     }
 
     case "post": {
-      // Post tier prefers successful-run detail (see ModeRendererPost).
-      const kq = postDetail?.key_quantities as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const verdict = postDetail?.success === true ? "通过" : postDetail ? "失败" : "—";
-      const verdictTone =
-        postDetail?.success === true
-          ? "healthy"
-          : postDetail
-            ? "crit"
-            : undefined;
-      const kqEntries = scalarKqEntries(kq).slice(0, 3);
-      const chips: KpiChip[] = kqEntries.map<KpiChip>(([k, v]) => ({
-        value: fmt(v, 3),
-        label: k,
-      }));
-      while (chips.length < 3) chips.push({ value: "—", label: "—" });
-      chips.push({
-        value: verdict,
-        label: "对比基准",
-        deltaTone: verdictTone,
-      });
-      return chips;
-    }
-
-    case "doe": {
-      // No DOE backend yet · keep stub values but reference real case
       return [
-        { value: "—", label: "样本", delta: "DOE 待接入", deltaTone: "warn" },
-        { value: "—", label: "best 压力" },
-        { value: "—", label: "best 温度" },
-        { value: "—", label: "best 流量" },
+        {
+          value: POST_BLUEPRINT_KPIS.pressurePa.toFixed(1),
+          label: "压降",
+          unit: "Pa",
+        },
+        {
+          value: POST_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
+          label: "质量流量",
+          unit: "kg/s",
+        },
+        {
+          value: POST_BLUEPRINT_KPIS.temperatureC.toFixed(1),
+          label: "出口温度",
+          unit: "°C",
+        },
+        {
+          value: String(POST_BLUEPRINT_KPIS.progressPct),
+          label: "覆盖率",
+          unit: "%",
+        },
+        {
+          value: `+${POST_BLUEPRINT_KPIS.gainPct.toFixed(1)}`,
+          label: "对比基准",
+          unit: "%",
+          delta: "增益",
+          deltaTone: "healthy",
+        },
       ];
     }
   }
@@ -439,15 +490,21 @@ interface KpiStripV4Props {
 }
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
+  const ctx = useV4WorkbenchContext(
+    activeStep === "doe" || activeStep === "geometry" ? null : caseId,
+  );
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
   }
   const chips = chipsFor(activeStep, ctx);
+  const isGeometry = activeStep === "geometry";
 
   return (
     <div
-      className="flex h-24 shrink-0 items-center gap-6 border-t border-v4-border bg-v4-shell px-6"
+      className={[
+        "flex shrink-0 items-center border-t border-v4-border bg-v4-shell",
+        isGeometry ? "h-[104px] gap-4 px-4" : "h-24 gap-6 px-6",
+      ].join(" ")}
       data-testid="kpistrip-v4"
       data-active-step={activeStep}
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
@@ -455,7 +512,12 @@ export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
       {chips.map((chip, i) => (
         <div
           key={i}
-          className="flex min-w-[110px] flex-col justify-center"
+          className={[
+            "flex flex-col justify-center",
+            isGeometry
+              ? "h-[72px] min-w-0 flex-1 border border-v4-border bg-v4-surfaceRaised/40 px-4"
+              : "min-w-[110px]",
+          ].join(" ")}
           data-testid={`kpistrip-v4-chip-${i}`}
         >
           <div className="flex items-baseline gap-1.5">

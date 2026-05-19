@@ -154,7 +154,7 @@ def test_cache_invalidates_on_source_mtime_change(isolated_imported: Path):
 
 
 def test_atomic_write_leaves_no_tempfile_on_success(isolated_imported: Path):
-    """After a successful build the cache dir holds only ``geometry.glb`` —
+    """After a successful build the cache dir holds no temp artifacts —
     the ``.tmp.<hex>`` temp name from atomic-rename should be gone."""
     case_id = "imported_2026-04-28T00-00-00Z_atomic"
     _stage_case(isolated_imported, case_id, box_stl())
@@ -162,7 +162,7 @@ def test_atomic_write_leaves_no_tempfile_on_success(isolated_imported: Path):
     build_geometry_glb(case_id)
     cache_dir = isolated_imported / case_id / ".render_cache"
     children = sorted(p.name for p in cache_dir.iterdir())
-    assert children == ["geometry.glb"]
+    assert children == ["geometry.glb", "geometry.source"]
 
 
 # ───────── failure paths ─────────
@@ -221,6 +221,46 @@ def test_get_case_geometry_render_matches_uppercase_stl(isolated_imported: Path)
     response = client.get(f"/api/cases/{case_id}/geometry/render")
     assert response.status_code == 200
     assert response.content[:4] == b"glTF"
+
+
+def test_build_geometry_glb_prefers_runtime_constant_trisurface(
+    isolated_imported: Path, monkeypatch
+):
+    """Prefer the solver/runtime CAD surface over the simplified intake hull.
+
+    Imported KJ66 cases can carry a lightweight upload shell under
+    triSurface/ and the actual renderable engine mesh under
+    constant/triSurface/. The Geometry workbench should render the latter
+    when it exists.
+    """
+    case_id = "imported_2026-04-28T00-00-00Z_constant_tri"
+    case_dir = isolated_imported / case_id
+    upload_tri = case_dir / "triSurface"
+    runtime_tri = case_dir / "constant" / "triSurface"
+    upload_tri.mkdir(parents=True)
+    runtime_tri.mkdir(parents=True)
+    (upload_tri / "hull.stl").write_bytes(box_stl())
+    (runtime_tri / "engine.stl").write_bytes(_cylinder_stl())
+
+    loaded_paths: list[Path] = []
+
+    class _FakeMesh:
+        is_empty = False
+
+        def export(self, file_type: str) -> bytes:
+            assert file_type == "glb"
+            return b"glTF" + b"\x00" * 16
+
+    def _capture_load(path: Path, *args, **kwargs):
+        loaded_paths.append(Path(path))
+        return _FakeMesh()
+
+    monkeypatch.setattr(geometry_glb_mod.trimesh, "load", _capture_load)
+
+    result = build_geometry_glb(case_id)
+
+    assert result.status == "miss"
+    assert loaded_paths == [runtime_tri / "engine.stl"]
 
 
 def test_build_geometry_glb_rejects_stl_symlink_escape(

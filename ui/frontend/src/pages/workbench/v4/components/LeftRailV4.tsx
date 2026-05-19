@@ -18,6 +18,8 @@ import {
   BOUNDARY_BLUEPRINT_RECOGNITION,
   BOUNDARY_BLUEPRINT_TREE_COUNTS,
 } from "./boundaryBlueprint";
+import { DOE_BLUEPRINT_LEFT_TREE } from "./doeBlueprint";
+import { GEOMETRY_BLUEPRINT_SUMMARY } from "./geometryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 import { type V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -38,6 +40,7 @@ const ICON_TABS: IconTab[] = [
   { id: "instruments", label: "监控", glyph: "◷" },
   { id: "solver", label: "求解", glyph: "▶" },
   { id: "post", label: "结果", glyph: "▤" },
+  { id: "doe", label: "设计探索", glyph: "✥" },
 ];
 
 interface TreeNode {
@@ -282,6 +285,74 @@ function buildCaseTree(
   ];
 }
 
+function buildDoeTree(): TreeNode[] {
+  return DOE_BLUEPRINT_LEFT_TREE.flatMap((sectionDef) => {
+    const sectionNode: TreeNode = {
+      label: sectionDef.label,
+      kind: "section",
+      step: "doe",
+      status:
+        sectionDef.label === "方案集" || sectionDef.label === "最优解"
+          ? "active"
+          : "muted",
+    };
+    const itemNodes: TreeNode[] = sectionDef.items.map((item) => ({
+      label: item.label,
+      kind: "item",
+      depth: 1,
+      status: item.status,
+      count: item.value,
+      mono: item.status === "ok" || item.status === "active",
+      title: item.value ? `${item.label} · ${item.value}` : item.label,
+    }));
+    return [sectionNode, ...itemNodes];
+  });
+}
+
+function buildGeometryTree(): TreeNode[] {
+  return [
+    {
+      label: "R-042_ApuVent",
+      kind: "section",
+      step: "import",
+      status: "ok",
+    },
+    section("geometry", "几何", "geometry", "active"),
+    {
+      label: "零件",
+      kind: "item",
+      depth: 1,
+      status: "ok",
+      count: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+    },
+    {
+      label: "修复",
+      kind: "item",
+      depth: 1,
+      status: "warn",
+      count: String(GEOMETRY_BLUEPRINT_SUMMARY.gapCount),
+    },
+    {
+      label: "包裹",
+      kind: "item",
+      depth: 1,
+      status: "muted",
+      count: "1",
+    },
+    {
+      label: "区域",
+      kind: "item",
+      depth: 1,
+      status: "muted",
+      count: "5",
+    },
+    section("mesh", "网格", "geometry", "muted"),
+    section("physics", "物理模型", "geometry", "muted"),
+    section("solver", "工况与求解", "geometry", "muted"),
+    section("post", "结果", "geometry", "muted"),
+  ];
+}
+
 function StatusDot({ status }: { status?: TreeNode["status"] }) {
   const color =
     status === "ok"
@@ -310,17 +381,29 @@ export function LeftRailV4({
   onStepChange,
   caseId = null,
 }: LeftRailV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
-  const residuals = useResidualSeries(caseId);
-  const tree = buildCaseTree(activeStep, ctx, residuals.data);
+  const isDoe = activeStep === "doe";
+  const isGeometry = activeStep === "geometry";
+  const effectiveCaseId = isDoe || isGeometry ? null : caseId;
+  const ctx = useV4WorkbenchContext(effectiveCaseId);
+  const residuals = useResidualSeries(effectiveCaseId);
+  const tree = isDoe
+    ? buildDoeTree()
+    : isGeometry
+      ? buildGeometryTree()
+      : buildCaseTree(activeStep, ctx, residuals.data);
+  const railWidth = isGeometry ? "w-[242px]" : "w-[224px]";
+  const navWidth = isGeometry ? "w-14" : "w-8";
+  const navButtonClass = isGeometry
+    ? "flex h-[54px] w-14 flex-col items-center justify-center gap-1 text-[10px] leading-none transition-colors"
+    : "flex h-8 w-8 items-center justify-center text-[13px] transition-colors";
 
   return (
     <aside
-      className="flex w-[224px] shrink-0 border-r border-v4-border bg-v4-surface"
+      className={`flex ${railWidth} shrink-0 border-r border-v4-border bg-v4-surface`}
       data-testid="leftrail-v4"
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
     >
-      <nav className="flex w-8 flex-col items-center gap-0.5 border-r border-v4-border py-1.5">
+      <nav className={`flex ${navWidth} flex-col items-center gap-0.5 border-r border-v4-border py-1.5`}>
         {ICON_TABS.map((tab) => {
           const isActive = tab.id === activeStep;
           const isInteractive = tab.id !== "instruments" && tab.id !== "tools";
@@ -333,14 +416,17 @@ export function LeftRailV4({
               }}
               title={tab.label}
               className={[
-                "flex h-8 w-8 items-center justify-center text-[13px] transition-colors",
+                navButtonClass,
                 isActive
                   ? "border-l border-v4-active bg-v4-surfaceRaised text-v4-active"
                   : "text-v4-textSecondary hover:bg-v4-surfaceRaised hover:text-v4-textPrimary",
               ].join(" ")}
               data-testid={`leftrail-v4-icon-${tab.id}`}
             >
-              {tab.glyph}
+              <span className={isGeometry ? "text-[15px]" : undefined}>
+                {tab.glyph}
+              </span>
+              {isGeometry && <span>{tab.label}</span>}
             </button>
           );
         })}
@@ -348,13 +434,21 @@ export function LeftRailV4({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto py-2">
         <div className="mb-1 flex items-center justify-between px-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
-          <span>案例树</span>
-          {ctx.isLoading || residuals.isLoading ? (
+          <span>{isDoe ? "设计探索" : "案例树"}</span>
+          {isDoe || isGeometry ? (
+            <span>LIVE</span>
+          ) : ctx.isLoading || residuals.isLoading ? (
             <span>加载中</span>
           ) : (
             <span>{ctx.hasBackend ? "LIVE" : "LOCAL"}</span>
           )}
         </div>
+        {(isDoe || isGeometry) && (
+          <div className="mx-2 mb-1 flex h-7 items-center gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised px-2 text-[10px] text-v4-textTertiary">
+            <span>⌕</span>
+            <span>搜索 (Ctrl+F)</span>
+          </div>
+        )}
         <ul className="flex flex-col">
           {tree.map((node, i) => {
             const depth = node.depth ?? 0;

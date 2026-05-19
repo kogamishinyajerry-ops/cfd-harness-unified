@@ -93,19 +93,12 @@ function PipelineDot({ state }: DotProps) {
   if (state === "done") {
     return (
       <span
-        className="flex h-2.5 w-2.5 items-center justify-center rounded-full"
+        className="flex h-2.5 w-2.5 items-center justify-center rounded-full text-[7px] font-bold leading-none"
         style={{ backgroundColor: color }}
       >
-        <svg viewBox="0 0 24 24" width="7" height="7" aria-hidden>
-          <path
-            d="M5 12l4 4 10-10"
-            stroke={V4_PALETTE.shell}
-            strokeWidth="3"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <span style={{ color: V4_PALETTE.shell }} aria-hidden>
+          ✓
+        </span>
       </span>
     );
   }
@@ -123,14 +116,26 @@ export function BottomBarV4({
   onStepChange,
   caseId = null,
 }: BottomBarV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
-  const doneSteps = deriveDoneSteps(ctx);
+  const isDoe = activeStep === "doe";
+  const isGeometryBlueprint = activeStep === "geometry";
+  const ctx = useV4WorkbenchContext(isDoe || isGeometryBlueprint ? null : caseId);
+  const doneSteps = isDoe
+    ? new Set<V4PipelineStepId>([
+        "import",
+        "geometry",
+        "mesh",
+        "physics",
+        "boundary",
+        "solver",
+        "post",
+      ])
+    : isGeometryBlueprint
+      ? new Set<V4PipelineStepId>(["import"])
+    : deriveDoneSteps(ctx);
 
-  // 2026-05-19 user directive: DoE is sealed (mock samples · no backend).
-  // Filter out conditional steps from the visible rail. The conditional
-  // flag was already on V4_PIPELINE_STEPS but no consumer was honoring it.
+  // DOE remains conditional: include it only when the DOE cockpit is active.
   const VISIBLE_STEPS = V4_PIPELINE_STEPS.filter(
-    (s) => !("conditional" in s && s.conditional),
+    (s) => !("conditional" in s && s.conditional) || isDoe,
   );
 
   const activeIndex = VISIBLE_STEPS.findIndex((s) => s.id === activeStep);
@@ -152,7 +157,10 @@ export function BottomBarV4({
 
   return (
     <footer
-      className="relative flex h-[60px] shrink-0 items-center border-t border-v4-border bg-v4-surface px-8"
+      className={[
+        "relative flex shrink-0 items-center border-t border-v4-border bg-v4-surface px-8",
+        isGeometryBlueprint ? "h-[76px]" : "h-[60px]",
+      ].join(" ")}
       data-testid="bottombar-v4"
       data-backend-connected={ctx.hasBackend ? "true" : "false"}
     >
@@ -175,12 +183,18 @@ export function BottomBarV4({
 
         {VISIBLE_STEPS.map((step, i) => {
           const state = stateFor(i, step.id);
+          const geometryActive = isGeometryBlueprint && state === "active";
           return (
             <button
               key={step.id}
               type="button"
               onClick={() => onStepChange(step.id)}
-              className="group relative z-10 flex flex-1 flex-col items-center gap-1.5 py-1 transition-colors"
+              className={[
+                "group relative z-10 flex flex-col items-center gap-1.5 transition-colors",
+                geometryActive
+                  ? "mx-2 flex-none basis-[150px] border border-v4-active/70 bg-v4-surfaceRaised px-3 py-2 shadow-[0_0_0_1px_rgba(207,162,74,0.12)]"
+                  : "flex-1 py-1",
+              ].join(" ")}
               data-testid={`bottombar-v4-step-${step.id}`}
               data-state={state}
             >
@@ -205,6 +219,15 @@ export function BottomBarV4({
               >
                 {step.label}
               </span>
+              {isGeometryBlueprint && (
+                <span className="text-[9px] leading-none text-v4-textTertiary">
+                  {state === "done"
+                    ? "完成"
+                    : state === "active"
+                      ? "进行中"
+                      : "待处理"}
+                </span>
+              )}
             </button>
           );
         })}
