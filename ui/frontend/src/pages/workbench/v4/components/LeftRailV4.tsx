@@ -18,6 +18,7 @@ import {
   BOUNDARY_BLUEPRINT_RECOGNITION,
   BOUNDARY_BLUEPRINT_TREE_COUNTS,
 } from "./boundaryBlueprint";
+import { DOE_BLUEPRINT_LEFT_TREE } from "./doeBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 import { type V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -38,6 +39,7 @@ const ICON_TABS: IconTab[] = [
   { id: "instruments", label: "监控", glyph: "◷" },
   { id: "solver", label: "求解", glyph: "▶" },
   { id: "post", label: "结果", glyph: "▤" },
+  { id: "doe", label: "设计探索", glyph: "✥" },
 ];
 
 interface TreeNode {
@@ -282,6 +284,30 @@ function buildCaseTree(
   ];
 }
 
+function buildDoeTree(): TreeNode[] {
+  return DOE_BLUEPRINT_LEFT_TREE.flatMap((sectionDef) => {
+    const sectionNode: TreeNode = {
+      label: sectionDef.label,
+      kind: "section",
+      step: "doe",
+      status:
+        sectionDef.label === "方案集" || sectionDef.label === "最优解"
+          ? "active"
+          : "muted",
+    };
+    const itemNodes: TreeNode[] = sectionDef.items.map((item) => ({
+      label: item.label,
+      kind: "item",
+      depth: 1,
+      status: item.status,
+      count: item.value,
+      mono: item.status === "ok" || item.status === "active",
+      title: item.value ? `${item.label} · ${item.value}` : item.label,
+    }));
+    return [sectionNode, ...itemNodes];
+  });
+}
+
 function StatusDot({ status }: { status?: TreeNode["status"] }) {
   const color =
     status === "ok"
@@ -310,9 +336,11 @@ export function LeftRailV4({
   onStepChange,
   caseId = null,
 }: LeftRailV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
-  const residuals = useResidualSeries(caseId);
-  const tree = buildCaseTree(activeStep, ctx, residuals.data);
+  const isDoe = activeStep === "doe";
+  const effectiveCaseId = isDoe ? null : caseId;
+  const ctx = useV4WorkbenchContext(effectiveCaseId);
+  const residuals = useResidualSeries(effectiveCaseId);
+  const tree = isDoe ? buildDoeTree() : buildCaseTree(activeStep, ctx, residuals.data);
 
   return (
     <aside
@@ -348,13 +376,21 @@ export function LeftRailV4({
 
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto py-2">
         <div className="mb-1 flex items-center justify-between px-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
-          <span>案例树</span>
-          {ctx.isLoading || residuals.isLoading ? (
+          <span>{isDoe ? "设计探索" : "案例树"}</span>
+          {isDoe ? (
+            <span>LIVE</span>
+          ) : ctx.isLoading || residuals.isLoading ? (
             <span>加载中</span>
           ) : (
             <span>{ctx.hasBackend ? "LIVE" : "LOCAL"}</span>
           )}
         </div>
+        {isDoe && (
+          <div className="mx-2 mb-1 flex h-7 items-center gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised px-2 text-[10px] text-v4-textTertiary">
+            <span>⌕</span>
+            <span>搜索 (Ctrl+f)</span>
+          </div>
+        )}
         <ul className="flex flex-col">
           {tree.map((node, i) => {
             const depth = node.depth ?? 0;

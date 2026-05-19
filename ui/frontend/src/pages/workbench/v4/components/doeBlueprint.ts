@@ -1,13 +1,11 @@
 import { V4_CFD_COLORMAP, V4_PALETTE } from "@/theme/industrial_minimalist";
-import type { ModeTab } from "./ModeTabStrip";
 
 export interface DoeBlueprintSample {
   id: string;
+  variableLabel: string;
   pressurePa: number;
   temperatureC: number;
-  volumeM3: number;
-  deltaPct: number;
-  recommended: boolean;
+  optimal?: boolean;
   seed: number;
 }
 
@@ -23,109 +21,122 @@ export interface DoeBlueprintRightCard {
   ctaTone?: "active" | "neutral";
 }
 
-export const DOE_BLUEPRINT_TABS: ModeTab[] = [
-  { id: "samples", label: "样本网格" },
-  { id: "pareto", label: "Pareto" },
-  { id: "sensitivity", label: "敏感性" },
-  { id: "report", label: "报告" },
+export interface DoeBlueprintToolbarItem {
+  id: "search" | "status" | "view" | "sort" | "settings";
+  label: string;
+}
+
+export interface DoeBlueprintTreeSection {
+  label: string;
+  items: Array<{
+    label: string;
+    value?: string;
+    status?: "ok" | "warn" | "active" | "muted";
+  }>;
+}
+
+export const DOE_BLUEPRINT_TOOLBAR: DoeBlueprintToolbarItem[] = [
+  { id: "search", label: "搜索方案" },
+  { id: "status", label: "全部状态" },
+  { id: "view", label: "视图" },
+  { id: "sort", label: "排序：综合评分" },
+  { id: "settings", label: "设置" },
 ];
 
 export const DOE_BLUEPRINT_KPIS = {
   sampleCount: 28,
+  completedCount: 28,
+  runningCount: 0,
+  queuedCount: 0,
   bestPressurePa: 212.6,
   bestTemperatureC: 94.1,
-  bestVolumeM3: 18.42,
-  bestGainPct: 4.2,
+  estimatedComputeTime: "18 h 42 m",
+  elapsedComputeTime: "16 h 08 m",
+  remainingComputeTime: "2 h 34 m",
 } as const;
 
-export const DOE_BLUEPRINT_SAMPLES: DoeBlueprintSample[] = [
+export const DOE_BLUEPRINT_VISIBLE_SAMPLES: DoeBlueprintSample[] = [
   {
-    id: "S-01",
-    pressurePa: 198.7,
-    temperatureC: 96.8,
-    volumeM3: 16.84,
-    deltaPct: -2.1,
-    recommended: false,
+    id: "V-07",
+    variableLabel: "进风口面积 +20%",
+    pressurePa: 298.7,
+    temperatureC: 98.8,
     seed: 3,
   },
   {
-    id: "S-02",
-    pressurePa: 222.1,
-    temperatureC: 95.1,
-    volumeM3: 17.91,
-    deltaPct: 0.8,
-    recommended: true,
+    id: "V-08",
+    variableLabel: "进风口面积 +40%",
+    pressurePa: 262.1,
+    temperatureC: 96.3,
     seed: 7,
   },
   {
-    id: "S-03",
+    id: "V-09",
+    variableLabel: "风道角度 +5°",
     pressurePa: 231.4,
-    temperatureC: 94.7,
-    volumeM3: 18.18,
-    deltaPct: 2.2,
-    recommended: true,
+    temperatureC: 95.7,
     seed: 11,
   },
   {
-    id: "S-04",
-    pressurePa: 206.8,
-    temperatureC: 95.9,
-    volumeM3: 17.22,
-    deltaPct: -1.0,
-    recommended: false,
+    id: "V-10",
+    variableLabel: "风道角度 +10°",
+    pressurePa: 218.9,
+    temperatureC: 94.9,
     seed: 13,
   },
   {
-    id: "S-05",
-    pressurePa: DOE_BLUEPRINT_KPIS.bestPressurePa,
-    temperatureC: DOE_BLUEPRINT_KPIS.bestTemperatureC,
-    volumeM3: DOE_BLUEPRINT_KPIS.bestVolumeM3,
-    deltaPct: DOE_BLUEPRINT_KPIS.bestGainPct,
-    recommended: true,
+    id: "V-11",
+    variableLabel: "风扇转速 +10%",
+    pressurePa: 247.5,
+    temperatureC: 93.6,
     seed: 17,
   },
   {
-    id: "S-06",
-    pressurePa: 248.6,
-    temperatureC: 93.6,
-    volumeM3: 17.72,
-    deltaPct: 0.9,
-    recommended: true,
+    id: "V-12",
+    variableLabel: "风扇转速 +20%",
+    pressurePa: DOE_BLUEPRINT_KPIS.bestPressurePa,
+    temperatureC: DOE_BLUEPRINT_KPIS.bestTemperatureC,
+    optimal: true,
     seed: 19,
   },
   {
-    id: "S-07",
-    pressurePa: 196.4,
-    temperatureC: 96.2,
-    volumeM3: 16.51,
-    deltaPct: -2.4,
-    recommended: false,
+    id: "V-13",
+    variableLabel: "散热片间距 -10%",
+    pressurePa: 226.3,
+    temperatureC: 95.4,
     seed: 23,
   },
   {
-    id: "S-08",
-    pressurePa: 219.2,
-    temperatureC: 95.4,
-    volumeM3: 17.88,
-    deltaPct: 1.5,
-    recommended: true,
+    id: "V-14",
+    variableLabel: "网格等级（中→细）",
+    pressurePa: 214.8,
+    temperatureC: 94.0,
     seed: 29,
   },
+];
+
+export const DOE_BLUEPRINT_SCATTER_POINTS = [
+  ...DOE_BLUEPRINT_VISIBLE_SAMPLES,
   {
-    id: "S-09",
-    pressurePa: 235.7,
-    temperatureC: 94.8,
-    volumeM3: 18.06,
-    deltaPct: 2.8,
-    recommended: false,
+    id: "V-15",
+    variableLabel: "出口面积 +10%",
+    pressurePa: 195.4,
+    temperatureC: 96.8,
     seed: 31,
+  },
+  {
+    id: "V-16",
+    variableLabel: "局部细化",
+    pressurePa: 360.0,
+    temperatureC: 93.0,
+    seed: 37,
   },
 ];
 
 export const DOE_BLUEPRINT_VERDICT = {
-  selectedId: "S-05",
-  label: "推荐设计 · S-05",
-  subtitle: "5 个候选进入比对 · 设计探索后端待接入",
+  selectedId: "V-12",
+  label: "V-12 最优解",
+  subtitle: "压降与最高温度之间取得最佳平衡",
 } as const;
 
 export const DOE_BLUEPRINT_SCATTER = {
@@ -136,34 +147,102 @@ export const DOE_BLUEPRINT_SCATTER = {
   recommendedColor: V4_CFD_COLORMAP[2],
 } as const;
 
+export const DOE_BLUEPRINT_CONFIDENCE = {
+  modelPct: 92,
+  label: "模型置信度",
+} as const;
+
+export const DOE_BLUEPRINT_LEFT_TREE: DoeBlueprintTreeSection[] = [
+  {
+    label: "参数",
+    items: [
+      { label: "几何参数", value: "12", status: "muted" },
+      { label: "物理参数", value: "8", status: "muted" },
+      { label: "数值参数", value: "6", status: "muted" },
+    ],
+  },
+  {
+    label: "变量 (16)",
+    items: [
+      { label: "进风口面积", value: "4", status: "active" },
+      { label: "出口面积", value: "2", status: "muted" },
+      { label: "风道角度", value: "3", status: "muted" },
+      { label: "风扇转速", value: "2", status: "muted" },
+      { label: "散热片间距", value: "2", status: "muted" },
+    ],
+  },
+  {
+    label: "方案集",
+    items: [
+      { label: "探索集_01", value: "32", status: "muted" },
+      { label: "探索集_02", value: "28", status: "active" },
+      { label: "探索集_03", value: "24", status: "muted" },
+    ],
+  },
+  {
+    label: "目标函数",
+    items: [
+      { label: "压降 (Pa)", value: "最小化", status: "muted" },
+      { label: "最高温度 (°C)", value: "最小化", status: "muted" },
+    ],
+  },
+  {
+    label: "约束",
+    items: [
+      { label: "最大噪声", value: "< 85 dB(A)", status: "muted" },
+      { label: "风扇功耗", value: "< 1.2 kW", status: "muted" },
+      { label: "出口温度", value: "< 120 °C", status: "muted" },
+    ],
+  },
+  {
+    label: "最优解",
+    items: [
+      { label: "V-12（探索集_02）", status: "active" },
+      { label: "压降", value: "212.6 Pa", status: "ok" },
+      { label: "最高温度", value: "94.1 °C", status: "ok" },
+    ],
+  },
+];
+
 export const DOE_BLUEPRINT_RIGHT_CARDS: DoeBlueprintRightCard[] = [
   {
-    title: "推荐 5 个设计",
+    title: "推荐 3 个新方案",
     facts: [
-      { label: "候选样本", value: "28" },
-      { label: "推荐入围", value: "5", tone: "healthy" },
-      { label: "当前选择", value: "S-05", tone: "healthy" },
+      { label: "基于当前结果", value: "预计更优", tone: "healthy" },
+      { label: "建议方向", value: "局部细化" },
     ],
-    footer: "按压降、出口温度、体积流量综合排序",
-  },
-  {
-    title: "实验比对就绪",
-    facts: [
-      { label: "最佳压降", value: "212.6 Pa" },
-      { label: "最佳温度", value: "94.1 °C" },
-      { label: "后端状态", value: "待接入", tone: "warn" },
-    ],
-    footer: "当前为设计探索预览，不自动触发新求解",
-  },
-  {
-    title: "导出报告",
-    facts: [
-      { label: "矩阵", value: "3 × 3" },
-      { label: "散点图", value: "Pareto" },
-      { label: "体积流量", value: "18.42 m³", tone: "healthy" },
-    ],
-    cta: "导出报告",
+    cta: "查看推荐",
     ctaTone: "active",
-    footer: "报告包包含样本矩阵、Pareto 图和推荐摘要",
+    footer: "仅展示候选方向，不自动触发新求解",
+  },
+  {
+    title: "发现最优点",
+    facts: [
+      { label: "方案", value: "V-12", tone: "healthy" },
+      { label: "压降", value: "212.6 Pa", tone: "healthy" },
+      { label: "最高温度", value: "94.1 °C", tone: "healthy" },
+    ],
+    cta: "查看详情",
+    footer: "建议开展局部细化验证",
+  },
+  {
+    title: "生成对比报告",
+    facts: [
+      { label: "图表", value: "函数与结论" },
+      { label: "设计数", value: "28" },
+    ],
+    cta: "生成报告",
+    ctaTone: "active",
+    footer: "对比最优方案与基线设计",
+  },
+  {
+    title: "导出模板",
+    facts: [
+      { label: "对象", value: "探索设置" },
+      { label: "复用", value: "新项目" },
+    ],
+    cta: "导出模板",
+    ctaTone: "active",
+    footer: "导出当前探索设置与最优方案导出为模板",
   },
 ];

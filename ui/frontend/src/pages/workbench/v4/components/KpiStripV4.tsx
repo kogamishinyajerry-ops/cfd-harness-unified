@@ -8,7 +8,7 @@
  *   - boundary: patch counts by role
  *   - solver:   RunDetail.residuals + key_quantities + duration
  *   - post:     RunDetail.key_quantities + success
- *   - doe:      stub (no DOE backend yet)
+ *   - doe:      blueprint image 8 DOE scoreboard
  *
  * Graceful: when caseId is null OR backend missing, falls back to em-dash
  * placeholder so the visual frame is preserved.
@@ -64,6 +64,37 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
 }
 
 function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
+  if (step === "doe") {
+    return [
+      {
+        value: String(DOE_BLUEPRINT_KPIS.sampleCount),
+        label: "方案数",
+        delta: `已完成 ${DOE_BLUEPRINT_KPIS.completedCount}`,
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.bestPressurePa.toFixed(1),
+        label: "最优压降",
+        unit: "Pa",
+        delta: "V-12",
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.bestTemperatureC.toFixed(1),
+        label: "最高温度",
+        unit: "°C",
+        delta: "V-12",
+        deltaTone: "healthy",
+      },
+      {
+        value: DOE_BLUEPRINT_KPIS.estimatedComputeTime,
+        label: "预计计算时长",
+        delta: `剩余 ${DOE_BLUEPRINT_KPIS.remainingComputeTime}`,
+        deltaTone: "warn",
+      },
+    ];
+  }
+
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
@@ -304,34 +335,6 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
         },
       ];
     }
-
-    case "doe": {
-      return [
-        { value: String(DOE_BLUEPRINT_KPIS.sampleCount), label: "样本" },
-        {
-          value: DOE_BLUEPRINT_KPIS.bestPressurePa.toFixed(1),
-          label: "best 压力",
-          unit: "Pa",
-        },
-        {
-          value: DOE_BLUEPRINT_KPIS.bestTemperatureC.toFixed(1),
-          label: "best 温度",
-          unit: "°C",
-        },
-        {
-          value: DOE_BLUEPRINT_KPIS.bestVolumeM3.toFixed(2),
-          label: "best 流量",
-          unit: "m³",
-        },
-        {
-          value: `+${DOE_BLUEPRINT_KPIS.bestGainPct.toFixed(1)}`,
-          label: "推荐增益",
-          unit: "%",
-          delta: "S-05",
-          deltaTone: "healthy",
-        },
-      ];
-    }
   }
 }
 
@@ -447,7 +450,7 @@ interface KpiStripV4Props {
 }
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
+  const ctx = useV4WorkbenchContext(activeStep === "doe" ? null : caseId);
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
   }

@@ -10,7 +10,7 @@
  *      static placeholder pills with facts pulled from useV4WorkbenchContext.
  *      Per-step content (geometry: patches+dim+CL · mesh: GCI · physics:
  *      solver · boundary: roles · solver: residuals · post: verdict · doe:
- *      stub) so each pipeline step has a useful right-panel.
+ *      blueprint decision cards) so each pipeline step has a useful right-panel.
  *   3. AdvisorPillStack (V91 matcher) remains at the bottom — primary
  *      "AI 助理" surface, progressive-disclosure pills, advisory-only.
  *
@@ -44,7 +44,10 @@ import {
   SOLVER_BLUEPRINT_TELEMETRY,
 } from "./solverBlueprint";
 import { POST_BLUEPRINT_RIGHT_CARDS } from "./postBlueprint";
-import { DOE_BLUEPRINT_RIGHT_CARDS } from "./doeBlueprint";
+import {
+  DOE_BLUEPRINT_CONFIDENCE,
+  DOE_BLUEPRINT_RIGHT_CARDS,
+} from "./doeBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -669,18 +672,53 @@ function PlaceholderPillCard({ pill, idx }: { pill: PlaceholderPill; idx: number
   );
 }
 
+function DoeConfidenceCard() {
+  return (
+    <article
+      className="flex flex-col gap-2 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
+      data-testid="rightpanel-v4-doe-confidence"
+    >
+      <div className="flex items-baseline justify-between">
+        <span className="text-[10px] tracking-wider text-v4-textTertiary">
+          {DOE_BLUEPRINT_CONFIDENCE.label}
+        </span>
+        <span className="font-mono text-[10px] text-v4-healthy">
+          DOE MODEL
+        </span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="font-mono text-[26px] font-semibold leading-none tabular-nums text-v4-textPrimary">
+          {DOE_BLUEPRINT_CONFIDENCE.modelPct}
+        </span>
+        <span className="text-[11px] text-v4-textTertiary">%</span>
+        <span className="ml-auto text-[10px] text-v4-textSecondary">
+          建议仅作候选方向
+        </span>
+      </div>
+      <div className="h-1 w-full rounded-sm bg-v4-canvas">
+        <div
+          className="h-full rounded-sm bg-v4-healthy"
+          style={{ width: `${DOE_BLUEPRINT_CONFIDENCE.modelPct}%` }}
+        />
+      </div>
+    </article>
+  );
+}
+
 interface RightPanelV4Props {
   activeStep: V4PipelineStepId;
   caseId?: string | null;
 }
 
 export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
-  const matcher = useV4AdvisorMatches(caseId);
+  const isDoe = activeStep === "doe";
+  const effectiveCaseId = isDoe ? null : caseId;
+  const ctx = useV4WorkbenchContext(effectiveCaseId);
+  const matcher = useV4AdvisorMatches(effectiveCaseId);
   const solverResiduals = useResidualSeries(
-    activeStep === "solver" ? caseId : null,
+    activeStep === "solver" ? effectiveCaseId : null,
   );
-  const realMatcherMode = Boolean(caseId);
+  const realMatcherMode = Boolean(effectiveCaseId);
   const modeCards = realMatcherMode
     ? modeCardsFor(activeStep, ctx, solverResiduals.data)
     : [];
@@ -695,7 +733,7 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
       data-real-matcher={realMatcherMode ? "true" : "false"}
     >
       <div className="flex h-8 items-center justify-between border-b border-v4-border px-3 text-[11px] uppercase tracking-wider text-v4-textSecondary">
-        <span>AI 助理</span>
+        <span>{isDoe ? "AI 副驾" : "AI 助理"}</span>
         <span
           className="text-v4-textTertiary"
           data-testid="rightpanel-v4-advisory-note"
@@ -705,7 +743,14 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
-        {realMatcherMode ? (
+        {isDoe ? (
+          <>
+            <DoeConfidenceCard />
+            {DOE_BLUEPRINT_RIGHT_CARDS.map((card, i) => (
+              <FactCard key={`doe-${i}`} {...card} />
+            ))}
+          </>
+        ) : realMatcherMode ? (
           <>
             <CompletenessCard ctx={ctx} />
             {modeCards.map((card, i) => (

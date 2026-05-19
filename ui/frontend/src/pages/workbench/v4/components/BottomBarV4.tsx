@@ -123,14 +123,23 @@ export function BottomBarV4({
   onStepChange,
   caseId = null,
 }: BottomBarV4Props) {
-  const ctx = useV4WorkbenchContext(caseId);
-  const doneSteps = deriveDoneSteps(ctx);
+  const isDoe = activeStep === "doe";
+  const ctx = useV4WorkbenchContext(isDoe ? null : caseId);
+  const doneSteps = isDoe
+    ? new Set<V4PipelineStepId>([
+        "import",
+        "geometry",
+        "mesh",
+        "physics",
+        "boundary",
+        "solver",
+        "post",
+      ])
+    : deriveDoneSteps(ctx);
 
-  // 2026-05-19 user directive: DoE is sealed (mock samples · no backend).
-  // Filter out conditional steps from the visible rail. The conditional
-  // flag was already on V4_PIPELINE_STEPS but no consumer was honoring it.
+  // DOE remains conditional: include it only when the DOE cockpit is active.
   const VISIBLE_STEPS = V4_PIPELINE_STEPS.filter(
-    (s) => !("conditional" in s && s.conditional),
+    (s) => !("conditional" in s && s.conditional) || isDoe,
   );
 
   const activeIndex = VISIBLE_STEPS.findIndex((s) => s.id === activeStep);
