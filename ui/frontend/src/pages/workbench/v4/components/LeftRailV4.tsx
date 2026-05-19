@@ -14,6 +14,10 @@ import {
   useResidualSeries,
 } from "../hooks/useResidualSeries";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
+import {
+  BOUNDARY_BLUEPRINT_RECOGNITION,
+  BOUNDARY_BLUEPRINT_TREE_COUNTS,
+} from "./boundaryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 import { type V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -124,6 +128,7 @@ function buildCaseTree(
   );
   const residualP = latestResidual(residualPayload, "p");
   const bcMissing = hasMissing(ctx, "bc.patches");
+  const hasBoundaryPatches = (basics?.patches.length ?? 0) > 0;
   const blocked = (completeness?.blocked_by_critical ?? 0) > 0;
   const ready = completeness?.ready_for_archive === true;
   const displayName =
@@ -207,13 +212,31 @@ function buildCaseTree(
       status: basics?.solver ? "ok" : "muted",
     },
 
-    section("boundary", "边界", activeStep, bcMissing ? "warn" : "ok"),
-    {
-      label: bcMissing ? "bc.patches 待补齐" : "边界设置已入库",
-      kind: "item",
-      depth: 1,
-      status: bcMissing ? "warn" : "ok",
-    },
+    section(
+      "boundary",
+      "边界",
+      activeStep,
+      bcMissing ? "warn" : "ok",
+      hasBoundaryPatches
+        ? String(basics?.patches.length)
+        : `${BOUNDARY_BLUEPRINT_RECOGNITION.recognized}/${BOUNDARY_BLUEPRINT_RECOGNITION.total}`,
+    ),
+    ...(hasBoundaryPatches
+      ? [
+          {
+            label: "边界设置已入库",
+            kind: "item" as const,
+            depth: 1,
+            status: "ok" as const,
+          },
+        ]
+      : BOUNDARY_BLUEPRINT_TREE_COUNTS.map((item) => ({
+          label: `${item.labelZh} ×${item.count}`,
+          kind: "item" as const,
+          depth: 1,
+          status: item.status,
+          mono: item.id === "unidentified",
+        }))),
 
     section(
       "solver",

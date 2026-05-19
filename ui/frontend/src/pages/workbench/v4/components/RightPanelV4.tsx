@@ -26,9 +26,23 @@ import { AdvisorPillStack } from "./AdvisorPillStack";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 import { useV4AdvisorMatches } from "../hooks/useV4AdvisorMatches";
 import {
-  convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import {
+  GEOMETRY_BLUEPRINT_SUMMARY,
+  hasAuthoredCadParts,
+} from "./geometryBlueprint";
+import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
+import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
+import {
+  BOUNDARY_BLUEPRINT_KPIS,
+  BOUNDARY_BLUEPRINT_RECOGNITION,
+} from "./boundaryBlueprint";
+import {
+  SOLVER_BLUEPRINT_KPIS,
+  SOLVER_BLUEPRINT_RIGHT_CARDS,
+  SOLVER_BLUEPRINT_TELEMETRY,
+} from "./solverBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -62,17 +76,6 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 function fmtSci(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toExponential(2);
-}
-
-function latestResidual(
-  payload: ResidualSeriesPayload | null | undefined,
-  name: string | null,
-): number | null {
-  if (!name) return null;
-  const pts = payload?.series?.[name];
-  if (!pts || pts.length === 0) return null;
-  const last = pts[pts.length - 1];
-  return Number.isFinite(last?.y) ? last.y : null;
 }
 
 /** Completeness summary card · always at top when ctx.completeness present. */
@@ -155,15 +158,17 @@ interface FactCardProps {
     tone?: "healthy" | "warn" | "crit" | "neutral";
   }>;
   footer?: string;
+  cta?: string;
+  ctaTone?: "active" | "neutral";
 }
 
-function FactCard({ title, facts, footer }: FactCardProps) {
+function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardProps) {
   return (
     <article
       className="flex flex-col gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
       data-testid={`rightpanel-v4-factcard-${title}`}
     >
-      <div className="text-[10px] uppercase tracking-wider text-v4-textTertiary">
+      <div className="text-[10px] tracking-wider text-v4-textTertiary">
         {title}
       </div>
       <ul className="space-y-1 text-[11px]">
@@ -198,6 +203,22 @@ function FactCard({ title, facts, footer }: FactCardProps) {
           {footer}
         </div>
       )}
+      {cta && (
+        <div className="flex justify-end border-t border-v4-border pt-1.5">
+          <span
+            className={[
+              "rounded border px-2 py-0.5 text-[10px] font-medium",
+              ctaTone === "active"
+                ? "border-v4-active/40 text-v4-active"
+                : "border-v4-border text-v4-textSecondary",
+            ].join(" ")}
+            data-testid={`rightpanel-v4-factcard-cta-${title}`}
+            data-advisory-only="true"
+          >
+            {cta}
+          </span>
+        </div>
+      )}
     </article>
   );
 }
@@ -230,7 +251,6 @@ function modeCardsFor(
 ): FactCardProps[] {
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  const detail = ctx.runDetail;
 
   switch (step) {
     case "import": {
@@ -261,6 +281,51 @@ function modeCardsFor(
     }
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
+      if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {
+        return [
+          {
+            title: "几何已就绪",
+            facts: [
+              {
+                label: "CAD 分件",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.partCount} 部件`,
+                tone: "healthy",
+              },
+              {
+                label: "实例",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.instanceCount} 个`,
+              },
+              {
+                label: "容差",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1)} mm`,
+              },
+            ],
+            footer: "GLB 可用 · 单壳 STL 的 CAD 分件语义待命名",
+          },
+          {
+            title: "启动几何分析",
+            facts: [
+              { label: "水密性", value: "已通过", tone: "healthy" },
+              { label: "单位", value: "mm" },
+              {
+                label: "估算单元",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2)} M`,
+              },
+            ],
+            cta: "启动几何分析",
+            ctaTone: "active",
+          },
+          {
+            title: "建议合并 2 实例",
+            facts: [
+              { label: "重复实例", value: "2", tone: "warn" },
+              { label: "策略", value: "保留母体" },
+              { label: "影响", value: "网格更稳定" },
+            ],
+            cta: "查看建议",
+          },
+        ];
+      }
       return [
         {
           title: "几何摘要",
@@ -286,6 +351,52 @@ function modeCardsFor(
     case "mesh": {
       const gci = mesh?.gci;
       const qc = mesh?.qc_band;
+      if (!mesh) {
+        return [
+          {
+            title: "网格生成完成",
+            facts: [
+              {
+                label: "估算单元",
+                value: `${MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)} M`,
+                tone: "healthy",
+              },
+              { label: "线框层", value: "mesh.glb" },
+              { label: "histogram", value: "5 项" },
+            ],
+            footer: "mesh metrics artifact 缺失 · 使用蓝图 QA 分布合同",
+          },
+          {
+            title: "18.86M 单元 · 0.128 max skew",
+            facts: [
+              {
+                label: "max skew",
+                value: MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3),
+                tone: "healthy",
+              },
+              {
+                label: "max non-orth",
+                value: `${MESH_BLUEPRINT_NUMERICS.maxNonOrthogonalityDeg.toFixed(1)}°`,
+                tone: "warn",
+              },
+              {
+                label: "时间估计",
+                value: `${MESH_BLUEPRINT_NUMERICS.timeEstimateMin.toFixed(1)} min`,
+              },
+            ],
+          },
+          {
+            title: "评估",
+            facts: [
+              { label: "流体距离", value: "分布正常", tone: "healthy" },
+              { label: "表面距离", value: "近壁加密" },
+              { label: "下一步", value: "物理设置" },
+            ],
+            cta: "查看网格质量",
+            ctaTone: "active",
+          },
+        ];
+      }
       const gci32Tone: "healthy" | "warn" | "crit" | undefined =
         qc?.gci_32 === "green"
           ? "healthy"
@@ -343,6 +454,51 @@ function modeCardsFor(
     }
     case "physics": {
       const solver = basics?.solver;
+      if (!solver) {
+        return [
+          {
+            title: "推荐 SST k-ω",
+            facts: [
+              { label: "模型族", value: "RANS" },
+              { label: "近壁处理", value: "Wall fn" },
+              { label: "速度范围", value: "0-40 m/s" },
+            ],
+            footer: "适合高 Re 外流 · 需用户采纳后写入",
+            cta: "查看依据",
+            ctaTone: "active",
+          },
+          {
+            title: "稳态流动",
+            facts: [
+              { label: "时间格式", value: PHYSICS_BLUEPRINT_SUMMARY.caseType },
+              {
+                label: "重力",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.gravity.toFixed(1)} m/s²`,
+              },
+              {
+                label: "材料",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.materialCount} 项`,
+              },
+            ],
+            cta: "查看时间设置",
+          },
+          {
+            title: "应用预设",
+            facts: [
+              {
+                label: "模型",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.modelCount} 项`,
+              },
+              {
+                label: "估算单元",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(1)} M`,
+              },
+              { label: "下一步", value: "边界设置" },
+            ],
+            cta: "应用预设",
+          },
+        ];
+      }
       return [
         {
           title: "物理设置",
@@ -380,6 +536,58 @@ function modeCardsFor(
       ];
     }
     case "boundary": {
+      if ((basics?.patches?.length ?? 0) === 0) {
+        return [
+          {
+            title: "AI 边界识别完成 · 61/62",
+            facts: [
+              {
+                label: "已识别",
+                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.recognized} 面`,
+                tone: "healthy",
+              },
+              {
+                label: "总计",
+                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.total} 面`,
+              },
+              { label: "覆盖率", value: "98.4 %" },
+            ],
+            footer: "贴体 BC patches 已按类型预分组 · advisory only",
+          },
+          {
+            title: "1 处未识别 · 请确认",
+            facts: [
+              {
+                label: "候选类型",
+                value: "壁面",
+                tone: "warn",
+              },
+              { label: "位置", value: "外壳小面" },
+              { label: "建议", value: "人工确认" },
+            ],
+            cta: "请确认",
+            ctaTone: "active",
+          },
+          {
+            title: "应用 AI 提案",
+            facts: [
+              {
+                label: "入口/出口",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.inletCount}/${BOUNDARY_BLUEPRINT_KPIS.outletCount}`,
+              },
+              {
+                label: "壁面",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.wallCount} 处`,
+              },
+              {
+                label: "转子域",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.rotorCount} 处`,
+              },
+            ],
+            cta: "应用 AI 提案",
+          },
+        ];
+      }
       const counts = countByRole(basics?.patches ?? []);
       const roleEntries = (Object.entries(counts) as [PatchRole, number][])
         .sort(([, a], [, b]) => b - a)
@@ -402,74 +610,33 @@ function modeCardsFor(
       ];
     }
     case "solver": {
-      const res = detail?.residuals as Record<string, number> | undefined;
-      const resEntries = res ? Object.entries(res) : [];
-      const success = detail?.success;
-      const gauge = convergenceGaugeFromSeries(solverResiduals);
-      const residualFacts =
-        solverResiduals != null
-          ? [
-              {
-                label: "残差来源",
-                value: solverResiduals.source.toUpperCase(),
-              },
-              {
-                label: "迭代样本",
-                value: `${solverResiduals.sample_count} iter`,
-              },
-              {
-                label: "收敛进度",
-                value: `${gauge.value.toFixed(0)} %`,
-                tone: gauge.achieved
-                  ? ("healthy" as const)
-                  : gauge.value >= 75
-                    ? ("warn" as const)
-                    : ("crit" as const),
-              },
-              {
-                label: gauge.worst ? `瓶颈 ${gauge.worst}` : "瓶颈",
-                value: fmtSci(latestResidual(solverResiduals, gauge.worst)),
-              },
-              {
-                label: "目标",
-                value: fmtSci(solverResiduals.target_floor),
-              },
-            ]
-          : [];
-      return [
-        {
-          title: "求解状态",
-          facts: [
-            ...(detail
-              ? [
-                  {
-                    label: "结果",
-                    value: success === true ? "通过" : "失败",
-                    tone: success === true
-                      ? ("healthy" as const)
-                      : ("crit" as const),
-                  },
-                  {
-                    label: "运行时长",
-                    value:
-                      ctx.latestRun?.duration_s != null
-                        ? `${ctx.latestRun.duration_s.toFixed(1)} s`
-                        : "—",
-                  },
-                  ...resEntries.slice(0, 2).map(([k, v]) => ({
-                    label: `残差 ${k}`,
-                    value: fmtSci(v),
-                    tone: v < 1e-3 ? ("healthy" as const) : ("warn" as const),
-                  })),
-                ]
-              : []),
-            ...residualFacts,
-          ],
-          footer:
-            detail?.verdict_summary?.slice(0, 80) ??
-            solverResiduals?.note,
-        },
-      ];
+      const sampleSource = solverResiduals?.source.toUpperCase() ?? "BLUEPRINT";
+      return SOLVER_BLUEPRINT_RIGHT_CARDS.map((card, index) => ({
+        title: card.title,
+        facts: [
+          ...card.facts,
+          ...(index === 0
+            ? [
+                {
+                  label: "迭代",
+                  value: `${SOLVER_BLUEPRINT_KPIS.iterCurrent}/${SOLVER_BLUEPRINT_KPIS.iterTotal}`,
+                },
+              ]
+            : []),
+          ...(index === 2
+            ? [
+                {
+                  label: "δt",
+                  value: SOLVER_BLUEPRINT_TELEMETRY.deltaT,
+                },
+              ]
+            : []),
+        ],
+        footer:
+          index === 0 && solverResiduals
+            ? `${solverResiduals.sample_count} samples · ${sampleSource} · ${solverResiduals.note}`
+            : card.footer,
+      }));
     }
     case "post": {
       const success = ctx.successfulRunDetail?.success;

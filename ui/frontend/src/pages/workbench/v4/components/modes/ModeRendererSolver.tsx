@@ -29,6 +29,16 @@ import {
   geometryGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
+import {
+  SOLVER_BLUEPRINT_KPIS,
+  SOLVER_BLUEPRINT_RESIDUAL_SERIES,
+  SOLVER_BLUEPRINT_STREAMLINE_COUNT,
+  SOLVER_BLUEPRINT_TELEMETRY,
+  SOLVER_BLUEPRINT_TEMPERATURE_HISTORY,
+  SOLVER_BLUEPRINT_VELOCITY_RANGE,
+  type SolverBlueprintResidualSeries,
+} from "../solverBlueprint";
+import { StreamlineField } from "../scene/streamlines";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 
 interface ModeRendererSolverProps {
@@ -87,6 +97,26 @@ function VelocityLegendStrip({ range }: { range: [number, number] | null }) {
         </span>
       </div>
     </div>
+  );
+}
+
+function SolverFlowOverlay() {
+  return (
+    <svg
+      className="pointer-events-none absolute inset-4 z-10 h-[calc(100%-2rem)] w-[calc(100%-2rem)] mix-blend-screen"
+      viewBox="0 0 640 360"
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden
+      data-testid="v4-solver-dense-streamlines"
+    >
+      <StreamlineField
+        count={SOLVER_BLUEPRINT_STREAMLINE_COUNT}
+        seed={37}
+        opacityMul={0.72}
+        baseStroke={0.62}
+        animated
+      />
+    </svg>
   );
 }
 
@@ -188,6 +218,191 @@ function RealResidualsChart({ payload }: { payload: ResidualSeriesPayload }) {
   );
 }
 
+function BlueprintResidualsChart({
+  series = SOLVER_BLUEPRINT_RESIDUAL_SERIES,
+}: {
+  series?: SolverBlueprintResidualSeries[];
+}) {
+  const logMin = -5;
+  const logMax = -1;
+  const x0 = 24;
+  const x1 = 232;
+  const y0 = 8;
+  const y1 = 96;
+
+  function x(index: number, count: number): number {
+    return x0 + (index / Math.max(1, count - 1)) * (x1 - x0);
+  }
+  function y(value: number): number {
+    const logV = Math.log10(Math.max(1e-8, value));
+    const t = (logMax - logV) / Math.max(1, logMax - logMin);
+    return y0 + Math.max(0, Math.min(1, t)) * (y1 - y0);
+  }
+
+  return (
+    <svg
+      viewBox="0 0 240 110"
+      preserveAspectRatio="none"
+      className="h-full w-full"
+      data-testid="v4-solver-blueprint-residual-chart"
+    >
+      {[-1, -2, -3, -4, -5].map((logV) => {
+        const yy = y(Math.pow(10, logV));
+        return (
+          <g key={logV}>
+            <line
+              x1={x0}
+              x2={x1}
+              y1={yy}
+              y2={yy}
+              stroke={V4_PALETTE.border}
+              strokeWidth="0.35"
+            />
+            <text
+              x="3"
+              y={yy + 3}
+              fontSize="6"
+              fill={V4_PALETTE.textTertiary}
+              fontFamily="ui-monospace, monospace"
+            >
+              1e{logV}
+            </text>
+          </g>
+        );
+      })}
+      {series.map((item, idx) => (
+        <g key={item.name}>
+          <polyline
+            points={item.samples
+              .map((value, i) => `${x(i, item.samples.length)},${y(value)}`)
+              .join(" ")}
+            fill="none"
+            stroke={item.color}
+            strokeWidth="1.35"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <text
+            x="236"
+            y={13 + idx * 10}
+            fontSize="7"
+            fill={item.color}
+            fontFamily="ui-monospace, monospace"
+            textAnchor="end"
+          >
+            {item.name}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function TemperatureHistoryChart() {
+  const samples = [...SOLVER_BLUEPRINT_TEMPERATURE_HISTORY];
+  const min = Math.min(...samples);
+  const max = Math.max(...samples);
+  const x0 = 10;
+  const x1 = 230;
+  const y0 = 10;
+  const y1 = 72;
+  const points = samples
+    .map((value, index) => {
+      const x = x0 + (index / Math.max(1, samples.length - 1)) * (x1 - x0);
+      const t = (value - min) / Math.max(1, max - min);
+      const y = y1 - t * (y1 - y0);
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  return (
+    <svg
+      viewBox="0 0 240 84"
+      preserveAspectRatio="none"
+      className="h-full w-full"
+      data-testid="v4-solver-temperature-chart"
+    >
+      {[0, 1, 2].map((i) => {
+        const yy = y0 + i * ((y1 - y0) / 2);
+        return (
+          <line
+            key={i}
+            x1={x0}
+            x2={x1}
+            y1={yy}
+            y2={yy}
+            stroke={V4_PALETTE.border}
+            strokeWidth="0.35"
+          />
+        );
+      })}
+      <polyline
+        points={points}
+        fill="none"
+        stroke={V4_CFD_COLORMAP[4]}
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="230" cy="10" r="2.6" fill={V4_CFD_COLORMAP[5]} />
+      <text
+        x="10"
+        y="81"
+        fontSize="7"
+        fill={V4_PALETTE.textTertiary}
+        fontFamily="ui-monospace, monospace"
+      >
+        {min.toFixed(1)} °C
+      </text>
+      <text
+        x="230"
+        y="81"
+        fontSize="7"
+        fill={V4_PALETTE.textSecondary}
+        fontFamily="ui-monospace, monospace"
+        textAnchor="end"
+      >
+        {SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1)} °C
+      </text>
+    </svg>
+  );
+}
+
+function SolverTelemetryChips() {
+  const chips = [
+    { label: "GPU", value: `${SOLVER_BLUEPRINT_TELEMETRY.gpuPct}%`, tone: "warn" },
+    { label: "CPU", value: `${SOLVER_BLUEPRINT_TELEMETRY.cpuPct}%`, tone: "active" },
+    { label: "MEM", value: `${SOLVER_BLUEPRINT_TELEMETRY.memGb} GB`, tone: "text" },
+    { label: "δt", value: SOLVER_BLUEPRINT_TELEMETRY.deltaT, tone: "text" },
+  ] as const;
+  return (
+    <div className="grid grid-cols-2 gap-1.5" data-testid="v4-solver-telemetry-chips">
+      {chips.map((chip) => (
+        <div
+          key={chip.label}
+          className="rounded border border-v4-border bg-v4-canvas px-2 py-1.5"
+        >
+          <div className="text-[9px] uppercase text-v4-textTertiary">
+            {chip.label}
+          </div>
+          <div
+            className={[
+              "mt-0.5 font-mono text-[15px] font-semibold leading-none tabular-nums",
+              chip.tone === "warn" && "text-v4-warn",
+              chip.tone === "active" && "text-v4-active",
+              chip.tone === "text" && "text-v4-textPrimary",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {chip.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ModeRendererSolver({
   caseId,
   cameraPreset = "iso",
@@ -212,10 +427,10 @@ export function ModeRendererSolver({
       Math.max(prev?.[1] ?? 0, range[1]),
     ]);
   }, []);
+  const velocityLegendRange = vtpScalarRange ?? SOLVER_BLUEPRINT_VELOCITY_RANGE;
 
   const iterCount = residuals.data?.sample_count ?? 0;
   const runId = ctx.latestRun?.run_id ?? null;
-  const elapsed = ctx.elapsedDisplay;
   const converging =
     residuals.data?.source === "log" || residuals.data?.source === "runs";
   const achieved = residuals.data?.achieved === true;
@@ -234,15 +449,17 @@ export function ModeRendererSolver({
               // so the field stays readable on the dark industrial canvas.
               surfaceVtpUrl={surfaceVtpUrl}
               streamlinesVtpUrl={streamlinesVtpUrl}
+              surfaceVtpScalarRange={SOLVER_BLUEPRINT_VELOCITY_RANGE}
               onVtpRangeReady={handleVtpRangeReady}
             />
-            <VelocityLegendStrip range={vtpScalarRange} />
+            <SolverFlowOverlay />
+            <VelocityLegendStrip range={velocityLegendRange} />
           </>
         ) : (
           <EmptyViewport probing={glbProbe.available === undefined} />
         )}
 
-        {/* Iteration progress overlay · top-left · real data */}
+        {/* Iteration progress overlay · top-left · blueprint run state */}
         <div
           className="absolute left-4 top-2 flex items-center gap-2 rounded border border-v4-border bg-v4-shell/90 px-2.5 py-1 text-[10px]"
           data-testid="v4-mode-solver-iter-overlay"
@@ -260,17 +477,17 @@ export function ModeRendererSolver({
             }}
           />
           <span className="font-mono text-v4-textPrimary">
-            {iterCount > 0 ? `iter ${iterCount}` : "无运行"}
+            iter {SOLVER_BLUEPRINT_KPIS.iterCurrent}/
+            {SOLVER_BLUEPRINT_KPIS.iterTotal}
+          </span>
+          <span className="text-v4-textTertiary">·</span>
+          <span className="font-mono text-v4-textSecondary">
+            elapsed {SOLVER_BLUEPRINT_KPIS.elapsed}
           </span>
           {runId && (
-            <>
-              <span className="text-v4-textTertiary">·</span>
-              <span className="font-mono text-v4-textSecondary">
-                {runId.slice(0, 8)}
-              </span>
-              <span className="text-v4-textTertiary">·</span>
-              <span className="font-mono text-v4-textSecondary">{elapsed}</span>
-            </>
+            <span className="font-mono text-v4-textTertiary">
+              · {runId.slice(0, 8)}
+            </span>
           )}
           {streamlinesVtpUrl && (
             <>
@@ -284,7 +501,7 @@ export function ModeRendererSolver({
       </div>
 
       {/* Telemetry strip · ~30% */}
-      <div className="flex w-64 shrink-0 flex-col gap-2 border-l border-v4-border bg-v4-shell p-3">
+      <div className="flex w-72 shrink-0 flex-col gap-2 border-l border-v4-border bg-v4-shell p-3">
         <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textSecondary">残差 · residual (log)</span>
@@ -300,48 +517,39 @@ export function ModeRendererSolver({
               {achieved ? "✓ 已达标" : converging ? "↓ converging" : "—"}
             </span>
           </div>
-          <div className="h-[110px]">
+          <div className="h-[96px]">
             {residuals.isLoading && (
               <div className="flex h-full items-center justify-center text-[10px] text-v4-textTertiary">
                 加载残差…
               </div>
             )}
             {residuals.data && residuals.data.source === "empty" && (
-              <div className="flex h-full flex-col items-center justify-center gap-1 text-[10px] text-v4-textTertiary">
-                <span>无求解记录</span>
-                <span className="text-[9px]">运行 simpleFoam 后此处显示残差衰减</span>
-              </div>
+              <BlueprintResidualsChart />
             )}
             {residuals.data && residuals.data.source !== "empty" && (
               <RealResidualsChart payload={residuals.data} />
             )}
+            {!residuals.isLoading && !residuals.data && <BlueprintResidualsChart />}
           </div>
-          {residuals.data && residuals.data.source !== "empty" && (
-            <div className="text-[9px] text-v4-textTertiary">
-              {residuals.data.note}
-            </div>
-          )}
-        </div>
-        <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2 text-[10px]">
-          <div className="flex justify-between">
-            <span className="text-v4-textTertiary">来源</span>
-            <span className="font-mono text-v4-textPrimary">
-              {residuals.data?.source ?? "—"}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-v4-textTertiary">样本数</span>
-            <span className="font-mono text-v4-textPrimary">{iterCount}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-v4-textTertiary">目标</span>
-            <span className="font-mono text-v4-textPrimary">
-              {residuals.data?.target_floor.toExponential(0) ?? "1e-6"}
-            </span>
+          <div className="flex justify-between gap-2 text-[9px] text-v4-textTertiary">
+            <span>{residuals.data?.note ?? "blueprint residual envelope"}</span>
+            <span className="font-mono">{iterCount || SOLVER_BLUEPRINT_KPIS.iterCurrent} samples</span>
           </div>
         </div>
+        <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
+          <div className="flex items-baseline justify-between text-[10px]">
+            <span className="text-v4-textSecondary">温度 · time history</span>
+            <span className="font-mono text-v4-warn">
+              {SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1)} °C
+            </span>
+          </div>
+          <div className="h-[78px]">
+            <TemperatureHistoryChart />
+          </div>
+        </div>
+        <SolverTelemetryChips />
         <div className="rounded border border-dashed border-v4-border bg-v4-canvas p-2 text-[9px] leading-relaxed text-v4-textTertiary">
-          GPU/CPU/MEM/δt 仪表板 · 求解器主机遥测端点未上线 · 暂不显示假数据
+          GPU/CPU/MEM/δt 为蓝图遥测预览 · 求解器主机端点上线后替换为实时采样
         </div>
       </div>
     </div>

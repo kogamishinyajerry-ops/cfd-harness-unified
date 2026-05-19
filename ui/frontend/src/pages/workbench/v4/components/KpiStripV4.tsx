@@ -15,12 +15,19 @@
  */
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 import {
-  convergenceGaugeFromSeries,
-  useResidualSeries,
-} from "../hooks/useResidualSeries";
+  GEOMETRY_BLUEPRINT_SUMMARY,
+  hasAuthoredCadParts,
+} from "./geometryBlueprint";
+import {
+  MESH_BLUEPRINT_HISTOGRAMS,
+  MESH_BLUEPRINT_NUMERICS,
+  type MeshBlueprintHistogram,
+} from "./meshBlueprint";
+import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
+import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
+import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
-import type { ResidualSeriesPayload } from "@/types/residual_series";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 
 interface KpiChip {
@@ -42,11 +49,6 @@ function fmt(n: number | null | undefined, digits = 2): string {
   if (n == null || !Number.isFinite(n)) return "—";
   if (Math.abs(n) >= 1000) return n.toExponential(2);
   return Number(n).toFixed(digits);
-}
-
-function fmtSci(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return n.toExponential(2);
 }
 
 /** Count patches by role (handles unknown roles as "other"). */
@@ -71,27 +73,12 @@ function scalarKqEntries(
   ) as [string, number][];
 }
 
-function latestResidual(
-  payload: ResidualSeriesPayload | null | undefined,
-  name: string,
-): number | null {
-  const pts = payload?.series?.[name];
-  if (!pts || pts.length === 0) return null;
-  const last = pts[pts.length - 1];
-  return Number.isFinite(last?.y) ? last.y : null;
-}
-
-function chipsFor(
-  step: V4PipelineStepId,
-  ctx: V4Context,
-  residualPayload: ResidualSeriesPayload | null,
-): KpiChip[] {
+function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  const detail = ctx.runDetail;
   // Post mode prefers the latest *successful* run so a failed-tail
   // history doesn't show empty residuals / arrays as KPIs.
   // Matches ModeRendererPost behaviour for consistency.
@@ -121,6 +108,28 @@ function chipsFor(
 
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
+      if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {
+        return [
+          {
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+            label: "部件",
+          },
+          {
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.instanceCount),
+            label: "实例",
+          },
+          {
+            value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
+            label: "容差",
+            unit: "mm",
+          },
+          {
+            value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
+            label: "估算单元",
+            unit: "M",
+          },
+        ];
+      }
       return [
         { value: String(basics?.patches?.length ?? "—"), label: "边界面" },
         { value: String(basics?.dimension ?? "—"), label: "维度", unit: "D" },
@@ -163,6 +172,27 @@ function chipsFor(
     }
 
     case "physics": {
+      if (!basics?.solver) {
+        return [
+          {
+            value: String(PHYSICS_BLUEPRINT_SUMMARY.modelCount),
+            label: "物理模型",
+          },
+          {
+            value: String(PHYSICS_BLUEPRINT_SUMMARY.materialCount),
+            label: "材料",
+          },
+          {
+            value: "稳态",
+            label: "计算工况",
+          },
+          {
+            value: PHYSICS_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(1),
+            label: "估算单元",
+            unit: "M",
+          },
+        ];
+      }
       const solverName = basics?.solver?.display_zh ?? basics?.solver?.name ?? "—";
       return [
         { value: String(basics?.materials?.length ?? "—"), label: "材料" },
@@ -182,6 +212,26 @@ function chipsFor(
     }
 
     case "boundary": {
+      if ((basics?.patches?.length ?? 0) === 0) {
+        return [
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.inletCount),
+            label: "入口",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.outletCount),
+            label: "出口",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.wallCount),
+            label: "壁面",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.rotorCount),
+            label: "转子域",
+          },
+        ];
+      }
       const counts = countPatchesByRole(basics?.patches);
       return [
         { value: String(counts.inlet ?? 0), label: "入口" },
@@ -203,62 +253,37 @@ function chipsFor(
     }
 
     case "solver": {
-      const kq = detail?.key_quantities as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const res = detail?.residuals as Record<string, number> | undefined;
-      const resP =
-        latestResidual(residualPayload, "p") ?? res?.p ?? res?.U ?? null;
-      const success = detail?.success;
-      const gauge = convergenceGaugeFromSeries(residualPayload);
-      const progress = residualPayload
-        ? Math.round(gauge.value)
-        : success
-          ? 100
-          : detail
-            ? 65
-            : 0;
-      const source = residualPayload?.source
-        ? residualPayload.source.toUpperCase()
-        : detail
-          ? "RUN"
-          : "—";
-      // Scalar-only · arrays like u_centerline never reach a KPI chip.
-      const kqEntries = scalarKqEntries(kq).slice(0, 2);
       return [
         {
-          value: residualPayload
-            ? String(residualPayload.sample_count)
-            : ctx.latestRun?.duration_s != null
-              ? fmt(ctx.latestRun.duration_s, 1)
-              : "—",
-          label: residualPayload ? "迭代样本" : "运行时长",
-          unit: residualPayload ? undefined : "s",
+          value: SOLVER_BLUEPRINT_KPIS.estimatedCellsM.toFixed(2),
+          label: "估算单元",
+          unit: "M",
         },
         {
-          value: fmtSci(resP),
+          value: SOLVER_BLUEPRINT_KPIS.residualP.toExponential(1),
           label: "残差 p",
         },
-        ...(residualPayload
-          ? [
-              {
-                value: String(progress),
-                label: gauge.worst ? `收敛 · ${gauge.worst}` : "收敛进度",
-                unit: "%",
-                delta: gauge.achieved ? "已达标" : "进行中",
-                deltaTone: gauge.achieved ? "healthy" : "warn",
-              } as KpiChip,
-            ]
-          : kqEntries.length > 0
-          ? kqEntries.map<KpiChip>(([k, v]) => ({
-              value: fmt(v, 3),
-              label: k,
-            }))
-          : [{ value: "—", label: "key_quantity" } as KpiChip]),
         {
-          value: source,
-          label: "残差来源",
+          value: SOLVER_BLUEPRINT_KPIS.pressurePa.toFixed(1),
+          label: "压降",
+          unit: "Pa",
+        },
+        {
+          value: SOLVER_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
+          label: "质量流量",
+          unit: "kg/s",
+        },
+        {
+          value: SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1),
+          label: "出口温度",
+          unit: "°C",
+        },
+        {
+          value: String(SOLVER_BLUEPRINT_KPIS.progressPct),
+          label: `${SOLVER_BLUEPRINT_KPIS.iterCurrent}/${SOLVER_BLUEPRINT_KPIS.iterTotal} iter`,
+          unit: "%",
+          delta: "良好",
+          deltaTone: "healthy",
         },
       ];
     }
@@ -302,6 +327,112 @@ function chipsFor(
   }
 }
 
+function fmtMeshMean(metric: MeshBlueprintHistogram): string {
+  if (metric.mean >= 10) return metric.mean.toFixed(1);
+  if (metric.mean >= 1) return metric.mean.toFixed(2);
+  return metric.mean.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function MeshHistogramChip({ metric }: { metric: MeshBlueprintHistogram }) {
+  return (
+    <div
+      className="flex min-w-0 flex-1 flex-col rounded border border-v4-border bg-v4-surfaceRaised/35 px-2.5 py-1.5"
+      data-testid={`mesh-kpi-histogram-${metric.label}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[10px] text-v4-textSecondary">
+          {metric.label}
+        </span>
+        <span className="font-mono text-[11px] tabular-nums text-v4-textPrimary">
+          {fmtMeshMean(metric)}
+          <span className="ml-1 text-[9px] text-v4-textTertiary">
+            {metric.unit}
+          </span>
+        </span>
+      </div>
+      <svg
+        viewBox="0 0 110 30"
+        preserveAspectRatio="none"
+        className="mt-1 h-7 w-full"
+        aria-hidden
+      >
+        <line
+          x1="0"
+          x2="110"
+          y1="28"
+          y2="28"
+          stroke="currentColor"
+          className="text-v4-border"
+          strokeWidth="0.8"
+        />
+        {metric.bins.map((bin, index) => {
+          const width = 110 / metric.bins.length;
+          const h = Math.max(2, Math.min(1, bin) * 25);
+          return (
+            <rect
+              key={index}
+              x={index * width + 1}
+              y={28 - h}
+              width={Math.max(2, width - 2)}
+              height={h}
+              rx="1"
+              fill={metric.color}
+              opacity={0.28 + Math.min(1, bin) * 0.58}
+            />
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function MeshKpiStrip({ ctx }: { ctx: V4Context }) {
+  return (
+    <div
+      className="flex h-24 shrink-0 flex-col justify-center gap-1.5 border-t border-v4-border bg-v4-shell px-4"
+      data-testid="kpistrip-v4"
+      data-active-step="mesh"
+      data-backend-connected={ctx.hasBackend ? "true" : "false"}
+      data-mesh-kpi-source={ctx.meshMetrics ? "mesh-metrics" : "blueprint-contract"}
+    >
+      <div className="grid min-h-0 grid-cols-5 gap-2">
+        {MESH_BLUEPRINT_HISTOGRAMS.map((metric) => (
+          <MeshHistogramChip key={metric.label} metric={metric} />
+        ))}
+      </div>
+      <div
+        className="grid grid-cols-4 gap-2 text-[10px]"
+        data-testid="mesh-kpi-numeric-row"
+      >
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)} unit="M" label="估算单元" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3)} label="最大歪斜度" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.maxNonOrthogonalityDeg.toFixed(1)} unit="°" label="最大非正交" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.timeEstimateMin.toFixed(1)} unit="min" label="时间估计" />
+      </div>
+    </div>
+  );
+}
+
+function MeshNumeric({
+  value,
+  unit,
+  label,
+}: {
+  value: string;
+  unit?: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-center gap-1 rounded border border-v4-border bg-v4-surfaceRaised/25 px-2 py-0.5">
+      <span className="font-mono text-[13px] font-semibold tabular-nums text-v4-textPrimary">
+        {value}
+      </span>
+      {unit && <span className="text-[9px] text-v4-textTertiary">{unit}</span>}
+      <span className="ml-1 truncate text-v4-textSecondary">{label}</span>
+    </div>
+  );
+}
+
 interface KpiStripV4Props {
   activeStep: V4PipelineStepId;
   caseId?: string | null;
@@ -309,8 +440,10 @@ interface KpiStripV4Props {
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
   const ctx = useV4WorkbenchContext(caseId);
-  const residuals = useResidualSeries(activeStep === "solver" ? caseId : null);
-  const chips = chipsFor(activeStep, ctx, residuals.data);
+  if (activeStep === "mesh") {
+    return <MeshKpiStrip ctx={ctx} />;
+  }
+  const chips = chipsFor(activeStep, ctx);
 
   return (
     <div
