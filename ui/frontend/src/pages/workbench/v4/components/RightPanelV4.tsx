@@ -29,6 +29,10 @@ import {
   convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import {
+  GEOMETRY_BLUEPRINT_SUMMARY,
+  hasAuthoredCadParts,
+} from "./geometryBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -155,9 +159,11 @@ interface FactCardProps {
     tone?: "healthy" | "warn" | "crit" | "neutral";
   }>;
   footer?: string;
+  cta?: string;
+  ctaTone?: "active" | "neutral";
 }
 
-function FactCard({ title, facts, footer }: FactCardProps) {
+function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardProps) {
   return (
     <article
       className="flex flex-col gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
@@ -196,6 +202,22 @@ function FactCard({ title, facts, footer }: FactCardProps) {
       {footer && (
         <div className="border-t border-v4-border pt-1.5 text-[10px] text-v4-textTertiary">
           {footer}
+        </div>
+      )}
+      {cta && (
+        <div className="flex justify-end border-t border-v4-border pt-1.5">
+          <span
+            className={[
+              "rounded border px-2 py-0.5 text-[10px] font-medium",
+              ctaTone === "active"
+                ? "border-v4-active/40 text-v4-active"
+                : "border-v4-border text-v4-textSecondary",
+            ].join(" ")}
+            data-testid={`rightpanel-v4-factcard-cta-${title}`}
+            data-advisory-only="true"
+          >
+            {cta}
+          </span>
         </div>
       )}
     </article>
@@ -261,6 +283,51 @@ function modeCardsFor(
     }
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
+      if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {
+        return [
+          {
+            title: "几何已就绪",
+            facts: [
+              {
+                label: "CAD 分件",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.partCount} 部件`,
+                tone: "healthy",
+              },
+              {
+                label: "实例",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.instanceCount} 个`,
+              },
+              {
+                label: "容差",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1)} mm`,
+              },
+            ],
+            footer: "GLB 可用 · 单壳 STL 的 CAD 分件语义待命名",
+          },
+          {
+            title: "启动几何分析",
+            facts: [
+              { label: "水密性", value: "已通过", tone: "healthy" },
+              { label: "单位", value: "mm" },
+              {
+                label: "估算单元",
+                value: `${GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2)} M`,
+              },
+            ],
+            cta: "启动几何分析",
+            ctaTone: "active",
+          },
+          {
+            title: "建议合并 2 实例",
+            facts: [
+              { label: "重复实例", value: "2", tone: "warn" },
+              { label: "策略", value: "保留母体" },
+              { label: "影响", value: "网格更稳定" },
+            ],
+            cta: "查看建议",
+          },
+        ];
+      }
       return [
         {
           title: "几何摘要",

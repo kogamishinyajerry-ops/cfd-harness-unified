@@ -18,6 +18,10 @@ import {
   convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import {
+  GEOMETRY_BLUEPRINT_SUMMARY,
+  hasAuthoredCadParts,
+} from "./geometryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -121,6 +125,28 @@ function chipsFor(
 
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
+      if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {
+        return [
+          {
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.partCount),
+            label: "部件",
+          },
+          {
+            value: String(GEOMETRY_BLUEPRINT_SUMMARY.instanceCount),
+            label: "实例",
+          },
+          {
+            value: GEOMETRY_BLUEPRINT_SUMMARY.toleranceMm.toFixed(1),
+            label: "容差",
+            unit: "mm",
+          },
+          {
+            value: GEOMETRY_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(2),
+            label: "估算单元",
+            unit: "M",
+          },
+        ];
+      }
       return [
         { value: String(basics?.patches?.length ?? "—"), label: "边界面" },
         { value: String(basics?.dimension ?? "—"), label: "维度", unit: "D" },
