@@ -8,8 +8,10 @@ Cache layout:
 
     <imported_case_dir>/.render_cache/geometry.glb
 
-Cache invalidation: source-mtime comparison. If any *.stl under
-``triSurface/`` is newer than the cached glb, the cache is rebuilt.
+Cache invalidation: source path + source-mtime comparison. The runtime
+``constant/triSurface/`` export is preferred over the lightweight upload
+``triSurface/`` shell so the workbench renders the actual CAD surface when
+solver assets are present.
 
 Atomic write: the new glb lands in a tempfile next to the cache
 target, then ``os.replace`` moves it into place. Concurrent readers
@@ -65,31 +67,50 @@ def _imported_case_dir(case_id: str) -> Path:
     return template_clone.IMPORTED_DIR / case_id
 
 
+def _candidate_trisurface_dirs(case_dir: Path) -> list[Path]:
+    return [case_dir / "constant" / "triSurface", case_dir / "triSurface"]
+
+
 def _resolve_source_stl(case_dir: Path) -> Path:
-    """Pick the canonical STL under ``case_dir/triSurface/``.
+    """Pick the canonical STL for rendering.
 
     Mirrors the case-insensitive match in ``routes/geometry_render.py``
     (Codex round-1 P2 #1 fix on M-VIZ): ``glob("*.stl")`` would miss
     uploads named ``MODEL.STL`` since ``_safe_origin_filename``
     preserves the original casing.
 
+    Runtime ``constant/triSurface`` has priority over upload
+    ``triSurface`` because it carries the actual solver/CAD mesh for
+    imported industrial cases. The upload shell remains the fallback for
+    cases that have not gone through meshing/scaffold promotion yet.
+
     Round-2 Finding 1: resolves the chosen path strictly and asserts it
     stays under the case dir, so a symlink in ``triSurface/`` cannot
     redirect us to an arbitrary file outside IMPORTED_DIR.
     """
-    triSurface = case_dir / "triSurface"
-    if not triSurface.is_dir():
+    tri_dirs = _candidate_trisurface_dirs(case_dir)
+    existing_dirs = [p for p in tri_dirs if p.is_dir()]
+    if not existing_dirs:
         raise GeometryRenderError(
             failing_check="no_source_stl",
             message=f"no triSurface/ under {case_dir}",
         )
-    stls = sorted(p for p in triSurface.iterdir() if p.suffix.lower() == ".stl")
-    if not stls:
+
+    chosen: Path | None = None
+    searched: list[Path] = []
+    for tri_dir in existing_dirs:
+        searched.append(tri_dir)
+        stls = sorted(p for p in tri_dir.iterdir() if p.suffix.lower() == ".stl")
+        if stls:
+            chosen = stls[0]
+            break
+
+    if chosen is None:
+        searched_labels = ", ".join(str(p) for p in searched)
         raise GeometryRenderError(
             failing_check="no_source_stl",
-            message=f"no .stl under {triSurface}",
+            message=f"no .stl under {searched_labels}",
         )
-    chosen = stls[0]
     try:
         resolved = chosen.resolve(strict=True)
         case_root = case_dir.resolve(strict=True)
@@ -106,8 +127,25 @@ def _cache_target(case_dir: Path) -> Path:
     return case_dir / ".render_cache" / "geometry.glb"
 
 
-def _is_cache_fresh(cache: Path, source: Path) -> bool:
+def _cache_source_marker_target(case_dir: Path) -> Path:
+    return case_dir / ".render_cache" / "geometry.source"
+
+
+def _source_marker(case_dir: Path, source: Path) -> str:
+    return source.relative_to(case_dir.resolve(strict=True)).as_posix()
+
+
+def _is_cache_fresh(
+    cache: Path, source: Path, source_marker: Path, case_dir: Path
+) -> bool:
     if not cache.exists():
+        return False
+    try:
+        if source_marker.read_text(encoding="utf-8").strip() != _source_marker(
+            case_dir, source
+        ):
+            return False
+    except OSError:
         return False
     try:
         return cache.stat().st_mtime >= source.stat().st_mtime
@@ -222,8 +260,9 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
 
     source_stl = _resolve_source_stl(case_dir)
     cache = _cache_target(case_dir)
+    source_marker = _cache_source_marker_target(case_dir)
 
-    if _is_cache_fresh(cache, source_stl):
+    if _is_cache_fresh(cache, source_stl, source_marker, case_dir):
         return GlbBuildResult(cache_path=cache, status="hit")
 
     # Round-3+4 Finding 3 closure: source mtime threaded through both
@@ -252,4 +291,7 @@ def build_geometry_glb(case_id: str) -> GlbBuildResult:
             failing_check="transcode_error",
             message=f"{exc} (retry the request)",
         )
+    source_marker.write_text(
+        _source_marker(case_dir, source_stl), encoding="utf-8"
+    )
     return GlbBuildResult(cache_path=cache, status=status)

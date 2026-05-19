@@ -52,11 +52,15 @@ export interface GeometryBlueprintRightCard {
   footer?: string;
 }
 
-export interface GeometryBlueprintScene {
-  kind: "exploded-apu-bitmap";
-  imageUrl: string;
-  sourceBlueprint: string;
-}
+export const GEOMETRY_REAL_CAD_ASSEMBLY = {
+  kind: "apu-cad-assembly-glb",
+  glbUrl: "/blueprints/v4/apu-cad-assembly.glb",
+  sourceStep:
+    "_industrial_substrates/apu-bay-ventilation/inputs/catia_export/0507_APU.step",
+  sourceStlDir:
+    "_industrial_substrates/apu-bay-ventilation/inputs_clean_starccm/individual_binary",
+  partCount: 28,
+} as const;
 
 export const GEOMETRY_BLUEPRINT_SUMMARY = {
   partCount: 17,
@@ -64,12 +68,6 @@ export const GEOMETRY_BLUEPRINT_SUMMARY = {
   gapCount: 2,
   toleranceMm: 2.0,
   estimatedCellsM: 18.76,
-} as const;
-
-export const GEOMETRY_BLUEPRINT_SCENE: GeometryBlueprintScene = {
-  kind: "exploded-apu-bitmap",
-  imageUrl: "/blueprints/v4/geometry-apu-exploded.png",
-  sourceBlueprint: "ChatGPT Image 2026年5月18日 22_58_28 (2).png",
 } as const;
 
 export const GEOMETRY_BLUEPRINT_TABS: GeometryBlueprintTab[] = [

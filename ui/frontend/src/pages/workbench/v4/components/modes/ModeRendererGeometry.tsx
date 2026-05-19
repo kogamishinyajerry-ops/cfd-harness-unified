@@ -1,9 +1,10 @@
 /**
  * V4 · Mode renderer · 几何 (Geometry) · per UI-SPEC §4.2 · Phase C-R2 wired.
  *
- * Real vtk.js viewport (geometry.glb) when authored CAD semantics are
- * available; otherwise the blueprint-intake page uses a local bitmap scene
- * derived from image 2. No schematic SVG fallback is used for this mode.
+ * Real vtk.js viewport for CAD: authored cases use their case geometry.glb,
+ * while the blueprint workbench renders a real APU CAD assembly GLB derived
+ * from the local CATIA/STAR-CCM assets. No SVG or bitmap CAD substitute is
+ * used for this mode.
  *
  * Phase C-R2: part legend now reads real patches from workbench-basics
  * grouped by surface role (inlet/outlet/wall/...), with a role-color
@@ -21,11 +22,10 @@ import {
 } from "../../hooks/useGlbAvailability";
 import { ViewportV4, type V4CameraPreset } from "../ViewportV4";
 import {
-  GEOMETRY_BLUEPRINT_PARTS,
-  GEOMETRY_BLUEPRINT_SCENE,
   GEOMETRY_BLUEPRINT_SUMMARY,
   GEOMETRY_BLUEPRINT_TABS,
   GEOMETRY_BLUEPRINT_TOOLBAR,
+  GEOMETRY_REAL_CAD_ASSEMBLY,
   hasAuthoredCadParts,
 } from "../geometryBlueprint";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
@@ -61,22 +61,6 @@ function roleLabel(role: PatchRole): string {
   return ROLE_LABEL_ZH[role] ?? role;
 }
 
-function BlueprintBitmapScene() {
-  return (
-    <div className="flex h-full w-full items-center justify-center px-3 py-3">
-      <div className="relative h-full max-h-[680px] w-full overflow-hidden border border-v4-border bg-v4-canvas shadow-[inset_0_0_120px_rgba(0,0,0,0.32)]">
-        <img
-          src={GEOMETRY_BLUEPRINT_SCENE.imageUrl}
-          alt="Exploded APU CAD assembly"
-          className="h-full w-full object-contain"
-          data-testid="v4-mode-geometry-bitmap-scene"
-          draggable={false}
-        />
-      </div>
-    </div>
-  );
-}
-
 function GeometryEmptyState() {
   return (
     <div
@@ -102,26 +86,43 @@ interface Props {
 }
 
 export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
-  const ctx = useV4WorkbenchContext(null);
-  const glbUrl = geometryGlbUrl(caseId);
-  const probe = useGlbAvailability(glbUrl);
+  const ctx = useV4WorkbenchContext(caseId ?? null);
+  const caseGlbUrl = geometryGlbUrl(caseId);
+  const caseProbe = useGlbAvailability(caseGlbUrl);
+  const assemblyProbe = useGlbAvailability(GEOMETRY_REAL_CAD_ASSEMBLY.glbUrl);
 
   const patches = ctx.basics?.patches ?? [];
   const dim = ctx.basics?.dimension;
   const cl = ctx.basics?.geometry?.characteristic_length;
   const [selectedPatchId, setSelectedPatchId] = useState<string | null>(null);
   const authoredCadParts = hasAuthoredCadParts(patches.length);
-  const blueprintCadMode = !authoredCadParts;
-  const showViewport = probe.available === true && authoredCadParts;
-  const selectedBlueprintPart = blueprintCadMode
-    ? GEOMETRY_BLUEPRINT_PARTS.find((p) => p.id === selectedPatchId)
-    : null;
+  const useCaseGlb = authoredCadParts && caseProbe.available === true;
+  const waitForCaseGlb = authoredCadParts && caseProbe.isLoading;
+  const useAssemblyGlb =
+    !useCaseGlb && !waitForCaseGlb && assemblyProbe.available === true;
+  const viewportGlbUrl = useCaseGlb
+    ? caseGlbUrl
+    : GEOMETRY_REAL_CAD_ASSEMBLY.glbUrl;
+  const showViewport = useCaseGlb || useAssemblyGlb;
+  const sourceLabel = showViewport
+    ? useCaseGlb
+      ? "case geometry.glb · solver STL transcode"
+      : `${GEOMETRY_REAL_CAD_ASSEMBLY.partCount} part APU CAD assembly · STEP/STL`
+    : caseId
+      ? "等待 CAD GLB"
+      : "未选择 case";
 
   return (
     <div
       data-testid="v4-mode-geometry"
       className="flex h-full w-full flex-col bg-v4-canvas"
-      data-cad-source={blueprintCadMode ? "blueprint-intake" : "workbench-basics"}
+      data-cad-source={
+        useCaseGlb
+          ? "case-glb-render"
+          : useAssemblyGlb
+            ? "apu-cad-assembly-glb"
+            : "missing-geometry"
+      }
     >
       <div className="flex h-11 shrink-0 items-end justify-between border-b border-v4-border px-3">
         <div className="flex h-full items-end gap-6">
@@ -142,8 +143,10 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
           ))}
         </div>
         <span className="pb-2 font-mono text-[10px] text-v4-textTertiary">
-          {blueprintCadMode
-            ? `CAD intake · ${GEOMETRY_BLUEPRINT_SUMMARY.partCount} 零件 · ${GEOMETRY_BLUEPRINT_SUMMARY.gapCount} 缝隙`
+          {showViewport
+            ? `CAD render · ${sourceLabel}`
+            : !authoredCadParts
+              ? `CAD intake · ${GEOMETRY_BLUEPRINT_SUMMARY.partCount} 零件 · ${GEOMETRY_BLUEPRINT_SUMMARY.gapCount} 缝隙`
             : `${dim ? `${dim}D` : "—"} · ${patches.length} 边界面${
                 cl ? ` · ${cl.name} ${cl.value.toPrecision(3)}${cl.unit}` : ""
               }`}
@@ -178,8 +181,8 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
         </button>
       </div>
       <div className="flex min-h-0 flex-1">
-        {/* Part legend · left — real patches, or blueprint CAD intake when CAD semantics are absent. */}
-        {!blueprintCadMode && (
+        {/* Part legend · left — shown only when workbench-basics carries authored patch semantics. */}
+        {authoredCadParts && (
           <aside
             className="flex w-[200px] shrink-0 flex-col border-r border-v4-border bg-v4-shell/60"
             data-testid="v4-mode-geometry-legend"
@@ -262,23 +265,22 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
           </aside>
         )}
 
-        {/* Scene · real viewport, or blueprint bitmap / honest empty state. */}
+        {/* Scene · real CAD viewport, or honest empty state. */}
         <div
           className="relative flex min-h-0 flex-1 items-center justify-center bg-[radial-gradient(circle_at_50%_35%,rgba(91,180,255,0.08),transparent_42%)]"
           data-viewport-active={showViewport ? "true" : "false"}
         >
           {showViewport ? (
             <ViewportV4
-              glbUrl={glbUrl}
+              glbUrl={viewportGlbUrl}
               cameraPreset={cameraPreset ?? "iso"}
-              highlightedPatchId={authoredCadParts ? selectedPatchId : null}
+              showGrid={false}
+              highlightedPatchId={useCaseGlb ? selectedPatchId : null}
             />
-          ) : blueprintCadMode ? (
-            <BlueprintBitmapScene />
           ) : (
             <GeometryEmptyState />
           )}
-          {probe.isLoading && (
+          {(caseProbe.isLoading || assemblyProbe.isLoading) && (
             <div
               className="pointer-events-none absolute left-3 top-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
               data-testid="v4-mode-geometry-probe-loading"
@@ -286,7 +288,7 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
               检查几何…
             </div>
           )}
-          {probe.available === false && caseId && (
+          {!showViewport && caseProbe.available === false && caseId && (
             <div
               className="pointer-events-none absolute right-3 bottom-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
               data-testid="v4-mode-geometry-empty-state"
@@ -294,12 +296,12 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
               当前算例无导入几何 · 等待 GLB 资产
             </div>
           )}
-          {probe.available === true && blueprintCadMode && (
+          {useAssemblyGlb && (
             <div
               className="pointer-events-none absolute right-3 bottom-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
-              data-testid="v4-mode-geometry-blueprint-source"
+              data-testid="v4-mode-geometry-real-cad-source"
             >
-              GLB 可用 · CAD 分件语义待命名
+              真实 APU CAD GLB · {GEOMETRY_REAL_CAD_ASSEMBLY.partCount} parts
             </div>
           )}
           {selectedPatchId && (
@@ -309,8 +311,7 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
             >
               <span className="text-v4-textTertiary">已选 </span>
               <span className="font-mono text-v4-textPrimary">
-                {selectedBlueprintPart?.labelZh ??
-                  patches.find((p) => p.id === selectedPatchId)?.label_zh ??
+                {patches.find((p) => p.id === selectedPatchId)?.label_zh ??
                   selectedPatchId}
               </span>
             </div>

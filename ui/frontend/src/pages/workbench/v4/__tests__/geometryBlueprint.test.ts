@@ -6,10 +6,10 @@ import {
   GEOMETRY_BLUEPRINT_CALLOUTS,
   GEOMETRY_BLUEPRINT_RIGHT_CARDS,
   GEOMETRY_BLUEPRINT_PARTS,
-  GEOMETRY_BLUEPRINT_SCENE,
   GEOMETRY_BLUEPRINT_SUMMARY,
   GEOMETRY_BLUEPRINT_TABS,
   GEOMETRY_BLUEPRINT_TOOLBAR,
+  GEOMETRY_REAL_CAD_ASSEMBLY,
   hasAuthoredCadParts,
 } from "../components/geometryBlueprint";
 
@@ -60,23 +60,33 @@ describe("Geometry blueprint contract", () => {
     ]);
   });
 
-  it("uses the exploded APU bitmap as the image-2 main scene", () => {
-    expect(GEOMETRY_BLUEPRINT_SCENE).toMatchObject({
-      kind: "exploded-apu-bitmap",
-      imageUrl: "/blueprints/v4/geometry-apu-exploded.png",
-    });
-    expect(GEOMETRY_BLUEPRINT_SCENE.sourceBlueprint).toContain("22_58_28");
-  });
-
-  it("does not keep the legacy SVG CAD fallback in the geometry renderer", () => {
+  it("uses real GLB CAD assets as the primary CAD renderer", () => {
     const rendererSource = readFileSync(
       `${process.cwd()}/src/pages/workbench/v4/components/modes/ModeRendererGeometry.tsx`,
       "utf8",
     );
+    const assemblyBytes = readFileSync(
+      `${process.cwd()}/public${GEOMETRY_REAL_CAD_ASSEMBLY.glbUrl}`,
+    );
 
-    expect(rendererSource).toContain("v4-mode-geometry-bitmap-scene");
+    expect(rendererSource).toContain("geometryGlbUrl(caseId)");
+    expect(rendererSource).toContain("GEOMETRY_REAL_CAD_ASSEMBLY.glbUrl");
+    expect(rendererSource).toContain("const useAssemblyGlb");
+    expect(rendererSource).toContain("\"apu-cad-assembly-glb\"");
+    expect(rendererSource).toContain("showGrid={false}");
+    expect(GEOMETRY_REAL_CAD_ASSEMBLY).toMatchObject({
+      kind: "apu-cad-assembly-glb",
+      glbUrl: "/blueprints/v4/apu-cad-assembly.glb",
+      partCount: 28,
+    });
+    expect(assemblyBytes.subarray(0, 4).toString("ascii")).toBe("glTF");
+    expect(assemblyBytes.byteLength).toBeGreaterThan(1_000_000);
+    expect(rendererSource).not.toContain("probe.available === true && authoredCadParts");
     expect(rendererSource).not.toContain("IndustrialBoxScene");
     expect(rendererSource).not.toContain("v4-mode-geometry-cad-callouts");
+    expect(rendererSource).not.toContain("v4-mode-geometry-bitmap-scene");
+    expect(rendererSource).not.toContain("geometry-apu-exploded.png");
+    expect(rendererSource).not.toContain("GEOMETRY_BLUEPRINT_SCENE");
   });
 
   it("keeps the visible geometry shell free of inline SVG chrome", () => {
