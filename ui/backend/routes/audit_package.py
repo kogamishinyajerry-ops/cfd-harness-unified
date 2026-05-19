@@ -205,6 +205,15 @@ def build_audit_package(case_id: str, run_id: str) -> AuditPackageBuildResponse:
         audit_concerns=audit_concerns_doc,
     )
 
+    # V91.3 (V9.D · DEC-V91-charter): inject V9 advisor commentary sidecar.
+    # Pure function over the manifest dict — no network, no I/O beyond
+    # reading the dict. ``serialize.py`` writes ``commentary/matched.json``
+    # into bundle.zip when this field is present. Byte-reproducible.
+    from ui.backend.services.v9_advisor.manifest_adapter import (
+        commentary_section_for_manifest,
+    )
+    manifest["commentary"] = commentary_section_for_manifest(manifest)
+
     # Stage.
     bundle_id = uuid.uuid4().hex
     bundle_dir = _STAGING_ROOT / bundle_id

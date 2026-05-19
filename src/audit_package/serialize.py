@@ -189,6 +189,16 @@ def _zip_entries_from_manifest(
             except OSError:
                 continue
 
+    # V91.3 (V9.D · DEC-V91-charter): embed V9 advisor commentary sidecar
+    # when the manifest carries a top-level ``commentary`` dict. Computed
+    # upstream by ``ui.backend.services.v9_advisor.manifest_adapter``;
+    # serialize.py stays generic — it just writes the dict as canonical
+    # JSON, byte-reproducibly. Old bundles without ``commentary`` remain
+    # valid (purely additive · forward-compat).
+    commentary = manifest.get("commentary")
+    if isinstance(commentary, dict):
+        entries["commentary/matched.json"] = _canonical_json(commentary)
+
     return entries
 
 

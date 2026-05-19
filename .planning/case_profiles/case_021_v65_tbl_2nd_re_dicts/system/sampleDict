@@ -1,0 +1,70 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Sample wallShearStress on plate boundary at 5 canonical x-stations
+// Re_x targets: 2e6, 4e6, 6e6, 8e6, 9.58e6 (matching CASE_SPEC.md §5)
+// Run as: postProcess -func sampleDict -latestTime -dict system/sampleDict
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      sampleDict;
+}
+
+type sets;
+libs (sampling);
+writeControl onEnd;
+
+interpolationScheme cellPoint;
+
+setFormat raw;
+
+fields (wallShearStress yPlus);
+
+sets
+(
+    // 5 short z-spanning lines AT the wall (y just above plate)
+    // Each line samples the plate boundary at one x_target
+    s1_Re2e6
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.418  1e-6  0);
+        end         (0.418  1e-6  0.01);
+    }
+    s2_Re4e6
+    {
+        type        midPoint;
+        axis        z;
+        start       (0.835  1e-6  0);
+        end         (0.835  1e-6  0.01);
+    }
+    s3_Re6e6
+    {
+        type        midPoint;
+        axis        z;
+        start       (1.253  1e-6  0);
+        end         (1.253  1e-6  0.01);
+    }
+    s4_Re8e6
+    {
+        type        midPoint;
+        axis        z;
+        start       (1.670  1e-6  0);
+        end         (1.670  1e-6  0.01);
+    }
+    s5_Re9p58e6
+    {
+        type        midPoint;
+        axis        z;
+        start       (1.995  1e-6  0);
+        end         (1.995  1e-6  0.01);
+    }
+);
+
+// ************************************************************************* //

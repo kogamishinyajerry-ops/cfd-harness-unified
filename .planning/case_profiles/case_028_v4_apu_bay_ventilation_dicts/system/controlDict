@@ -1,0 +1,76 @@
+FoamFile { version 2.0; format ascii; class dictionary; object controlDict; }
+
+// case_028 v4 (V65-A B79) APU bay ventilation · pimpleFoam transient relax-to-steady
+// v4 change vs v3: simpleFoam → pimpleFoam · push residual gate via transient time-stepping
+// deltaT=0.05 s (Co~1 at 1 m/s probe speed · CFL stable for the apertures)
+// endTime=20 s (= 400 timesteps · target 2-3 flow-through times)
+
+application     pimpleFoam;
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         5;
+deltaT          0.005;     // small deltaT for CFL safety + start from v3 final state (relabel as t=0) · 1000 timesteps
+writeControl    adjustableRunTime;
+writeInterval   1;          // write every 1 sec (5 snapshots)
+purgeWrite      3;
+writeFormat     ascii;
+writePrecision  7;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+// adjustableRunTime needs Co control (pimpleFoam · Courant-limited)
+adjustTimeStep  no;
+maxCo           1.5;
+maxDeltaT       0.1;
+
+functions
+{
+    // Mass conservation monitor — v3 patches renamed (intake_duct = inflow, vent_door = outflow)
+    intake_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            intake_duct;
+        operation       sum;
+        fields          (phi);
+    }
+    vent_mass_flow
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        log             true;
+        writeFields     false;
+        regionType      patch;
+        name            vent_door;
+        operation       sum;
+        fields          (phi);
+    }
+
+    // Probe velocity (v3 + v4 reuse)
+    probes
+    {
+        type            probes;
+        libs            ("libsampling.so");
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          (U p);
+        probeLocations
+        (
+            (64.5 0.5 0.0)
+            (65.5 0.5 0.0)
+            (66.5 0.5 0.0)
+            (65.1 0.7 -0.7)
+            (65.0 1.8 -0.6)
+        );
+    }
+}

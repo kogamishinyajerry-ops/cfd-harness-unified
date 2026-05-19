@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api, ApiError } from "@/api/client";
 
+import { PowerDisclosure } from "../PowerDisclosure";
 import type { StepTaskPanelProps } from "../types";
 
 export function Step1Import({
@@ -97,6 +98,22 @@ export function Step1Import({
         <code className="font-mono">/api/cases/{caseId}/geometry/render</code>{" "}
         (M-RENDER-API). To upload a different STL, return to the import flow.
       </p>
+
+      <PowerDisclosure
+        label="Unit & coordinate system"
+        summary="Defaults to SI (m / kg / s) · coordinate axes from STL header"
+        testIdPrefix="step1-units"
+      >
+        <p className="text-surface-300">
+          Override the inferred unit + origin offset. Use this when the STL
+          was exported from CAD in mm or with a non-zero origin.
+        </p>
+        <ul className="ml-3 list-disc text-surface-400">
+          <li>Unit: m | mm | inch</li>
+          <li>Origin offset: x, y, z</li>
+          <li>Up-axis: +Y (default) | +Z</li>
+        </ul>
+      </PowerDisclosure>
 
       <div className="flex items-center justify-end gap-2">
         <Link

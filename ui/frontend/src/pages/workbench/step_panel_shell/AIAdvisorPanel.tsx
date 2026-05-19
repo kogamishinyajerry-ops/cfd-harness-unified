@@ -33,28 +33,70 @@ interface AIAdvisorPanelProps {
 
 type AdvisorTab = "review" | "diagnose";
 
+// V68-C.2 · LLM-offline graceful fallback. 5xx + network errors classify
+// as "advisor offline" — the UI shows a calm degradation banner instead
+// of a red ERROR card so engineers know the workbench is still safe (V130:
+// advisor offline never blocks the rest of the workbench). 4xx errors are
+// kept as harsh "error" because they signal a contract bug (invalid case
+// id, bad query param) the engineer needs to fix.
+type AdvisorFailureKind = "offline" | "error";
+
+export interface ClassifiedAdvisorFailure {
+  kind: AdvisorFailureKind;
+  detail: string;
+  status: number | null;
+}
+
+export function classifyAdvisorFailure(exc: unknown): ClassifiedAdvisorFailure {
+  if (exc instanceof ApiError) {
+    // 503/502 (upstream gateway / LLM provider down) + 500 (unhandled
+    // backend exception) → offline. 504 timeout also offline.
+    if (exc.status >= 500) {
+      return {
+        kind: "offline",
+        detail: `${exc.status}: ${exc.message}`,
+        status: exc.status,
+      };
+    }
+    // 408 request timeout → offline (advisor took too long).
+    if (exc.status === 408) {
+      return { kind: "offline", detail: `${exc.status}: ${exc.message}`, status: exc.status };
+    }
+    // 4xx other than 408 = client/contract error → harsh error.
+    return {
+      kind: "error",
+      detail: `${exc.status}: ${exc.message}`,
+      status: exc.status,
+    };
+  }
+  if (exc instanceof TypeError) {
+    // `fetch` throws TypeError on network failure (DNS, CORS, dropped
+    // connection) — backend is unreachable, which is functionally
+    // identical to "advisor offline" from the engineer's POV.
+    return { kind: "offline", detail: exc.message, status: null };
+  }
+  if (exc instanceof Error) {
+    return { kind: "error", detail: exc.message, status: null };
+  }
+  return { kind: "error", detail: String(exc), status: null };
+}
+
 export function AIAdvisorPanel({ caseId }: AIAdvisorPanelProps) {
   const [activeTab, setActiveTab] = useState<AdvisorTab | null>(null);
   const [review, setReview] = useState<ReviewResponse | null>(null);
   const [diagnose, setDiagnose] = useState<DiagnoseResponse | null>(null);
   const [loading, setLoading] = useState<AdvisorTab | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ClassifiedAdvisorFailure | null>(null);
 
   const runReview = useCallback(async () => {
     setLoading("review");
-    setError(null);
+    setFailure(null);
     setActiveTab("review");
     try {
       const resp = await api.getAIReview(caseId);
       setReview(resp);
     } catch (exc) {
-      const msg =
-        exc instanceof ApiError
-          ? `${exc.status}: ${exc.message}`
-          : exc instanceof Error
-            ? exc.message
-            : String(exc);
-      setError(msg);
+      setFailure(classifyAdvisorFailure(exc));
     } finally {
       setLoading(null);
     }
@@ -62,19 +104,13 @@ export function AIAdvisorPanel({ caseId }: AIAdvisorPanelProps) {
 
   const runDiagnose = useCallback(async () => {
     setLoading("diagnose");
-    setError(null);
+    setFailure(null);
     setActiveTab("diagnose");
     try {
       const resp = await api.getAIDiagnose(caseId);
       setDiagnose(resp);
     } catch (exc) {
-      const msg =
-        exc instanceof ApiError
-          ? `${exc.status}: ${exc.message}`
-          : exc instanceof Error
-            ? exc.message
-            : String(exc);
-      setError(msg);
+      setFailure(classifyAdvisorFailure(exc));
     } finally {
       setLoading(null);
     }
@@ -120,13 +156,29 @@ export function AIAdvisorPanel({ caseId }: AIAdvisorPanelProps) {
         </button>
       </div>
 
-      {error && (
+      {failure?.kind === "offline" && (
+        <div
+          data-testid="ai-advisor-offline"
+          data-status={failure.status ?? "network"}
+          role="status"
+          className="rounded border border-amber-700 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200"
+        >
+          <div className="font-mono uppercase tracking-wider text-[10px] text-amber-300">
+            AI advisor offline · rest of workbench unaffected
+          </div>
+          <div className="mt-0.5 text-amber-200/80">
+            The advisor is temporarily unreachable ({failure.detail}). Engineer
+            can continue mesh / BC / solver work; click again later to retry.
+          </div>
+        </div>
+      )}
+      {failure?.kind === "error" && (
         <div
           data-testid="ai-advisor-error"
           role="alert"
           className="rounded border border-red-800 bg-red-950/30 px-2 py-1.5 text-xs text-red-300"
         >
-          {error}
+          {failure.detail}
         </div>
       )}
 

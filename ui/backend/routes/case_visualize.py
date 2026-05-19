@@ -31,6 +31,18 @@ from ui.backend.services.case_visualize import (
     render_residual_chart_png,
     render_velocity_slice_png,
 )
+from ui.backend.services.case_visualize.residual_series import (
+    build_residual_series,
+)
+from ui.backend.services.case_visualize.vtk_export import (
+    VtkExportError,
+    ensure_vtk_output,
+)
+from ui.backend.services.case_visualize.streamline_export import (
+    StreamlineExportError,
+    ensure_streamlines,
+)
+from ui.backend.services.case_drafts import _draft_path  # case_id alphabet
 
 
 router = APIRouter()
@@ -70,6 +82,123 @@ def get_bc_overlay(case_id: str) -> Response:
             raise HTTPException(status_code=409, detail=msg) from exc
         raise HTTPException(status_code=500, detail=msg) from exc
     return _png_response(png)
+
+
+@router.get("/cases/{case_id}/residual-series", tags=["case-visualize"])
+def get_residual_series(case_id: str) -> dict:
+    """R6 · Structured residual history for V4 Post-mode chart.
+
+    Returns the best-available residual time-series as JSON. Source
+    selection (best-first): parsed solver log → multi-run final
+    residuals → empty. Frontend uses ``source`` to label the x-axis
+    and falls back to an empty-state when ``source="empty"``.
+
+    Per V130 advisor-not-driver: GET-only, no mutation surface, no
+    LLM in path. Safe to poll.
+    """
+    if not is_safe_case_id(case_id):
+        raise HTTPException(status_code=400, detail=f"unsafe case_id: {case_id!r}")
+    payload = build_residual_series(case_id)
+    return {
+        "case_id": payload.case_id,
+        "source": payload.source,
+        "series": {
+            name: [{"x": p.x, "y": p.y} for p in points]
+            for name, points in payload.series.items()
+        },
+        "sample_count": payload.sample_count,
+        "latest_run_id": payload.latest_run_id,
+        "target_floor": payload.target_floor,
+        "achieved": payload.achieved,
+        "note": payload.note,
+    }
+
+
+# ──────────────── B2.5 · Post viewport VTP feeds ────────────────
+# Two endpoints for the V4 Post-mode 3D viewport's real surface +
+# streamline overlay. Both serve XML PolyData (VTP), consumed client-
+# side by vtk.js's vtkXMLPolyDataReader. See B2.5 architecture decision
+# 2026-05-19 (.planning/v4_real_viewport_audit_2026-05-19.md).
+
+
+@router.get("/cases/{case_id}/post/surface.vtp", tags=["case-visualize"])
+def get_post_surface_vtp(case_id: str, patch: str = "engine") -> Response:
+    """Return the named patch's surface as VTP with U/p scalars attached.
+
+    Runs ``foamToVTK -latestTime`` in the cfd-openfoam container the
+    first time (cached afterwards · re-runs on solver re-execute).
+
+    Default ``patch=engine`` matches the canonical KJ66 + external-aero
+    naming convention. For internal-flow cases, pass ``patch=wall``
+    or whatever wall patch carries the body of interest.
+
+    Errors:
+      - 409 when solver hasn't run yet
+      - 404 when patch name doesn't exist in the case's boundary set
+      - 503 when the OpenFOAM container isn't running
+      - 500 for everything else
+    """
+    # Safety: patch name traversal guard (alphanum + _ + -).
+    if not all(c.isalnum() or c in ("_", "-") for c in patch):
+        raise HTTPException(status_code=400, detail=f"unsafe patch: {patch!r}")
+
+    case_dir = _resolve(case_id)
+    try:
+        vtk = ensure_vtk_output(case_dir)
+    except VtkExportError as exc:
+        msg = str(exc)
+        if "no time directories" in msg or "solver hasn't run" in msg:
+            raise HTTPException(status_code=409, detail=msg) from exc
+        if "container" in msg.lower() and "not running" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
+
+    vtp_path = vtk.boundary_dir / f"{patch}.vtp"
+    if not vtp_path.is_file():
+        available = sorted(
+            p.stem for p in vtk.boundary_dir.glob("*.vtp")
+        )
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"patch {patch!r} not in case · available: "
+                f"{', '.join(available) or '(none)'}"
+            ),
+        )
+    return Response(
+        content=vtp_path.read_bytes(),
+        media_type="application/vnd.kitware.vtk-polydata+xml",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
+
+
+@router.get("/cases/{case_id}/post/streamlines.vtp", tags=["case-visualize"])
+def get_post_streamlines_vtp(case_id: str) -> Response:
+    """Return integrated streamlines as VTP, with U/p sampled along
+    each track.
+
+    Seeds = 8-point line on the inlet AABB diagonal (auto seeding · per
+    B2.5 architecture). Runs OpenFOAM's native ``streamLine`` function
+    in the container (cached · re-runs on solver re-execute).
+
+    Errors mirror surface.vtp (409 / 503 / 500).
+    """
+    case_dir = _resolve(case_id)
+    try:
+        result = ensure_streamlines(case_dir)
+    except StreamlineExportError as exc:
+        msg = str(exc)
+        if "no time directories" in msg or "solver hasn't run" in msg:
+            raise HTTPException(status_code=409, detail=msg) from exc
+        if "container" in msg.lower() and "not running" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
+
+    return Response(
+        content=result.track_vtp.read_bytes(),
+        media_type="application/vnd.kitware.vtk-polydata+xml",
+        headers={"Cache-Control": "no-store, max-age=0"},
+    )
 
 
 @router.get("/cases/{case_id}/residual-history.png", tags=["case-visualize"])

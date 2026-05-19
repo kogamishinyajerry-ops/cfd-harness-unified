@@ -120,6 +120,23 @@ class CaseIndexEntry(BaseModel):
     has_measurement: bool
     run_summary: RunSummary = Field(default_factory=RunSummary)
     contract_status: ContractStatus
+    # V68-C.3 · case_kind annotates whether the entry is a curated
+    # whitelist case ("whitelist") or an imported user substrate
+    # surfacing through the catalog ("imported_user"). gold_pending=True
+    # means a curated gold reference hasn't been authored yet — the case
+    # is reachable + listable but the trust gate must surface a
+    # "⏳ gold pending" disclaimer instead of a PASS/FAIL verdict.
+    case_kind: str = Field(
+        default="whitelist",
+        description='Either "whitelist" (curated) or "imported_user".',
+    )
+    gold_pending: bool = Field(
+        default=False,
+        description=(
+            "True when the case is listable but lacks a gold reference. "
+            "UI surfaces a `⏳ gold pending` badge; trust gate disclaimer."
+        ),
+    )
 
 
 class GoldStandardReference(BaseModel):

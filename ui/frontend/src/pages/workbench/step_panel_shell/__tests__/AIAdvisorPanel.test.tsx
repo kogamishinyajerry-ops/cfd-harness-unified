@@ -92,17 +92,23 @@ const DIAGNOSE_FIXTURE: DiagnoseResponse = {
 let reviewResponse: ReviewResponse = REVIEW_FIXTURE;
 let diagnoseResponse: DiagnoseResponse = DIAGNOSE_FIXTURE;
 let failNext = false;
+// V68-C.2 · per-test override for the failure status code. Default 502 keeps
+// the legacy "renders error banner on API failure" / "502 upstream timeout"
+// test exercising the upstream-timeout path; new tests bump it to 500/503/
+// 422 to assert the offline-vs-error classifier.
+let statusCode = 502;
 
 beforeEach(() => {
   reviewResponse = REVIEW_FIXTURE;
   diagnoseResponse = DIAGNOSE_FIXTURE;
   failNext = false;
+  statusCode = 502;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo) => {
       const url = typeof input === "string" ? input : input.toString();
       if (failNext) {
-        return new Response("upstream timeout", { status: 502 });
+        return new Response("upstream timeout", { status: statusCode });
       }
       if (url.includes("/ai-review")) {
         return new Response(JSON.stringify(reviewResponse), {
@@ -216,15 +222,87 @@ describe("AIAdvisorPanel · AI 审查 flow", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders error banner on API failure", async () => {
+  // V68-C.2 · LLM-offline graceful fallback. 502/503/500 + network failures
+  // classify as `offline` (calm degradation banner) rather than `error` (harsh
+  // red card). 4xx other than 408 stays as harsh `error` since it signals
+  // contract bugs the engineer must fix.
+
+  it("renders offline banner (not error) on 502 upstream timeout", async () => {
     failNext = true;
     const user = userEvent.setup();
     render(<AIAdvisorPanel caseId={CASE_ID} />);
     await user.click(screen.getByTestId("ai-advisor-review-button"));
 
-    expect(
-      await screen.findByTestId("ai-advisor-error"),
-    ).toBeInTheDocument();
+    const offline = await screen.findByTestId("ai-advisor-offline");
+    expect(offline).toBeInTheDocument();
+    expect(offline).toHaveAttribute("data-status", "502");
+    expect(offline.textContent).toContain("AI advisor offline");
+    // Harsh red error banner must NOT render on offline.
+    expect(screen.queryByTestId("ai-advisor-error")).toBeNull();
+  });
+
+  it("V68-C.2 · 503 service unavailable → offline banner", async () => {
+    statusCode = 503;
+    failNext = true;
+    const user = userEvent.setup();
+    render(<AIAdvisorPanel caseId={CASE_ID} />);
+    await user.click(screen.getByTestId("ai-advisor-review-button"));
+    const offline = await screen.findByTestId("ai-advisor-offline");
+    expect(offline).toHaveAttribute("data-status", "503");
+  });
+
+  it("V68-C.2 · 500 internal server error → offline banner", async () => {
+    statusCode = 500;
+    failNext = true;
+    const user = userEvent.setup();
+    render(<AIAdvisorPanel caseId={CASE_ID} />);
+    await user.click(screen.getByTestId("ai-advisor-diagnose-button"));
+    const offline = await screen.findByTestId("ai-advisor-offline");
+    expect(offline).toHaveAttribute("data-status", "500");
+  });
+
+  it("V68-C.2 · network failure (fetch TypeError) → offline banner", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    );
+    const user = userEvent.setup();
+    render(<AIAdvisorPanel caseId={CASE_ID} />);
+    await user.click(screen.getByTestId("ai-advisor-review-button"));
+    const offline = await screen.findByTestId("ai-advisor-offline");
+    expect(offline).toHaveAttribute("data-status", "network");
+    expect(offline.textContent).toContain("Failed to fetch");
+  });
+
+  it("V68-C.2 · 4xx contract error stays as harsh error (not offline)", async () => {
+    statusCode = 422;
+    failNext = true;
+    const user = userEvent.setup();
+    render(<AIAdvisorPanel caseId={CASE_ID} />);
+    await user.click(screen.getByTestId("ai-advisor-review-button"));
+    const error = await screen.findByTestId("ai-advisor-error");
+    expect(error.textContent).toContain("422");
+    expect(screen.queryByTestId("ai-advisor-offline")).toBeNull();
+  });
+
+  it("V68-C.2 · V130 invariant preserved on offline (no Apply UI surfaced)", async () => {
+    statusCode = 503;
+    failNext = true;
+    const user = userEvent.setup();
+    render(<AIAdvisorPanel caseId={CASE_ID} />);
+    await user.click(screen.getByTestId("ai-advisor-review-button"));
+    await screen.findByTestId("ai-advisor-offline");
+    // No apply/submit/execute buttons exist anywhere — offline state
+    // must not introduce a mutation affordance as a "retry hack".
+    const panel = screen.getByTestId("ai-advisor-panel");
+    expect(panel.querySelectorAll("button[type='submit']")).toHaveLength(0);
+    const allButtons = within(panel).queryAllByRole("button");
+    for (const btn of allButtons) {
+      const label = (btn.textContent ?? "").toLowerCase();
+      expect(label).not.toMatch(/apply|submit|execute|应用|提交/);
+    }
   });
 
   it("renders empty-state message when findings list is empty", async () => {

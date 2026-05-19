@@ -39,7 +39,19 @@ def _load_whitelist_rows() -> list[dict]:
     except yaml.YAMLError:
         return []
     rows = (doc or {}).get("cases") or []
-    return [r for r in rows if isinstance(r, dict) and r.get("id")]
+    # V68-C.3 · the catalog now lists imported_user entries with
+    # gold_pending=true (case_002a APU bay) but the batch matrix is a
+    # density-sweep grid against curated golds — without a gold the
+    # cells degrade to UNKNOWN and the grid loses signal. Filter to
+    # curated whitelist rows only here; the gold-pending entries
+    # surface through GET /api/cases for browsing.
+    return [
+        r
+        for r in rows
+        if isinstance(r, dict)
+        and r.get("id")
+        and not bool(r.get("gold_pending"))
+    ]
 
 
 def _verdict_reason(report) -> Optional[str]:

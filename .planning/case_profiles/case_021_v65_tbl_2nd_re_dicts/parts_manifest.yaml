@@ -1,0 +1,53 @@
+# case_021 · parts_manifest · minimal stub
+#
+# This case is blockMesh-native (no STL parts). Manifest is preserved
+# for cross-case schema parity but contains no surface mesh references.
+# Geometry is fully described in system/blockMeshDict.
+
+case_id: case_021_nasa_tmr_flat_plate
+schema_version: 1
+geometry_mode: blockMesh_native  # vs. stl_based for surface-mesh cases
+last_assessed: "2026-05-15"
+last_assessed_by: "Claude Code Opus 4.7 (V64-A B63 dispatch · M-V64A-VAL-FULL-3-INCOMP)"
+
+# No STL parts — flat plate is a single block face.
+parts: []
+
+# Logical surface labels (resolved to blockMeshDict patches, not STL files).
+patches:
+  - name: plate
+    role: no_slip_wall
+    blockmesh_patch: plate
+    canonical_reference: "Prandtl-Schlichting eq 21.11 · Coles & Wadcock 1979"
+  - name: inlet
+    role: velocity_inlet
+    blockmesh_patch: inlet
+  - name: outlet
+    role: pressure_outlet_zerogradient
+    blockmesh_patch: outlet
+  - name: top
+    role: freestream_slip
+    blockmesh_patch: top
+  - name: front_back
+    role: empty_2d
+    blockmesh_patch: [frontAndBack]
+
+# Risk flags from CaseProfile registry (knowledge/schemas/risk_flag_registry.yaml).
+risk_flags:
+  - flag_id: executable_smoke_test
+    triggered: true
+    justification: |
+      First-time substrate, but blockMesh + simpleFoam topology is the most
+      validated OpenFOAM incompressible RANS path (pitzDaily lineage).
+      Mitigation: full Docker invocation captured in RUN_LOG.md.
+  - flag_id: solver_stability_on_novel_geometry
+    triggered: false
+    justification: |
+      ZPG turbulent BL + kOmegaSST + bounded-upwind is the canonical
+      reference topology for NASA TMR. Zero novel-geometry risk.
+
+tolerance_policy:
+  cf_skin_friction:
+    tolerance: 0.05  # FULL gate: 5% on 5/5 stations
+    canonical_source: "Prandtl-Schlichting eq 21.11 (1/7-power law)"
+    secondary_source: "Coles & Wadcock 1979"

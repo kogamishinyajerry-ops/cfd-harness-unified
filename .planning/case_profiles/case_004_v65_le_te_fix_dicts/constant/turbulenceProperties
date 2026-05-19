@@ -1,0 +1,29 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM                                        |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           | case_004 · M-V64A-VAL-FULL-1                    |
+|    \\/     M anipulation  | RAS kOmegaSST per case.yaml                     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+simulationType  RAS;
+
+RAS
+{
+    RASModel        kOmegaSST;
+
+    turbulence      on;
+
+    printCoeffs     on;
+}
+
+// ************************************************************************* //

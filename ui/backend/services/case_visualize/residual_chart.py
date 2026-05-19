@@ -54,11 +54,16 @@ def _parse_log(log_text: str) -> dict[str, list[tuple[int, float]]]:
     """Return {series_name: [(iteration_index, residual), ...]}.
 
     icoFoam emits residuals in time-step blocks. We iterate by time
-    step (each ``Time = ...`` line increments the step counter) and
-    capture the FIRST initial-residual per quantity within that block.
-    PISO emits multiple p iterations per step (nCorrectors * nNonOrth
-    + something); we pick the first as a representative for the
-    timestep.
+    step (each ``Time = ...`` line increments the step counter) and,
+    per quantity, capture:
+
+      * U components — the FIRST initial-residual seen (icoFoam's
+        smoothSolver solves each U component exactly once per step,
+        so first = only).
+      * p — the LAST initial-residual seen (PISO solves p multiple
+        times per step via nCorrectors × nNonOrthogonalCorrectors;
+        the LAST iterate is the converged value the user sees as
+        "p has settled" at steady state).
     """
     series: dict[str, list[tuple[int, float]]] = {
         "Ux": [],

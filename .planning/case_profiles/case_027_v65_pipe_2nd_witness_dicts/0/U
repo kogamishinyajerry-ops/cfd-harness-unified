@@ -1,0 +1,74 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2512                                 |
+|   \\  /    A nd           | Web:      www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// Inlet: codedFixedValue parabolic Hagen-Poiseuille profile (inlet IS analytical)
+//   u(r) = 2·u_mean·(1 - (r/R)²) · u_mean=0.1 · R=0.005 · u_max=0.2
+//   r = sqrt(y² + z²) computed per face center (3D · radial coordinate)
+//   First codedFixedValue-with-sqrt(y²+z²) radial geometry in this repo
+//   (case_025 plane Poiseuille used u(y) directly · pipe needs u(r))
+// Outlet: zeroGradient (allows natural extrapolation)
+// Wall: noSlip
+// front/back: wedge (OpenFOAM axisymmetric symmetry)
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (1.5 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            codedFixedValue;
+        value           uniform (1.5 0 0);
+        name            hagenPoiseuilleProfile;
+        code
+        #{
+            const fvPatch& patch = this->patch();
+            const vectorField& centers = patch.Cf();
+            vectorField& field = *this;
+
+            // Analytical: u(r) = 2·u_mean·(1 - (r/R)²) where r = sqrt(y² + z²)
+            const scalar R     = 0.005;
+            const scalar uMean = 1.5;
+            const scalar uMax  = 2.0 * uMean;
+
+            forAll(centers, i)
+            {
+                scalar y    = centers[i].y();
+                scalar z    = centers[i].z();
+                scalar r    = Foam::sqrt(y*y + z*z);
+                scalar ur   = uMax * (1.0 - sqr(r / R));
+                field[i]    = vector(ur, 0.0, 0.0);
+            }
+        #};
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    wall
+    {
+        type            noSlip;
+    }
+    front
+    {
+        type            wedge;
+    }
+    back
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //

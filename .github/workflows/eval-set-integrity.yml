@@ -1,0 +1,44 @@
+name: Eval Set Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.planning/evals/**'
+      - '.planning/methodology/advisor_rules*'
+      - '.planning/sdk/**'
+      - 'scripts/eval/**'
+      - '.github/workflows/eval-set-integrity.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.planning/evals/**'
+      - '.planning/methodology/advisor_rules*'
+      - '.planning/sdk/**'
+      - 'scripts/eval/**'
+
+concurrency:
+  group: eval-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifest-verify:
+    name: Canonical manifest byte-repro check (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify SHA-256 manifest
+        run: python3 scripts/eval/build_canonical_manifest.py
+
+      - name: Verify eval set structural integrity
+        run: python3 scripts/eval/verify_eval_set_integrity.py

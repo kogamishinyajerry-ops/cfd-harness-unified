@@ -1,0 +1,470 @@
+{
+  "fixtures": [
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Pressure residual decreased monotonically over the last 8 iterations and the run converged within budget — this is the textbook \"things going right\" pattern. No action needed. If you're tuning this case for a parameter sweep, this is a g…",
+          "matched_at": "healthy_convergence_p",
+          "provenance": "Versteeg & Malalasekera · An Introduction to CFD · §11.3",
+          "rule_id": "HEALTHY_CONVERGENCE_V9_R8",
+          "severity": "info"
+        }
+      ],
+      "name": "clean_healthy_convergence",
+      "slice": {
+        "case_id": "lid_driven_cavity",
+        "convergence_stats": {
+          "converged": true,
+          "elapsed_seconds": 28.0,
+          "final_iter": 800,
+          "max_iters_reached": false
+        },
+        "exit_code": 0,
+        "forces": [
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 0
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 1
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 2
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 3
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 4
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 5
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 6
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 7
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 8
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 9
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 10
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 11
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 12
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 13
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 14
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 15
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 16
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 17
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 18
+          },
+          {
+            "Cd": 0.951,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 19
+          }
+        ],
+        "gold_delta": {
+          "max_abs_pct": 0.75
+        },
+        "residuals": {
+          "U": [
+            0.01,
+            0.005,
+            0.0025,
+            0.001,
+            0.0005,
+            0.00025,
+            0.0001,
+            5e-05
+          ],
+          "p": [
+            0.01,
+            0.005,
+            0.0025,
+            0.001,
+            0.0005,
+            0.00025,
+            0.0001,
+            5e-05
+          ]
+        },
+        "run_id": "R-OK-1",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Solver reached its iteration cap (maxIters from system/fvSolution → solvers section) WITHOUT meeting the convergence tolerance. The case is technically not finished — the residuals at the final iter represent the best the solver achieved…",
+          "matched_at": "convergence_stats",
+          "provenance": ".planning/intel/v_series/V18_max_iters.md",
+          "rule_id": "MAX_ITERS_REACHED_V9_R2",
+          "severity": "advise"
+        },
+        {
+          "commentary_excerpt": "Maximum absolute deviation from the gold-standard reference exceeds 5%. For canonical cases (Ghia 1982 lid-driven cavity, etc.), agreement within 1-3% is the expected bar. Drift of this magnitude usually points to: (1) mesh too coarse ne…",
+          "matched_at": "gold_delta_8.20pct",
+          "provenance": ".planning/intel/v_series/V46_gold_delta_drift.md",
+          "rule_id": "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4",
+          "severity": "warn"
+        }
+      ],
+      "name": "max_iters_with_gold_drift",
+      "slice": {
+        "case_id": "lid_driven_cavity",
+        "convergence_stats": {
+          "converged": false,
+          "elapsed_seconds": 60.0,
+          "final_iter": 5000,
+          "max_iters_reached": true
+        },
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": {
+          "max_abs_pct": 8.2
+        },
+        "residuals": null,
+        "run_id": "R-MAX-1",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "The solver process exited with a non-zero status code, which means it died before reporting convergence. This is distinct from \"hit maxIters but kept running cleanly\" (see R2). Likely causes: floating-point exception (NaN in a field — of…",
+          "matched_at": "exit_code_137",
+          "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · §8.7",
+          "rule_id": "RUN_FAILED_NONZERO_EXIT_V9_R3",
+          "severity": "advise"
+        }
+      ],
+      "name": "run_failed_nonzero_exit",
+      "slice": {
+        "case_id": "lid_driven_cavity",
+        "convergence_stats": null,
+        "exit_code": 137,
+        "forces": null,
+        "gold_delta": null,
+        "residuals": null,
+        "run_id": "R-FAIL-1",
+        "success": false
+      }
+    },
+    {
+      "expected_matches": [],
+      "name": "empty_artifact_no_match",
+      "slice": {
+        "case_id": "x",
+        "convergence_stats": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "residuals": null,
+        "run_id": "R-empty",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Drag/lift coefficients are still changing >1% between the last 10 iterations — the integral quantities haven't settled even though residuals may have. This often happens in steady-state cases that are actually transient (vortex shedding …",
+          "matched_at": "forces_drift_18.37pct",
+          "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · §13.6",
+          "rule_id": "FORCES_NOT_CONVERGED_V9_R5",
+          "severity": "warn"
+        },
+        {
+          "commentary_excerpt": "Run took 5000+ iterations to converge — the case worked, but at the long end of typical effort. This is often a hint that (a) the initial guess (potentialFoam pre-step, or zero initialization) was far from the final state, or (b) the und…",
+          "matched_at": "iter_7500_slow_converge",
+          "provenance": ".planning/intel/v_series/V25_startup_speedup.md",
+          "rule_id": "SLOW_CONVERGENCE_V9_R6",
+          "severity": "info"
+        }
+      ],
+      "name": "forces_drift_slow_converge",
+      "slice": {
+        "case_id": "cylinder",
+        "convergence_stats": {
+          "converged": true,
+          "elapsed_seconds": 240.0,
+          "final_iter": 7500,
+          "max_iters_reached": false
+        },
+        "exit_code": 0,
+        "forces": [
+          {
+            "Cd": 0.5,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 0
+          },
+          {
+            "Cd": 0.55,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 1
+          },
+          {
+            "Cd": 0.6,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 2
+          },
+          {
+            "Cd": 0.65,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 3
+          },
+          {
+            "Cd": 0.7,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 4
+          },
+          {
+            "Cd": 0.75,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 5
+          },
+          {
+            "Cd": 0.8,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 6
+          },
+          {
+            "Cd": 0.8500000000000001,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 7
+          },
+          {
+            "Cd": 0.9,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 8
+          },
+          {
+            "Cd": 0.95,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 9
+          },
+          {
+            "Cd": 1.0,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 10
+          },
+          {
+            "Cd": 1.05,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 11
+          },
+          {
+            "Cd": 1.1,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 12
+          },
+          {
+            "Cd": 1.15,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 13
+          },
+          {
+            "Cd": 1.2000000000000002,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 14
+          },
+          {
+            "Cd": 1.25,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 15
+          },
+          {
+            "Cd": 1.3,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 16
+          },
+          {
+            "Cd": 1.35,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 17
+          },
+          {
+            "Cd": 1.4,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 18
+          },
+          {
+            "Cd": 1.4500000000000002,
+            "Cl": 0.0,
+            "Cm": 0.0,
+            "iteration": 19
+          }
+        ],
+        "gold_delta": null,
+        "residuals": null,
+        "run_id": "R-DRIFT-1",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Pressure residual is oscillating rather than decreasing monotonically — the last few iterations show alternating amplitude > 30% of the mean. This commonly indicates the pressure-relaxation factor is too aggressive for the case's couplin…",
+          "matched_at": "iter_2000_p_residual",
+          "provenance": ".planning/intel/v_series/V32_residual_oscillation.md",
+          "rule_id": "RESIDUAL_OSCILLATION_P_V9_R1",
+          "severity": "warn"
+        },
+        {
+          "commentary_excerpt": "Velocity residual has plateaued (last 20 iterations show variation <2% but value is still 10× above the convergence tolerance). The solver isn't going to improve from here without intervention. Likely causes: (1) under-relaxation too con…",
+          "matched_at": "U_plateau_1.50e-3",
+          "provenance": ".planning/intel/v_series/V37_residual_plateau.md",
+          "rule_id": "RESIDUAL_PLATEAU_U_V9_R7",
+          "severity": "warn"
+        }
+      ],
+      "name": "residual_plateau_and_oscillation",
+      "slice": {
+        "case_id": "naca0012",
+        "convergence_stats": {
+          "converged": true,
+          "elapsed_seconds": 80.0,
+          "final_iter": 2000,
+          "max_iters_reached": false
+        },
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "residuals": {
+          "U": [
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015,
+            0.001501,
+            0.0014990000000000001,
+            0.0015
+          ],
+          "p": [
+            0.01,
+            0.005,
+            0.012,
+            0.004,
+            0.013,
+            0.0035,
+            0.014,
+            0.003
+          ]
+        },
+        "run_id": "R-PLATEAU-1",
+        "success": true
+      }
+    }
+  ],
+  "version": "v9.0.0"
+}

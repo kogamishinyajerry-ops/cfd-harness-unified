@@ -35,6 +35,7 @@ import {
 } from "@/types/mesh_prism_layers";
 
 import { MeshQualityCard } from "../MeshQualityCard";
+import { PowerDisclosure } from "../PowerDisclosure";
 import type { StepTaskPanelProps } from "../types";
 
 // DEC-V61-135 (N2.1): empty sizing-field literal for resetting the
@@ -832,6 +833,22 @@ export function Step2Mesh({
           Network error: {networkError}
         </p>
       )}
+
+      <PowerDisclosure
+        label="sHM tuning"
+        summary="Preset auto-tunes refinement levels for typical aero meshes"
+        testIdPrefix="step2-shm-tune"
+      >
+        <p className="text-surface-300">
+          Engineer-tier sHM controls: per-region refinement, layer growth
+          ratio, surface feature angle. Defaults are conservative.
+        </p>
+        <ul className="ml-3 list-disc text-surface-400">
+          <li>nSurfaceLayers: 5 (default) | 3–10</li>
+          <li>expansionRatio: 1.2 (default) | 1.05–1.5</li>
+          <li>resolveFeatureAngle: 30° (default)</li>
+        </ul>
+      </PowerDisclosure>
     </div>
   );
 }

@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Thermophysical properties — V65-A B84 case_031 NACA0012 supersonic V106 retry.|
+|                                                                              |
+| V65-A B84 changes vs tutorial:                                              |
+| - transport const → sutherland (As=1.4585e-6 kg/m·s·K^(1/2), Ts=110.4 K)   |
+| - This activates V106 thermo-FPE template's intended mechanism: sutherland  |
+|   has T<Ts vulnerability → limitTemperature fvOption clamps T to safe range.|
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      thermophysicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+thermoType
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       sutherland;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+mixture // air at standard conditions
+{
+    specie
+    {
+        molWeight   28.9;
+    }
+    thermodynamics
+    {
+        Cp          1005;
+        Hf          0;
+    }
+    transport
+    {
+        As          1.4585e-06;
+        Ts          110.4;
+    }
+}
+
+
+// ************************************************************************* //

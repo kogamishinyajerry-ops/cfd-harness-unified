@@ -110,3 +110,22 @@ uv.lock
 # Canonical audit doc v62_stack_4q_audit.md is tracked.
 .planning/audits/anon_*.json
 .planning/audits/*_ai_review_*.json
+
+# 2026-05-16 (post-V67-D · desktop deep cleanup) — sandbox case data
+# and large industrial substrate trees moved from ~/Desktop/ into the
+# project tree for organization. These are run-time data (OpenFOAM
+# solver outputs, STAR-CCM+ files, STEP/STL assets) and are NOT part
+# of the repo source. They live here so the desktop stays clean while
+# the project tree remains the SSOT for paths cited in DEC files.
+#
+# Force-add individual artifacts if a specific run/manifest becomes
+# audit-relevant (e.g., a Cf_results.csv that a DEC cites).
+_sandboxes/
+_industrial_substrates/
+_starccm_workspace/
+_external_substudies/
+_adjacent_workspaces/
+
+# Playwright e2e artifacts (V67-C.1)
+ui/frontend/test-results/
+ui/frontend/playwright-report/

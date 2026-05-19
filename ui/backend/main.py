@@ -69,6 +69,7 @@ from ui.backend.routes import (
     mesh_quality,
     preflight,
     run_history,
+    solver_stream,
     validation,
     wizard,
     workbench_basics,
@@ -232,6 +233,7 @@ app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
 app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
+app.include_router(solver_stream.router, prefix="/api", tags=["solver-stream"])
 app.include_router(ai_chat.router, prefix="/api", tags=["ai-chat"])
 app.include_router(ai_coach.router, prefix="/api", tags=["ai-coach"])
 app.include_router(ai_advisor.router, prefix="/api", tags=["ai-advisor"])

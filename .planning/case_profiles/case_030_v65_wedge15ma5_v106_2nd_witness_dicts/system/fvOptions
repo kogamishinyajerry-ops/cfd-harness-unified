@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| fvOptions — V106 thermo-FPE substrate-fix template · 2nd application         |
+|                                                                              |
+| Source: case_006_v64_thermo_fpe_fix_dicts + case_016_v64_thermo_fpe_fix_dicts |
+| 1st application (V64-A B61): rhoSimpleFoam ONERA M6 (M=0.84) + rhoPimpleFoam |
+|                              m219 cavity (M=0.85) · transonic regime          |
+| 2nd application (V65-A B82): rhoCentralFoam wedge15Ma5 (M=5.0) · supersonic   |
+|                              regime · NEW high-Mach context for V106 LANDING  |
+|                                                                              |
+| Template: limitTemperature [min 110 K, max 2000 K] on all cells.             |
+|   - min 110 K: just above sutherland Ts=110.4 K (mu(T) becomes nonphysical) |
+|   - max 2000 K: SAFE upper bound. For M=5 air, T_stag = T_inf*(1+0.2*M²) =  |
+|                 300*6 = 1800 K. Post-oblique-shock T ~ T_inf*(1 + 2γ/(γ+1)*  |
+|                 (M_n²-1)/...). For 15° wedge at M=5: oblique shock angle    |
+|                 β ≈ 24°, M_n1 = M*sin(β) ≈ 2.03, T_ratio ≈ 1.72, post-shock |
+|                 T ≈ 516 K. Well within [110, 2000] envelope.                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+limitT_V106_2nd_witness
+{
+    type            limitTemperature;
+    active          yes;
+    selectionMode   all;
+    min             110.0;
+    max             2000.0;
+}
+
+// ************************************************************************* //

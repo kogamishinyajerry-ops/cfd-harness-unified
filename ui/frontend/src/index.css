@@ -47,3 +47,9 @@
     @apply font-mono text-[0.95em];
   }
 }
+
+/* V83.4 · V5.C cinematic mode progress indicator */
+@keyframes v83-cinematic-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
