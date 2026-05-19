@@ -34,6 +34,7 @@ import {
   hasAuthoredCadParts,
 } from "./geometryBlueprint";
 import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
+import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -170,7 +171,7 @@ function FactCard({ title, facts, footer, cta, ctaTone = "neutral" }: FactCardPr
       className="flex flex-col gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
       data-testid={`rightpanel-v4-factcard-${title}`}
     >
-      <div className="text-[10px] uppercase tracking-wider text-v4-textTertiary">
+      <div className="text-[10px] tracking-wider text-v4-textTertiary">
         {title}
       </div>
       <ul className="space-y-1 text-[11px]">
@@ -457,6 +458,51 @@ function modeCardsFor(
     }
     case "physics": {
       const solver = basics?.solver;
+      if (!solver) {
+        return [
+          {
+            title: "推荐 SST k-ω",
+            facts: [
+              { label: "模型族", value: "RANS" },
+              { label: "近壁处理", value: "Wall fn" },
+              { label: "速度范围", value: "0-40 m/s" },
+            ],
+            footer: "适合高 Re 外流 · 需用户采纳后写入",
+            cta: "查看依据",
+            ctaTone: "active",
+          },
+          {
+            title: "稳态流动",
+            facts: [
+              { label: "时间格式", value: PHYSICS_BLUEPRINT_SUMMARY.caseType },
+              {
+                label: "重力",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.gravity.toFixed(1)} m/s²`,
+              },
+              {
+                label: "材料",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.materialCount} 项`,
+              },
+            ],
+            cta: "查看时间设置",
+          },
+          {
+            title: "应用预设",
+            facts: [
+              {
+                label: "模型",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.modelCount} 项`,
+              },
+              {
+                label: "估算单元",
+                value: `${PHYSICS_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(1)} M`,
+              },
+              { label: "下一步", value: "边界设置" },
+            ],
+            cta: "应用预设",
+          },
+        ];
+      }
       return [
         {
           title: "物理设置",

@@ -27,6 +27,7 @@ import {
   MESH_BLUEPRINT_NUMERICS,
   type MeshBlueprintHistogram,
 } from "./meshBlueprint";
+import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -194,6 +195,27 @@ function chipsFor(
     }
 
     case "physics": {
+      if (!basics?.solver) {
+        return [
+          {
+            value: String(PHYSICS_BLUEPRINT_SUMMARY.modelCount),
+            label: "物理模型",
+          },
+          {
+            value: String(PHYSICS_BLUEPRINT_SUMMARY.materialCount),
+            label: "材料",
+          },
+          {
+            value: "稳态",
+            label: "计算工况",
+          },
+          {
+            value: PHYSICS_BLUEPRINT_SUMMARY.estimatedCellsM.toFixed(1),
+            label: "估算单元",
+            unit: "M",
+          },
+        ];
+      }
       const solverName = basics?.solver?.display_zh ?? basics?.solver?.name ?? "—";
       return [
         { value: String(basics?.materials?.length ?? "—"), label: "材料" },

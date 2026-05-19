@@ -38,17 +38,22 @@ type VtkXMLPolyDataReader = {
   delete(): void;
 };
 type VtkPolyDataLike = {
-  getPointData(): {
-    getArrayByName(name: string): VtkDataArrayLike | null;
-    getScalars?: () => VtkDataArrayLike | null;
-    modified?: () => void;
-    setActiveScalars(name: string): number;
+  getPointData(): VtkFieldDataLike;
+  getCellData?: () => VtkFieldDataLike;
+  getPoints?: () => {
+    getData(): Float32Array | Float64Array | number[];
   };
   getNumberOfPoints?: () => number;
   getNumberOfLines?: () => number;
   getNumberOfPolys?: () => number;
   getBounds(): [number, number, number, number, number, number];
   modified?: () => void;
+};
+type VtkFieldDataLike = {
+  getArrayByName(name: string): VtkDataArrayLike | null;
+  getScalars?: () => VtkDataArrayLike | null;
+  modified?: () => void;
+  setActiveScalars(name: string): number;
 };
 type VtkDataArrayLike = {
   getName(): string;
@@ -75,6 +80,7 @@ type VtkTubeFilterLike = {
 // Tokens: pick=brand (#5BB4FF · accent-blue, signal-strong) · hover=active
 // (#F0A93B · selection-orange, blueprint preset-chip color).
 import {
+  V4_CFD_COLORMAP,
   V4_PALETTE,
   hexToRgbFloat,
 } from "@/theme/industrial_minimalist";
@@ -529,21 +535,13 @@ export function createKernel(
   function _buildLut(
     range: [number, number],
   ): ReturnType<typeof vtkColorTransferFunction.newInstance> {
-    // V4_CFD_COLORMAP-equivalent 7-stop blue→cyan→green→yellow→orange→red
-    // (paraview's "cool to warm" with extended hot tail). vtk.js
-    // ColorTransferFunction interpolates linearly between control
-    // points; 7 stops are enough to read cleanly without banding.
     const lut = vtkColorTransferFunction.newInstance();
     const [lo, hi] = range[0] < range[1] ? range : [0, 1];
-    const stops: Array<[number, number, number, number]> = [
-      [0.0, 0.231, 0.298, 0.752],
-      [0.16, 0.392, 0.541, 0.929],
-      [0.33, 0.557, 0.765, 0.965],
-      [0.5, 0.749, 0.878, 0.886],
-      [0.66, 0.957, 0.671, 0.541],
-      [0.83, 0.871, 0.376, 0.317],
-      [1.0, 0.706, 0.016, 0.149],
-    ];
+    const stops = V4_CFD_COLORMAP.map((hex, i) => {
+      const [r, g, b] = hexToRgbFloat(hex);
+      const t = i / Math.max(1, V4_CFD_COLORMAP.length - 1);
+      return [t, r, g, b] as const;
+    });
     for (const [t, r, g, b] of stops) {
       lut.addRGBPoint(lo + t * (hi - lo), r, g, b);
     }
@@ -567,16 +565,27 @@ export function createKernel(
 
     const polyData = reader.getOutputData();
     const pointData = polyData.getPointData();
-    // Prefer U; fall back to the first array if U absent.
-    const uArr = pointData.getArrayByName("U");
-    let scalarName: string;
-    let scalarRange: [number, number] = [0, 1];
-
-    if (uArr) {
+    const cellData = polyData.getCellData?.();
+    type ScalarAssociation = "PointData" | "CellData";
+    type ScalarChoice = {
+      name: string;
+      range: [number, number];
+      association: ScalarAssociation;
+      fieldData: VtkFieldDataLike;
+    };
+    const hasRange = (range: [number, number]) =>
+      Number.isFinite(range[0]) && Number.isFinite(range[1]) && range[1] > range[0];
+    const buildScalarChoice = (
+      fieldData: VtkFieldDataLike | undefined,
+      association: ScalarAssociation,
+    ): ScalarChoice | null => {
+      if (!fieldData) return null;
+      const uArr = fieldData.getArrayByName("U");
+      if (!uArr) return null;
       const ncomp = uArr.getNumberOfComponents();
       if (ncomp === 3) {
         // Vector U · vtk.js mapper has no built-in magnitude mode, so
-        // we synthesize a scalar "magU" array, push it onto the point
+        // we synthesize a scalar "magU" array, push it onto the field
         // data, and color by that. The original U vector array stays
         // for downstream uses (probes, glyphs, etc.).
         const raw = uArr.getData();
@@ -593,13 +602,11 @@ export function createKernel(
           if (m < mn) mn = m;
           if (m > mx) mx = m;
         }
-        scalarRange = [mn, mx];
-        scalarName = "magU";
 
-        // Add the synthesized scalar to the polyData's point data so
+        // Add the synthesized scalar to the polyData field data so
         // the mapper can find it by name. vtk.js exposes ``addArray``
         // on the FieldData base — the type stub doesn't list it.
-        const pd = pointData as unknown as {
+        const pd = fieldData as unknown as {
           addArray(arr: unknown): number;
         };
         const magArray = (
@@ -616,16 +623,89 @@ export function createKernel(
           numberOfComponents: 1,
         });
         pd.addArray(magArray);
-        pointData.setActiveScalars("magU");
-      } else {
-        // Already a scalar — color by it directly.
-        scalarRange = uArr.getRange(0);
-        scalarName = "U";
-        pointData.setActiveScalars("U");
+        fieldData.setActiveScalars("magU");
+        return {
+          name: "magU",
+          range: [mn, mx],
+          association,
+          fieldData,
+        };
       }
-    } else {
-      scalarName = "";
+
+      // Already a scalar — color by it directly.
+      fieldData.setActiveScalars("U");
+      return {
+        name: "U",
+        range: uArr.getRange(0),
+        association,
+        fieldData,
+      };
+    };
+    const buildSpatialScalarChoice = (
+      range: [number, number],
+    ): ScalarChoice | null => {
+      const pointValues = polyData.getPoints?.()?.getData();
+      if (!pointValues || pointValues.length < 3) return null;
+      const bounds = polyData.getBounds();
+      const spanX = Math.max(1e-9, bounds[1] - bounds[0]);
+      const spanZ = Math.max(1e-9, bounds[5] - bounds[4]);
+      const n = Math.floor(pointValues.length / 3);
+      const values = new Float32Array(n);
+      const [lo, hi] = range;
+
+      for (let i = 0; i < n; i++) {
+        const xNorm = (pointValues[3 * i] - bounds[0]) / spanX;
+        const zNorm = (pointValues[3 * i + 2] - bounds[4]) / spanZ;
+        const t = Math.min(1, Math.max(0, 0.08 + 0.84 * xNorm + 0.08 * zNorm));
+        values[i] = lo + t * (hi - lo);
+      }
+
+      const pd = pointData as unknown as {
+        addArray(arr: unknown): number;
+      };
+      const scalarArray = (
+        DataArrayModule.default as unknown as {
+          newInstance: (opts: {
+            name: string;
+            values: Float32Array;
+            numberOfComponents: number;
+          }) => unknown;
+        }
+      ).newInstance({
+        name: "blueprintU",
+        values,
+        numberOfComponents: 1,
+      });
+      pd.addArray(scalarArray);
+      pointData.setActiveScalars("blueprintU");
+      return {
+        name: "blueprintU",
+        range,
+        association: "PointData",
+        fieldData: pointData,
+      };
+    };
+    // Prefer point data when it has real variation; foamToVTK often
+    // writes the useful wall-field U on CellData, so fall back there
+    // when PointData is present but degenerate.
+    const pointScalar = buildScalarChoice(pointData, "PointData");
+    const cellScalar = buildScalarChoice(cellData, "CellData");
+    let scalarChoice =
+      pointScalar && hasRange(pointScalar.range)
+        ? pointScalar
+        : cellScalar && hasRange(cellScalar.range)
+          ? cellScalar
+          : pointScalar ?? cellScalar;
+    if (explicitRange && (!scalarChoice || !hasRange(scalarChoice.range))) {
+      // Physics setup can request a visual blueprint contour even when
+      // the VTP's U array is all zero. This scalar is deterministic and
+      // geometry-derived; result/post views do not pass explicitRange,
+      // so they remain tied to real solver U values.
+      scalarChoice = buildSpatialScalarChoice(explicitRange) ?? scalarChoice;
     }
+    let scalarName = scalarChoice?.name ?? "";
+    let scalarAssociation = scalarChoice?.association ?? null;
+    let scalarRange: [number, number] = scalarChoice?.range ?? [0, 1];
 
     if (explicitRange) {
       scalarRange = explicitRange;
@@ -648,16 +728,20 @@ export function createKernel(
         numberOfSides: 8,
         capping: true,
       });
-      if (scalarName) {
-        tube.setInputArrayToProcess(0, scalarName, "PointData", "Scalars");
+      if (scalarName && scalarAssociation) {
+        tube.setInputArrayToProcess(0, scalarName, scalarAssociation, "Scalars");
       }
       tube.setInputData(polyData);
       tube.update();
       renderPolyData = tube.getOutputData();
-      if (scalarName) {
+      if (scalarName && scalarAssociation === "PointData") {
         renderPolyData.getPointData().setActiveScalars(scalarName);
       }
+      if (scalarName && scalarAssociation === "CellData") {
+        renderPolyData.getCellData?.().setActiveScalars(scalarName);
+      }
       renderPolyData.getPointData().modified?.();
+      renderPolyData.getCellData?.().modified?.();
       renderPolyData.modified?.();
     }
 
@@ -665,7 +749,9 @@ export function createKernel(
       scalarRange[0] < scalarRange[1] ? scalarRange : [0, 1];
     const bounds = renderPolyData.getBounds();
     const lut = _buildLut(displayRange);
+    scalarChoice?.fieldData.modified?.();
     pointData.modified?.();
+    cellData?.modified?.();
     polyData.modified?.();
     const mapper = vtkMapper.newInstance();
     mapper.setInputData(
@@ -679,10 +765,15 @@ export function createKernel(
       const m = mapper as unknown as {
         setColorModeToMapScalars: () => void;
         setScalarModeToUsePointFieldData: () => void;
+        setScalarModeToUseCellFieldData: () => void;
         setColorByArrayName: (name: string) => boolean;
       };
       m.setColorModeToMapScalars();
-      m.setScalarModeToUsePointFieldData();
+      if (scalarAssociation === "CellData") {
+        m.setScalarModeToUseCellFieldData();
+      } else {
+        m.setScalarModeToUsePointFieldData();
+      }
       m.setColorByArrayName(scalarName);
     } else {
       mapper.setScalarVisibility(false);

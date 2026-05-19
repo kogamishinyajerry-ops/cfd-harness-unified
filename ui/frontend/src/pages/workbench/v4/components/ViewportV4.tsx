@@ -97,6 +97,11 @@ interface ViewportV4Props {
    *  Caller controls re-attach via URL change (any change → rebuild). */
   surfaceVtpUrl?: string | null;
   streamlinesVtpUrl?: string | null;
+  /** Optional setup/blueprint scalar range. When supplied, the kernel
+   *  may use it to render a deterministic contour preview if the
+   *  loaded VTP has degenerate U=0 data. Post mode leaves this unset
+   *  so scientific result views remain tied to real VTP scalars. */
+  surfaceVtpScalarRange?: [number, number];
   /** Fires once the VTP layers report their scalar (U-magnitude)
    *  range so the React side can render a real colorbar. */
   onVtpRangeReady?: (range: [number, number]) => void;
@@ -158,6 +163,7 @@ export function ViewportV4({
   annotation = null,
   surfaceVtpUrl = null,
   streamlinesVtpUrl = null,
+  surfaceVtpScalarRange,
   onVtpRangeReady,
 }: ViewportV4Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -247,7 +253,7 @@ export function ViewportV4({
     let cancelled = false;
     let handle: Awaited<ReturnType<typeof kernel.attachVtp>> | null = null;
     kernel
-      .attachVtp(surfaceVtpUrl, "surface")
+      .attachVtp(surfaceVtpUrl, "surface", surfaceVtpScalarRange)
       .then((h) => {
         if (cancelled) {
           kernel.detachVtp(h);
@@ -273,7 +279,7 @@ export function ViewportV4({
         }
       }
     };
-  }, [surfaceVtpUrl, loadState.status, onVtpRangeReady]);
+  }, [surfaceVtpUrl, surfaceVtpScalarRange, loadState.status, onVtpRangeReady]);
 
   // B2.5 · attach streamlines VTP — same pattern as surface.
   useEffect(() => {
@@ -307,7 +313,7 @@ export function ViewportV4({
         }
       }
     };
-  }, [streamlinesVtpUrl, loadState.status]);
+  }, [streamlinesVtpUrl, loadState.status, onVtpRangeReady]);
 
   // Phase C-R3 · highlightedPatchId prop sync. Idempotent — clear
   // overlay when null, otherwise call the kernel's named-patch
