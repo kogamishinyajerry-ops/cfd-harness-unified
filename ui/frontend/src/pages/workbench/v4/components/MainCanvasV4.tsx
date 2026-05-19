@@ -7,9 +7,8 @@
  * curated cases without imported geometry (LDC, tutorials) still
  * show the stylised SVG scene rather than a 404 spinner.
  *
- * Other modes (import / physics / solver / post / doe) remain pure
- * SVG — adding a 3D viewport there carries no information without
- * volume rendering or contour plots, which are later arcs.
+ * Import / Geometry / Mesh / Boundary / Solver / Post can mount the real
+ * vtk.js viewport when a page-level blueprint needs CAD or field context.
  *
  * Camera preset state is lifted here so the Top-right preset chips
  * stay mounted across modes and drive a single source-of-truth into
@@ -52,7 +51,7 @@ function renderForStep(
 ) {
   switch (step) {
     case "import":
-      return <ModeRendererImport />;
+      return <ModeRendererImport caseId={caseId} cameraPreset={cameraPreset} />;
     case "geometry":
       return (
         <ModeRendererGeometry caseId={caseId} cameraPreset={cameraPreset} />
@@ -78,6 +77,8 @@ function renderForStep(
 
 export function MainCanvasV4({ activeStep, caseId }: MainCanvasV4Props) {
   const [cameraPreset, setCameraPreset] = useState<V4CameraPreset>("iso");
+  const cameraPresetPositionClass =
+    activeStep === "import" ? "right-[232px] top-[108px]" : "right-3 top-10";
 
   return (
     <section
@@ -91,7 +92,10 @@ export function MainCanvasV4({ activeStep, caseId }: MainCanvasV4Props) {
 
       {activeStep !== "doe" && (
         <div
-          className="pointer-events-auto absolute right-3 top-10 flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary"
+          className={[
+            "pointer-events-auto absolute flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary",
+            cameraPresetPositionClass,
+          ].join(" ")}
           data-testid="maincanvas-v4-camera-presets"
         >
           {(Object.keys(PRESET_LABEL) as V4CameraPreset[]).map((p) => {

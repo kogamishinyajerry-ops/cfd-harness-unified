@@ -28,6 +28,7 @@ import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
 import { POST_BLUEPRINT_KPIS } from "./postBlueprint";
 import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
+import { IMPORT_BLUEPRINT_KPIS } from "./importBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -128,33 +129,41 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
     ];
   }
 
+  if (step === "import") {
+    return [
+      {
+        value: String(IMPORT_BLUEPRINT_KPIS.fileCount),
+        label: "摄入文件",
+        unit: "项",
+        delta: `${IMPORT_BLUEPRINT_KPIS.acceptedCount} accepted`,
+        deltaTone: "healthy",
+      },
+      {
+        value: String(IMPORT_BLUEPRINT_KPIS.reviewCount),
+        label: "待人工确认",
+        unit: "项",
+        delta: "manual gate",
+        deltaTone: "warn",
+      },
+      {
+        value: String(IMPORT_BLUEPRINT_KPIS.partCount),
+        label: "CAD 分件",
+        unit: "parts",
+      },
+      {
+        value: IMPORT_BLUEPRINT_KPIS.sourceScale,
+        label: "scale mm→m",
+        delta: "provenance",
+      },
+    ];
+  }
+
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
   switch (step) {
-    case "import": {
-      const dim = basics?.dimension;
-      const cl = basics?.geometry?.characteristic_length;
-      return [
-        { value: String(dim ?? "—"), label: "维度", unit: "D" },
-        {
-          value: cl?.value != null ? fmt(cl.value, 3) : "—",
-          label: cl?.name ?? "特征长度",
-          unit: cl?.unit,
-        },
-        {
-          value: String(basics?.patches?.length ?? "—"),
-          label: "边界面",
-        },
-        {
-          value: ctx.latestRun ? String(ctx.latestRun.exit_code) : "—",
-          label: "最近退出码",
-        },
-      ];
-    }
-
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
       if (!basics || !hasAuthoredCadParts(basics.patches?.length)) {

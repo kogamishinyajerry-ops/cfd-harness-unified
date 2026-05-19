@@ -48,6 +48,7 @@ import {
   DOE_BLUEPRINT_CONFIDENCE,
   DOE_BLUEPRINT_RIGHT_CARDS,
 } from "./doeBlueprint";
+import { IMPORT_BLUEPRINT_RIGHT_CARDS } from "./importBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -271,30 +272,7 @@ function modeCardsFor(
 
   switch (step) {
     case "import": {
-      return [
-        {
-          title: "算例信息",
-          facts: [
-            { label: "case_id", value: ctx.caseId ?? "—" },
-            {
-              label: "名称",
-              value: ctx.displayNameZh ?? ctx.displayName ?? "—",
-            },
-            { label: "维度", value: String(basics?.dimension ?? "—") },
-            {
-              label: "运行记录",
-              value: ctx.latestRun
-                ? `${ctx.latestRun.run_id} · ${ctx.latestRun.success ? "✓" : "✗"}`
-                : "—",
-              tone: ctx.latestRun?.success
-                ? "healthy"
-                : ctx.latestRun
-                  ? "crit"
-                  : "neutral",
-            },
-          ],
-        },
-      ];
+      return IMPORT_BLUEPRINT_RIGHT_CARDS;
     }
     case "geometry": {
       const cl = basics?.geometry?.characteristic_length;
