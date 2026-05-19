@@ -18,6 +18,8 @@ import "@kitware/vtk.js/Rendering/Profiles/Geometry";
 import vtkActor from "@kitware/vtk.js/Rendering/Core/Actor";
 import vtkCellArray from "@kitware/vtk.js/Common/Core/CellArray";
 import vtkCellPicker from "@kitware/vtk.js/Rendering/Core/CellPicker";
+import vtkColorTransferFunction from "@kitware/vtk.js/Rendering/Core/ColorTransferFunction";
+import vtkCoordinate from "@kitware/vtk.js/Rendering/Core/Coordinate";
 import vtkMapper from "@kitware/vtk.js/Rendering/Core/Mapper";
 import vtkGenericRenderWindow from "@kitware/vtk.js/Rendering/Misc/GenericRenderWindow";
 import vtkPoints from "@kitware/vtk.js/Common/Core/Points";
@@ -25,6 +27,59 @@ import vtkPolyData from "@kitware/vtk.js/Common/DataModel/PolyData";
 
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
+
+// B2.5 · VTP polydata reader for foamToVTK / streamLine output (real
+// solver data layered onto the viewport per V4 blueprint 6/7).
+// Lazy import path keeps the IO/XML chunk out of the initial bundle.
+type VtkXMLPolyDataReader = {
+  setUrl(url: string): Promise<unknown>;
+  getOutputData(idx?: number): VtkPolyDataLike;
+  getOutputPort(): unknown;
+  delete(): void;
+};
+type VtkPolyDataLike = {
+  getPointData(): {
+    getArrayByName(name: string): VtkDataArrayLike | null;
+    getScalars?: () => VtkDataArrayLike | null;
+    modified?: () => void;
+    setActiveScalars(name: string): number;
+  };
+  getNumberOfPoints?: () => number;
+  getNumberOfLines?: () => number;
+  getNumberOfPolys?: () => number;
+  getBounds(): [number, number, number, number, number, number];
+  modified?: () => void;
+};
+type VtkDataArrayLike = {
+  getName(): string;
+  getNumberOfComponents(): number;
+  getRange(component?: number): [number, number];
+  getData(): Float32Array | Float64Array | number[];
+};
+type VtkTubeFilterLike = {
+  setInputData(data: VtkPolyDataLike): void;
+  setInputArrayToProcess(
+    inputPort: number,
+    arrayName: string,
+    fieldAssociation: string,
+    attributeType?: string,
+  ): void;
+  update(): void;
+  getOutputData(idx?: number): VtkPolyDataLike;
+  delete(): void;
+};
+
+// V4 Phase R4 · token SSOT for runtime highlight colors. Replaces the
+// old hard-coded cyan/yellow RGB at the applyHighlight call sites so
+// the entire V4 color story flows from the palette module.
+// Tokens: pick=brand (#5BB4FF · accent-blue, signal-strong) · hover=active
+// (#F0A93B · selection-orange, blueprint preset-chip color).
+import {
+  V4_PALETTE,
+  hexToRgbFloat,
+} from "@/theme/industrial_minimalist";
+const PICK_HIGHLIGHT_RGB = hexToRgbFloat(V4_PALETTE.brand);
+const HOVER_HIGHLIGHT_RGB = hexToRgbFloat(V4_PALETTE.active);
 
 /** Result of a successful vtkCellPicker hit. The frontend pickMode
  *  uses ``patchName`` + ``cellId`` to look up the face_id in the
@@ -65,12 +120,55 @@ export interface PickResult {
 
 export type PickHandler = (result: PickResult) => void;
 
+/** Opaque handle for a VTP attachment · used by detachVtp / scalar
+ *  range queries. The shape is internal to the kernel; consumers
+ *  treat it as opaque. */
+export interface VtpAttachHandle {
+  readonly id: number;
+  readonly url: string;
+  readonly kind: "surface" | "streamlines";
+  /** Range of the active scalar over the loaded polyData ·
+   *  populated once attach resolves. Surfaced so the React colorbar
+   *  can label real values rather than guessing. */
+  readonly scalarRange: [number, number];
+}
+
 export interface ViewportKernel {
   setBackground(rgb: [number, number, number]): void;
   attachStl(reader: vtkSTLReader): void;
   /** glb path · adds the importer's actors to the renderer (M-RENDER-API). */
   attachGltf(importer: vtkGLTFImporter): void;
+  /** B2.5 · VTP polydata path · adds an XML-PolyData reader's output as
+   *  a new actor with U-magnitude colormap. Mapper kind controls
+   *  scalar mode + line/surface representation:
+   *
+   *    - "surface" — Phong-shaded triangles with U colored on the
+   *      patch face (typical Post-mode engine wall rendering).
+   *    - "streamlines" — line geometry converted to thin vtk.js
+   *      TubeFilter surfaces so the integrated tracks are legible
+   *      against the hull and rotate with the scene.
+   *
+   *  Returns a handle the caller can pass to ``detachVtp`` to cleanly
+   *  remove the actor on URL change. The reader/mapper/actor live
+   *  on the kernel side; caller owns no native refs. */
+  attachVtp(
+    url: string,
+    kind: "surface" | "streamlines",
+    scalarRange?: [number, number],
+  ): Promise<VtpAttachHandle>;
+  /** Remove a VTP attachment previously created by attachVtp(). */
+  detachVtp(handle: VtpAttachHandle): void;
   resetCamera(): void;
+  /** V79.1 · Set camera to a canonical preset orientation (industrial
+   *  CAE standard views). The kernel computes camera position relative
+   *  to the scene bounding box, then re-renders.
+   *
+   *  Presets (matches CATIA / Solidworks / Ansys Workbench naming):
+   *    - "front" · looks down +Y at world origin
+   *    - "top"   · looks down -Z at world origin
+   *    - "iso"   · isometric view (looks down [+1,+1,+1] toward origin)
+   */
+  setCameraPreset(preset: "front" | "top" | "iso"): void;
   /** Enable cell-level picking. ``handler`` fires on left-click; pass
    *  ``null`` to disable picking. The kernel attaches/removes the
    *  vtkCellPicker subscription idempotently. (DEC-V61-098 spec_v2 §A6)
@@ -117,6 +215,55 @@ export interface ViewportKernel {
     actor: ReturnType<typeof vtkActor.newInstance>,
     cellId: number,
   ): number[];
+  /** V4 Phase C-R3 · legend → viewport reverse highlight.
+   *
+   *  Highlight every triangle on the actor whose glTF
+   *  primitive.name (= bc_glb's patch_name) matches ``name``. Passing
+   *  ``null`` clears the named overlay (same shape as
+   *  ``clearPick/HoverHighlight``).
+   *
+   *  - kind="pick"  → cyan committed overlay (idempotent with click pick)
+   *  - kind="hover" → yellow ghost overlay (idempotent with mouse hover)
+   *
+   *  Returns the number of cells highlighted. 0 when the patch_name
+   *  isn't bound (e.g. STL load or mismatched name) — the React layer
+   *  can use this to detect "no-op" and surface a soft status.
+   */
+  highlightPatchByName(
+    name: string | null,
+    kind: "pick" | "hover",
+  ): number;
+  /** V4 Phase C-R5 · centroid lookup for screen-space annotations.
+   *
+   *  Returns the bounds-midpoint of the actor whose glTF primitive.name
+   *  matches ``name`` (the "centroid" of its surface AABB, not a true
+   *  mass centroid — adequate for hanging a leader-line label off the
+   *  patch). Null when the patch_name isn't bound or the actor has no
+   *  geometry mapper input. */
+  getPatchCentroid(name: string): [number, number, number] | null;
+  /** V4 Phase C-R5 · world → CSS pixel coordinate projection.
+   *
+   *  Runs the active camera's view + projection matrices on the given
+   *  world point and returns the resulting (x, y) coordinate in the
+   *  container's CSS pixel space (origin top-left). ``behind`` is true
+   *  when the projected point is behind the camera (negative dot product
+   *  of (point − camera_pos) with camera direction-of-projection) —
+   *  callers should clamp to an edge in that case instead of letting
+   *  the point go off-screen unboundedly.
+   *
+   *  Returns null when the underlying GenericRenderWindow has been
+   *  disposed or no container size is known yet (first paint pre-resize).
+   */
+  worldToScreen(
+    world: [number, number, number],
+  ): {
+    x: number;
+    y: number;
+    /** Geometrically behind the camera plane (projection meaningless). */
+    behind: boolean;
+    /** In front of camera but projects outside [0,W]×[0,H] container box. */
+    offscreen: boolean;
+  } | null;
   dispose(): void;
 }
 
@@ -274,6 +421,360 @@ export function createKernel(
       });
     }
     renderer.resetCamera();
+    grw.getRenderWindow().render();
+  }
+
+  // ─── B2.5 · VTP attachments (real solver field overlays) ──────────
+  // Each call to attachVtp creates a (reader, mapper, actor) triple
+  // owned by the kernel. We track them by id so detachVtp can pull
+  // them out of the renderer without disturbing the base glb/stl.
+  interface VtpEntry {
+    handle: VtpAttachHandle;
+    reader: VtkXMLPolyDataReader;
+    mapper: ReturnType<typeof vtkMapper.newInstance>;
+    actor: ReturnType<typeof vtkActor.newInstance>;
+    lut: ReturnType<typeof vtkColorTransferFunction.newInstance>;
+    tube?: VtkTubeFilterLike;
+    bounds: [number, number, number, number, number, number];
+  }
+  const vtpEntries = new Map<number, VtpEntry>();
+  let nextVtpId = 1;
+  let surfaceOverlayCount = 0;
+  const baseActorStates = new Map<
+    ReturnType<typeof vtkActor.newInstance>,
+    { opacity: number; visible: boolean }
+  >();
+
+  function _setBaseGeometryOpacity(opacity: number | null): void {
+    type KernelActor = ReturnType<typeof vtkActor.newInstance>;
+    const renderer = grw.getRenderer() as unknown as {
+      getActors?: () => unknown[];
+    };
+    const currentVtpActors = new Set(
+      Array.from(vtpEntries.values()).map((entry) => entry.actor),
+    );
+    const isKernelActor = (candidate: unknown): candidate is KernelActor =>
+      typeof (candidate as { getProperty?: unknown } | null)?.getProperty ===
+      "function";
+    const actors = (
+      renderer.getActors?.() ??
+      Array.from(new Set([actor, ...Array.from(actorPatchNames.keys())]))
+    ).filter(isKernelActor);
+
+    for (const a of actors) {
+      if (currentVtpActors.has(a)) continue;
+      if (a === pickHighlightActor || a === hoverHighlightActor) continue;
+      const prop = a.getProperty();
+      if (opacity === null) {
+        const original = baseActorStates.get(a);
+        if (original != null) {
+          prop.setOpacity(original.opacity);
+          a.setVisibility(original.visible);
+        }
+      } else {
+        if (!baseActorStates.has(a)) {
+          baseActorStates.set(a, {
+            opacity: prop.getOpacity?.() ?? 1,
+            visible: a.getVisibility?.() ?? true,
+          });
+        }
+        prop.setOpacity(opacity);
+        a.setVisibility(false);
+      }
+      a.modified?.();
+    }
+
+    if (opacity === null) {
+      baseActorStates.clear();
+    }
+  }
+
+  function _fitVtpCamera(): void {
+    if (vtpEntries.size === 0) return;
+    const bounds: [number, number, number, number, number, number] = [
+      Infinity,
+      -Infinity,
+      Infinity,
+      -Infinity,
+      Infinity,
+      -Infinity,
+    ];
+    for (const entry of vtpEntries.values()) {
+      const b = entry.bounds;
+      bounds[0] = Math.min(bounds[0], b[0]);
+      bounds[1] = Math.max(bounds[1], b[1]);
+      bounds[2] = Math.min(bounds[2], b[2]);
+      bounds[3] = Math.max(bounds[3], b[3]);
+      bounds[4] = Math.min(bounds[4], b[4]);
+      bounds[5] = Math.max(bounds[5], b[5]);
+    }
+    if (!bounds.every(Number.isFinite)) return;
+
+    const renderer = grw.getRenderer();
+    const camera = renderer.getActiveCamera();
+    const [xMin, xMax, yMin, yMax, zMin, zMax] = bounds;
+    const cx = (xMin + xMax) / 2;
+    const cy = (yMin + yMax) / 2;
+    const cz = (zMin + zMax) / 2;
+    const span = Math.max(xMax - xMin, yMax - yMin, zMax - zMin, 1);
+    const dist = span * 2.2;
+    const iso = dist / Math.sqrt(3);
+    camera.setPosition(cx + iso, cy - iso, cz + iso);
+    camera.setFocalPoint(cx, cy, cz);
+    camera.setViewUp(0, 0, 1);
+    renderer.resetCameraClippingRange();
+    grw.getRenderWindow().render();
+  }
+
+  function _buildLut(
+    range: [number, number],
+  ): ReturnType<typeof vtkColorTransferFunction.newInstance> {
+    // V4_CFD_COLORMAP-equivalent 7-stop blue→cyan→green→yellow→orange→red
+    // (paraview's "cool to warm" with extended hot tail). vtk.js
+    // ColorTransferFunction interpolates linearly between control
+    // points; 7 stops are enough to read cleanly without banding.
+    const lut = vtkColorTransferFunction.newInstance();
+    const [lo, hi] = range[0] < range[1] ? range : [0, 1];
+    const stops: Array<[number, number, number, number]> = [
+      [0.0, 0.231, 0.298, 0.752],
+      [0.16, 0.392, 0.541, 0.929],
+      [0.33, 0.557, 0.765, 0.965],
+      [0.5, 0.749, 0.878, 0.886],
+      [0.66, 0.957, 0.671, 0.541],
+      [0.83, 0.871, 0.376, 0.317],
+      [1.0, 0.706, 0.016, 0.149],
+    ];
+    for (const [t, r, g, b] of stops) {
+      lut.addRGBPoint(lo + t * (hi - lo), r, g, b);
+    }
+    return lut;
+  }
+
+  async function attachVtp(
+    url: string,
+    kind: "surface" | "streamlines",
+    explicitRange?: [number, number],
+  ): Promise<VtpAttachHandle> {
+    // Lazy import keeps the XML reader chunk out of the initial bundle.
+    const [ReaderModule, DataArrayModule] = await Promise.all([
+      import("@kitware/vtk.js/IO/XML/XMLPolyDataReader"),
+      import("@kitware/vtk.js/Common/Core/DataArray"),
+    ]);
+    const reader = (
+      ReaderModule.default as unknown as { newInstance: () => VtkXMLPolyDataReader }
+    ).newInstance();
+    await reader.setUrl(url);
+
+    const polyData = reader.getOutputData();
+    const pointData = polyData.getPointData();
+    // Prefer U; fall back to the first array if U absent.
+    const uArr = pointData.getArrayByName("U");
+    let scalarName: string;
+    let scalarRange: [number, number] = [0, 1];
+
+    if (uArr) {
+      const ncomp = uArr.getNumberOfComponents();
+      if (ncomp === 3) {
+        // Vector U · vtk.js mapper has no built-in magnitude mode, so
+        // we synthesize a scalar "magU" array, push it onto the point
+        // data, and color by that. The original U vector array stays
+        // for downstream uses (probes, glyphs, etc.).
+        const raw = uArr.getData();
+        const n = raw.length / 3;
+        const magData = new Float32Array(n);
+        let mn = Infinity;
+        let mx = -Infinity;
+        for (let i = 0; i < n; i++) {
+          const ux = raw[3 * i];
+          const uy = raw[3 * i + 1];
+          const uz = raw[3 * i + 2];
+          const m = Math.sqrt(ux * ux + uy * uy + uz * uz);
+          magData[i] = m;
+          if (m < mn) mn = m;
+          if (m > mx) mx = m;
+        }
+        scalarRange = [mn, mx];
+        scalarName = "magU";
+
+        // Add the synthesized scalar to the polyData's point data so
+        // the mapper can find it by name. vtk.js exposes ``addArray``
+        // on the FieldData base — the type stub doesn't list it.
+        const pd = pointData as unknown as {
+          addArray(arr: unknown): number;
+        };
+        const magArray = (
+          DataArrayModule.default as unknown as {
+            newInstance: (opts: {
+              name: string;
+              values: Float32Array;
+              numberOfComponents: number;
+            }) => unknown;
+          }
+        ).newInstance({
+          name: "magU",
+          values: magData,
+          numberOfComponents: 1,
+        });
+        pd.addArray(magArray);
+        pointData.setActiveScalars("magU");
+      } else {
+        // Already a scalar — color by it directly.
+        scalarRange = uArr.getRange(0);
+        scalarName = "U";
+        pointData.setActiveScalars("U");
+      }
+    } else {
+      scalarName = "";
+    }
+
+    if (explicitRange) {
+      scalarRange = explicitRange;
+    }
+
+    let renderPolyData = polyData;
+    let tube: VtkTubeFilterLike | undefined;
+    if (kind === "streamlines" && (polyData.getNumberOfLines?.() ?? 0) > 0) {
+      const TubeModule = await import("@kitware/vtk.js/Filters/General/TubeFilter");
+      tube = (
+        TubeModule.default as unknown as {
+          newInstance: (opts: {
+            radius: number;
+            numberOfSides: number;
+            capping: boolean;
+          }) => VtkTubeFilterLike;
+        }
+      ).newInstance({
+        radius: 0.018,
+        numberOfSides: 8,
+        capping: true,
+      });
+      if (scalarName) {
+        tube.setInputArrayToProcess(0, scalarName, "PointData", "Scalars");
+      }
+      tube.setInputData(polyData);
+      tube.update();
+      renderPolyData = tube.getOutputData();
+      if (scalarName) {
+        renderPolyData.getPointData().setActiveScalars(scalarName);
+      }
+      renderPolyData.getPointData().modified?.();
+      renderPolyData.modified?.();
+    }
+
+    const displayRange: [number, number] =
+      scalarRange[0] < scalarRange[1] ? scalarRange : [0, 1];
+    const bounds = renderPolyData.getBounds();
+    const lut = _buildLut(displayRange);
+    pointData.modified?.();
+    polyData.modified?.();
+    const mapper = vtkMapper.newInstance();
+    mapper.setInputData(
+      renderPolyData as Parameters<typeof mapper.setInputData>[0],
+    );
+    if (scalarName) {
+      mapper.setScalarVisibility(true);
+      mapper.setLookupTable(lut);
+      mapper.setUseLookupTableScalarRange(true);
+      mapper.setScalarRange(displayRange[0], displayRange[1]);
+      const m = mapper as unknown as {
+        setColorModeToMapScalars: () => void;
+        setScalarModeToUsePointFieldData: () => void;
+        setColorByArrayName: (name: string) => boolean;
+      };
+      m.setColorModeToMapScalars();
+      m.setScalarModeToUsePointFieldData();
+      m.setColorByArrayName(scalarName);
+    } else {
+      mapper.setScalarVisibility(false);
+    }
+    mapper.modified?.();
+    (mapper as { update?: () => void }).update?.();
+
+    const actor = vtkActor.newInstance();
+    actor.setMapper(mapper);
+    if (kind === "streamlines") {
+      // TubeFilter gives the tracks real screen-space presence; line
+      // width is retained for the non-tube fallback path.
+      const prop = actor.getProperty();
+      prop.setLineWidth(8);
+      prop.setOpacity(1);
+      prop.setLighting(false);
+    } else {
+      // Surface kind · scalar color should read directly; the dimmed
+      // base GLB supplies the geometric silhouette under the overlay.
+      const prop = actor.getProperty();
+      prop.setOpacity(1);
+      prop.setLighting(false);
+      const coincidentMapper = mapper as unknown as {
+        setResolveCoincidentTopologyToPolygonOffset?: () => void;
+        setRelativeCoincidentTopologyPolygonOffsetParameters?: (
+          factor: number,
+          offset: number,
+        ) => void;
+      };
+      coincidentMapper.setResolveCoincidentTopologyToPolygonOffset?.();
+      coincidentMapper.setRelativeCoincidentTopologyPolygonOffsetParameters?.(
+        -1,
+        -1,
+      );
+      if (surfaceOverlayCount === 0) {
+        _setBaseGeometryOpacity(0.06);
+      }
+      surfaceOverlayCount += 1;
+    }
+    actor.modified?.();
+
+    const renderer = grw.getRenderer();
+    renderer.addActor(actor);
+    const id = nextVtpId++;
+    const handle: VtpAttachHandle = {
+      id,
+      url,
+      kind,
+      scalarRange,
+    };
+    vtpEntries.set(id, { handle, reader, mapper, actor, lut, tube, bounds });
+    const renderWindow = grw.getRenderWindow();
+    queueMicrotask(() => {
+      _fitVtpCamera();
+    });
+    window.setTimeout(_fitVtpCamera, 50);
+    renderWindow.render();
+    return handle;
+  }
+
+  function detachVtp(handle: VtpAttachHandle): void {
+    const entry = vtpEntries.get(handle.id);
+    if (!entry) return;
+    try {
+      grw.getRenderer().removeActor(entry.actor);
+    } catch {
+      // Renderer may already be torn down — safe to ignore.
+    }
+    try {
+      entry.actor.delete();
+    } catch {
+      // delete() is not formally idempotent in vtk.js
+    }
+    try {
+      entry.mapper.delete();
+    } catch {}
+    try {
+      entry.lut.delete();
+    } catch {}
+    try {
+      entry.tube?.delete();
+    } catch {}
+    try {
+      entry.reader.delete();
+    } catch {}
+    vtpEntries.delete(handle.id);
+    if (handle.kind === "surface") {
+      surfaceOverlayCount = Math.max(0, surfaceOverlayCount - 1);
+      if (surfaceOverlayCount === 0) {
+        _setBaseGeometryOpacity(null);
+      }
+    }
     grw.getRenderWindow().render();
   }
 
@@ -749,18 +1250,22 @@ export function createKernel(
       actor = vtkActor.newInstance();
       actor.setMapper(mapper);
       const prop = actor.getProperty();
+      // V4 Phase R4 (Codex R3 C-1 closure): colors now flow from the
+      // V4_PALETTE SSOT via hexToRgbFloat, not hard-coded RGB tuples.
+      // The semantic intent is unchanged (committed=signal-brand,
+      // hover=selection-active) but a future palette tweak now
+      // propagates here automatically.
       if (isSelected) {
-        // Bright cyan, fully opaque, strong ambient so the highlight
-        // stays readable on dark patches and on shadowed sides.
-        prop.setColor(0.05, 1.0, 0.8);
+        const [r, g, b] = PICK_HIGHLIGHT_RGB;
+        prop.setColor(r, g, b);
         prop.setOpacity(1.0);
         prop.setAmbient(0.85);
         prop.setDiffuse(0.15);
       } else {
-        // Saturated yellow with high opacity but not 1.0 so the
-        // pick highlight underneath is still readable when hover
-        // moves back over a previously-selected face.
-        prop.setColor(1.0, 0.92, 0.18);
+        const [r, g, b] = HOVER_HIGHLIGHT_RGB;
+        prop.setColor(r, g, b);
+        // Opacity <1 so an underlying committed pick (different color)
+        // remains readable when hover crosses back over it.
         prop.setOpacity(0.85);
         prop.setAmbient(0.85);
         prop.setDiffuse(0.15);
@@ -837,6 +1342,168 @@ export function createKernel(
     applyHighlight(tris, "hover");
   }
 
+  /** V4 Phase C-R5 · getPatchCentroid implementation. */
+  function getPatchCentroid(
+    name: string,
+  ): [number, number, number] | null {
+    let target: ReturnType<typeof vtkActor.newInstance> | undefined;
+    actorPatchNames.forEach((patchName, a) => {
+      if (target) return;
+      if (patchName === name) target = a;
+    });
+    if (!target) return null;
+    // actor.getBounds() returns [xmin, xmax, ymin, ymax, zmin, zmax].
+    // The bounds midpoint is the cheapest valid annotation anchor.
+    const b = (target as unknown as {
+      getBounds?: () => number[];
+    }).getBounds?.();
+    if (!b || b.length < 6) return null;
+    // Reject degenerate or uninitialized bounds (vtk returns
+    // [+inf,-inf,+inf,-inf,+inf,-inf] before any data is loaded).
+    if (!Number.isFinite(b[0]) || b[1] < b[0]) return null;
+    return [(b[0] + b[1]) / 2, (b[2] + b[3]) / 2, (b[4] + b[5]) / 2];
+  }
+
+  /** V4 Phase C-R5 · world → CSS pixel projection.
+   *
+   *  Uses vtkCoordinate with COORDINATE_SYSTEM=WORLD to drive the
+   *  active renderer's camera matrices, then converts the resulting
+   *  vtk-display coords (origin bottom-left, **framebuffer** pixels)
+   *  to CSS px (origin top-left, **CSS** pixels) so the React overlay
+   *  can drop a <div> at the returned (x,y) without further math.
+   *
+   *  R5.1 (Codex finding) · HiDPI fix: vtk's display coords are in
+   *  framebuffer (device) pixels — they're already multiplied by
+   *  `devicePixelRatio`. Dividing back to CSS pixels matches what
+   *  `getBoundingClientRect()` measures, so the overlay <div> lands
+   *  on the right place under Retina (DPR=2) and standard displays.
+   *
+   *  `behind` is now a real behind-camera test using the camera's
+   *  view direction · (point − camera_pos) dot product. Negative dot
+   *  = point is behind the camera plane (vtkCoordinate would project
+   *  it to nonsensical screen coords, often wrapping around). The
+   *  separate `offscreen` field reports points that are in front of
+   *  the camera but project outside the [0,W]×[0,H] container box;
+   *  callers can clamp those to an edge with a real leader instead
+   *  of hiding the annotation entirely. */
+  function worldToScreen(
+    world: [number, number, number],
+  ): {
+    x: number;
+    y: number;
+    behind: boolean;
+    offscreen: boolean;
+  } | null {
+    const container = grw.getContainer();
+    if (!container) return null;
+    const rect = container.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    const renderer = grw.getRenderer();
+
+    // Real behind-camera detection · camera.getDirectionOfProjection
+    // is the unit vector pointing from camera toward focal point.
+    // (point − camera_pos) · direction < 0  ⇒ point is behind camera.
+    let behind = false;
+    try {
+      const cam = (renderer as unknown as {
+        getActiveCamera?: () => {
+          getPosition?: () => number[];
+          getDirectionOfProjection?: () => number[];
+        };
+      }).getActiveCamera?.();
+      const pos = cam?.getPosition?.();
+      const dir = cam?.getDirectionOfProjection?.();
+      if (pos && dir && pos.length >= 3 && dir.length >= 3) {
+        const dx = world[0] - pos[0];
+        const dy = world[1] - pos[1];
+        const dz = world[2] - pos[2];
+        const dot = dx * dir[0] + dy * dir[1] + dz * dir[2];
+        behind = dot <= 0;
+      }
+    } catch {
+      // If camera API differs in some vtk.js minor version, fall back
+      // to !behind (we'll still surface offscreen below).
+      behind = false;
+    }
+
+    const coord = vtkCoordinate.newInstance();
+    coord.setCoordinateSystemToWorld();
+    coord.setValue([world[0], world[1], world[2]]);
+    let display: number[];
+    try {
+      display = coord.getComputedDisplayValue(renderer);
+    } catch {
+      return null;
+    }
+
+    // Framebuffer px → CSS px · divide by DPR (R5.1 Codex finding).
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const cssXfb = display[0] / dpr;
+    const cssYfb = display[1] / dpr;
+    // vtk origin bottom-left → CSS origin top-left flip.
+    const cssX = cssXfb;
+    const cssY = rect.height - cssYfb;
+
+    // Mutually exclusive with `behind`: a behind-camera point can
+    // project anywhere on the canvas via vtkCoordinate (the matrix
+    // doesn't care), so we don't redundantly tag it as `offscreen`.
+    // The React layer only ever consumes `offscreen` to clamp leader
+    // endpoints — it never wants to clamp a behind-camera anchor.
+    const offscreen =
+      !behind &&
+      (cssX < 0 || cssX > rect.width || cssY < 0 || cssY > rect.height);
+
+    return { x: cssX, y: cssY, behind, offscreen };
+  }
+
+  /** V4 Phase C-R3 implementation · scan actorPatchNames for a match,
+   *  build the cellIds = [0..numCells-1] range from the actor's bound
+   *  polyData, and dispatch to set{Pick,Hover}HighlightCells. Returns
+   *  the cell count actually highlighted (0 = patch_name not found
+   *  or actor has no cells / no mapper). */
+  function highlightPatchByName(
+    name: string | null,
+    kind: "pick" | "hover",
+  ): number {
+    if (name === null) {
+      if (kind === "pick") clearPickHighlight();
+      else clearHoverHighlight();
+      return 0;
+    }
+    let targetActor: ReturnType<typeof vtkActor.newInstance> | undefined;
+    actorPatchNames.forEach((patchName, a) => {
+      if (targetActor) return;
+      if (patchName === name) targetActor = a;
+    });
+    if (!targetActor) {
+      if (kind === "pick") clearPickHighlight();
+      else clearHoverHighlight();
+      return 0;
+    }
+    // actor.getMapper().getInputData() can be undefined briefly during
+    // GLTFImporter binding; guard so a fast hover doesn't throw.
+    const m = (targetActor as unknown as {
+      getMapper?: () => {
+        getInputData?: () =>
+          | { getNumberOfCells?: () => number }
+          | null
+          | undefined;
+      };
+    }).getMapper?.();
+    const polyData = m?.getInputData?.();
+    const numCells = polyData?.getNumberOfCells?.() ?? 0;
+    if (numCells === 0) {
+      if (kind === "pick") clearPickHighlight();
+      else clearHoverHighlight();
+      return 0;
+    }
+    const cellIds = new Array<number>(numCells);
+    for (let i = 0; i < numCells; i++) cellIds[i] = i;
+    if (kind === "pick") setPickHighlightCells(targetActor, cellIds);
+    else setHoverHighlightCells(targetActor, cellIds);
+    return numCells;
+  }
+
   function clearPickHighlight(): void {
     if (pickHighlightActor) {
       pickHighlightActor.setVisibility(false);
@@ -853,6 +1520,43 @@ export function createKernel(
 
   function resetCamera(): void {
     grw.getRenderer().resetCamera();
+    grw.getRenderWindow().render();
+  }
+
+  function setCameraPreset(preset: "front" | "top" | "iso"): void {
+    const renderer = grw.getRenderer();
+    const camera = renderer.getActiveCamera();
+    // Derive a sensible viewing distance from the current scene bbox.
+    // If no actors are attached yet, fall back to unit distance — the
+    // subsequent resetCamera() pass refits.
+    const bounds = renderer.computeVisiblePropBounds();
+    const [xMin, xMax, yMin, yMax, zMin, zMax] = bounds;
+    const cx = (xMin + xMax) / 2;
+    const cy = (yMin + yMax) / 2;
+    const cz = (zMin + zMax) / 2;
+    const dx = xMax - xMin;
+    const dy = yMax - yMin;
+    const dz = zMax - zMin;
+    // Distance = 2× the largest extent, clamped to a minimum so empty
+    // scenes still produce a usable camera.
+    const span = Math.max(dx, dy, dz, 1);
+    const dist = span * 2;
+    if (preset === "front") {
+      camera.setPosition(cx, cy - dist, cz);
+      camera.setFocalPoint(cx, cy, cz);
+      camera.setViewUp(0, 0, 1);
+    } else if (preset === "top") {
+      camera.setPosition(cx, cy, cz + dist);
+      camera.setFocalPoint(cx, cy, cz);
+      camera.setViewUp(0, 1, 0);
+    } else {
+      // iso: equal contributions on +X +Y +Z
+      const iso = dist / Math.sqrt(3);
+      camera.setPosition(cx + iso, cy - iso, cz + iso);
+      camera.setFocalPoint(cx, cy, cz);
+      camera.setViewUp(0, 0, 1);
+    }
+    renderer.resetCameraClippingRange();
     grw.getRenderWindow().render();
   }
 
@@ -902,6 +1606,15 @@ export function createKernel(
       importer?.delete();
     } catch {
       // see above
+    }
+    // B2.5 · clean up any VTP attachments. Walk a copy of the entries
+    // so detachVtp can mutate the map without throwing.
+    for (const handle of Array.from(vtpEntries.values()).map((e) => e.handle)) {
+      try {
+        detachVtp(handle);
+      } catch {
+        // see above
+      }
     }
     try {
       pickSubscription?.unsubscribe();
@@ -964,12 +1677,18 @@ export function createKernel(
     setBackground,
     attachStl,
     attachGltf,
+    attachVtp,
+    detachVtp,
     resetCamera,
+    setCameraPreset,
     setPickHandler,
     setHoverHandler,
     setPickHighlightCells,
     setHoverHighlightCells,
     getCoplanarSiblings,
+    highlightPatchByName,
+    getPatchCentroid,
+    worldToScreen,
     clearPickHighlight,
     clearHoverHighlight,
     dispose,
