@@ -26,7 +26,6 @@ import { AdvisorPillStack } from "./AdvisorPillStack";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 import { useV4AdvisorMatches } from "../hooks/useV4AdvisorMatches";
 import {
-  convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
 import {
@@ -39,6 +38,11 @@ import {
   BOUNDARY_BLUEPRINT_KPIS,
   BOUNDARY_BLUEPRINT_RECOGNITION,
 } from "./boundaryBlueprint";
+import {
+  SOLVER_BLUEPRINT_KPIS,
+  SOLVER_BLUEPRINT_RIGHT_CARDS,
+  SOLVER_BLUEPRINT_TELEMETRY,
+} from "./solverBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -72,17 +76,6 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 function fmtSci(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toExponential(2);
-}
-
-function latestResidual(
-  payload: ResidualSeriesPayload | null | undefined,
-  name: string | null,
-): number | null {
-  if (!name) return null;
-  const pts = payload?.series?.[name];
-  if (!pts || pts.length === 0) return null;
-  const last = pts[pts.length - 1];
-  return Number.isFinite(last?.y) ? last.y : null;
 }
 
 /** Completeness summary card · always at top when ctx.completeness present. */
@@ -258,7 +251,6 @@ function modeCardsFor(
 ): FactCardProps[] {
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  const detail = ctx.runDetail;
 
   switch (step) {
     case "import": {
@@ -618,74 +610,33 @@ function modeCardsFor(
       ];
     }
     case "solver": {
-      const res = detail?.residuals as Record<string, number> | undefined;
-      const resEntries = res ? Object.entries(res) : [];
-      const success = detail?.success;
-      const gauge = convergenceGaugeFromSeries(solverResiduals);
-      const residualFacts =
-        solverResiduals != null
-          ? [
-              {
-                label: "残差来源",
-                value: solverResiduals.source.toUpperCase(),
-              },
-              {
-                label: "迭代样本",
-                value: `${solverResiduals.sample_count} iter`,
-              },
-              {
-                label: "收敛进度",
-                value: `${gauge.value.toFixed(0)} %`,
-                tone: gauge.achieved
-                  ? ("healthy" as const)
-                  : gauge.value >= 75
-                    ? ("warn" as const)
-                    : ("crit" as const),
-              },
-              {
-                label: gauge.worst ? `瓶颈 ${gauge.worst}` : "瓶颈",
-                value: fmtSci(latestResidual(solverResiduals, gauge.worst)),
-              },
-              {
-                label: "目标",
-                value: fmtSci(solverResiduals.target_floor),
-              },
-            ]
-          : [];
-      return [
-        {
-          title: "求解状态",
-          facts: [
-            ...(detail
-              ? [
-                  {
-                    label: "结果",
-                    value: success === true ? "通过" : "失败",
-                    tone: success === true
-                      ? ("healthy" as const)
-                      : ("crit" as const),
-                  },
-                  {
-                    label: "运行时长",
-                    value:
-                      ctx.latestRun?.duration_s != null
-                        ? `${ctx.latestRun.duration_s.toFixed(1)} s`
-                        : "—",
-                  },
-                  ...resEntries.slice(0, 2).map(([k, v]) => ({
-                    label: `残差 ${k}`,
-                    value: fmtSci(v),
-                    tone: v < 1e-3 ? ("healthy" as const) : ("warn" as const),
-                  })),
-                ]
-              : []),
-            ...residualFacts,
-          ],
-          footer:
-            detail?.verdict_summary?.slice(0, 80) ??
-            solverResiduals?.note,
-        },
-      ];
+      const sampleSource = solverResiduals?.source.toUpperCase() ?? "BLUEPRINT";
+      return SOLVER_BLUEPRINT_RIGHT_CARDS.map((card, index) => ({
+        title: card.title,
+        facts: [
+          ...card.facts,
+          ...(index === 0
+            ? [
+                {
+                  label: "迭代",
+                  value: `${SOLVER_BLUEPRINT_KPIS.iterCurrent}/${SOLVER_BLUEPRINT_KPIS.iterTotal}`,
+                },
+              ]
+            : []),
+          ...(index === 2
+            ? [
+                {
+                  label: "δt",
+                  value: SOLVER_BLUEPRINT_TELEMETRY.deltaT,
+                },
+              ]
+            : []),
+        ],
+        footer:
+          index === 0 && solverResiduals
+            ? `${solverResiduals.sample_count} samples · ${sampleSource} · ${solverResiduals.note}`
+            : card.footer,
+      }));
     }
     case "post": {
       const success = ctx.successfulRunDetail?.success;

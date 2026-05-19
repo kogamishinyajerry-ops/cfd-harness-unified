@@ -15,10 +15,6 @@
  */
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 import {
-  convergenceGaugeFromSeries,
-  useResidualSeries,
-} from "../hooks/useResidualSeries";
-import {
   GEOMETRY_BLUEPRINT_SUMMARY,
   hasAuthoredCadParts,
 } from "./geometryBlueprint";
@@ -29,9 +25,9 @@ import {
 } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
+import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
-import type { ResidualSeriesPayload } from "@/types/residual_series";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 
 interface KpiChip {
@@ -53,11 +49,6 @@ function fmt(n: number | null | undefined, digits = 2): string {
   if (n == null || !Number.isFinite(n)) return "—";
   if (Math.abs(n) >= 1000) return n.toExponential(2);
   return Number(n).toFixed(digits);
-}
-
-function fmtSci(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return n.toExponential(2);
 }
 
 /** Count patches by role (handles unknown roles as "other"). */
@@ -82,27 +73,12 @@ function scalarKqEntries(
   ) as [string, number][];
 }
 
-function latestResidual(
-  payload: ResidualSeriesPayload | null | undefined,
-  name: string,
-): number | null {
-  const pts = payload?.series?.[name];
-  if (!pts || pts.length === 0) return null;
-  const last = pts[pts.length - 1];
-  return Number.isFinite(last?.y) ? last.y : null;
-}
-
-function chipsFor(
-  step: V4PipelineStepId,
-  ctx: V4Context,
-  residualPayload: ResidualSeriesPayload | null,
-): KpiChip[] {
+function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  const detail = ctx.runDetail;
   // Post mode prefers the latest *successful* run so a failed-tail
   // history doesn't show empty residuals / arrays as KPIs.
   // Matches ModeRendererPost behaviour for consistency.
@@ -277,62 +253,37 @@ function chipsFor(
     }
 
     case "solver": {
-      const kq = detail?.key_quantities as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const res = detail?.residuals as Record<string, number> | undefined;
-      const resP =
-        latestResidual(residualPayload, "p") ?? res?.p ?? res?.U ?? null;
-      const success = detail?.success;
-      const gauge = convergenceGaugeFromSeries(residualPayload);
-      const progress = residualPayload
-        ? Math.round(gauge.value)
-        : success
-          ? 100
-          : detail
-            ? 65
-            : 0;
-      const source = residualPayload?.source
-        ? residualPayload.source.toUpperCase()
-        : detail
-          ? "RUN"
-          : "—";
-      // Scalar-only · arrays like u_centerline never reach a KPI chip.
-      const kqEntries = scalarKqEntries(kq).slice(0, 2);
       return [
         {
-          value: residualPayload
-            ? String(residualPayload.sample_count)
-            : ctx.latestRun?.duration_s != null
-              ? fmt(ctx.latestRun.duration_s, 1)
-              : "—",
-          label: residualPayload ? "迭代样本" : "运行时长",
-          unit: residualPayload ? undefined : "s",
+          value: SOLVER_BLUEPRINT_KPIS.estimatedCellsM.toFixed(2),
+          label: "估算单元",
+          unit: "M",
         },
         {
-          value: fmtSci(resP),
+          value: SOLVER_BLUEPRINT_KPIS.residualP.toExponential(1),
           label: "残差 p",
         },
-        ...(residualPayload
-          ? [
-              {
-                value: String(progress),
-                label: gauge.worst ? `收敛 · ${gauge.worst}` : "收敛进度",
-                unit: "%",
-                delta: gauge.achieved ? "已达标" : "进行中",
-                deltaTone: gauge.achieved ? "healthy" : "warn",
-              } as KpiChip,
-            ]
-          : kqEntries.length > 0
-          ? kqEntries.map<KpiChip>(([k, v]) => ({
-              value: fmt(v, 3),
-              label: k,
-            }))
-          : [{ value: "—", label: "key_quantity" } as KpiChip]),
         {
-          value: source,
-          label: "残差来源",
+          value: SOLVER_BLUEPRINT_KPIS.pressurePa.toFixed(1),
+          label: "压降",
+          unit: "Pa",
+        },
+        {
+          value: SOLVER_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
+          label: "质量流量",
+          unit: "kg/s",
+        },
+        {
+          value: SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1),
+          label: "出口温度",
+          unit: "°C",
+        },
+        {
+          value: String(SOLVER_BLUEPRINT_KPIS.progressPct),
+          label: `${SOLVER_BLUEPRINT_KPIS.iterCurrent}/${SOLVER_BLUEPRINT_KPIS.iterTotal} iter`,
+          unit: "%",
+          delta: "良好",
+          deltaTone: "healthy",
         },
       ];
     }
@@ -489,11 +440,10 @@ interface KpiStripV4Props {
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
   const ctx = useV4WorkbenchContext(caseId);
-  const residuals = useResidualSeries(activeStep === "solver" ? caseId : null);
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
   }
-  const chips = chipsFor(activeStep, ctx, residuals.data);
+  const chips = chipsFor(activeStep, ctx);
 
   return (
     <div
