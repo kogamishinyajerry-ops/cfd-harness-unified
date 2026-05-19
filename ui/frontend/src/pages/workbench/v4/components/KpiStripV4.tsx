@@ -28,6 +28,7 @@ import {
   type MeshBlueprintHistogram,
 } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
+import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -235,6 +236,26 @@ function chipsFor(
     }
 
     case "boundary": {
+      if ((basics?.patches?.length ?? 0) === 0) {
+        return [
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.inletCount),
+            label: "入口",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.outletCount),
+            label: "出口",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.wallCount),
+            label: "壁面",
+          },
+          {
+            value: String(BOUNDARY_BLUEPRINT_KPIS.rotorCount),
+            label: "转子域",
+          },
+        ];
+      }
       const counts = countPatchesByRole(basics?.patches);
       return [
         { value: String(counts.inlet ?? 0), label: "入口" },

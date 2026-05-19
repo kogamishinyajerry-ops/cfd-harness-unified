@@ -35,6 +35,10 @@ import {
 } from "./geometryBlueprint";
 import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
+import {
+  BOUNDARY_BLUEPRINT_KPIS,
+  BOUNDARY_BLUEPRINT_RECOGNITION,
+} from "./boundaryBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -540,6 +544,58 @@ function modeCardsFor(
       ];
     }
     case "boundary": {
+      if ((basics?.patches?.length ?? 0) === 0) {
+        return [
+          {
+            title: "AI 边界识别完成 · 61/62",
+            facts: [
+              {
+                label: "已识别",
+                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.recognized} 面`,
+                tone: "healthy",
+              },
+              {
+                label: "总计",
+                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.total} 面`,
+              },
+              { label: "覆盖率", value: "98.4 %" },
+            ],
+            footer: "贴体 BC patches 已按类型预分组 · advisory only",
+          },
+          {
+            title: "1 处未识别 · 请确认",
+            facts: [
+              {
+                label: "候选类型",
+                value: "壁面",
+                tone: "warn",
+              },
+              { label: "位置", value: "外壳小面" },
+              { label: "建议", value: "人工确认" },
+            ],
+            cta: "请确认",
+            ctaTone: "active",
+          },
+          {
+            title: "应用 AI 提案",
+            facts: [
+              {
+                label: "入口/出口",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.inletCount}/${BOUNDARY_BLUEPRINT_KPIS.outletCount}`,
+              },
+              {
+                label: "壁面",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.wallCount} 处`,
+              },
+              {
+                label: "转子域",
+                value: `${BOUNDARY_BLUEPRINT_KPIS.rotorCount} 处`,
+              },
+            ],
+            cta: "应用 AI 提案",
+          },
+        ];
+      }
       const counts = countByRole(basics?.patches ?? []);
       const roleEntries = (Object.entries(counts) as [PatchRole, number][])
         .sort(([, a], [, b]) => b - a)

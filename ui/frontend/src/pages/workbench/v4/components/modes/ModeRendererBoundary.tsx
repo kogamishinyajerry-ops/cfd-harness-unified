@@ -24,6 +24,11 @@ import {
   geometryGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
+import {
+  BOUNDARY_BLUEPRINT_RECOGNITION,
+  BOUNDARY_BLUEPRINT_TREE_COUNTS,
+  BOUNDARY_BLUEPRINT_TYPES,
+} from "../boundaryBlueprint";
 import { IndustrialBoxScene } from "../scene/IndustrialBoxScene";
 import { ViewportV4, type V4CameraPreset, type V4FacePickEvent } from "../ViewportV4";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
@@ -110,24 +115,53 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
   }
 
   const showViewport = activeGlbUrl != null;
+  const hasBoundaryPatches = patches.length > 0;
 
   return (
     <div data-testid="v4-mode-boundary" className="flex h-full w-full bg-v4-canvas">
       {/* Left · real patch list grouped by role */}
       <aside
-        className="flex w-[220px] shrink-0 flex-col border-r border-v4-border bg-v4-shell/60"
+        className="flex w-[184px] shrink-0 flex-col border-r border-v4-border bg-v4-shell/60"
         data-testid="v4-mode-boundary-patch-list"
       >
         <div className="border-b border-v4-border px-3 py-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
-          边界面 · {patches.length} 项
+          {hasBoundaryPatches
+            ? `边界面 · ${patches.length} 项`
+            : `BC 类型 · ${BOUNDARY_BLUEPRINT_RECOGNITION.recognized}/${BOUNDARY_BLUEPRINT_RECOGNITION.total}`}
         </div>
         <ul className="flex-1 overflow-y-auto px-1.5 py-1.5 text-[11px]">
-          {patches.length === 0 && (
-            <li className="px-2 py-1 text-v4-textTertiary">
-              {caseId ? "无边界数据" : "选择算例后显示"}
-            </li>
-          )}
-          {patches.map((p) => {
+          {!hasBoundaryPatches &&
+            BOUNDARY_BLUEPRINT_TREE_COUNTS.map((item) => {
+              const color =
+                BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === item.id)?.color ??
+                V4_PALETTE.warn;
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className={[
+                      "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors",
+                      item.status === "warn"
+                        ? "text-v4-warn"
+                        : "text-v4-textSecondary hover:bg-v4-surfaceRaised hover:text-v4-textPrimary",
+                    ].join(" ")}
+                    data-testid={`v4-mode-boundary-type-${item.id}`}
+                    title={item.labelZh}
+                  >
+                    <span
+                      aria-hidden
+                      className="h-2 w-2 shrink-0 rounded-sm"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="flex-1 truncate">{item.labelZh}</span>
+                    <span className="font-mono text-[9px] text-v4-textTertiary">
+                      ×{item.count}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          {hasBoundaryPatches && patches.map((p) => {
             const c = roleColor(p.role);
             const isSelected = p.id === selectedPatchId;
             return (
@@ -178,7 +212,7 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
         className="relative flex min-h-0 flex-1 items-center justify-center"
         data-viewport-active={showViewport ? "true" : "false"}
       >
-        {showViewport ? (
+        {showViewport && hasBoundaryPatches ? (
           <ViewportV4
             glbUrl={activeGlbUrl}
             cameraPreset={cameraPreset ?? "iso"}
@@ -205,13 +239,10 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center px-4 py-2">
-            <IndustrialBoxScene
-              variant="boundary"
-              className="h-full max-h-[420px] w-full max-w-3xl"
-            />
+            <BoundaryBlueprintScene />
           </div>
         )}
-        {bcProbe.available === false && geomProbe.available === true && (
+        {bcProbe.available === false && geomProbe.available === true && hasBoundaryPatches && (
           <div
             className="pointer-events-none absolute right-3 bottom-3 rounded border border-v4-border bg-v4-surfaceRaised/90 px-2 py-0.5 font-mono text-[10px] text-v4-textTertiary"
             data-testid="v4-mode-boundary-bcfallback"
@@ -245,34 +276,49 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
       </div>
 
       {/* Right · BC type legend with real counts */}
-      <aside className="flex w-[200px] shrink-0 flex-col border-l border-v4-border bg-v4-shell p-3">
+      <aside className="flex w-[172px] shrink-0 flex-col border-l border-v4-border bg-v4-shell p-3">
         <div className="mb-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
           边界统计
         </div>
         <ul className="space-y-1.5 text-[11px]">
-          {sortedRoles.length === 0 && (
-            <li className="text-v4-textTertiary">—</li>
-          )}
-          {sortedRoles.map((role) => (
-            <li key={role} className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ backgroundColor: roleColor(role) }}
-                />
-                <span className="text-v4-textPrimary">{roleLabel(role)}</span>
-              </span>
-              <span className="font-mono text-v4-textSecondary">
-                {counts[role]} 处
-              </span>
-            </li>
-          ))}
+          {hasBoundaryPatches
+            ? sortedRoles.map((role) => (
+                <li key={role} className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: roleColor(role) }}
+                    />
+                    <span className="text-v4-textPrimary">{roleLabel(role)}</span>
+                  </span>
+                  <span className="font-mono text-v4-textSecondary">
+                    {counts[role]} 处
+                  </span>
+                </li>
+              ))
+            : BOUNDARY_BLUEPRINT_TYPES.map((type) => (
+                <li key={type.id} className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: type.color }}
+                    />
+                    <span className="text-v4-textPrimary">{type.labelZh}</span>
+                  </span>
+                  <span className="font-mono text-v4-textSecondary">
+                    {type.count} 处
+                  </span>
+                </li>
+              ))}
         </ul>
         <div className="mt-3 border-t border-v4-border pt-2">
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textTertiary">边界条件</span>
             <span className="font-mono text-v4-textSecondary">
-              {ctx.basics?.boundary_conditions?.length ?? "—"} 项
+              {hasBoundaryPatches
+                ? (ctx.basics?.boundary_conditions?.length ?? "—")
+                : BOUNDARY_BLUEPRINT_RECOGNITION.recognized}{" "}
+              项
             </span>
           </div>
           <div className="mt-1 flex items-baseline justify-between text-[10px]">
@@ -284,5 +330,196 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
         </div>
       </aside>
     </div>
+  );
+}
+
+function BoundaryBlueprintScene() {
+  return (
+    <IndustrialBoxScene
+      variant="boundary"
+      className="h-full max-h-[520px] w-full max-w-5xl scale-125"
+      bodyOverlay={<BoundaryBlueprintBodyPatches />}
+    >
+      <BoundaryBlueprintAttachedPatches />
+      <BoundaryBlueprintCallouts />
+    </IndustrialBoxScene>
+  );
+}
+
+function BoundaryBlueprintBodyPatches() {
+  const inlet = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "inlet")!;
+  const hotWall = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "hot-wall")!;
+  const wall = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "wall")!;
+
+  return (
+    <g data-testid="v4-boundary-blueprint-body-patches" pointerEvents="none">
+      <rect
+        x="230"
+        y="120"
+        width="68"
+        height="60"
+        fill={inlet.color}
+        opacity="0.86"
+      />
+      <rect
+        x="300"
+        y="115"
+        width="60"
+        height="70"
+        fill={hotWall.color}
+        opacity="0.82"
+      />
+      <rect
+        x="360"
+        y="120"
+        width="70"
+        height="60"
+        fill={wall.color}
+        opacity="0.58"
+      />
+    </g>
+  );
+}
+
+function BoundaryBlueprintAttachedPatches() {
+  const outlet = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "outlet")!;
+  const rotor = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "rotor-zone")!;
+  const wall = BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === "wall")!;
+
+  return (
+    <g data-testid="v4-boundary-blueprint-attached-patches" pointerEvents="none">
+      <polygon
+        points="430,135 478,118 478,182 430,165"
+        fill={outlet.color}
+        opacity="0.9"
+        stroke={outlet.color}
+        strokeWidth="1.2"
+      />
+      <ellipse
+        cx="230"
+        cy="150"
+        rx="11"
+        ry="36"
+        fill={rotor.color}
+        opacity="0.88"
+        stroke={rotor.color}
+        strokeWidth="1"
+      />
+      <path
+        d="M248 122 H292 M250 178 H294 M372 122 H420 M374 178 H422"
+        stroke={wall.color}
+        strokeWidth="2.4"
+        strokeLinecap="round"
+        opacity="0.95"
+      />
+    </g>
+  );
+}
+
+function BoundaryBlueprintCallouts() {
+  const callouts = [
+    { id: "inlet", x: 150, y: 93, anchorX: 236, anchorY: 132 },
+    { id: "rotor-zone", x: 126, y: 188, anchorX: 226, anchorY: 160 },
+    { id: "hot-wall", x: 304, y: 76, anchorX: 330, anchorY: 118 },
+    { id: "wall", x: 382, y: 214, anchorX: 396, anchorY: 178 },
+    { id: "outlet", x: 498, y: 118, anchorX: 474, anchorY: 145 },
+  ] as const;
+
+  return (
+    <g data-testid="v4-boundary-blueprint-callouts">
+      {callouts.map((callout) => {
+        const type = BOUNDARY_BLUEPRINT_TYPES.find((item) => item.id === callout.id)!;
+        return (
+          <g key={type.id} className="group">
+            <line
+              x1={callout.anchorX}
+              y1={callout.anchorY}
+              x2={callout.x}
+              y2={callout.y + 12}
+              stroke={type.color}
+              strokeWidth="0.8"
+              opacity="0.75"
+            />
+            <circle
+              cx={callout.anchorX}
+              cy={callout.anchorY}
+              r="3"
+              fill={type.color}
+              opacity="0.95"
+            />
+            <rect
+              x={callout.x}
+              y={callout.y}
+              width="76"
+              height="24"
+              rx="4"
+              fill={V4_PALETTE.surfaceRaised}
+              stroke={type.color}
+              strokeWidth="0.7"
+              opacity="0.96"
+            />
+            <text
+              x={callout.x + 8}
+              y={callout.y + 10}
+              fill={V4_PALETTE.textPrimary}
+              fontSize="9"
+              fontFamily="ui-sans-serif, system-ui"
+            >
+              {type.labelZh}
+            </text>
+            <text
+              x={callout.x + 8}
+              y={callout.y + 20}
+              fill={V4_PALETTE.textTertiary}
+              fontSize="7.5"
+              fontFamily="ui-monospace, monospace"
+            >
+              {type.labelEn} x{type.count}
+            </text>
+          </g>
+        );
+      })}
+      <g data-testid="v4-boundary-blueprint-unidentified-callout">
+        <line
+          x1="402"
+          y1="134"
+          x2="522"
+          y2="226"
+          stroke={V4_PALETTE.warn}
+          strokeDasharray="3 3"
+          strokeWidth="0.8"
+          opacity="0.85"
+        />
+        <rect
+          x="516"
+          y="214"
+          width="88"
+          height="24"
+          rx="4"
+          fill={V4_PALETTE.surfaceRaised}
+          stroke={V4_PALETTE.warn}
+          strokeWidth="0.7"
+          opacity="0.96"
+        />
+        <text
+          x="524"
+          y="224"
+          fill={V4_PALETTE.warn}
+          fontSize="9"
+          fontFamily="ui-sans-serif, system-ui"
+        >
+          未识别
+        </text>
+        <text
+          x="524"
+          y="234"
+          fill={V4_PALETTE.textTertiary}
+          fontSize="7.5"
+          fontFamily="ui-monospace, monospace"
+        >
+          confirm x1
+        </text>
+      </g>
+    </g>
   );
 }
