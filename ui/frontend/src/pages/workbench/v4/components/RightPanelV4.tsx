@@ -49,6 +49,7 @@ import {
   DOE_BLUEPRINT_RIGHT_CARDS,
 } from "./doeBlueprint";
 import { IMPORT_BLUEPRINT_RIGHT_CARDS } from "./importBlueprint";
+import { viewportModeLabel } from "./crossStepBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -153,6 +154,7 @@ function CompletenessCard({ ctx }: { ctx: V4Context }) {
 
 interface FactCardProps {
   title: string;
+  section?: "active-solve" | "mesh-summary" | "cross-step";
   facts: Array<{
     label: string;
     value: string;
@@ -166,6 +168,7 @@ interface FactCardProps {
 
 function FactCard({
   title,
+  section,
   facts,
   footer,
   cta,
@@ -176,6 +179,7 @@ function FactCard({
     <article
       className="flex flex-col gap-1.5 rounded border border-v4-border bg-v4-surfaceRaised p-2.5"
       data-testid={`rightpanel-v4-factcard-${title}`}
+      data-inspector-section={section}
     >
       <div className="text-[10px] tracking-wider text-v4-textTertiary">
         {title}
@@ -321,11 +325,17 @@ function modeCardsFor(
       if (!mesh) {
         return [
           {
-            title: "网格生成完成",
+            title: "MESH SUMMARY",
+            section: "mesh-summary",
             facts: [
               {
                 label: "估算单元",
                 value: `${MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)} M`,
+                tone: "healthy",
+              },
+              {
+                label: "max skew",
+                value: MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3),
                 tone: "healthy",
               },
               { label: "线框层", value: "mesh.glb" },
@@ -374,7 +384,8 @@ function modeCardsFor(
               : undefined;
       return [
         {
-          title: "网格收敛",
+          title: "MESH SUMMARY",
+          section: "mesh-summary",
           facts: [
             {
               label: "网格层级",
@@ -391,6 +402,10 @@ function modeCardsFor(
             {
               label: "p_obs",
               value: gci?.p_obs != null ? fmtPct(gci.p_obs, 2) : "—",
+            },
+            {
+              label: "skewness",
+              value: "需 checkMesh artifact",
             },
             {
               label: "渐进区",
@@ -580,6 +595,7 @@ function modeCardsFor(
       const sampleSource = solverResiduals?.source.toUpperCase() ?? "BLUEPRINT";
       return SOLVER_BLUEPRINT_RIGHT_CARDS.map((card, index) => ({
         title: card.title,
+        section: index === 0 ? "active-solve" : undefined,
         facts: [
           ...card.facts,
           ...(index === 0
@@ -692,12 +708,21 @@ function geometryCards(): FactCardProps[] {
 
 interface RightPanelV4Props {
   activeStep: V4PipelineStepId;
+  viewportMode?: V4PipelineStepId | null;
   caseId?: string | null;
 }
 
-export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
+export function RightPanelV4({
+  activeStep,
+  viewportMode = activeStep,
+  caseId = null,
+}: RightPanelV4Props) {
   const isDoe = activeStep === "doe";
   const isGeometry = activeStep === "geometry";
+  const effectiveViewportMode = viewportMode ?? activeStep;
+  const isCrossStep = effectiveViewportMode !== activeStep;
+  const isSolverMeshCrossStep =
+    activeStep === "solver" && effectiveViewportMode === "mesh";
   const effectiveCaseId = isDoe || isGeometry ? null : caseId;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const matcher = useV4AdvisorMatches(effectiveCaseId);
@@ -708,6 +733,22 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
   const modeCards = realMatcherMode
     ? modeCardsFor(activeStep, ctx, solverResiduals.data)
     : [];
+  const viewportModeCards =
+    realMatcherMode && isCrossStep
+      ? modeCardsFor(effectiveViewportMode, ctx, solverResiduals.data)
+      : [];
+  const activeSolveCards = isCrossStep
+    ? modeCards.filter((card) => card.section === "active-solve")
+    : [];
+  const viewportSummaryCards = isCrossStep
+    ? viewportModeCards.filter((card) => card.section === "mesh-summary")
+    : [];
+  const remainingModeCards = isCrossStep
+    ? modeCards.filter((card) => card.section !== "active-solve")
+    : modeCards;
+  const remainingViewportCards = isCrossStep
+    ? viewportModeCards.filter((card) => card.section !== "mesh-summary")
+    : viewportModeCards;
   const placeholderPills = realMatcherMode
     ? []
     : PLACEHOLDER_BY_STEP[activeStep] ?? [];
@@ -718,6 +759,8 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
       className={`flex ${panelWidth} shrink-0 flex-col border-l border-v4-border bg-v4-surface`}
       data-testid="rightpanel-v4"
       data-real-matcher={realMatcherMode ? "true" : "false"}
+      data-viewport-mode={effectiveViewportMode}
+      data-cross-step={isCrossStep ? "true" : "false"}
     >
       <div className="flex h-8 items-center justify-between border-b border-v4-border px-3 text-[11px] uppercase tracking-wider text-v4-textSecondary">
         <span>
@@ -754,9 +797,41 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
           </>
         ) : realMatcherMode ? (
           <>
+            {isCrossStep && (
+              <FactCard
+                title="跨步骤检查"
+                section="cross-step"
+                facts={[
+                  { label: "Pipeline", value: viewportModeLabel(activeStep) },
+                  {
+                    label: "Viewport",
+                    value: viewportModeLabel(effectiveViewportMode),
+                    tone: "warn",
+                  },
+                  {
+                    label: "Residuals",
+                    value: isSolverMeshCrossStep ? "停靠显示" : "按 pipeline 保留",
+                  },
+                ]}
+                footer={
+                  isSolverMeshCrossStep
+                    ? "viewing Mesh while 求解 solves · pipeline 未中断"
+                    : `viewing ${viewportModeLabel(effectiveViewportMode)} while ${viewportModeLabel(activeStep)} stays active · pipeline 未中断`
+                }
+              />
+            )}
+            {activeSolveCards.map((card, i) => (
+              <FactCard key={`active-solve-${i}`} {...card} />
+            ))}
+            {viewportSummaryCards.map((card, i) => (
+              <FactCard key={`viewport-summary-${effectiveViewportMode}-${i}`} {...card} />
+            ))}
             <CompletenessCard ctx={ctx} />
-            {modeCards.map((card, i) => (
+            {remainingModeCards.map((card, i) => (
               <FactCard key={`${activeStep}-${i}`} {...card} />
+            ))}
+            {remainingViewportCards.map((card, i) => (
+              <FactCard key={`viewport-${effectiveViewportMode}-${i}`} {...card} />
             ))}
             <div className="mt-1 text-[10px] uppercase tracking-wider text-v4-textTertiary">
               V91 匹配

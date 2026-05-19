@@ -93,18 +93,30 @@ export function WorkbenchShellV4() {
     ? stepFromUrl
     : "solver";
   const [activeStep, setActiveStepRaw] = useState<V4PipelineStepId>(initialStep);
+  const [viewportMode, setViewportMode] = useState<V4PipelineStepId>(initialStep);
+  const [viewportOverride, setViewportOverride] = useState(false);
 
   // Keep state in sync with URL when the user uses back/forward / pastes
   // a new URL while on the same shell instance.
   useEffect(() => {
     if (isValidStepId(stepFromUrl) && stepFromUrl !== activeStep) {
       setActiveStepRaw(stepFromUrl);
+      if (stepFromUrl === viewportMode) {
+        setViewportOverride(false);
+      } else if (!viewportOverride) {
+        setViewportMode(stepFromUrl);
+      }
     }
-  }, [stepFromUrl, activeStep]);
+  }, [stepFromUrl, activeStep, viewportMode, viewportOverride]);
 
   const setActiveStep = useCallback(
     (next: V4PipelineStepId) => {
       setActiveStepRaw(next);
+      if (next === viewportMode) {
+        setViewportOverride(false);
+      } else if (!viewportOverride) {
+        setViewportMode(next);
+      }
       setSearchParams(
         (prev) => {
           const out = new URLSearchParams(prev);
@@ -114,7 +126,15 @@ export function WorkbenchShellV4() {
         { replace: true },
       );
     },
-    [setSearchParams],
+    [setSearchParams, viewportMode, viewportOverride],
+  );
+
+  const handleViewportModeChange = useCallback(
+    (next: V4PipelineStepId) => {
+      setViewportMode(next);
+      setViewportOverride(next !== activeStep);
+    },
+    [activeStep],
   );
 
   const [cmdkOpen, setCmdkOpen] = useState(false);
@@ -144,7 +164,12 @@ export function WorkbenchShellV4() {
 
         <main className="flex min-w-0 flex-1 flex-col">
           <V4ErrorBoundary zone="MainCanvas">
-            <MainCanvasV4 activeStep={activeStep} caseId={caseId} />
+            <MainCanvasV4
+              activeStep={activeStep}
+              viewportMode={viewportMode}
+              onViewportModeChange={handleViewportModeChange}
+              caseId={caseId}
+            />
           </V4ErrorBoundary>
           <V4ErrorBoundary
             zone="KpiStrip"
@@ -155,7 +180,11 @@ export function WorkbenchShellV4() {
         </main>
 
         <V4ErrorBoundary zone="RightPanel">
-          <RightPanelV4 activeStep={activeStep} caseId={caseId ?? null} />
+          <RightPanelV4
+            activeStep={activeStep}
+            viewportMode={viewportMode}
+            caseId={caseId ?? null}
+          />
         </V4ErrorBoundary>
       </div>
 
