@@ -24,6 +24,7 @@ import { ViewportV4, type V4CameraPreset } from "../ViewportV4";
 import {
   GEOMETRY_BLUEPRINT_CALLOUTS,
   GEOMETRY_BLUEPRINT_PARTS,
+  GEOMETRY_BLUEPRINT_SCENE,
   GEOMETRY_BLUEPRINT_SUMMARY,
   GEOMETRY_BLUEPRINT_TABS,
   GEOMETRY_BLUEPRINT_TOOLBAR,
@@ -139,6 +140,22 @@ function BlueprintCallouts() {
         );
       })}
     </g>
+  );
+}
+
+function BlueprintBitmapScene() {
+  return (
+    <div className="flex h-full w-full items-center justify-center px-4 py-3">
+      <div className="relative h-full max-h-[620px] w-full max-w-6xl overflow-hidden rounded-sm border border-v4-border bg-v4-canvas shadow-[inset_0_0_120px_rgba(0,0,0,0.32)]">
+        <img
+          src={GEOMETRY_BLUEPRINT_SCENE.imageUrl}
+          alt="Exploded APU CAD assembly"
+          className="h-full w-full object-contain"
+          data-testid="v4-mode-geometry-bitmap-scene"
+          draggable={false}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -319,6 +336,8 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
               cameraPreset={cameraPreset ?? "iso"}
               highlightedPatchId={authoredCadParts ? selectedPatchId : null}
             />
+          ) : blueprintCadMode ? (
+            <BlueprintBitmapScene />
           ) : (
             <div className="flex h-full w-full items-center justify-center px-4 py-2">
               <IndustrialBoxScene

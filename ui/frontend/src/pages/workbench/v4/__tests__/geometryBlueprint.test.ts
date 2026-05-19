@@ -4,6 +4,7 @@ import {
   GEOMETRY_BLUEPRINT_CALLOUTS,
   GEOMETRY_BLUEPRINT_RIGHT_CARDS,
   GEOMETRY_BLUEPRINT_PARTS,
+  GEOMETRY_BLUEPRINT_SCENE,
   GEOMETRY_BLUEPRINT_SUMMARY,
   GEOMETRY_BLUEPRINT_TABS,
   GEOMETRY_BLUEPRINT_TOOLBAR,
@@ -55,6 +56,14 @@ describe("Geometry blueprint contract", () => {
       "视图",
       "显示",
     ]);
+  });
+
+  it("uses the exploded APU bitmap as the image-2 main scene", () => {
+    expect(GEOMETRY_BLUEPRINT_SCENE).toMatchObject({
+      kind: "exploded-apu-bitmap",
+      imageUrl: "/blueprints/v4/geometry-apu-exploded.png",
+    });
+    expect(GEOMETRY_BLUEPRINT_SCENE.sourceBlueprint).toContain("22_58_28");
   });
 
   it("keeps image-2 callouts and AI geometry recommendations mechanically auditable", () => {
