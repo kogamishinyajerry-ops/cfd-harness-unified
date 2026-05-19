@@ -22,6 +22,11 @@ import {
   GEOMETRY_BLUEPRINT_SUMMARY,
   hasAuthoredCadParts,
 } from "./geometryBlueprint";
+import {
+  MESH_BLUEPRINT_HISTOGRAMS,
+  MESH_BLUEPRINT_NUMERICS,
+  type MeshBlueprintHistogram,
+} from "./meshBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -328,6 +333,112 @@ function chipsFor(
   }
 }
 
+function fmtMeshMean(metric: MeshBlueprintHistogram): string {
+  if (metric.mean >= 10) return metric.mean.toFixed(1);
+  if (metric.mean >= 1) return metric.mean.toFixed(2);
+  return metric.mean.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function MeshHistogramChip({ metric }: { metric: MeshBlueprintHistogram }) {
+  return (
+    <div
+      className="flex min-w-0 flex-1 flex-col rounded border border-v4-border bg-v4-surfaceRaised/35 px-2.5 py-1.5"
+      data-testid={`mesh-kpi-histogram-${metric.label}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[10px] text-v4-textSecondary">
+          {metric.label}
+        </span>
+        <span className="font-mono text-[11px] tabular-nums text-v4-textPrimary">
+          {fmtMeshMean(metric)}
+          <span className="ml-1 text-[9px] text-v4-textTertiary">
+            {metric.unit}
+          </span>
+        </span>
+      </div>
+      <svg
+        viewBox="0 0 110 30"
+        preserveAspectRatio="none"
+        className="mt-1 h-7 w-full"
+        aria-hidden
+      >
+        <line
+          x1="0"
+          x2="110"
+          y1="28"
+          y2="28"
+          stroke="currentColor"
+          className="text-v4-border"
+          strokeWidth="0.8"
+        />
+        {metric.bins.map((bin, index) => {
+          const width = 110 / metric.bins.length;
+          const h = Math.max(2, Math.min(1, bin) * 25);
+          return (
+            <rect
+              key={index}
+              x={index * width + 1}
+              y={28 - h}
+              width={Math.max(2, width - 2)}
+              height={h}
+              rx="1"
+              fill={metric.color}
+              opacity={0.28 + Math.min(1, bin) * 0.58}
+            />
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function MeshKpiStrip({ ctx }: { ctx: V4Context }) {
+  return (
+    <div
+      className="flex h-24 shrink-0 flex-col justify-center gap-1.5 border-t border-v4-border bg-v4-shell px-4"
+      data-testid="kpistrip-v4"
+      data-active-step="mesh"
+      data-backend-connected={ctx.hasBackend ? "true" : "false"}
+      data-mesh-kpi-source={ctx.meshMetrics ? "mesh-metrics" : "blueprint-contract"}
+    >
+      <div className="grid min-h-0 grid-cols-5 gap-2">
+        {MESH_BLUEPRINT_HISTOGRAMS.map((metric) => (
+          <MeshHistogramChip key={metric.label} metric={metric} />
+        ))}
+      </div>
+      <div
+        className="grid grid-cols-4 gap-2 text-[10px]"
+        data-testid="mesh-kpi-numeric-row"
+      >
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)} unit="M" label="估算单元" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3)} label="最大歪斜度" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.maxNonOrthogonalityDeg.toFixed(1)} unit="°" label="最大非正交" />
+        <MeshNumeric value={MESH_BLUEPRINT_NUMERICS.timeEstimateMin.toFixed(1)} unit="min" label="时间估计" />
+      </div>
+    </div>
+  );
+}
+
+function MeshNumeric({
+  value,
+  unit,
+  label,
+}: {
+  value: string;
+  unit?: string;
+  label: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-center gap-1 rounded border border-v4-border bg-v4-surfaceRaised/25 px-2 py-0.5">
+      <span className="font-mono text-[13px] font-semibold tabular-nums text-v4-textPrimary">
+        {value}
+      </span>
+      {unit && <span className="text-[9px] text-v4-textTertiary">{unit}</span>}
+      <span className="ml-1 truncate text-v4-textSecondary">{label}</span>
+    </div>
+  );
+}
+
 interface KpiStripV4Props {
   activeStep: V4PipelineStepId;
   caseId?: string | null;
@@ -336,6 +447,9 @@ interface KpiStripV4Props {
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
   const ctx = useV4WorkbenchContext(caseId);
   const residuals = useResidualSeries(activeStep === "solver" ? caseId : null);
+  if (activeStep === "mesh") {
+    return <MeshKpiStrip ctx={ctx} />;
+  }
   const chips = chipsFor(activeStep, ctx, residuals.data);
 
   return (

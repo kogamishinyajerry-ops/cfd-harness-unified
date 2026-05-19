@@ -91,7 +91,7 @@ export function MainCanvasV4({ activeStep, caseId }: MainCanvasV4Props) {
 
       {/* Camera preset overlay · top-right · stable across modes */}
       <div
-        className="pointer-events-auto absolute right-3 top-3 flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary"
+        className="pointer-events-auto absolute right-3 top-10 flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary"
         data-testid="maincanvas-v4-camera-presets"
       >
         {(Object.keys(PRESET_LABEL) as V4CameraPreset[]).map((p) => {

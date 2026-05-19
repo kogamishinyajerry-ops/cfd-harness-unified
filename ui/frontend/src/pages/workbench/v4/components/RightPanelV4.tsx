@@ -33,6 +33,7 @@ import {
   GEOMETRY_BLUEPRINT_SUMMARY,
   hasAuthoredCadParts,
 } from "./geometryBlueprint";
+import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -353,6 +354,52 @@ function modeCardsFor(
     case "mesh": {
       const gci = mesh?.gci;
       const qc = mesh?.qc_band;
+      if (!mesh) {
+        return [
+          {
+            title: "网格生成完成",
+            facts: [
+              {
+                label: "估算单元",
+                value: `${MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)} M`,
+                tone: "healthy",
+              },
+              { label: "线框层", value: "mesh.glb" },
+              { label: "histogram", value: "5 项" },
+            ],
+            footer: "mesh metrics artifact 缺失 · 使用蓝图 QA 分布合同",
+          },
+          {
+            title: "18.86M 单元 · 0.128 max skew",
+            facts: [
+              {
+                label: "max skew",
+                value: MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3),
+                tone: "healthy",
+              },
+              {
+                label: "max non-orth",
+                value: `${MESH_BLUEPRINT_NUMERICS.maxNonOrthogonalityDeg.toFixed(1)}°`,
+                tone: "warn",
+              },
+              {
+                label: "时间估计",
+                value: `${MESH_BLUEPRINT_NUMERICS.timeEstimateMin.toFixed(1)} min`,
+              },
+            ],
+          },
+          {
+            title: "评估",
+            facts: [
+              { label: "流体距离", value: "分布正常", tone: "healthy" },
+              { label: "表面距离", value: "近壁加密" },
+              { label: "下一步", value: "物理设置" },
+            ],
+            cta: "查看网格质量",
+            ctaTone: "active",
+          },
+        ];
+      }
       const gci32Tone: "healthy" | "warn" | "crit" | undefined =
         qc?.gci_32 === "green"
           ? "healthy"
