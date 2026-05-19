@@ -16,6 +16,17 @@ export interface SolverBlueprintRightCard {
   footer?: string;
 }
 
+export const SOLVER_BLUEPRINT_TASK = {
+  sourceImage: ".planning/blueprints/v3/05-solve.png",
+  sourceCompanion: ".planning/transitions/2026-05-18_blueprint_read.md#image-1-6",
+  pageTask:
+    "求解运行页同时呈现真实 CAD/场视口、密集曲线流线、残差/温度 split charts 和 GPU/CPU/MEM telemetry",
+  primaryViewport:
+    "ViewportV4 geometry.glb + post/surface.vtp + post/streamlines.vtp",
+  forbiddenMainSceneFallback:
+    "IndustrialBoxScene / StreamlineField hand-drawn SVG scene",
+} as const;
+
 export const SOLVER_BLUEPRINT_KPIS = {
   estimatedCellsM: 18.76,
   residualP: 2.3e-5,

@@ -8,7 +8,7 @@
  *   - Run telemetry overlay reads latest run from useV4WorkbenchContext.
  *
  * What used to live here:
- *   - IndustrialBoxScene + StreamlineField (hand-drawn SVG cartoon)
+ *   - a hand-drawn SVG scene layer for the flow field
  *   - Hardcoded residual series + temp history + GPU/CPU chips
  * That was visually-pleasing wireframe but **zero real data** — the
  * KJ66 dogfood (2026-05-19) caught this gap; Codex R3-R8 missed it.
@@ -32,13 +32,11 @@ import {
 import {
   SOLVER_BLUEPRINT_KPIS,
   SOLVER_BLUEPRINT_RESIDUAL_SERIES,
-  SOLVER_BLUEPRINT_STREAMLINE_COUNT,
   SOLVER_BLUEPRINT_TELEMETRY,
   SOLVER_BLUEPRINT_TEMPERATURE_HISTORY,
   SOLVER_BLUEPRINT_VELOCITY_RANGE,
   type SolverBlueprintResidualSeries,
 } from "../solverBlueprint";
-import { StreamlineField } from "../scene/streamlines";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 
 interface ModeRendererSolverProps {
@@ -97,26 +95,6 @@ function VelocityLegendStrip({ range }: { range: [number, number] | null }) {
         </span>
       </div>
     </div>
-  );
-}
-
-function SolverFlowOverlay() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-4 z-10 h-[calc(100%-2rem)] w-[calc(100%-2rem)] mix-blend-screen"
-      viewBox="0 0 640 360"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden
-      data-testid="v4-solver-dense-streamlines"
-    >
-      <StreamlineField
-        count={SOLVER_BLUEPRINT_STREAMLINE_COUNT}
-        seed={37}
-        opacityMul={0.72}
-        baseStroke={0.62}
-        animated
-      />
-    </svg>
   );
 }
 
@@ -452,7 +430,6 @@ export function ModeRendererSolver({
               surfaceVtpScalarRange={SOLVER_BLUEPRINT_VELOCITY_RANGE}
               onVtpRangeReady={handleVtpRangeReady}
             />
-            <SolverFlowOverlay />
             <VelocityLegendStrip range={velocityLegendRange} />
           </>
         ) : (
