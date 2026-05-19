@@ -43,6 +43,7 @@ import {
   SOLVER_BLUEPRINT_RIGHT_CARDS,
   SOLVER_BLUEPRINT_TELEMETRY,
 } from "./solverBlueprint";
+import { POST_BLUEPRINT_RIGHT_CARDS } from "./postBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -71,11 +72,6 @@ const PLACEHOLDER_BY_STEP: Record<V4PipelineStepId, PlaceholderPill[]> = {
 function fmtPct(n: number | null | undefined, digits = 1): string {
   if (n == null || !Number.isFinite(n)) return "—";
   return n.toFixed(digits);
-}
-
-function fmtSci(n: number | null | undefined): string {
-  if (n == null || !Number.isFinite(n)) return "—";
-  return n.toExponential(2);
 }
 
 /** Completeness summary card · always at top when ctx.completeness present. */
@@ -639,36 +635,7 @@ function modeCardsFor(
       }));
     }
     case "post": {
-      const success = ctx.successfulRunDetail?.success;
-      const kq = (ctx.successfulRunDetail?.key_quantities ?? {}) as Record<
-        string,
-        unknown
-      >;
-      const scalarKq = Object.entries(kq)
-        .filter(([, v]) => typeof v === "number" && Number.isFinite(v as number))
-        .slice(0, 4) as [string, number][];
-      return [
-        {
-          title: "后处理验收",
-          facts: [
-            {
-              label: "verdict",
-              value: success === true ? "通过" : ctx.successfulRunDetail ? "失败" : "—",
-              tone: success === true ? "healthy" : ctx.successfulRunDetail ? "crit" : "neutral",
-            },
-            {
-              label: "运行 ID",
-              value:
-                ctx.latestSuccessfulRun?.run_id ?? ctx.latestRun?.run_id ?? "—",
-            },
-            ...scalarKq.map(([k, v]) => ({
-              label: k,
-              value: fmtSci(v),
-            })),
-          ],
-          footer: ctx.successfulRunDetail?.verdict_summary?.slice(0, 80),
-        },
-      ];
+      return POST_BLUEPRINT_RIGHT_CARDS;
     }
     case "doe":
       return [

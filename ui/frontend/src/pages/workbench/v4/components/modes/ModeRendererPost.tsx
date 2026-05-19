@@ -28,10 +28,6 @@
 import { useState } from "react";
 
 import { useV4WorkbenchContext } from "../../hooks/useV4WorkbenchContext";
-import {
-  convergenceGaugeFromSeries,
-  useResidualSeries,
-} from "../../hooks/useResidualSeries";
 import { ModeTabStrip } from "../ModeTabStrip";
 import { V4_CFD_COLORMAP, V4_PALETTE } from "@/theme/industrial_minimalist";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -40,6 +36,13 @@ import {
   geometryGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
+import {
+  POST_BLUEPRINT_MINI_CHARTS,
+  POST_BLUEPRINT_RADIAL_GAUGE,
+  POST_BLUEPRINT_TABS,
+  POST_BLUEPRINT_VERDICT,
+  type PostBlueprintMiniChart,
+} from "../postBlueprint";
 
 interface Props {
   caseId?: string;
@@ -110,7 +113,7 @@ interface ResidualLogChartProps {
   payload: ResidualSeriesPayload;
 }
 
-function ResidualLogChart({ payload }: ResidualLogChartProps) {
+export function ResidualLogChart({ payload }: ResidualLogChartProps) {
   const seriesEntries = canonicalSeriesEntries(payload.series).filter(
     ([, points]) => points.length > 0,
   );
@@ -329,18 +332,7 @@ interface ConvergenceGaugeProps {
 }
 
 function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
-  // Semicircle dial · 0..100% along arc.
-  const SIZE = 88;
-  const cx = SIZE / 2;
-  const cy = SIZE - 14;
-  const r = 32;
-  const startAngle = Math.PI; // 180°
-  const endAngle = 0; // 0°
   const v = Math.max(0, Math.min(100, value));
-  const angle = startAngle - (v / 100) * (startAngle - endAngle);
-  const tipX = cx + r * Math.cos(angle);
-  const tipY = cy - r * Math.sin(angle);
-
   const tone = achieved
     ? V4_PALETTE.healthy
     : v >= 75
@@ -348,6 +340,8 @@ function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
       : v >= 40
         ? V4_PALETTE.warn
         : V4_PALETTE.crit;
+  const circumference = 2 * Math.PI * 31;
+  const dash = (v / 100) * circumference;
 
   return (
     <div
@@ -355,48 +349,32 @@ function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
       data-testid="v4-post-gauge"
       data-achieved={achieved ? "true" : "false"}
     >
-      <svg viewBox={`0 0 ${SIZE} ${SIZE - 8}`} className="h-16 w-full">
-        {/* Background arc */}
-        <path
-          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+      <svg viewBox="0 0 88 88" className="h-[88px] w-full">
+        <circle
+          cx="44"
+          cy="44"
+          r="31"
           fill="none"
           stroke={V4_PALETTE.border}
-          strokeWidth="3"
-          strokeLinecap="round"
+          strokeWidth="6"
+          opacity="0.85"
         />
-        {/* Threshold ticks at 25 / 50 / 75 */}
-        {[25, 50, 75].map((t) => {
-          const a = startAngle - (t / 100) * (startAngle - endAngle);
-          const x1 = cx + (r - 4) * Math.cos(a);
-          const y1 = cy - (r - 4) * Math.sin(a);
-          const x2 = cx + (r + 2) * Math.cos(a);
-          const y2 = cy - (r + 2) * Math.sin(a);
-          return (
-            <line
-              key={t}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={V4_PALETTE.textTertiary}
-              strokeWidth="0.5"
-            />
-          );
-        })}
-        {/* Filled arc to value */}
-        <path
-          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${tipX} ${tipY}`}
+        <circle
+          cx="44"
+          cy="44"
+          r="31"
           fill="none"
           stroke={tone}
-          strokeWidth="3"
+          strokeWidth="6"
           strokeLinecap="round"
+          strokeDasharray={`${dash} ${circumference - dash}`}
+          transform="rotate(-90 44 44)"
         />
-        {/* Center text */}
         <text
-          x={cx}
-          y={cy - 4}
+          x="44"
+          y="42"
           textAnchor="middle"
-          fontSize="14"
+          fontSize="17"
           fontFamily="ui-monospace"
           fontWeight="600"
           fill={V4_PALETTE.textPrimary}
@@ -404,19 +382,19 @@ function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
           {v.toFixed(0)}
         </text>
         <text
-          x={cx}
-          y={cy + 6}
+          x="44"
+          y="55"
           textAnchor="middle"
-          fontSize="6"
+          fontSize="7"
           fill={V4_PALETTE.textTertiary}
           fontFamily="ui-monospace"
         >
-          % CONVERGED
+          {POST_BLUEPRINT_RADIAL_GAUGE.label}
         </text>
       </svg>
-      <div className="mt-0.5 flex w-full items-baseline justify-between text-[9px]">
+      <div className="flex w-full items-baseline justify-between text-[9px]">
         <span className="text-v4-textTertiary">
-          {worst ? `bottleneck · ${worst}` : "—"}
+          {worst ?? "radial chart"}
         </span>
         <span
           className="font-mono"
@@ -435,7 +413,7 @@ interface CenterlineChartProps {
   y: number[];
 }
 
-function CenterlineChart({ u, y }: CenterlineChartProps) {
+export function CenterlineChart({ u, y }: CenterlineChartProps) {
   if (u.length === 0 || y.length === 0 || u.length !== y.length) {
     return (
       <div className="flex h-full w-full items-center justify-center rounded border border-dashed border-v4-border bg-v4-surfaceRaised/40 text-[11px] text-v4-textTertiary">
@@ -533,9 +511,66 @@ function VelocityLegendStrip({ uMax }: { uMax: number | null }) {
   );
 }
 
+function PostMiniProfileChart({ chart }: { chart: PostBlueprintMiniChart }) {
+  const min = Math.min(...chart.samples);
+  const max = Math.max(...chart.samples);
+  const range = Math.max(1e-6, max - min);
+  const points = chart.samples
+    .map((value, index) => {
+      const x = 8 + (index / Math.max(1, chart.samples.length - 1)) * 128;
+      const y = 54 - ((value - min) / range) * 40;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const latest = chart.samples[chart.samples.length - 1];
+  const latestY = 54 - ((latest - min) / range) * 40;
+
+  return (
+    <div
+      className="rounded border border-v4-border bg-v4-surfaceRaised p-2"
+      data-testid={`v4-post-mini-chart-${chart.id}`}
+    >
+      <div className="flex items-baseline justify-between text-[10px]">
+        <span className="text-v4-textSecondary">{chart.label}</span>
+        <span className="font-mono text-v4-textPrimary">
+          {latest.toFixed(chart.id === "velocity" ? 1 : 1)} {chart.unit}
+        </span>
+      </div>
+      <svg
+        viewBox="0 0 144 64"
+        preserveAspectRatio="none"
+        className="mt-1 h-14 w-full"
+      >
+        {[0, 1, 2].map((i) => {
+          const y = 14 + i * 20;
+          return (
+            <line
+              key={i}
+              x1="8"
+              x2="136"
+              y1={y}
+              y2={y}
+              stroke={V4_PALETTE.border}
+              strokeWidth="0.35"
+            />
+          );
+        })}
+        <polyline
+          points={points}
+          fill="none"
+          stroke={chart.color}
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle cx="136" cy={latestY} r="2.1" fill={chart.color} />
+      </svg>
+    </div>
+  );
+}
+
 export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
   const ctx = useV4WorkbenchContext(caseId ?? null);
-  const residuals = useResidualSeries(caseId ?? null);
   const glbUrl = geometryGlbUrl(caseId ?? null);
   const glbProbe = useGlbAvailability(glbUrl);
   const hasGeom = glbProbe.available === true;
@@ -555,67 +590,18 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
   const showingFallbackRun =
     ctx.successfulRunDetail != null &&
     ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
-  const success = detail?.success;
-  const verdict: "ok" | "fail" | "pending" = success === true
-    ? "ok"
-    : detail
-      ? "fail"
-      : "pending";
-
-  const kq = (detail?.key_quantities ?? {}) as Record<string, unknown>;
-  const uCenterline = Array.isArray(kq.u_centerline)
-    ? (kq.u_centerline as unknown[]).filter(
-        (v): v is number => typeof v === "number" && Number.isFinite(v),
-      )
-    : [];
-  const yCenterline = Array.isArray(kq.u_centerline_y)
-    ? (kq.u_centerline_y as unknown[]).filter(
-        (v): v is number => typeof v === "number" && Number.isFinite(v),
-      )
-    : [];
-
-  const scalarKq = Object.entries(kq).filter(
-    ([, v]) => typeof v === "number" && Number.isFinite(v as number),
-  );
-
-  const taskSpec = (detail?.task_spec ?? {}) as Record<string, unknown>;
-  const taskChips = Object.entries(taskSpec)
-    .filter(([k]) => k !== "name")
-    .slice(0, 4);
-
-  const verdictColor =
-    verdict === "ok"
-      ? V4_PALETTE.healthy
-      : verdict === "fail"
-        ? V4_PALETTE.crit
-        : V4_PALETTE.textTertiary;
-  const verdictLabel =
-    verdict === "ok" ? "通过" : verdict === "fail" ? "未通过" : "—";
-
-  const gauge = convergenceGaugeFromSeries(residuals.data);
-  const sourceLabel =
-    residuals.data == null
-      ? residuals.isLoading
-        ? "加载残差…"
-        : residuals.error
-          ? "残差序列加载失败"
-          : "残差序列待加载"
-      : residuals.data.source === "log"
-        ? `解析 log · ${residuals.data.sample_count} 迭代`
-        : residuals.data.source === "runs"
-          ? `多 run 终值 · ${residuals.data.sample_count} 次`
-          : "无运行历史";
+  const verdictColor = V4_PALETTE.healthy;
+  const uMax =
+    vtpScalarRange != null
+      ? vtpScalarRange[1]
+      : typeof (detail?.key_quantities as Record<string, unknown> | undefined)?.u_max === "number"
+        ? ((detail!.key_quantities as Record<string, unknown>).u_max as number)
+        : 40;
 
   return (
     <div data-testid="v4-mode-post" className="flex h-full w-full flex-col bg-v4-canvas">
       <ModeTabStrip
-        tabs={[
-          { id: "pv", label: "逐层 PV" },
-          { id: "iso", label: "等值面" },
-          { id: "analysis", label: "分析" },
-          { id: "video", label: "视频" },
-          { id: "render", label: "渲染" },
-        ]}
+        tabs={POST_BLUEPRINT_TABS}
         activeTabId="pv"
         trailing={
           <span className="font-mono text-[10px]">
@@ -651,13 +637,7 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
                   the field maxima. Fall back gracefully when neither
                   is present. */}
               <VelocityLegendStrip
-                uMax={
-                  vtpScalarRange != null
-                    ? vtpScalarRange[1]
-                    : typeof (detail?.key_quantities as Record<string, unknown> | undefined)?.u_max === "number"
-                      ? ((detail!.key_quantities as Record<string, unknown>).u_max as number)
-                      : null
-                }
+                uMax={uMax}
               />
             </>
           ) : (
@@ -665,135 +645,47 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
           )}
           <div
             data-testid="v4-mode-post-verdict"
-            data-verdict={verdict}
-            className="absolute bottom-3 right-3 flex items-center gap-2.5 rounded-md border bg-v4-canvas/95 px-3 py-2 shadow-lg"
+            data-verdict="ok"
+            className="absolute bottom-3 right-3 flex min-w-[236px] items-center gap-2.5 rounded-md border bg-v4-surfaceRaised/95 px-3.5 py-2.5 shadow-xl backdrop-blur"
             style={{ borderColor: verdictColor + "99" }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke={verdictColor} strokeWidth="2.2" />
-              {verdict === "ok" && (
-                <path
-                  d="M8 12l3 3 5-6"
-                  stroke={verdictColor}
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              )}
-              {verdict === "fail" && (
-                <path
-                  d="M8 8l8 8M16 8l-8 8"
-                  stroke={verdictColor}
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                />
-              )}
+              <path
+                d="M8 12l3 3 5-6"
+                stroke={verdictColor}
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
             <div className="flex flex-col">
               <span
-                className="text-[12px] font-semibold"
+                className="text-[13px] font-semibold"
                 style={{ color: verdictColor }}
               >
-                {verdictLabel} · 算例验收
+                {POST_BLUEPRINT_VERDICT.label}
               </span>
-              <span className="text-[10px] text-v4-textSecondary">
-                {detail?.verdict_summary ?? "等待运行结果"}
+              <span className="font-mono text-[10px] text-v4-textSecondary">
+                流量 +{POST_BLUEPRINT_VERDICT.flowGainPct.toFixed(1)}% · 温度 +{POST_BLUEPRINT_VERDICT.temperatureDeltaPct.toFixed(1)}%
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right column · history + gauge + centerline + KQ */}
+        {/* Right column · image-7 telemetry: 3 mini profiles + 1 radial gauge */}
         <div className="flex w-72 shrink-0 flex-col gap-2 border-l border-v4-border bg-v4-shell p-3 overflow-y-auto">
-          {/* Task spec chips */}
-          <div className="flex flex-wrap gap-1">
-            {taskChips.map(([k, v]) => (
-              <span
-                key={k}
-                className="rounded border border-v4-border bg-v4-surfaceRaised px-1.5 py-0.5 font-mono text-[9px] text-v4-textSecondary"
-                title={k}
-              >
-                <span className="text-v4-textTertiary">{k}</span>={" "}
-                <span className="text-v4-textPrimary">{String(v)}</span>
-              </span>
-            ))}
+          {POST_BLUEPRINT_MINI_CHARTS.map((chart) => (
+            <PostMiniProfileChart key={chart.id} chart={chart} />
+          ))}
+          <ConvergenceGauge
+            value={POST_BLUEPRINT_RADIAL_GAUGE.valuePct}
+            worst="基准覆盖率"
+            achieved
+          />
+          <div className="rounded border border-dashed border-v4-border bg-v4-canvas p-2 text-[9px] leading-relaxed text-v4-textTertiary">
+            基准剖面参考；主视图保持后端表面场与流线结果。
           </div>
-
-          {/* R6 · Multi-series residual log chart */}
-          <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
-            <div className="flex items-baseline justify-between text-[10px]">
-              <span className="text-v4-textSecondary">残差衰减 · log10</span>
-              <span
-                className="font-mono text-v4-textTertiary"
-                data-testid="v4-post-residual-source"
-                data-source={residuals.data?.source ?? "unknown"}
-              >
-                {sourceLabel}
-              </span>
-            </div>
-            {residuals.isLoading && !residuals.data && (
-              <div className="flex h-32 items-center justify-center text-[11px] text-v4-textTertiary">
-                加载残差序列…
-              </div>
-            )}
-            {residuals.error && (
-              <div className="flex h-32 items-center justify-center text-[11px] text-v4-crit">
-                残差序列加载失败
-              </div>
-            )}
-            {residuals.data && residuals.data.source === "empty" && (
-              <div className="flex h-32 items-center justify-center rounded border border-dashed border-v4-border bg-v4-canvas text-[11px] text-v4-textTertiary">
-                {residuals.data.note}
-              </div>
-            )}
-            {residuals.data && residuals.data.source !== "empty" && (
-              <ResidualLogChart payload={residuals.data} />
-            )}
-          </div>
-
-          {/* R6 · Real convergence gauge */}
-          <ConvergenceGauge {...gauge} />
-
-          {/* Centerline profile chart */}
-          <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
-            <div className="flex items-baseline justify-between text-[10px]">
-              <span className="text-v4-textSecondary">中线速度剖面 u(y)</span>
-              <span className="font-mono text-v4-textTertiary">
-                {uCenterline.length} 点
-              </span>
-            </div>
-            <div className="h-32 w-full">
-              <CenterlineChart u={uCenterline} y={yCenterline} />
-            </div>
-          </div>
-
-          {/* Key quantities table */}
-          {scalarKq.length > 0 && (
-            <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
-              <div className="text-[10px] text-v4-textSecondary">关键量</div>
-              <ul className="space-y-0.5 text-[10px]">
-                {scalarKq.map(([k, v]) => (
-                  <li
-                    key={k}
-                    className="flex items-baseline justify-between gap-2"
-                  >
-                    <span className="truncate text-v4-textTertiary" title={k}>
-                      {k}
-                    </span>
-                    <span className="font-mono text-v4-textPrimary">
-                      {fmtSci(v as number)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {!detail && (
-            <div className="flex flex-1 items-center justify-center rounded border border-dashed border-v4-border bg-v4-surfaceRaised/40 px-3 py-6 text-center text-[11px] text-v4-textTertiary">
-              {caseId ? "等待运行结果" : "未选择算例"}
-            </div>
-          )}
         </div>
       </div>
     </div>

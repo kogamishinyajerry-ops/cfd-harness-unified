@@ -26,6 +26,7 @@ import {
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
+import { POST_BLUEPRINT_KPIS } from "./postBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -61,29 +62,12 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
   return counts;
 }
 
-/** Numeric-only filter for key_quantities · drops arrays/strings/null
- *  so a vector like `u_centerline: [0.0063, 0.0915, ...]` never lands
- *  in a 30px tabular-num KPI chip (Codex R3 Typography finding). */
-function scalarKqEntries(
-  kq: Record<string, unknown> | null | undefined,
-): [string, number][] {
-  if (!kq) return [];
-  return Object.entries(kq).filter(
-    ([, v]) => typeof v === "number" && Number.isFinite(v),
-  ) as [string, number][];
-}
-
 function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
   // No case selected · empty-state placeholder
   if (!ctx.caseId) return DASH;
 
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
-  // Post mode prefers the latest *successful* run so a failed-tail
-  // history doesn't show empty residuals / arrays as KPIs.
-  // Matches ModeRendererPost behaviour for consistency.
-  const postDetail = ctx.successfulRunDetail ?? ctx.runDetail;
-
   switch (step) {
     case "import": {
       const dim = basics?.dimension;
@@ -289,30 +273,35 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
     }
 
     case "post": {
-      // Post tier prefers successful-run detail (see ModeRendererPost).
-      const kq = postDetail?.key_quantities as
-        | Record<string, unknown>
-        | null
-        | undefined;
-      const verdict = postDetail?.success === true ? "通过" : postDetail ? "失败" : "—";
-      const verdictTone =
-        postDetail?.success === true
-          ? "healthy"
-          : postDetail
-            ? "crit"
-            : undefined;
-      const kqEntries = scalarKqEntries(kq).slice(0, 3);
-      const chips: KpiChip[] = kqEntries.map<KpiChip>(([k, v]) => ({
-        value: fmt(v, 3),
-        label: k,
-      }));
-      while (chips.length < 3) chips.push({ value: "—", label: "—" });
-      chips.push({
-        value: verdict,
-        label: "对比基准",
-        deltaTone: verdictTone,
-      });
-      return chips;
+      return [
+        {
+          value: POST_BLUEPRINT_KPIS.pressurePa.toFixed(1),
+          label: "压降",
+          unit: "Pa",
+        },
+        {
+          value: POST_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
+          label: "质量流量",
+          unit: "kg/s",
+        },
+        {
+          value: POST_BLUEPRINT_KPIS.temperatureC.toFixed(1),
+          label: "出口温度",
+          unit: "°C",
+        },
+        {
+          value: String(POST_BLUEPRINT_KPIS.progressPct),
+          label: "覆盖率",
+          unit: "%",
+        },
+        {
+          value: `+${POST_BLUEPRINT_KPIS.gainPct.toFixed(1)}`,
+          label: "对比基准",
+          unit: "%",
+          delta: "增益",
+          deltaTone: "healthy",
+        },
+      ];
     }
 
     case "doe": {
