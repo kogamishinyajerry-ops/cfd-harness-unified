@@ -11,35 +11,21 @@ import { IndustrialBoxScene } from "../scene/IndustrialBoxScene";
 import { StreamlineField } from "../scene/streamlines";
 import { ModeTabStrip } from "../ModeTabStrip";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
-
-interface DoeSample {
-  id: string;
-  pressure: number;
-  temp: number;
-  flow: number;
-  delta: string;
-  deltaTone: "healthy" | "warn";
-  seed: number;
-}
-
-const SAMPLES: DoeSample[] = [
-  { id: "S-01", pressure: 198.7, temp: 96.8, flow: 3.42, delta: "-2.1%", deltaTone: "warn", seed: 3 },
-  { id: "S-02", pressure: 222.1, temp: 95.1, flow: 3.61, delta: "+0.8%", deltaTone: "healthy", seed: 7 },
-  { id: "S-03", pressure: 231.4, temp: 94.7, flow: 3.78, delta: "+2.2%", deltaTone: "healthy", seed: 11 },
-  { id: "S-04", pressure: 206.8, temp: 95.9, flow: 3.51, delta: "-1.0%", deltaTone: "warn", seed: 13 },
-  { id: "S-05", pressure: 212.6, temp: 94.1, flow: 3.95, delta: "+4.2%", deltaTone: "healthy", seed: 17 },
-  { id: "S-06", pressure: 248.6, temp: 93.6, flow: 3.62, delta: "+0.9%", deltaTone: "healthy", seed: 19 },
-  { id: "S-07", pressure: 196.4, temp: 96.2, flow: 3.38, delta: "-2.4%", deltaTone: "warn", seed: 23 },
-  { id: "S-08", pressure: 219.2, temp: 95.4, flow: 3.65, delta: "+1.5%", deltaTone: "healthy", seed: 29 },
-  { id: "S-09", pressure: 235.7, temp: 94.8, flow: 3.71, delta: "+2.8%", deltaTone: "healthy", seed: 31 },
-];
+import {
+  DOE_BLUEPRINT_KPIS,
+  DOE_BLUEPRINT_SAMPLES,
+  DOE_BLUEPRINT_SCATTER,
+  DOE_BLUEPRINT_TABS,
+  DOE_BLUEPRINT_VERDICT,
+  type DoeBlueprintSample,
+} from "../doeBlueprint";
 
 function Thumbnail({
   sample,
   active,
   onClick,
 }: {
-  sample: DoeSample;
+  sample: DoeBlueprintSample;
   active: boolean;
   onClick: () => void;
 }) {
@@ -50,43 +36,60 @@ function Thumbnail({
       data-testid={`v4-mode-doe-thumb-${sample.id}`}
       data-active={active ? "true" : "false"}
       className={[
-        "group flex flex-col gap-1 overflow-hidden rounded-md border-2 bg-v4-surfaceRaised p-1.5 transition-all duration-150",
+        "group flex min-h-0 flex-col gap-1 overflow-hidden rounded-md border-2 bg-v4-surfaceRaised p-1.5 text-left transition-all duration-150",
         active
-          ? "border-v4-active scale-[1.02]"
+          ? "scale-[1.02] border-v4-active shadow-[0_0_18px_rgba(240,169,59,0.18)]"
           : "border-v4-border hover:border-v4-borderActive",
       ].join(" ")}
     >
-      <div className="aspect-[5/3] overflow-hidden rounded bg-v4-canvas">
-        <IndustrialBoxScene variant="solver" className="h-full w-full">
-          <StreamlineField count={28} seed={sample.seed} opacityMul={0.7} baseStroke={0.4} />
+      <div className="relative aspect-[5/3] overflow-hidden rounded bg-v4-canvas">
+        <IndustrialBoxScene variant="post" className="h-full w-full">
+          <StreamlineField
+            count={26}
+            seed={sample.seed}
+            opacityMul={0.62}
+            baseStroke={0.38}
+          />
         </IndustrialBoxScene>
+        {sample.recommended && (
+          <span className="absolute left-1.5 top-1.5 rounded border border-v4-healthy/40 bg-v4-canvas/85 px-1.5 py-0.5 font-mono text-[8px] text-v4-healthy">
+            REC
+          </span>
+        )}
       </div>
       <div className="flex items-baseline justify-between text-[9px]">
         <span className="font-mono text-v4-textSecondary">{sample.id}</span>
         <span
           className={
-            sample.deltaTone === "healthy"
+            sample.deltaPct >= 0
               ? "font-mono text-v4-healthy"
               : "font-mono text-v4-warn"
           }
         >
-          {sample.delta}
+          {sample.deltaPct >= 0 ? "+" : ""}
+          {sample.deltaPct.toFixed(1)}%
         </span>
       </div>
-      <div className="flex justify-between text-[9px] text-v4-textTertiary">
-        <span>P {sample.pressure.toFixed(1)}</span>
-        <span>T {sample.temp.toFixed(1)}</span>
-        <span>Q {sample.flow.toFixed(2)}</span>
+      <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] text-v4-textTertiary">
+        <span>P {sample.pressurePa.toFixed(1)}</span>
+        <span>T {sample.temperatureC.toFixed(1)}</span>
+        <span className="col-span-2">V {sample.volumeM3.toFixed(2)} m³</span>
       </div>
     </button>
   );
 }
 
-function ScatterPlot({ samples, activeId }: { samples: DoeSample[]; activeId: string }) {
-  const pMin = Math.min(...samples.map((s) => s.pressure));
-  const pMax = Math.max(...samples.map((s) => s.pressure));
-  const tMin = Math.min(...samples.map((s) => s.temp));
-  const tMax = Math.max(...samples.map((s) => s.temp));
+function ScatterPlot({
+  samples,
+  activeId,
+}: {
+  samples: DoeBlueprintSample[];
+  activeId: string;
+}) {
+  const pMin = Math.min(...samples.map((s) => s.pressurePa));
+  const pMax = Math.max(...samples.map((s) => s.pressurePa));
+  const tMin = Math.min(...samples.map((s) => s.temperatureC));
+  const tMax = Math.max(...samples.map((s) => s.temperatureC));
   return (
     <svg viewBox="0 0 300 100" preserveAspectRatio="none" className="h-full w-full">
       {[0.25, 0.5, 0.75].map((t) => (
@@ -102,62 +105,82 @@ function ScatterPlot({ samples, activeId }: { samples: DoeSample[]; activeId: st
       ))}
       <line
         x1="40"
-        y1="22"
+        y1="72"
         x2="280"
-        y2="78"
-        stroke={V4_PALETTE.healthy}
+        y2="20"
+        stroke={DOE_BLUEPRINT_SCATTER.frontierColor}
         strokeWidth="0.6"
         strokeDasharray="3 3"
         opacity="0.55"
       />
       {samples.map((s) => {
-        const x = 20 + ((s.pressure - pMin) / (pMax - pMin || 1)) * 270;
-        const y = 10 + ((tMax - s.temp) / (tMax - tMin || 1)) * 80;
+        const x = 20 + ((s.pressurePa - pMin) / (pMax - pMin || 1)) * 270;
+        const y = 10 + ((tMax - s.temperatureC) / (tMax - tMin || 1)) * 80;
         const isActive = s.id === activeId;
         return (
-          <circle
-            key={s.id}
-            cx={x}
-            cy={y}
-            r={isActive ? 4.5 : 3}
-            fill={isActive ? V4_PALETTE.active : V4_PALETTE.brand}
-            stroke={V4_PALETTE.shell}
-            strokeWidth={isActive ? "1.5" : "0.8"}
-          />
+          <g key={s.id}>
+            <circle
+              cx={x}
+              cy={y}
+              r={isActive ? 4.8 : s.recommended ? 3.6 : 2.8}
+              fill={
+                isActive
+                  ? DOE_BLUEPRINT_SCATTER.activeColor
+                  : s.recommended
+                    ? DOE_BLUEPRINT_SCATTER.recommendedColor
+                    : V4_PALETTE.brand
+              }
+              stroke={V4_PALETTE.shell}
+              strokeWidth={isActive ? "1.5" : "0.8"}
+            />
+            {isActive && (
+              <text
+                x={x + 7}
+                y={y - 4}
+                fontSize="7"
+                fill={V4_PALETTE.active}
+                fontFamily="ui-monospace, monospace"
+              >
+                {s.id}
+              </text>
+            )}
+          </g>
         );
       })}
       <text x="20" y="98" fontSize="7" fill={V4_PALETTE.textTertiary} fontFamily="ui-monospace, monospace">
-        压力 →
+        {DOE_BLUEPRINT_SCATTER.xLabel} →
       </text>
       <text x="22" y="10" fontSize="7" fill={V4_PALETTE.textTertiary} fontFamily="ui-monospace, monospace">
-        ↑ 温度
+        ↑ {DOE_BLUEPRINT_SCATTER.yLabel}
       </text>
     </svg>
   );
 }
 
 export function ModeRendererDoe() {
-  const [activeId, setActiveId] = useState("S-05");
-  const activeSample = SAMPLES.find((s) => s.id === activeId)!;
+  const [activeId, setActiveId] = useState<string>(
+    DOE_BLUEPRINT_VERDICT.selectedId,
+  );
+  const activeSample =
+    DOE_BLUEPRINT_SAMPLES.find((s) => s.id === activeId) ??
+    DOE_BLUEPRINT_SAMPLES[0];
 
   return (
     <div data-testid="v4-mode-doe" className="flex h-full w-full flex-col bg-v4-canvas">
       <ModeTabStrip
-        tabs={[
-          { id: "samples", label: "样本网格" },
-          { id: "pareto", label: "Pareto" },
-          { id: "sensitivity", label: "敏感性" },
-        ]}
+        tabs={DOE_BLUEPRINT_TABS}
         activeTabId="samples"
         trailing={
           <span className="font-mono text-[10px]">
-            28 样本 · 已选 {activeId} · {activeSample.delta}
+            {DOE_BLUEPRINT_KPIS.sampleCount} 样本 · 已选 {activeId} ·{" "}
+            {activeSample.deltaPct >= 0 ? "+" : ""}
+            {activeSample.deltaPct.toFixed(1)}%
           </span>
         }
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-        <div className="grid flex-[1.4] grid-cols-3 gap-2">
-          {SAMPLES.map((s) => (
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3">
+        <div className="grid min-h-0 flex-[1.35] grid-cols-3 gap-2">
+          {DOE_BLUEPRINT_SAMPLES.map((s) => (
             <Thumbnail
               key={s.id}
               sample={s}
@@ -166,13 +189,17 @@ export function ModeRendererDoe() {
             />
           ))}
         </div>
-        <div className="flex h-24 shrink-0 flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
+        <div className="flex h-28 shrink-0 flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
           <div className="flex items-baseline justify-between text-[10px]">
-            <span className="text-v4-textSecondary">Pareto · 压力 vs 温度 · 28 样本</span>
-            <span className="font-mono text-v4-textTertiary">已选 {activeId}</span>
+            <span className="text-v4-textSecondary">
+              Pareto · 压降 vs 温度 · {DOE_BLUEPRINT_KPIS.sampleCount} 样本
+            </span>
+            <span className="font-mono text-v4-textTertiary">
+              推荐 5 · 已选 {activeId}
+            </span>
           </div>
           <div className="min-h-0 flex-1">
-            <ScatterPlot samples={SAMPLES} activeId={activeId} />
+            <ScatterPlot samples={DOE_BLUEPRINT_SAMPLES} activeId={activeId} />
           </div>
         </div>
       </div>

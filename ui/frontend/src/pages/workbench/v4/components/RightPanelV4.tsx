@@ -44,6 +44,7 @@ import {
   SOLVER_BLUEPRINT_TELEMETRY,
 } from "./solverBlueprint";
 import { POST_BLUEPRINT_RIGHT_CARDS } from "./postBlueprint";
+import { DOE_BLUEPRINT_RIGHT_CARDS } from "./doeBlueprint";
 import { V4_PALETTE, V4_SEVERITY_COLOR } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
@@ -638,17 +639,7 @@ function modeCardsFor(
       return POST_BLUEPRINT_RIGHT_CARDS;
     }
     case "doe":
-      return [
-        {
-          title: "设计探索",
-          facts: [
-            { label: "样本", value: "—" },
-            { label: "best 流量", value: "—" },
-            { label: "best 温度", value: "—" },
-          ],
-          footer: "DOE 后端待接入",
-        },
-      ];
+      return DOE_BLUEPRINT_RIGHT_CARDS;
   }
 }
 

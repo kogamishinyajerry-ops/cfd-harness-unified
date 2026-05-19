@@ -27,6 +27,7 @@ import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
 import { POST_BLUEPRINT_KPIS } from "./postBlueprint";
+import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -305,12 +306,30 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
     }
 
     case "doe": {
-      // No DOE backend yet · keep stub values but reference real case
       return [
-        { value: "—", label: "样本", delta: "DOE 待接入", deltaTone: "warn" },
-        { value: "—", label: "best 压力" },
-        { value: "—", label: "best 温度" },
-        { value: "—", label: "best 流量" },
+        { value: String(DOE_BLUEPRINT_KPIS.sampleCount), label: "样本" },
+        {
+          value: DOE_BLUEPRINT_KPIS.bestPressurePa.toFixed(1),
+          label: "best 压力",
+          unit: "Pa",
+        },
+        {
+          value: DOE_BLUEPRINT_KPIS.bestTemperatureC.toFixed(1),
+          label: "best 温度",
+          unit: "°C",
+        },
+        {
+          value: DOE_BLUEPRINT_KPIS.bestVolumeM3.toFixed(2),
+          label: "best 流量",
+          unit: "m³",
+        },
+        {
+          value: `+${DOE_BLUEPRINT_KPIS.bestGainPct.toFixed(1)}`,
+          label: "推荐增益",
+          unit: "%",
+          delta: "S-05",
+          deltaTone: "healthy",
+        },
       ];
     }
   }

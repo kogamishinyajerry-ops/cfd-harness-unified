@@ -89,33 +89,34 @@ export function MainCanvasV4({ activeStep, caseId }: MainCanvasV4Props) {
     >
       {renderForStep(activeStep, caseId, cameraPreset)}
 
-      {/* Camera preset overlay · top-right · stable across modes */}
-      <div
-        className="pointer-events-auto absolute right-3 top-10 flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary"
-        data-testid="maincanvas-v4-camera-presets"
-      >
-        {(Object.keys(PRESET_LABEL) as V4CameraPreset[]).map((p) => {
-          const isActive = p === cameraPreset;
-          return (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setCameraPreset(p)}
-              className={[
-                "rounded px-1.5 py-0.5 transition-colors",
-                isActive
-                  ? "bg-v4-canvas text-v4-textPrimary"
-                  : "hover:text-v4-textPrimary",
-              ].join(" ")}
-              title={PRESET_TITLE[p]}
-              data-testid={`maincanvas-v4-camera-preset-${p}`}
-              data-active={isActive ? "true" : "false"}
-            >
-              {PRESET_LABEL[p]}
-            </button>
-          );
-        })}
-      </div>
+      {activeStep !== "doe" && (
+        <div
+          className="pointer-events-auto absolute right-3 top-10 flex gap-1 rounded border border-v4-border bg-v4-surfaceRaised/95 px-1 py-0.5 text-[10px] text-v4-textSecondary"
+          data-testid="maincanvas-v4-camera-presets"
+        >
+          {(Object.keys(PRESET_LABEL) as V4CameraPreset[]).map((p) => {
+            const isActive = p === cameraPreset;
+            return (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setCameraPreset(p)}
+                className={[
+                  "rounded px-1.5 py-0.5 transition-colors",
+                  isActive
+                    ? "bg-v4-canvas text-v4-textPrimary"
+                    : "hover:text-v4-textPrimary",
+                ].join(" ")}
+                title={PRESET_TITLE[p]}
+                data-testid={`maincanvas-v4-camera-preset-${p}`}
+                data-active={isActive ? "true" : "false"}
+              >
+                {PRESET_LABEL[p]}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
