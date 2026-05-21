@@ -279,9 +279,14 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         # overlay the ingest provenance.
         from ..backends.openfoam import (
             _compute_gate_from_residuals,
-            _parse_simplefoam_log,
+            _parse_simplefoam_log_stream,
         )
-        parsed = _parse_simplefoam_log(log_path.read_text())
+        # Gap #35 (TBD-20 follow-up): stream the log from disk instead
+        # of materialising the whole file. case_009-class reacting logs
+        # routinely exceed 1 GiB; the recovery path hit OOM at 13 GiB
+        # peak RSS via read_text(). Stream variant produces byte-identical
+        # output (test_stream_parser_equivalence covers the invariant).
+        parsed = _parse_simplefoam_log_stream(log_path)
         recovered = _compute_gate_from_residuals(parsed, manifest)
         details = dict(recovered.get("details", {}) or {})
         # Preserve ingest provenance regardless of recomputed status —
