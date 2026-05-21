@@ -186,6 +186,97 @@ boundaryField
     assert out["plain"]["type"] == "wall"
 
 
+# ---------- DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES ----------
+#
+# Canonical OpenFOAM `"(name1|name2|...)" { ... }` syntax — one BC
+# block declares many patches in one shot. Compressible aero benchmark
+# cases (ONERA M6, RAE 2822, NACA 0012 transonic, ...) author 0/p,
+# 0/k, 0/omega this way as the conventional shortcut. Closes
+# case_006 production blocker (Gap #23).
+
+
+def test_parse_field_boundary_field_expands_grouped_patches():
+    """Test A: synthetic 0/p with `"(wing|farfield)"` { type fixedValue;
+    value uniform 0; } → bc_quality result contains BOTH wing AND
+    farfield with that same BC shape."""
+    text = """
+boundaryField
+{
+    "(wing|farfield)"
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+}
+"""
+    out = ofa._parse_field_boundary_field(text)
+    assert set(out.keys()) == {"wing", "farfield"}
+    assert out["wing"]["type"] == "fixedValue"
+    assert out["wing"]["value_scalar"] == 0.0
+    assert out["farfield"]["type"] == "fixedValue"
+    assert out["farfield"]["value_scalar"] == 0.0
+    # Each synthetic entry is an independent dict (no shared-mutable-
+    # state surprise if a downstream consumer ever mutates one).
+    assert out["wing"] is not out["farfield"]
+
+
+def test_parse_field_boundary_field_mixes_single_and_grouped():
+    """Test B: mixed file with single-patch + grouped + value-vector +
+    nested-brace robustness — all parse correctly, ordering irrelevant."""
+    text = """
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (44.2 0 0);
+    }
+    "(wing|farfield|symmetry)"
+    {
+        type            slip;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+}
+"""
+    out = ofa._parse_field_boundary_field(text)
+    assert set(out.keys()) == {"inlet", "wing", "farfield", "symmetry", "outlet"}
+    assert out["inlet"]["type"] == "fixedValue"
+    assert out["inlet"]["value_vector"] == [44.2, 0.0, 0.0]
+    for name in ("wing", "farfield", "symmetry"):
+        assert out[name]["type"] == "slip"
+    assert out["outlet"]["type"] == "zeroGradient"
+
+
+def test_parse_field_boundary_field_grouped_drops_empty_fragments():
+    """Test C: malformed alternation `"(wing|)"` → wing parses, empty
+    fragment silently dropped. No exception. Walker advances normally
+    to the next single-patch block after the malformed group."""
+    text = """
+boundaryField
+{
+    "(wing|)"
+    {
+        type            fixedValue;
+        value           uniform 1.5;
+    }
+    farfield
+    {
+        type            zeroGradient;
+    }
+}
+"""
+    out = ofa._parse_field_boundary_field(text)
+    # wing parsed (valid fragment), empty fragment produced no entry,
+    # farfield parsed (walker advanced past the malformed group).
+    assert set(out.keys()) == {"wing", "farfield"}
+    assert out["wing"]["type"] == "fixedValue"
+    assert out["wing"]["value_scalar"] == 1.5
+    assert out["farfield"]["type"] == "zeroGradient"
+
+
 # ---------- _persist_bc_quality ----------
 
 
