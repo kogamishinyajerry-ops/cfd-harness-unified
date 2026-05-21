@@ -1701,9 +1701,10 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 # WARN, because the harness did not witness the run.
 
 
-# Candidate filenames for an externally-produced solver log. Ordered so
-# that the most specific name (matching solver convention) wins.
-_INGEST_LOG_CANDIDATES = (
+# Generic fallback filenames for an externally-produced solver log,
+# used when the manifest does not declare a solver or when none of the
+# manifest-derived candidates exist on disk. Order = most-specific first.
+_INGEST_LOG_FALLBACK_CANDIDATES = (
     "log_simpleFoam.txt",
     "log_pimpleFoam.txt",
     "log_icoFoam.txt",
@@ -1717,16 +1718,67 @@ _INGEST_LOG_CANDIDATES = (
 )
 
 
-def _find_external_solver_log(case_dir: Path) -> Path | None:
+def _candidate_log_names(manifest: Dict[str, Any] | None) -> Tuple[List[str], List[str]]:
+    """Build the ordered list of candidate log filenames for ingest.
+
+    Codex R1-P1 fix: manifest-declared solver wins over generic
+    candidates. A `pisoFoam` case must find `log_pisoFoam.txt` /
+    `log.pisoFoam` / `pisoFoam.log` even if a stale `log_simpleFoam.txt`
+    sits alongside it, AND the manifest-derived candidate must precede
+    any generic fallback so the chosen log corresponds to the declared
+    solver.
+
+    Returns `(primary, fallback)` so callers can record both lists in
+    BLOCKED diagnostics — users need to see exactly what was searched.
+
+    `manifest["solver"]` is sanitised: only alphanumeric + underscore +
+    dash are accepted (OpenFOAM solver names never contain shell or
+    path metachars; this prevents a bogus manifest from forcing the
+    walker into a parent directory or shell-interpreting the name).
+    """
+    primary: List[str] = []
+    if manifest is not None:
+        raw = manifest.get("solver")
+        if isinstance(raw, str):
+            solver = raw.strip()
+            if solver and re.match(r"^[A-Za-z0-9_-]+$", solver):
+                primary = [
+                    f"log_{solver}.txt",
+                    f"log.{solver}",
+                    f"{solver}.log",
+                ]
+    # Dedup the fallback list against primary so the BLOCKED diagnostic
+    # doesn't show duplicates when manifest.solver happens to be
+    # `simpleFoam` (already in fallbacks).
+    fallback = [n for n in _INGEST_LOG_FALLBACK_CANDIDATES if n not in primary]
+    return primary, fallback
+
+
+def _find_external_solver_log(
+    case_dir: Path,
+    manifest: Dict[str, Any] | None = None,
+) -> Path | None:
     """Locate an existing OpenFOAM solver log produced by an external run.
 
-    Search order is `_INGEST_LOG_CANDIDATES`. Returns the first existing
-    file as a `Path`, or `None` if nothing matches. The artifacts/ dir is
-    intentionally excluded — `artifacts/solver.log` is the ingest *output*,
-    not an input, so finding it would create a fixed-point loop on
-    repeated ingest of the same case.
+    Codex R1-P1 fix: the manifest's declared solver derives the
+    first-tried candidates, with the generic fallback list used only if
+    none of the solver-specific names exist. This avoids two failure
+    modes:
+      - false-BLOCKED on cases whose log matches `manifest["solver"]`
+        but isn't in the historical fallback list (e.g. a `pisoFoam`
+        case where neither `log_pisoFoam.txt` nor the generic names
+        happen to exist).
+      - silent wrong-log ingest when a directory carries multiple
+        historical logs and the most-specific match should win
+        regardless of fallback-list ordering.
+
+    Returns the first matched `Path`, or `None`. The artifacts/ dir is
+    intentionally excluded — `artifacts/solver.log` is the ingest
+    *output*, not an input, so finding it would create a fixed-point
+    loop on repeated ingest.
     """
-    for name in _INGEST_LOG_CANDIDATES:
+    primary, fallback = _candidate_log_names(manifest)
+    for name in (*primary, *fallback):
         p = case_dir / name
         if p.is_file():
             return p
@@ -1960,7 +2012,12 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     # Ingest-specific check 2: an external solver log must be locatable.
-    external_log = _find_external_solver_log(case_dir)
+    # Codex R1-P1 fix: pass the manifest so the search is driven by
+    # the declared solver, not a fixed list. The BLOCKED diagnostic
+    # surfaces BOTH the solver-derived candidates and the generic
+    # fallbacks so users can see what was tried.
+    primary, fallback = _candidate_log_names(manifest)
+    external_log = _find_external_solver_log(case_dir, manifest)
     if external_log is None:
         return {
             "status": "BLOCKED",
@@ -1969,11 +2026,12 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "execution": "skipped",
                 "real_solver_invoked": False,
                 "reason": "no_solver_log_found",
-                "searched": list(_INGEST_LOG_CANDIDATES),
+                "searched_solver_specific": primary,
+                "searched_fallback": fallback,
                 "next_step": (
                     "Place the external run's log at one of the searched "
-                    "names (commonly `log_simpleFoam.txt` from `simpleFoam "
-                    "> log_simpleFoam.txt 2>&1`), then re-run "
+                    "names (commonly `log_<solver>.txt` from "
+                    "`<solver> > log_<solver>.txt 2>&1`), then re-run "
                     "`cfdtrust ingest`."
                 ),
             },

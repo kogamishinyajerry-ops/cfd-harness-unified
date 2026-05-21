@@ -18,7 +18,13 @@ from typing import Any, Dict
 from .manifest import ManifestError, case_dir, validate_manifest
 from .audit import solver
 
-_BAD_STATUSES = {"FAIL", "BLOCKED"}
+# Codex R1-P2 fix: ONLY BLOCKED exits non-zero. FAIL on the solver gate
+# means "evidence was imported successfully but residuals didn't meet
+# the manifest target" — a valid trust outcome that downstream `cfdtrust
+# report` consumes. Returning 1 here breaks the `ingest && report`
+# chained workflow on exactly the cases users most need to inspect:
+# external runs that landed but did not converge.
+_INGEST_ENV_BLOCKED = {"BLOCKED"}
 
 
 def _print_ok(msg: str) -> None:
@@ -36,11 +42,17 @@ def _print_fail(msg: str) -> None:
 def cmd_ingest(case_path: str) -> int:
     """Ingest an externally-run case. Mirrors `cmd_run` shape from cli.py.
 
-    Exit codes:
-      0  — ingest produced a non-BLOCKED gate (PASS / WARN / FAIL all exit 0
-           because the ingest step itself succeeded; downstream `cfdtrust
-           report` exit code carries the trust verdict).
-      1  — ingest gate status is FAIL or BLOCKED.
+    Exit codes (Codex R1-P2 clarification):
+      0  — ingest step succeeded; gate status may be PASS / WARN / FAIL.
+           A FAIL gate means evidence was imported and the solver did
+           not meet residual targets — this is a valid trust outcome
+           and the downstream `cfdtrust report` exit code carries the
+           overall trust verdict. Scripted `ingest && report` flows
+           rely on this.
+      1  — ingest itself was BLOCKED by an environment / case-shape
+           issue (Docker unavailable, no time directory, no log file,
+           etc.). No artifacts were imported; rerunning `report` won't
+           help.
       2  — manifest could not be loaded.
     """
     try:
@@ -53,7 +65,7 @@ def cmd_ingest(case_path: str) -> int:
     gate: Dict[str, Any] = solver.ingest(cd, manifest)
     status = gate.get("status", "BLOCKED")
 
-    if status in _BAD_STATUSES:
+    if status in _INGEST_ENV_BLOCKED:
         _print_fail(f"ingest {status}: {gate.get('summary')}")
         details = gate.get("details", {}) or {}
         reason = details.get("reason")
@@ -64,7 +76,20 @@ def cmd_ingest(case_path: str) -> int:
             _print_warn(f"  next step: {next_step}")
         return 1
 
-    _print_ok(f"ingest {status}: {gate.get('summary')}")
+    # PASS / WARN / FAIL all mean "ingest itself succeeded; here is the
+    # gate verdict on the imported evidence". Exit 0 so the standard
+    # `cfdtrust ingest <case> && cfdtrust report <case>` chain keeps
+    # working on non-converged external runs.
+    if status == "FAIL":
+        _print_warn(f"ingest {status}: {gate.get('summary')}")
+        _print_warn(
+            "  Solver gate FAILed on imported residuals — evidence was "
+            "still ingested. Run `cfdtrust report` to assemble the full "
+            "trust_report.json."
+        )
+    else:
+        _print_ok(f"ingest {status}: {gate.get('summary')}")
+
     details = gate.get("details", {}) or {}
     src = details.get("external_log_source")
     if src:

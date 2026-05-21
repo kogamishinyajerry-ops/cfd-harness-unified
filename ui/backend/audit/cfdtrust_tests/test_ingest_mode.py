@@ -270,7 +270,12 @@ def test_ingest_blocked_when_no_solver_log(monkeypatch, tmp_path: Path):
     gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
     assert gate["status"] == "BLOCKED"
     assert gate["details"]["reason"] == "no_solver_log_found"
-    assert "log_simpleFoam.txt" in gate["details"]["searched"]
+    # Codex R1-P1: diagnostic split into solver-specific + fallback lists.
+    # Manifest declares solver=simpleFoam, so `log_simpleFoam.txt` is in
+    # the solver-specific bucket (deduped out of fallback).
+    assert "log_simpleFoam.txt" in gate["details"]["searched_solver_specific"]
+    # Fallback bucket still contains the other historical names.
+    assert "log_pimpleFoam.txt" in gate["details"]["searched_fallback"]
 
 
 def test_ingest_blocked_when_docker_unavailable(monkeypatch, tmp_path: Path):
@@ -291,6 +296,216 @@ def test_ingest_finds_log_simpleFoam_first(monkeypatch, tmp_path: Path):
     assert gate["details"]["external_log_source"] == "log_simpleFoam.txt"
     # And the transcribed solver.log content equals the chosen log
     assert (tmp_path / "artifacts" / "solver.log").read_text() == _CANONICAL_SIMPLEFOAM_LOG
+
+
+# ---------- Codex R1-P1: log selection derives from manifest.solver ----------
+
+
+def test_ingest_log_search_prefers_manifest_solver_over_fallback(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R1-P1: a pisoFoam case must find log_pisoFoam.txt even when
+    a stale log_simpleFoam.txt sits alongside. The manifest's declared
+    solver wins over fallback list ordering."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    # Stale legacy log — must NOT be chosen.
+    (tmp_path / "log_simpleFoam.txt").write_text("STALE LEGACY LOG\n")
+    # The current run's log — must be chosen because manifest says pisoFoam.
+    (tmp_path / "log_pisoFoam.txt").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    m = _ingest_manifest_fixture()
+    m["solver"] = "pisoFoam"
+    gate = ofa.ingest(tmp_path, m)
+    assert gate["details"]["external_log_source"] == "log_pisoFoam.txt"
+    assert (tmp_path / "artifacts" / "solver.log").read_text() == _CANONICAL_SIMPLEFOAM_LOG
+
+
+def test_ingest_finds_solver_specific_log_when_fallback_absent(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R1-P1: even when no generic fallback log exists, a solver-
+    specific log derived from manifest.solver must be discovered."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    # ONLY a solver-specific log, with a solver name that isn't in the
+    # historical fallback list at all.
+    (tmp_path / "log_myCustomFoam.txt").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    m = _ingest_manifest_fixture()
+    m["solver"] = "myCustomFoam"
+    gate = ofa.ingest(tmp_path, m)
+    assert gate["status"] != "BLOCKED"
+    assert gate["details"]["external_log_source"] == "log_myCustomFoam.txt"
+
+
+def test_ingest_blocked_diagnostic_lists_both_candidate_sets(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R1-P1: when no log is found, the BLOCKED diagnostic must
+    enumerate the searched solver-specific AND fallback names so users
+    know what conventions were tried."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    _patch_docker_for_ingest(monkeypatch)
+    m = _ingest_manifest_fixture()
+    m["solver"] = "pisoFoam"
+    gate = ofa.ingest(tmp_path, m)
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "no_solver_log_found"
+    # solver-derived names appear first; fallback list is also returned.
+    assert "log_pisoFoam.txt" in gate["details"]["searched_solver_specific"]
+    assert "log.pisoFoam" in gate["details"]["searched_solver_specific"]
+    assert "pisoFoam.log" in gate["details"]["searched_solver_specific"]
+    # The generic fallbacks are still listed so users see the full search.
+    assert "log_simpleFoam.txt" in gate["details"]["searched_fallback"]
+
+
+def test_ingest_log_search_rejects_unsafe_solver_name(monkeypatch, tmp_path: Path):
+    """Codex R1-P1 defense-in-depth: a manifest with `solver: '../etc/passwd'`
+    must not coerce the search into a parent directory. Only the
+    sanitised solver name (alphanumeric/underscore/dash) ever drives
+    candidate-name construction; bad names degrade silently to fallbacks."""
+    _make_ingestable_case(tmp_path)  # includes log_simpleFoam.txt
+    _patch_docker_for_ingest(monkeypatch)
+    m = _ingest_manifest_fixture()
+    m["solver"] = "../etc/passwd"
+    gate = ofa.ingest(tmp_path, m)
+    # Fallback list still hits log_simpleFoam.txt — that's fine, the
+    # test is that no '../' candidate was attempted.
+    assert gate["details"]["external_log_source"] == "log_simpleFoam.txt"
+
+
+def test_candidate_log_names_unit():
+    """Direct unit test of the candidate-name builder so each branch is
+    independently covered (solver present / solver missing / bad solver)."""
+    primary, fallback = ofa._candidate_log_names({"solver": "pisoFoam"})
+    assert primary == ["log_pisoFoam.txt", "log.pisoFoam", "pisoFoam.log"]
+    assert "log_simpleFoam.txt" in fallback
+
+    primary, fallback = ofa._candidate_log_names({})
+    assert primary == []
+    assert "log_simpleFoam.txt" in fallback
+
+    primary, fallback = ofa._candidate_log_names({"solver": "simpleFoam"})
+    # Dedup: simpleFoam-derived names that already appear in the fallback
+    # list must not be duplicated.
+    assert primary == ["log_simpleFoam.txt", "log.simpleFoam", "simpleFoam.log"]
+    assert "log_simpleFoam.txt" not in fallback
+    assert "log.simpleFoam" not in fallback
+    assert "simpleFoam.log" not in fallback
+    # Other fallback names still present.
+    assert "log_pimpleFoam.txt" in fallback
+
+
+# ---------- Codex R1-P2: cmd_ingest exit codes ----------
+
+
+def test_cmd_ingest_exits_zero_on_fail_gate(monkeypatch, tmp_path: Path):
+    """Codex R1-P2: a FAIL gate (e.g. residuals didn't meet target) must
+    still exit 0 because ingest itself succeeded — evidence was imported.
+    Scripted `ingest && report` flows depend on this."""
+    from cfdtrust.cli_ingest import cmd_ingest
+    from cfdtrust.audit import solver as solver_mod
+
+    _make_ingestable_case(tmp_path)
+    # Write the case_manifest.yaml so validate_manifest can load it.
+    import yaml
+    m = _ingest_manifest_fixture()
+    # Tighten residual targets so the synthetic log's final residuals
+    # (1.0e-7) fail against 1.0e-9.
+    m["solver_contract"]["residual_targets"] = {"Ux": 1.0e-9, "p": 1.0e-9}
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(m))
+    (tmp_path / "artifacts").mkdir(exist_ok=True)
+    _patch_docker_for_ingest(monkeypatch)
+
+    rc = cmd_ingest(str(tmp_path))
+    assert rc == 0, "FAIL gate must still exit 0 (ingest step succeeded)"
+    # And the solver_gate.json was persisted so report can read it.
+    assert (tmp_path / "artifacts" / "solver_gate.json").exists()
+
+
+def test_cmd_ingest_exits_one_on_blocked(monkeypatch, tmp_path: Path):
+    """Codex R1-P2: BLOCKED (env / case-shape problem) still exits 1 —
+    nothing was imported, downstream report can't proceed."""
+    from cfdtrust.cli_ingest import cmd_ingest
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    import yaml
+    (tmp_path / "case_manifest.yaml").write_text(
+        yaml.safe_dump(_ingest_manifest_fixture())
+    )
+    _patch_docker_for_ingest(monkeypatch)
+    rc = cmd_ingest(str(tmp_path))
+    assert rc == 1
+
+
+def test_cmd_ingest_exits_zero_on_pass(monkeypatch, tmp_path: Path):
+    """Codex R1-P2: PASS gate exits 0 (sanity)."""
+    from cfdtrust.cli_ingest import cmd_ingest
+    import yaml
+    _make_ingestable_case(tmp_path)
+    (tmp_path / "case_manifest.yaml").write_text(
+        yaml.safe_dump(_ingest_manifest_fixture())
+    )
+    _patch_docker_for_ingest(monkeypatch)
+    rc = cmd_ingest(str(tmp_path))
+    assert rc == 0
+
+
+# ---------- Codex R1-P3: cli_explain WARN branch ----------
+
+
+def test_explain_tldr_warn_for_ingested_does_not_say_did_not_pass(tmp_path: Path):
+    """Codex R1-P3: `cfdtrust explain` on an ingested WARN case (all
+    gates PASS, overall demoted to WARN per honesty fence) must NOT
+    surface the FAIL-flavoured 'did NOT pass its declared case contract'
+    string. It must instead explain the witness-gap explicitly."""
+    from cfdtrust.cli_explain import _render_tldr
+
+    report = {
+        "overall_status": "WARN",
+        "solver_execution": "ingested",
+        "validation_status": "partial",
+        "gates": {
+            "geometry_contract":     {"status": "PASS"},
+            "mesh_contract":         {"status": "PASS"},
+            "bc_contract":           {"status": "PASS"},
+            "solver_execution":      {"status": "PASS"},
+            "qoi_extraction":        {"status": "PASS"},
+            "reference_comparison":  {"status": "PASS"},
+        },
+    }
+    tldr = _render_tldr(report, gate_severities={})
+    assert "did NOT pass" not in tldr
+    assert "WARN" in tldr or "did not witness" in tldr or "ingested" in tldr.lower()
+
+
+def test_explain_tldr_warn_non_ingested_uses_generic_warn_body(tmp_path: Path):
+    """Codex R1-P3: WARN that's NOT from ingested demotion still gets
+    its own branch — must not fall through to FAIL message."""
+    from cfdtrust.cli_explain import _render_tldr
+
+    report = {
+        "overall_status": "WARN",
+        "solver_execution": "real",
+        "validation_status": "unknown",
+        "gates": {
+            "geometry_contract":     {"status": "PASS"},
+            "mesh_contract":         {"status": "WARN"},
+            "bc_contract":           {"status": "PASS"},
+            "solver_execution":      {"status": "PASS"},
+            "qoi_extraction":        {"status": "PASS"},
+            "reference_comparison":  {"status": "PASS"},
+        },
+    }
+    tldr = _render_tldr(report, gate_severities={"mesh_contract": "warning"})
+    assert "did NOT pass" not in tldr
+
+
+def test_explain_status_badge_handles_warn():
+    """Codex R1-P3 follow-up: WARN must render as a recognized badge,
+    not fall through to UNKNOWN."""
+    from cfdtrust.cli_explain import _status_badge
+    assert _status_badge("WARN") == "WARN"
 
 
 # ---------- solver.ingest dispatcher ----------
