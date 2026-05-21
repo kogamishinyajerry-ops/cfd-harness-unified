@@ -1,0 +1,1592 @@
+"""OpenFOAM Docker-backed solver adapter — Phase 1.
+
+Per DEC-0005 (`docs/project-memory/DECISION_LOG.md`), the adapter uses Docker
+exclusively. macOS has no native OpenFOAM; targeting both docker + native would
+double the maintenance surface for zero current benefit. If a Linux-native CI
+worker ever joins, a second backend module can be added — the contract is
+`run(case_dir, manifest) -> dict` and is strategy-agnostic.
+
+Phase 1 lands in two steps:
+
+  Step 1 (current): environment-detection layer + structured BLOCKED states.
+  Returns BLOCKED with one of FIVE explicit reasons:
+    - `manifest_invalid_solver_docker_image` — manifest's `solver_docker_image`
+                                               is not a non-empty string (R10-F-02)
+    - `docker_not_available`                 — binary not on PATH or daemon down
+    - `openfoam_image_not_pulled`            — image absent locally
+    - `case_dir_not_openfoam_compatible`     — case_dir or one of `system/`,
+                                               `constant/`, `0/` is missing OR
+                                               is a symlink (R10-F-03/F-04 fix);
+                                               nested symlinks at depth 2+ are
+                                               currently NOT caught (R-17, must
+                                               be addressed before step 2's
+                                               `docker run --volume`)
+    - `execution_not_implemented_yet`        — env OK; real `simpleFoam` wiring
+                                               is step 2.
+
+  Step 2 (next commit): actual `docker run simpleFoam` invocation, log parsing,
+  residuals.csv emission, gate computation. NASA TMR reference data (DEC-0006)
+  lands alongside. R-17 (nested-depth symlink walk) MUST land in this step
+  before the `docker --volume` line ships.
+
+Honesty rule: even when the env is fully ready, this adapter MUST NOT
+silently switch to mocked or claim success. The `execution_not_implemented_yet`
+BLOCKED state surfaces the gap so no `trust_report.json` can claim a real run
+before step 2 lands.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+
+# Default image. Override via `manifest.solver_docker_image` if a case needs
+# a different OpenFOAM build.
+#
+# R10-F-01 fix: previous value `openfoam/openfoam11-paraview512:latest` was a
+# typo / hallucinated tag. The real Docker Hub tag for OpenFOAM 11 + ParaView
+# 5.10 is `openfoam/openfoam11-paraview510`. An opt-in network test
+# (CFDTRUST_LIVE_NETWORK_TESTS=1) verifies this constant resolves on Hub so a
+# future bad edit is caught before a user hits "manifest unknown" at
+# `docker pull` time.
+DEFAULT_IMAGE = "openfoam/openfoam11-paraview510:latest"
+
+# Required top-level directories for an OpenFOAM case dir.
+_OPENFOAM_REQUIRED_DIRS = ("system", "constant", "0")
+
+
+# R15-F-03 belt-and-suspenders: even if `solver_docker_image` somehow bypasses
+# the JSON schema regex (manual edit, schema-validation skipped path),
+# refuse to pass anything that would be argv-interpreted by `docker run` as
+# a flag or shell-metachar token.
+_DOCKER_IMAGE_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._:/@\-]*$")
+
+
+def _is_valid_docker_image_name(image: str) -> bool:
+    """Cheap shape check — only catches obvious argv-injection vectors.
+
+    Docker's own reference grammar is far stricter than this; we mainly
+    care about:
+      - no leading `-` (would be parsed as a docker run flag)
+      - no whitespace (would split into multiple argv tokens)
+      - no shell metachars (`;`, `|`, `&`, backticks, $, ...)
+      - bounded length (<=256)
+    """
+    if not isinstance(image, str):
+        return False
+    if not (1 <= len(image) <= 256):
+        return False
+    return _DOCKER_IMAGE_RE.match(image) is not None
+
+
+# ---------- environment probes (mockable in tests via subprocess.run patching) ----------
+
+
+def _docker_available() -> Tuple[bool, str]:
+    """Check if `docker` is on PATH AND the daemon is reachable.
+
+    Returns ``(ok, reason)``. ``reason`` is empty when ``ok`` is True;
+    otherwise it is a human-readable diagnostic that the caller surfaces
+    in the BLOCKED gate.
+    """
+    if shutil.which("docker") is None:
+        return False, "docker binary not on PATH"
+    try:
+        res = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "docker version timed out after 5s"
+    except OSError as e:
+        return False, f"docker invocation failed: {e}"
+    if res.returncode != 0:
+        diag = (res.stderr.strip() or res.stdout.strip() or "no output")[:200]
+        return False, f"docker daemon unreachable: {diag}"
+    return True, ""
+
+
+def _image_present(image: str) -> bool:
+    """Whether the given Docker image is already pulled locally.
+
+    A False result causes the adapter to BLOCK rather than auto-pulling —
+    pulling a multi-GB image silently mid-trust-run would surprise the
+    user and obscure honest gate state.
+    """
+    try:
+        res = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True, text=True, timeout=5,
+        )
+        return res.returncode == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
+# Hard cap on the recursive symlink walk. Phase 1 step 2a chose this number
+# by inspecting the OpenFOAM dictionary tree shape: a typical case has
+# O(10²-10³) files across system/, constant/, 0/. 10000 is comfortably
+# above realistic max while still capping pathological dir trees that
+# could DoS the env-detection step.
+_MAX_PATHS_WALKED = 10000
+
+
+def _find_symlink_at_any_depth(case_dir: Path) -> Tuple[bool, str]:
+    """Walk `case_dir` recursively; return (True, rel_path) at the FIRST
+    symlink found. Returns (False, "") if the walk completes clean.
+
+    R-17 closure (Phase 1 step 2a): the depth-1 guard in
+    `_is_openfoam_compatible_case_dir` only inspected `case_dir` and the
+    three required subdirs themselves. A symlink at depth 2+
+    (e.g. `case_dir/system/sneaky_subpath → /tmp/host`) would slip past
+    and then be exposed by step 2's `docker --volume case_dir:/case`
+    when OpenFOAM's solver follows the link at runtime.
+
+    Implementation notes:
+      - Early-return at the first symlink; do not enumerate them all
+      - Hard cap at `_MAX_PATHS_WALKED` to bound worst-case time on
+        pathological trees; report BLOCKED if the cap is hit (treat as
+        "we cannot prove this is symlink-free, so refuse"). This is the
+        same fail-closed posture R10-F-01 introduced for the docker
+        daemon timeout.
+      - Walks every entry under `case_dir`, not just under the three
+        required subdirs — a Phase 2 user could place an `extras/` dir
+        with a symlink, and that should still be caught.
+    """
+    paths_walked = 0
+    try:
+        # Path.iterdir-based DFS so we can short-circuit cleanly without
+        # rglob's full materialization.
+        stack = [case_dir]
+        while stack:
+            current = stack.pop()
+            try:
+                entries = list(current.iterdir())
+            except (OSError, PermissionError):
+                # Treat unreadable subtrees as "cannot prove safe" → BLOCK.
+                return True, f"unreadable subtree: {current.relative_to(case_dir)}"
+            for entry in entries:
+                paths_walked += 1
+                if paths_walked > _MAX_PATHS_WALKED:
+                    return True, (
+                        f"case dir exceeds {_MAX_PATHS_WALKED} entries; refusing "
+                        f"to declare symlink-free (DoS bound)"
+                    )
+                if entry.is_symlink():
+                    return True, str(entry.relative_to(case_dir))
+                if entry.is_dir():
+                    stack.append(entry)
+        return False, ""
+    except OSError as e:
+        return True, f"walk failed: {e}"
+
+
+def _is_openfoam_compatible_case_dir(case_dir: Path) -> Tuple[bool, str]:
+    """An OpenFOAM case needs at least `system/`, `constant/`, `0/`.
+
+    R10-F-03 / R10-F-04 fix (depth-1 guard): both the outer `case_dir`
+    AND each required subdir are checked with `is_symlink()` first.
+
+    R-17 fix (depth-N guard, Phase 1 step 2a): after the depth-1 checks
+    pass, walk the entire `case_dir` subtree and refuse if ANY symlink
+    is found at any depth. Reason: step 2 will
+    `docker --volume case_dir:/case`; a symlinked file/dir anywhere
+    inside the case (e.g. `case_dir/system/foamWatch/exfil → /etc/passwd`)
+    would be followed by the OpenFOAM solver at runtime, exposing host
+    filesystem.
+
+    Legitimate symlink usage (shared mesh dir, NFS mount, monorepo) is not
+    expected in Phase 0; if it ever arrives, the right escape hatch is an
+    explicit `CFDTRUST_ALLOW_SYMLINK_CASE_DIR=1` env-var opt-in.
+    """
+    if case_dir.is_symlink():
+        return False, f"case_dir is a symlink (not allowed; resolves to {case_dir.resolve()})"
+
+    missing: list[str] = []
+    symlinked: list[str] = []
+    for d in _OPENFOAM_REQUIRED_DIRS:
+        p = case_dir / d
+        if p.is_symlink():
+            symlinked.append(d)
+            continue
+        if not p.is_dir():
+            missing.append(d)
+    if symlinked:
+        return False, f"required subdir(s) are symlinks (not allowed): {symlinked}"
+    if missing:
+        return False, f"missing required OpenFOAM subdirs: {missing}"
+
+    # R-17: walk the rest of the tree for symlinks at any depth.
+    found_symlink, where = _find_symlink_at_any_depth(case_dir)
+    if found_symlink:
+        return False, f"nested symlink not allowed (R-17): {where}"
+
+    return True, ""
+
+
+# ---------- Phase 1 step 2c: docker invocation + log parser + gate ----------
+
+
+# Default solver timeout (1 hour). Override via CFDTRUST_SOLVER_TIMEOUT_S.
+# Sub-commit-2c choice: long enough for a 6000-cell case to converge under
+# Docker emulation on Apple Silicon (amd64 image, slow); short enough that a
+# runaway solver doesn't pin the user's terminal indefinitely.
+_DEFAULT_SOLVER_TIMEOUT_S = 3600
+_TIMEOUT_ENV_VAR = "CFDTRUST_SOLVER_TIMEOUT_S"
+
+
+def _resolve_solver_timeout() -> int:
+    """Return the configured per-command timeout in seconds.
+
+    Honors `CFDTRUST_SOLVER_TIMEOUT_S` env var; falls back to
+    `_DEFAULT_SOLVER_TIMEOUT_S` if unset, empty, or non-numeric.
+    Negative or zero values are clamped to a minimum of 60s — a
+    sub-minute timeout is almost certainly a typo and would BLOCK every
+    real run.
+    """
+    raw = os.environ.get(_TIMEOUT_ENV_VAR, "").strip()
+    if not raw:
+        return _DEFAULT_SOLVER_TIMEOUT_S
+    try:
+        n = int(raw)
+    except ValueError:
+        return _DEFAULT_SOLVER_TIMEOUT_S
+    return max(n, 60)
+
+
+def _run_docker_command(
+    shell_args: str,
+    case_dir: Path,
+    image: str,
+    *,
+    timeout: int,
+) -> Tuple[int, str, str]:
+    """Run a shell command inside the OpenFOAM container against `case_dir`.
+
+    The case_dir is bind-mounted at `/case` and is the container's CWD.
+    The OpenFOAM environment (bashrc) is sourced before `shell_args` runs.
+
+    Returns `(returncode, stdout, stderr)`. On timeout returns
+    `(-1, partial_stdout, "docker command timed out after N s")`. On
+    OS-level invocation failure returns `(-1, "", diagnostic)`.
+
+    Subprocess args are list-form (no shell=True). The only string that
+    enters a shell is `shell_args`, executed inside the container via
+    `bash -c`. Callers are responsible for sanitizing it; the
+    project-internal callers only ever pass literal strings like
+    `"blockMesh"` and `"simpleFoam"`.
+    """
+    full_cmd = [
+        "docker", "run", "--rm",
+        "--entrypoint", "/bin/bash",
+        "-v", f"{case_dir.resolve()}:/case",
+        "-w", "/case",
+        image,
+        "-c", f"source /opt/openfoam11/etc/bashrc && {shell_args}",
+    ]
+    try:
+        res = subprocess.run(
+            full_cmd, capture_output=True, text=True, timeout=timeout,
+        )
+        return res.returncode, res.stdout, res.stderr
+    except subprocess.TimeoutExpired as e:
+        partial = e.stdout if isinstance(e.stdout, str) else (
+            e.stdout.decode("utf-8", errors="replace") if e.stdout else ""
+        )
+        # rc=-1 PLUS the stderr marker `OFA-TIMEOUT` lets `run()` distinguish
+        # this from an OSError (fork failure). The two have different honesty
+        # implications: timeout means the solver DID start; OSError means it
+        # never did.
+        return -1, partial, f"OFA-TIMEOUT: docker command timed out after {timeout}s"
+    except OSError as e:
+        # rc=-1 PLUS the marker `OFA-OSERROR` lets `run()` distinguish a fork
+        # failure (solver never started → real_solver_invoked=False) from a
+        # legitimate solver crash (rc>0 from inside the container, solver
+        # ran → real_solver_invoked=True). R15-F-01 fix.
+        return -1, "", f"OFA-OSERROR: docker invocation failed: {e}"
+
+
+# simpleFoam emits lines like:
+#   smoothSolver:  Solving for Ux, Initial residual = 0.123, Final residual = 0.001, No Iterations 5
+#   GAMG:  Solving for p, Initial residual = 0.45, Final residual = 0.003, No Iterations 12
+_RESIDUAL_LINE_RE = re.compile(
+    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG)\s*:\s*Solving for\s+(\w+),"
+    r"\s*Initial residual\s*=\s*([\d.eE+\-]+),"
+    r"\s*Final residual\s*=\s*([\d.eE+\-]+),"
+)
+# R16-F-01 fix: OpenFOAM 11 emits `Time = 157s` (with unit suffix `s`), not
+# just `Time = 157`. The pre-fix regex required end-of-line right after the
+# number, so every live run produced ZERO parseable iterations and the gate
+# falsely landed on `no_iterations_in_log` — even when the solver actually
+# converged cleanly. Live-confirmed against
+# `openfoam/openfoam11-paraview510:latest` on 2026-05-21.
+#
+# The optional `s` suffix is tolerated; downstream code only uses the numeric
+# portion. We deliberately do NOT widen this to arbitrary unit suffixes —
+# `s` is the only one OpenFOAM 11 emits in steady-state output, and a wider
+# pattern would risk false-matching diagnostic lines like "Time = unknown".
+_TIME_LINE_RE = re.compile(r"^Time\s*=\s*([\d.eE+\-]+)\s*s?\s*$")
+# yPlus function-object output:
+#   patch wall y+ : min = 0.5, max = 5.0, average = 2.3
+_YPLUS_LINE_RE = re.compile(
+    r"patch\s+(\w+)\s+y\+\s*:\s*min\s*=\s*([\d.eE+\-]+)"
+    r"\s*,?\s*max\s*=\s*([\d.eE+\-]+)"
+    r"\s*,?\s*average\s*=\s*([\d.eE+\-]+)",
+    re.IGNORECASE,
+)
+
+
+def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
+    """Pure function: simpleFoam log text → structured residual + y+ data.
+
+    Returns:
+        {
+          'iterations': [{'iter': int, 'residuals': {field: initial_residual_float}}, ...],
+          'final_iter': int,
+          'y_plus': {patch_name: {'min': float, 'max': float, 'avg': float}},
+          'converged': bool,    # SIMPLE residualControl triggered early exit
+        }
+
+    Per-iteration `residuals` keyed by `Initial residual` (canonical CFD
+    convention for "did the iter make progress from where it started?").
+    """
+    iterations: List[Dict[str, Any]] = []
+    y_plus_by_patch: Dict[str, Dict[str, float]] = {}
+    current_iter: int | None = None
+    current_residuals: Dict[str, float] = {}
+    converged = False
+
+    for raw_line in log_text.splitlines():
+        line = raw_line.rstrip()
+
+        m_time = _TIME_LINE_RE.match(line)
+        if m_time:
+            if current_iter is not None and current_residuals:
+                iterations.append({"iter": current_iter, "residuals": current_residuals})
+            try:
+                current_iter = int(float(m_time.group(1)))
+            except ValueError:
+                current_iter = None
+            current_residuals = {}
+            continue
+
+        m_res = _RESIDUAL_LINE_RE.match(line)
+        if m_res:
+            field = m_res.group(1)
+            try:
+                init_res = float(m_res.group(2))
+            except ValueError:
+                continue
+            # Keep the FIRST residual reported for this field per iteration
+            # (later GAMG outer-corrector residuals would overwrite to the
+            # last; first is the canonical "initial" value).
+            current_residuals.setdefault(field, init_res)
+            continue
+
+        m_yp = _YPLUS_LINE_RE.search(line)
+        if m_yp:
+            patch_name = m_yp.group(1)
+            try:
+                y_plus_by_patch[patch_name] = {
+                    "min": float(m_yp.group(2)),
+                    "max": float(m_yp.group(3)),
+                    "avg": float(m_yp.group(4)),
+                }
+            except ValueError:
+                pass
+            continue
+
+        # SIMPLE early-termination message in OpenFOAM 11
+        lower = line.lower()
+        if (
+            "simple solution converged" in lower
+            or "convergence criteria met" in lower
+            or "reached convergence" in lower
+        ):
+            converged = True
+
+    if current_iter is not None and current_residuals:
+        iterations.append({"iter": current_iter, "residuals": current_residuals})
+
+    return {
+        "iterations": iterations,
+        "final_iter": iterations[-1]["iter"] if iterations else 0,
+        "y_plus": y_plus_by_patch,
+        "converged": converged,
+    }
+
+
+def _compute_gate_from_residuals(
+    parsed: Dict[str, Any],
+    manifest: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Pure function: parsed log + manifest → gate dict.
+
+    Status logic:
+      - no iterations parsed → BLOCKED (something is wrong with the run)
+      - SIMPLE converged early OR every target field's final residual ≤ target → PASS
+      - otherwise → FAIL with the list of fields that missed targets
+
+    The manifest's `residual_targets` may use OpenFOAM-vector naming
+    (`U`) or split-component naming (`Ux`, `Uy`, `Uz`). Both are
+    accepted — the gate accepts a target hit if EITHER the combined OR
+    every present split component meets it.
+    """
+    contract = manifest.get("solver_contract", {})
+    targets = contract.get("residual_targets", {})
+    max_iter = int(contract.get("max_iterations", 500))
+
+    if not parsed["iterations"]:
+        return {
+            "status": "BLOCKED",
+            "summary": "simpleFoam log contained zero parseable iterations.",
+            "details": {
+                "execution": "attempted",
+                "real_solver_invoked": True,
+                "reason": "no_iterations_in_log",
+                "next_step": "Inspect artifacts/solver.log for error messages.",
+            },
+        }
+
+    final = parsed["iterations"][-1]["residuals"]
+
+    # Field-by-field comparison. Targets may name combined `U` or split `Ux,Uy`.
+    failed = []
+    checked = []
+    for tgt_field, tgt_val in targets.items():
+        actual = final.get(tgt_field)
+        if actual is None:
+            # Try common synonyms: target 'U' but log has 'Ux'+'Uy'+'Uz'
+            if tgt_field == "U":
+                comps = [final.get(c) for c in ("Ux", "Uy", "Uz") if final.get(c) is not None]
+                if comps:
+                    actual = max(comps)
+            # Else just skip — manifest declared a field simpleFoam didn't solve
+        if actual is None:
+            continue
+        checked.append(tgt_field)
+        if actual > float(tgt_val):
+            failed.append({
+                "field": tgt_field,
+                "final_residual": actual,
+                "target": float(tgt_val),
+            })
+
+    # R15-F-02 fix: honesty rule — refuse PASS if not a single target field
+    # was actually present in the log. The pre-R15 code would declare PASS
+    # whenever SIMPLE's "solution converged" message appeared, even if every
+    # manifest target named a field the solver never solved (manifest/log
+    # field-name drift). That's "PASS without checking anything" — the
+    # exact failure mode the trust harness exists to prevent.
+    if targets and not checked:
+        return {
+            "status": "BLOCKED",
+            "summary": (
+                "simpleFoam converged but none of the manifest's target fields "
+                f"({sorted(targets.keys())}) appeared in the log."
+            ),
+            "details": {
+                "execution": "real",
+                "real_solver_invoked": True,
+                "reason": "no_target_fields_in_log",
+                "manifest_targets": sorted(targets.keys()),
+                "fields_in_log": sorted(final.keys()),
+                "next_step": (
+                    "Check `solver_contract.residual_targets` field names "
+                    "against actual simpleFoam residual lines. OpenFOAM 11 "
+                    "emits split components (Ux, Uy, Uz) but the manifest "
+                    "may name combined `U`; this gate already maps `U` → "
+                    "max(Ux,Uy,Uz), but other names must match exactly."
+                ),
+                "y_plus": parsed["y_plus"],
+            },
+        }
+
+    converged = parsed["converged"] or (checked and not failed)
+
+    if not converged:
+        return {
+            "status": "FAIL",
+            "summary": (
+                f"simpleFoam ran {parsed['final_iter']}/{max_iter} iters; "
+                f"{len(failed)}/{len(checked)} field(s) did not reach residual target."
+            ),
+            "details": {
+                "execution": "real",
+                "real_solver_invoked": True,
+                "reason": "residual_targets_not_met",
+                "final_iter": parsed["final_iter"],
+                "max_iter": max_iter,
+                "failed_fields": failed,
+                "checked_fields": checked,
+                "y_plus": parsed["y_plus"],
+            },
+        }
+
+    return {
+        "status": "PASS",
+        "summary": (
+            f"simpleFoam converged at iter {parsed['final_iter']} "
+            f"(all {len(checked)} field residuals ≤ target)."
+        ),
+        "details": {
+            "execution": "real",
+            "real_solver_invoked": True,
+            "final_iter": parsed["final_iter"],
+            "max_iter": max_iter,
+            "final_residuals": final,
+            "checked_fields": checked,
+            "y_plus": parsed["y_plus"],
+        },
+    }
+
+
+def _write_residuals_csv(parsed: Dict[str, Any], out_path: Path) -> None:
+    """Write iteration-by-iteration residuals to `out_path` as CSV.
+
+    Columns: `iter,<sorted field names>`. Empty cells for missing fields.
+    """
+    fields = set()
+    for it in parsed["iterations"]:
+        fields.update(it["residuals"].keys())
+    sorted_fields = sorted(fields)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="") as f:
+        f.write("iter," + ",".join(sorted_fields) + "\n")
+        for it in parsed["iterations"]:
+            row = [str(it["iter"])]
+            for fld in sorted_fields:
+                v = it["residuals"].get(fld)
+                row.append(f"{v:.6e}" if isinstance(v, float) else "")
+            f.write(",".join(row) + "\n")
+
+
+# ---------- M4.1: checkMesh invocation + parser ----------
+#
+# checkMesh runs inside the same OpenFOAM container after blockMesh and before
+# simpleFoam. Its output is canonical, single-mesh quality evidence — the audit
+# gate (`audit/mesh.py`) reads `artifacts/mesh_quality.json` (this layer's
+# persisted parse) rather than re-running the binary, so the gate stays cheap
+# and the truth-source (the container output) is captured exactly once.
+#
+# Honesty rule: if checkMesh OS-errors or times out we DO NOT silently treat the
+# mesh as OK. We persist `checkmesh_status: blocked` so the audit gate surfaces
+# BLOCKED (not PASS) on the same evidence.
+
+
+# checkMesh canonical lines (verified against openfoam11-paraview510 on
+# 2026-05-21, BFS live case):
+#
+#   Mesh stats
+#       points:           23682
+#       faces:            46640
+#       internal faces:   34864
+#       cells:            11600
+#       boundary patches: 6
+#
+#   Mesh non-orthogonality Max: 0 average: 0
+#   Max skewness = 8.68421e-14 OK.
+#   Max aspect ratio = 22.2268 OK.
+#   Max cell openness = 2.5e-16 OK.
+#   Mesh OK.
+#
+# Failure path:
+#   ***Number of incorrectly-oriented faces: 23 ...
+#   Failed 2 mesh checks.
+
+_CM_POINTS_RE = re.compile(r"^\s*points\s*:\s*(\d+)\s*$")
+_CM_FACES_RE = re.compile(r"^\s*faces\s*:\s*(\d+)\s*$")
+_CM_INTERNAL_FACES_RE = re.compile(r"^\s*internal faces\s*:\s*(\d+)\s*$")
+_CM_CELLS_RE = re.compile(r"^\s*cells\s*:\s*(\d+)\s*$")
+_CM_BOUNDARY_PATCHES_RE = re.compile(r"^\s*boundary patches\s*:\s*(\d+)\s*$")
+
+# `Mesh non-orthogonality Max: 1.23 average: 0.45`
+_CM_NONORTHO_RE = re.compile(
+    r"Mesh non-orthogonality\s+Max\s*:\s*([\d.eE+\-]+)\s+average\s*:\s*([\d.eE+\-]+)"
+)
+# `Max skewness = 8.68421e-14 OK.` (or `... FAILED.`)
+_CM_SKEWNESS_RE = re.compile(r"Max skewness\s*=\s*([\d.eE+\-]+)")
+# `Max aspect ratio = 22.2268 OK.`
+_CM_ASPECT_RE = re.compile(r"Max aspect ratio\s*=\s*([\d.eE+\-]+)")
+# `Max cell openness = 2.5e-16 OK.`
+_CM_OPENNESS_RE = re.compile(r"Max cell openness\s*=\s*([\d.eE+\-]+)")
+# `Failed 2 mesh checks.` or `Failed N mesh checks.`
+_CM_FAILED_CHECKS_RE = re.compile(r"^Failed\s+(\d+)\s+mesh checks\.")
+
+
+def _parse_check_mesh_log(log_text: str) -> Dict[str, Any]:
+    """Pure function: checkMesh log text → structured quality data.
+
+    Extracts only the fields the mesh audit gate needs to decide PASS /
+    FAIL against `mesh_contract.quality_thresholds` (max_non_orthogonality,
+    max_skewness, max_aspect_ratio) plus topology counts for the
+    `mesh_report.json` summary line.
+
+    Returns a dict that is JSON-serializable. Missing fields are absent
+    from the dict (NOT zero-filled) — the audit gate must be able to
+    distinguish "checkMesh reported 0" from "checkMesh did not report this
+    line" and the latter is honest about the parse gap.
+
+    The `overall_mesh_ok` boolean comes from the presence of the terminal
+    `Mesh OK.` line. If `Failed N mesh checks.` appears we report it under
+    `failed_checks_count` and set `overall_mesh_ok = False`.
+    """
+    stats: Dict[str, int] = {}
+    geometry: Dict[str, float] = {}
+    overall_mesh_ok = False
+    failed_checks_count = 0
+
+    for raw_line in log_text.splitlines():
+        line = raw_line.rstrip()
+
+        for key, pat in (
+            ("points", _CM_POINTS_RE),
+            ("faces", _CM_FACES_RE),
+            ("internal_faces", _CM_INTERNAL_FACES_RE),
+            ("cells", _CM_CELLS_RE),
+            ("boundary_patches", _CM_BOUNDARY_PATCHES_RE),
+        ):
+            m = pat.match(line)
+            if m:
+                try:
+                    stats[key] = int(m.group(1))
+                except ValueError:
+                    pass
+                break
+
+        m = _CM_NONORTHO_RE.search(line)
+        if m:
+            try:
+                geometry["max_non_orthogonality"] = float(m.group(1))
+                geometry["avg_non_orthogonality"] = float(m.group(2))
+            except ValueError:
+                pass
+
+        m = _CM_SKEWNESS_RE.search(line)
+        if m:
+            try:
+                geometry["max_skewness"] = float(m.group(1))
+            except ValueError:
+                pass
+
+        m = _CM_ASPECT_RE.search(line)
+        if m:
+            try:
+                geometry["max_aspect_ratio"] = float(m.group(1))
+            except ValueError:
+                pass
+
+        m = _CM_OPENNESS_RE.search(line)
+        if m:
+            try:
+                geometry["max_cell_openness"] = float(m.group(1))
+            except ValueError:
+                pass
+
+        m = _CM_FAILED_CHECKS_RE.match(line)
+        if m:
+            try:
+                failed_checks_count = int(m.group(1))
+            except ValueError:
+                pass
+
+        # Terminal `Mesh OK.` (must be on its own line, optionally indented;
+        # `OK.` suffix on per-check lines like "Max skewness ... OK." is
+        # explicitly NOT matched here).
+        if line.strip() == "Mesh OK.":
+            overall_mesh_ok = True
+
+    return {
+        "stats": stats,
+        "geometry": geometry,
+        "overall_mesh_ok": overall_mesh_ok,
+        "failed_checks_count": failed_checks_count,
+    }
+
+
+def _persist_mesh_quality(
+    case_dir: Path,
+    *,
+    invoked: bool,
+    returncode: int | None,
+    log_relative: str | None,
+    parsed: Dict[str, Any] | None,
+    blocked_reason: str | None = None,
+    blocked_detail: str | None = None,
+) -> Path:
+    """Write `artifacts/mesh_quality.json` — the single source of truth the
+    mesh audit gate reads. Mirrors the `solver_gate.json` pattern (M2.3a
+    fix): the binary's output is captured once, parsed once, then persisted
+    so the audit layer never re-invokes the binary nor re-parses on its own.
+
+    Returns the path written.
+    """
+    art = case_dir / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    out_path = art / "mesh_quality.json"
+
+    if not invoked or blocked_reason is not None:
+        payload: Dict[str, Any] = {
+            "checkmesh_invoked": invoked,
+            "checkmesh_status": "blocked",
+            "checkmesh_returncode": returncode,
+            "reason": blocked_reason or "not_invoked",
+        }
+        if blocked_detail:
+            payload["detail"] = blocked_detail
+        if log_relative:
+            payload["log"] = log_relative
+    else:
+        payload = {
+            "checkmesh_invoked": True,
+            "checkmesh_status": "ok" if parsed and parsed["overall_mesh_ok"] else "failed",
+            "checkmesh_returncode": returncode,
+            "log": log_relative,
+        }
+        if parsed:
+            payload.update({
+                "stats": parsed["stats"],
+                "geometry": parsed["geometry"],
+                "overall_mesh_ok": parsed["overall_mesh_ok"],
+                "failed_checks_count": parsed["failed_checks_count"],
+            })
+
+    try:
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except OSError:
+        # Same fail-tolerant posture as `_write_gate` in audit/solver.py
+        # (R17-F-02): a non-writable artifacts dir must not crash the run.
+        pass
+    return out_path
+
+
+# ---------- M5.1: polyMesh/boundary parser + persistence ----------
+#
+# blockMesh writes `constant/polyMesh/boundary` listing every patch in the
+# realized mesh. This is the canonical, runtime-truth source for the
+# geometry audit: the manifest's `geometry_contract.required_patches` is
+# what the case PROMISES; this file is what the case actually DELIVERED.
+#
+# Same single-source-of-truth pattern as M4 (mesh_quality.json): backend
+# parses + persists; audit reads. No backend invocation needed (blockMesh
+# already wrote the file); the persistence step is pure side-effect on
+# top of an existing artifact, but it goes through the same fail-tolerant
+# wrapper as mesh_quality.json so the audit gate has a single uniform
+# JSON to consume.
+
+
+# Per OpenFOAM polyMesh/boundary grammar:
+#
+#   6
+#   (
+#       inlet
+#       {
+#           type            patch;
+#           nFaces          50;
+#           startFace       22960;
+#       }
+#       topWall
+#       {
+#           type            wall;
+#           inGroups        List<word> 1(wall);
+#           nFaces          160;
+#           startFace       23090;
+#       }
+#       ...
+#   )
+#
+# State machine: skip header → see `N\n(` → loop {word → `{...}` → next word}
+# until `)`. Comments `//` and `/* */` stripped first.
+
+_BOUNDARY_COMMENT_LINE_RE = re.compile(r"//[^\n]*")
+_BOUNDARY_COMMENT_BLOCK_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+_BOUNDARY_TYPE_RE = re.compile(r"\btype\s+(\w+)\s*;")
+_BOUNDARY_NFACES_RE = re.compile(r"\bnFaces\s+(\d+)\s*;")
+_BOUNDARY_STARTFACE_RE = re.compile(r"\bstartFace\s+(\d+)\s*;")
+_BOUNDARY_OPEN_RE = re.compile(r"^\s*(\d+)\s*\(\s*$", re.MULTILINE)
+
+
+def _strip_foam_comments(text: str) -> str:
+    """Remove C++ // line comments and /* */ block comments. Same family of
+    helpers as cli_doctor._strip_of_comments (M3.3); kept local to the
+    backend so the layering stays clean (backends/ doesn't depend on
+    cli_doctor)."""
+    text = _BOUNDARY_COMMENT_BLOCK_RE.sub("", text)
+    text = _BOUNDARY_COMMENT_LINE_RE.sub("", text)
+    return text
+
+
+def _parse_polymesh_boundary(text: str) -> Dict[str, Dict[str, Any]]:
+    """Pure function: polyMesh/boundary content → {patch: {type, nFaces, startFace}}.
+
+    Returns an empty dict on malformed input (NOT raising) — the
+    persistence layer surfaces this as `geometry_quality.checkmesh_status:
+    failed` style and the audit gate FAIL's. Same robustness posture as
+    `_parse_check_mesh_log`.
+
+    Each patch dict is keyed:
+      - `type`        — string (e.g. "patch", "wall", "empty", "symmetryPlane")
+      - `nFaces`      — int (may be 0 if not present)
+      - `startFace`   — int (may be 0 if not present)
+
+    Patch names whose containing block has no `type` field are skipped —
+    OpenFOAM does not accept untyped patches, so an entry without `type`
+    is malformed and ignoring it surfaces the structural gap to the
+    audit gate as "patch missing".
+    """
+    clean = _strip_foam_comments(text)
+
+    # Find the `N\n(` opener. Skip everything before it (FoamFile header).
+    m = _BOUNDARY_OPEN_RE.search(clean)
+    if not m:
+        return {}
+
+    body_start = m.end()
+    # Walk forward, balancing `{` / `}` to find each patch's block. The
+    # outer container's closing `)` ends the list.
+    patches: Dict[str, Dict[str, Any]] = {}
+    i = body_start
+    n = len(clean)
+
+    def _skip_ws(j: int) -> int:
+        while j < n and clean[j].isspace():
+            j += 1
+        return j
+
+    while True:
+        i = _skip_ws(i)
+        if i >= n or clean[i] == ")":
+            break
+        # Read a word (patch name): [A-Za-z_][A-Za-z0-9_]*
+        name_start = i
+        while i < n and (clean[i].isalnum() or clean[i] == "_"):
+            i += 1
+        if i == name_start:
+            # Not a name character — stop to avoid infinite loop on
+            # unexpected token.
+            break
+        name = clean[name_start:i]
+
+        i = _skip_ws(i)
+        if i >= n or clean[i] != "{":
+            # Malformed: expected `{` after patch name. Skip the rest.
+            break
+
+        # Balance braces to find the block end.
+        depth = 1
+        block_start = i + 1
+        i += 1
+        while i < n and depth > 0:
+            if clean[i] == "{":
+                depth += 1
+            elif clean[i] == "}":
+                depth -= 1
+            i += 1
+        if depth != 0:
+            # Unclosed block — refuse to half-parse it.
+            break
+        block_text = clean[block_start:i - 1]
+
+        # Extract fields from the block.
+        type_m = _BOUNDARY_TYPE_RE.search(block_text)
+        if type_m is None:
+            continue
+        n_faces = 0
+        sf = 0
+        nf_m = _BOUNDARY_NFACES_RE.search(block_text)
+        if nf_m:
+            try:
+                n_faces = int(nf_m.group(1))
+            except ValueError:
+                pass
+        sf_m = _BOUNDARY_STARTFACE_RE.search(block_text)
+        if sf_m:
+            try:
+                sf = int(sf_m.group(1))
+            except ValueError:
+                pass
+        patches[name] = {
+            "type": type_m.group(1),
+            "nFaces": n_faces,
+            "startFace": sf,
+        }
+
+    return patches
+
+
+def _persist_geometry_quality(
+    case_dir: Path,
+    *,
+    patches: Dict[str, Dict[str, Any]] | None,
+    boundary_relative: str | None,
+    blocked_reason: str | None = None,
+    blocked_detail: str | None = None,
+) -> Path:
+    """Write `artifacts/geometry_quality.json` — single source of truth for
+    the geometry audit gate. Mirrors `_persist_mesh_quality` (M4.1).
+
+    Returns the path written.
+    """
+    art = case_dir / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    out_path = art / "geometry_quality.json"
+
+    if blocked_reason is not None or patches is None:
+        payload: Dict[str, Any] = {
+            "polymesh_boundary_parsed": False,
+            "status": "blocked",
+            "reason": blocked_reason or "unparsed",
+        }
+        if blocked_detail:
+            payload["detail"] = blocked_detail
+        if boundary_relative:
+            payload["boundary_file"] = boundary_relative
+    else:
+        payload = {
+            "polymesh_boundary_parsed": True,
+            "status": "ok" if patches else "empty",
+            "boundary_file": boundary_relative,
+            "patches": patches,
+            "patch_count": len(patches),
+        }
+
+    try:
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except OSError:
+        # Same fail-tolerant posture as `_write_gate` (R17-F-02) and
+        # `_persist_mesh_quality` (M4.1).
+        pass
+    return out_path
+
+
+# ---------- M6.1: 0/<field> boundary parser + bc_quality.json persistence ----------
+#
+# Each `0/<field>` file (OpenFOAM initial+boundary conditions) carries a
+# `boundaryField { ... }` block listing the BC type for every patch in the
+# mesh. The audit gate compares manifest's `bc_contract` declarations to
+# what these files realize.
+#
+# Same single-source-of-truth pattern as M4 / M5: backend parses + persists;
+# audit reads. The 0/ files exist BEFORE blockMesh runs (they are user
+# inputs), but persistence happens inside `run()` to keep the artifact
+# producer single — the audit gate is a pure reader.
+
+
+_BOUNDARY_FIELD_OPEN_RE = re.compile(r"\bboundaryField\s*\{")
+
+# M7.1: numeric tokens — sign, digits, decimal, scientific notation.
+_NUM_TOKEN = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
+# `value uniform <scalar>;`  e.g. `value uniform 0.293;` or `value uniform 0;`
+_VALUE_UNIFORM_SCALAR_RE = re.compile(
+    rf"\bvalue\s+uniform\s+({_NUM_TOKEN})\s*;"
+)
+# `value uniform (<x> <y> <z>);`  e.g. `value uniform (44.2 0 0);`
+_VALUE_UNIFORM_VECTOR_RE = re.compile(
+    rf"\bvalue\s+uniform\s+\(\s*({_NUM_TOKEN})\s+({_NUM_TOKEN})\s+({_NUM_TOKEN})\s*\)\s*;"
+)
+# M7.1: scalar BC parameters inside a patch block. Whitelist named
+# scalars the audit gate compares to manifest declarations. Adding a
+# parameter here is the schema-extension point — keep it conservative.
+_KNOWN_SCALAR_PARAMS = ("intensity", "mixingLength", "value")
+# Pre-compile per-name extractor regexes. We do NOT use `_KNOWN_SCALAR_PARAMS`
+# blindly with a generic regex because `value` has two shapes (scalar vs
+# vector) and is handled separately above.
+_SCALAR_PARAM_RES = {
+    name: re.compile(rf"\b{re.escape(name)}\s+({_NUM_TOKEN})\s*;")
+    for name in ("intensity", "mixingLength")
+}
+
+
+def _parse_field_boundary_field(text: str) -> Dict[str, Dict[str, Any]]:
+    """Pure function: 0/<field> file content → {patch_name: {type, value_scalar?, value_vector?, params?}}.
+
+    Locates the `boundaryField { ... }` block and walks each `patch_name
+    { type X; ... }` entry inside it. Returns an empty dict if the block
+    is missing or malformed — same robustness posture as
+    `_parse_polymesh_boundary`.
+
+    Per-patch dict shape (M7.1, additive to M6.1):
+      - `type`         — string (always present; entry skipped if absent)
+      - `value_scalar` — float, if `value uniform <scalar>;` matched
+      - `value_vector` — [x, y, z], if `value uniform (X Y Z);` matched
+      - `params`       — dict of scalar named parameters extracted from
+                         the BC block (currently `intensity`, `mixingLength`)
+                         Only present when ≥1 known scalar param matched.
+
+    Mutually exclusive: a patch block has EITHER value_scalar OR
+    value_vector (or neither for BCs that don't carry a value, like
+    `zeroGradient` or `noSlip`).
+    """
+    clean = _strip_foam_comments(text)
+    open_m = _BOUNDARY_FIELD_OPEN_RE.search(clean)
+    if not open_m:
+        return {}
+
+    # Locate the closing brace of the outer `boundaryField { ... }` block.
+    i = open_m.end()
+    depth = 1
+    block_start = i
+    n = len(clean)
+    while i < n and depth > 0:
+        if clean[i] == "{":
+            depth += 1
+        elif clean[i] == "}":
+            depth -= 1
+        i += 1
+    if depth != 0:
+        return {}
+    inner = clean[block_start:i - 1]
+
+    # Walk the inner block: name → `{ type X; }` pairs. Mirrors the patch
+    # parser inside `_parse_polymesh_boundary` but lighter (no nFaces /
+    # startFace lookup needed for BC files).
+    patches: Dict[str, Dict[str, Any]] = {}
+    j = 0
+    m = len(inner)
+
+    def _skip_ws(k: int) -> int:
+        while k < m and inner[k].isspace():
+            k += 1
+        return k
+
+    while True:
+        j = _skip_ws(j)
+        if j >= m:
+            break
+        name_start = j
+        while j < m and (inner[j].isalnum() or inner[j] == "_"):
+            j += 1
+        if j == name_start:
+            break
+        name = inner[name_start:j]
+
+        j = _skip_ws(j)
+        if j >= m or inner[j] != "{":
+            break
+
+        depth = 1
+        inner_start = j + 1
+        j += 1
+        while j < m and depth > 0:
+            if inner[j] == "{":
+                depth += 1
+            elif inner[j] == "}":
+                depth -= 1
+            j += 1
+        if depth != 0:
+            break
+        block_text = inner[inner_start:j - 1]
+
+        type_m = _BOUNDARY_TYPE_RE.search(block_text)
+        if type_m is None:
+            continue
+
+        patch_entry: Dict[str, Any] = {"type": type_m.group(1)}
+
+        # M7.1: extract `value` if present. Vector pattern is tried
+        # first because a value-uniform-vector string also contains the
+        # token `value uniform <number>` as a prefix; matching the
+        # scalar pattern on it would yield a misleading scalar=44.2.
+        vec_m = _VALUE_UNIFORM_VECTOR_RE.search(block_text)
+        if vec_m:
+            try:
+                patch_entry["value_vector"] = [
+                    float(vec_m.group(1)),
+                    float(vec_m.group(2)),
+                    float(vec_m.group(3)),
+                ]
+            except ValueError:
+                pass
+        else:
+            sca_m = _VALUE_UNIFORM_SCALAR_RE.search(block_text)
+            if sca_m:
+                try:
+                    patch_entry["value_scalar"] = float(sca_m.group(1))
+                except ValueError:
+                    pass
+
+        # M7.1: extract whitelisted scalar params (intensity, mixingLength).
+        # Other scalar fields in a BC block are ignored — the manifest
+        # only references this whitelist today, and adding new params is
+        # an intentional schema-extension point.
+        extracted_params: Dict[str, float] = {}
+        for pname, pre in _SCALAR_PARAM_RES.items():
+            pm = pre.search(block_text)
+            if pm:
+                try:
+                    extracted_params[pname] = float(pm.group(1))
+                except ValueError:
+                    pass
+        if extracted_params:
+            patch_entry["params"] = extracted_params
+
+        patches[name] = patch_entry
+
+    return patches
+
+
+def _persist_bc_quality(
+    case_dir: Path,
+    *,
+    fields: Dict[str, Dict[str, Any]] | None,
+    expected_fields: List[str],
+    blocked_reason: str | None = None,
+    blocked_detail: str | None = None,
+) -> Path:
+    """Write `artifacts/bc_quality.json` — single source of truth for the
+    BC audit gate. Mirrors `_persist_mesh_quality` (M4.1) and
+    `_persist_geometry_quality` (M5.1).
+
+    `fields` shape: {field_name: {file: rel_path, parsed: bool, patches: {...},
+                                  missing: bool (when file absent)}}.
+    `expected_fields` is the ordered list of fields we tried to parse
+    (U, p, then `turbulence_fields` from the manifest).
+    """
+    art = case_dir / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    out_path = art / "bc_quality.json"
+
+    if blocked_reason is not None or fields is None:
+        payload: Dict[str, Any] = {
+            "bc_parsing_status": "blocked",
+            "reason": blocked_reason or "unparsed",
+        }
+        if blocked_detail:
+            payload["detail"] = blocked_detail
+        if expected_fields:
+            payload["expected_fields"] = expected_fields
+    else:
+        payload = {
+            "bc_parsing_status": "ok",
+            "expected_fields": expected_fields,
+            "fields_present": sorted(
+                fname for fname, fdata in fields.items()
+                if fdata.get("parsed", False)
+            ),
+            "fields_missing": sorted(
+                fname for fname, fdata in fields.items()
+                if not fdata.get("parsed", False) and fdata.get("missing", False)
+            ),
+            "fields": fields,
+        }
+
+    try:
+        out_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except OSError:
+        # Same fail-tolerant posture as `_write_gate` (R17-F-02),
+        # `_persist_mesh_quality`, `_persist_geometry_quality`.
+        pass
+    return out_path
+
+
+def _collect_and_persist_bc(
+    case_dir: Path,
+    manifest: Dict[str, Any],
+) -> None:
+    """Walk the expected `0/<field>` files, parse each, and persist
+    `artifacts/bc_quality.json`. Called from `run()` after blockMesh
+    succeeds.
+
+    Field selection: always `U` and `p` (incompressible RANS canonical),
+    plus any name in `manifest.bc_contract.turbulence_fields`. The 0/
+    files exist before any solver runs (user inputs), so parser failures
+    here surface as `fields_missing` in the JSON — not BLOCKED.
+    """
+    bc_contract = manifest.get("bc_contract", {}) or {}
+    turb_fields = list(bc_contract.get("turbulence_fields", []) or [])
+
+    # Canonical incompressible RANS fields. Deduplicate while preserving
+    # order: U, p first, then turbulence fields in manifest order.
+    seen: set = set()
+    expected: List[str] = []
+    for fname in ["U", "p", *turb_fields]:
+        if fname in seen:
+            continue
+        seen.add(fname)
+        expected.append(fname)
+
+    fields: Dict[str, Dict[str, Any]] = {}
+    for fname in expected:
+        fpath = case_dir / "0" / fname
+        rel = str(Path("0") / fname)
+        if not fpath.is_file():
+            fields[fname] = {
+                "file": rel,
+                "parsed": False,
+                "missing": True,
+            }
+            continue
+        try:
+            text = fpath.read_text()
+        except OSError as e:
+            fields[fname] = {
+                "file": rel,
+                "parsed": False,
+                "missing": False,
+                "read_error": str(e),
+            }
+            continue
+        parsed = _parse_field_boundary_field(text)
+        if not parsed:
+            # File exists but has no parseable `boundaryField` block —
+            # surface this as parsed=False so the audit can FAIL on it.
+            fields[fname] = {
+                "file": rel,
+                "parsed": False,
+                "missing": False,
+                "parse_error": "no_boundary_field_block_found",
+            }
+            continue
+        fields[fname] = {
+            "file": rel,
+            "parsed": True,
+            "patches": parsed,
+        }
+
+    _persist_bc_quality(case_dir, fields=fields, expected_fields=expected)
+
+
+# ---------- main entry point ----------
+
+
+def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """Phase 1 step 2c: real `docker run` of blockMesh + simpleFoam.
+
+    Returns BLOCKED if the environment isn't ready (depth-1 + recursive
+    case_dir audit) OR if blockMesh / simpleFoam fail. Returns PASS / FAIL
+    based on residual convergence against `manifest.solver_contract.residual_targets`
+    once the run completes.
+
+    Writes:
+      - artifacts/solver.log         (combined stdout+stderr of simpleFoam)
+      - artifacts/residuals.csv      (iter, <fields...> per row)
+
+    Real solver invocation is gated on every env probe passing, including
+    the R-17 recursive symlink walk over the case dir.
+    """
+    image = manifest.get("solver_docker_image", DEFAULT_IMAGE)
+
+    # R10-F-02 fix: belt and suspenders. The case_manifest schema now
+    # constrains `solver_docker_image` to a non-empty string, so a manifest
+    # that hits this branch has either failed validation already OR
+    # set the field via a non-schema-validated path. Either way, surface
+    # it as a controlled BLOCKED rather than crashing inside subprocess.
+    if not isinstance(image, str) or not image.strip():
+        return {
+            "status": "BLOCKED",
+            "summary": "manifest.solver_docker_image is not a non-empty string.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "manifest_invalid_solver_docker_image",
+                "value": repr(image),
+                "next_step": (
+                    "Either remove `solver_docker_image` from the manifest "
+                    "(default is used) or set it to a non-empty string."
+                ),
+            },
+        }
+
+    # R15-F-03 fix: reject anything that doesn't look like a Docker reference
+    # so a manifest can never inject extra docker-run flags via the image
+    # argv slot (e.g. `--privileged alpine`, `-v /etc:/host alpine`).
+    if not _is_valid_docker_image_name(image):
+        return {
+            "status": "BLOCKED",
+            "summary": "manifest.solver_docker_image is not a valid Docker image reference.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "manifest_invalid_solver_docker_image",
+                "value": repr(image),
+                "next_step": (
+                    "Image must start with alphanumeric and contain only "
+                    "[a-zA-Z0-9._:/@-]. No whitespace, no leading dash, "
+                    "no shell metacharacters."
+                ),
+            },
+        }
+
+    ok, reason = _docker_available()
+    if not ok:
+        return {
+            "status": "BLOCKED",
+            "summary": "Docker is not available for OpenFOAM execution.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "docker_not_available",
+                "detail": reason,
+                "next_step": (
+                    "Install Docker Desktop and start the daemon. "
+                    "On macOS: https://www.docker.com/products/docker-desktop. "
+                    "Then retry `cfdtrust run`."
+                ),
+            },
+        }
+
+    if not _image_present(image):
+        return {
+            "status": "BLOCKED",
+            "summary": f"OpenFOAM Docker image '{image}' is not pulled locally.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "openfoam_image_not_pulled",
+                "image": image,
+                "next_step": (
+                    f"Run `docker pull {image}` once (multi-GB download), "
+                    f"then retry `cfdtrust run`."
+                ),
+            },
+        }
+
+    ok, reason = _is_openfoam_compatible_case_dir(case_dir)
+    if not ok:
+        return {
+            "status": "BLOCKED",
+            "summary": "Case directory does not look like an OpenFOAM case.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "case_dir_not_openfoam_compatible",
+                "detail": reason,
+                "next_step": (
+                    "Phase 1 step 2 will scaffold manifest → OpenFOAM-case translation. "
+                    "Manual workaround: provide system/, constant/, and 0/ directories "
+                    "alongside case_manifest.yaml."
+                ),
+            },
+        }
+
+    # All env checks passed — invoke OpenFOAM for real.
+    artifacts_dir = case_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    log_path = artifacts_dir / "solver.log"
+    mesh_log_path = artifacts_dir / "mesh_quality.log"
+    residuals_csv = artifacts_dir / "residuals.csv"
+    timeout_s = _resolve_solver_timeout()
+
+    # --- blockMesh (idempotent in practice — re-runs are safe) ---
+    rc, bm_stdout, bm_stderr = _run_docker_command(
+        "blockMesh", case_dir, image, timeout=timeout_s,
+    )
+    if rc != 0:
+        # R15-F-04 fix: distinguish OSError / timeout / real failure for
+        # blockMesh too. Even though blockMesh isn't the solver,
+        # `docker_invocation_failed` is still a different operational
+        # condition from "blockMesh dict syntax error".
+        if rc == -1 and "OFA-OSERROR" in (bm_stderr or ""):
+            return {
+                "status": "BLOCKED",
+                "summary": "docker invocation failed before blockMesh could start.",
+                "details": {
+                    "execution": "skipped",
+                    "real_solver_invoked": False,
+                    "reason": "docker_invocation_failed",
+                    "detail": bm_stderr.strip(),
+                    "next_step": (
+                        "Check Docker daemon health and retry `cfdtrust run`."
+                    ),
+                },
+            }
+        if rc == -1 and "OFA-TIMEOUT" in (bm_stderr or ""):
+            return {
+                "status": "BLOCKED",
+                "summary": f"blockMesh timed out after {timeout_s}s.",
+                "details": {
+                    "execution": "attempted",
+                    "real_solver_invoked": False,
+                    "reason": "blockmesh_timed_out",
+                    "timeout_s": timeout_s,
+                },
+            }
+        return {
+            "status": "BLOCKED",
+            "summary": f"blockMesh failed (rc={rc}). See solver.log for diagnostics.",
+            "details": {
+                "execution": "attempted",
+                "real_solver_invoked": False,
+                "reason": "blockmesh_failed",
+                "returncode": rc,
+                "stderr_tail": (bm_stderr or bm_stdout or "")[-2000:],
+                "next_step": (
+                    "Inspect blockMeshDict for syntax errors; re-run "
+                    "`docker run ... blockMesh` manually for full output."
+                ),
+            },
+        }
+
+    # --- M5.1: parse + persist polyMesh/boundary ---
+    # blockMesh just wrote constant/polyMesh/; the boundary file is the
+    # canonical source of truth for the geometry audit gate. Persist the
+    # parsed dict before checkMesh runs so a checkMesh OSError/timeout
+    # doesn't lose the geometry evidence.
+    boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
+    if boundary_path.is_file():
+        try:
+            b_text = boundary_path.read_text()
+            b_parsed = _parse_polymesh_boundary(b_text)
+            _persist_geometry_quality(
+                case_dir,
+                patches=b_parsed,
+                boundary_relative=str(boundary_path.relative_to(case_dir)),
+            )
+        except OSError as e:
+            _persist_geometry_quality(
+                case_dir,
+                patches=None,
+                boundary_relative=str(boundary_path.relative_to(case_dir)),
+                blocked_reason="boundary_file_unreadable",
+                blocked_detail=str(e),
+            )
+    else:
+        # blockMesh exited 0 but didn't write the boundary file — anomalous
+        # but possible (e.g. a custom blockMeshDict that runs but produces
+        # an unusable mesh). Record as blocked so the audit gate surfaces it.
+        _persist_geometry_quality(
+            case_dir,
+            patches=None,
+            boundary_relative=None,
+            blocked_reason="boundary_file_missing",
+            blocked_detail=str(boundary_path),
+        )
+
+    # --- M6.1: parse + persist 0/<field> BC files ---
+    # User-supplied 0/ files; persistence is uniform regardless of which
+    # files are present so the audit gate can FAIL on missing/malformed.
+    try:
+        _collect_and_persist_bc(case_dir, manifest)
+    except OSError:
+        # Same fail-tolerant posture as the other persistence layers; do
+        # not let an OSError here lose the rest of the run's evidence.
+        pass
+
+    # --- checkMesh (M4.1) ---
+    # Runs after blockMesh on the just-generated polyMesh; output is the
+    # single source of truth for the mesh audit gate (`audit/mesh.py`).
+    # checkMesh almost never fails on rc — it exits 0 even with bad quality
+    # and prints `Failed N mesh checks.` instead. We capture the log, parse,
+    # and persist mesh_quality.json regardless of outcome so the audit gate
+    # can decide PASS/FAIL on evidence (not on rc).
+    cm_rc, cm_stdout, cm_stderr = _run_docker_command(
+        "checkMesh", case_dir, image, timeout=timeout_s,
+    )
+
+    cm_combined = cm_stdout
+    if cm_stderr:
+        cm_combined = f"{cm_combined}\n--- STDERR ---\n{cm_stderr}\n"
+    try:
+        mesh_log_path.write_text(cm_combined)
+        mesh_log_rel: str | None = str(mesh_log_path.relative_to(case_dir))
+    except OSError:
+        mesh_log_rel = None
+
+    if cm_rc == -1 and "OFA-OSERROR" in (cm_stderr or ""):
+        _persist_mesh_quality(
+            case_dir,
+            invoked=False,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=None,
+            blocked_reason="docker_invocation_failed",
+            blocked_detail=(cm_stderr or "").strip(),
+        )
+    elif cm_rc == -1 and "OFA-TIMEOUT" in (cm_stderr or ""):
+        _persist_mesh_quality(
+            case_dir,
+            invoked=True,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=None,
+            blocked_reason="checkmesh_timed_out",
+            blocked_detail=f"timeout_s={timeout_s}",
+        )
+    else:
+        # checkMesh returned (0 or non-zero structural exit) — parse the log.
+        # Even on rc != 0 we parse what we have; rc surfaces in the JSON.
+        cm_parsed = _parse_check_mesh_log(cm_stdout)
+        _persist_mesh_quality(
+            case_dir,
+            invoked=True,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=cm_parsed,
+        )
+
+    # --- simpleFoam ---
+    rc, sf_stdout, sf_stderr = _run_docker_command(
+        "simpleFoam", case_dir, image, timeout=timeout_s,
+    )
+
+    # Persist combined log unconditionally — debugging needs it whether
+    # the run passed or failed.
+    combined_log = sf_stdout
+    if sf_stderr:
+        combined_log = f"{combined_log}\n--- STDERR ---\n{sf_stderr}\n"
+    log_path.write_text(combined_log)
+
+    if rc != 0:
+        # Three distinct sub-cases. The marker-based discrimination is set by
+        # `_run_docker_command` (R15-F-01 fix); previously OSError was
+        # mis-reported as `simplefoam_crashed` with `real_solver_invoked=True`
+        # even though the solver process never actually started.
+        if rc == -1 and "OFA-OSERROR" in (sf_stderr or ""):
+            return {
+                "status": "BLOCKED",
+                "summary": "docker invocation failed before simpleFoam could start.",
+                "details": {
+                    "execution": "skipped",
+                    "real_solver_invoked": False,
+                    "reason": "docker_invocation_failed",
+                    "detail": sf_stderr.strip(),
+                    "next_step": (
+                        "Check Docker daemon health, host fork limits, and "
+                        "container runtime quota. Retry `cfdtrust run` after fix."
+                    ),
+                },
+            }
+        if rc == -1 and "OFA-TIMEOUT" in (sf_stderr or ""):
+            return {
+                "status": "BLOCKED",
+                "summary": f"simpleFoam timed out after {timeout_s}s (set CFDTRUST_SOLVER_TIMEOUT_S to extend).",
+                "details": {
+                    "execution": "attempted",
+                    "real_solver_invoked": True,
+                    "reason": "simplefoam_timed_out",
+                    "timeout_s": timeout_s,
+                    "log": str(log_path.relative_to(case_dir)),
+                },
+            }
+        return {
+            "status": "BLOCKED",
+            "summary": f"simpleFoam exited non-zero (rc={rc}). See artifacts/solver.log.",
+            "details": {
+                "execution": "attempted",
+                "real_solver_invoked": True,
+                "reason": "simplefoam_crashed",
+                "returncode": rc,
+                "stderr_tail": (sf_stderr or "")[-2000:],
+                "log": str(log_path.relative_to(case_dir)),
+            },
+        }
+
+    # --- parse log → residuals.csv ---
+    parsed = _parse_simplefoam_log(sf_stdout)
+    _write_residuals_csv(parsed, residuals_csv)
+
+    # --- gate computation ---
+    gate = _compute_gate_from_residuals(parsed, manifest)
+    gate["details"]["image"] = image
+    gate["details"]["log"] = str(log_path.relative_to(case_dir))
+    gate["details"]["residuals_csv"] = str(residuals_csv.relative_to(case_dir))
+    if "artifact" not in gate:
+        gate["artifact"] = str(log_path.relative_to(case_dir))
+
+    return gate

@@ -1,0 +1,172 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-cfd-v2/schemas/case_manifest.schema.json",
+  "title": "case_manifest",
+  "type": "object",
+  "required": [
+    "case_id",
+    "case_family",
+    "solver_backend",
+    "solver",
+    "physics",
+    "geometry_contract",
+    "mesh_contract",
+    "bc_contract",
+    "solver_contract",
+    "qoi",
+    "reference_comparison",
+    "required_artifacts"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "case_id": { "type": "string", "minLength": 1 },
+    "case_family": { "type": "string", "minLength": 1 },
+    "solver_backend": {
+      "type": "string",
+      "enum": ["openfoam", "mocked"]
+    },
+    "solver_docker_image": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:/@-]*$",
+      "description": "Optional Docker image override for the openfoam backend (DEC-0005). Defaults to openfoam/openfoam11-paraview510:latest if omitted. Must look like a Docker reference: starts with alphanumeric, then alphanumerics + `.` `_` `:` `/` `@` `-`. Disallows leading `-` (would be parsed as a docker flag), whitespace, shell metachars, and any other argv-injection vector (R15-F-03 fix)."
+    },
+    "solver": { "type": "string", "minLength": 1 },
+    "physics": {
+      "type": "object",
+      "required": ["regime", "fluid", "turbulence_model"],
+      "additionalProperties": true,
+      "properties": {
+        "regime": { "type": "string" },
+        "fluid": { "type": "string" },
+        "turbulence_model": { "type": "string" },
+        "compressible": { "type": "boolean" },
+        "steady": { "type": "boolean" }
+      }
+    },
+    "geometry_contract": {
+      "type": "object",
+      "required": ["required_patches", "dimensionality", "unit_system"],
+      "additionalProperties": true,
+      "properties": {
+        "required_patches": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "dimensionality": {
+          "type": "string",
+          "enum": ["2D", "2.5D", "3D"]
+        },
+        "unit_system": { "type": "string" }
+      }
+    },
+    "mesh_contract": {
+      "type": "object",
+      "required": ["checkmesh_required", "boundary_layer_required", "y_plus_target"],
+      "additionalProperties": true,
+      "properties": {
+        "checkmesh_required": { "type": "boolean" },
+        "boundary_layer_required": { "type": "boolean" },
+        "y_plus_target": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "wall_function_policy": { "type": "string" }
+          }
+        },
+        "quality_thresholds": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "bc_contract": {
+      "type": "object",
+      "required": ["inlet", "outlet", "wall", "turbulence_fields"],
+      "additionalProperties": true,
+      "properties": {
+        "inlet": { "type": "object", "additionalProperties": true },
+        "outlet": { "type": "object", "additionalProperties": true },
+        "wall": { "type": "object", "additionalProperties": true },
+        "turbulence_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      }
+    },
+    "solver_contract": {
+      "type": "object",
+      "required": ["residual_targets", "max_iterations", "qoi_stability"],
+      "additionalProperties": true,
+      "properties": {
+        "residual_targets": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "max_iterations": { "type": "integer", "minimum": 1 },
+        "qoi_stability": {
+          "type": "object",
+          "properties": {
+            "window_iterations": { "type": "integer", "minimum": 1 },
+            "relative_drift_tolerance": { "type": "number" }
+          }
+        }
+      }
+    },
+    "qoi": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "additionalProperties": true,
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string" },
+          "units": { "type": "string" },
+          "tolerance": { "type": "number" }
+        }
+      }
+    },
+    "reference_comparison": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["finalized", "placeholder", "not_finalized", "missing"]
+        },
+        "source": { "type": "string" },
+        "source_url": { "type": "string", "format": "uri" },
+        "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "reference_csv": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Path relative to case_dir; runtime check (audit/qoi.py) refuses absolute and ..-traversing paths (R16-F-05).",
+          "pattern": "^[^/].*"
+        },
+        "reference_csv_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "qoi": { "type": "string", "minLength": 1 },
+        "wall_patch": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "$comment": "Name of the polyMesh boundary patch from which to extract wall shear stress for Cf comparison. M2.3b: makes the previously-hardcoded 'wall' name case-declarable so harness works across cases with different patch naming conventions."
+        },
+        "tolerance": { "type": "number", "exclusiveMinimum": 0 },
+        "x_min_compare_m": { "type": "number", "minimum": 0 },
+        "notes": { "type": "string" }
+      }
+    },
+    "required_artifacts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    }
+  }
+}
