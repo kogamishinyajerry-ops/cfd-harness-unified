@@ -1935,3 +1935,208 @@ def test_tbd19_residual_regex_captures_parenthesized_species():
         f"CH2(T) parenthesized triplet must be captured intact; got "
         f"{list(residuals.keys())}"
     )
+
+
+# ---------- DEC-V61-201-SUB-INGEST-MULTI-REGION-BC (Gap #11) ----------
+#
+# case_011 chtMultiRegionFoam dogfood surfaced: bc_audit parser was hard-coded
+# to read 0/<field>, missing 0/region_<name>/<field> layouts. Backend now
+# detects + iterates per region and emits a multi-region bc_quality.json;
+# downstream audit emits structural BLOCKED until charter-class per-region
+# bc_contract schema lands (Gap #28).
+
+
+_CANONICAL_0_REGION_FLUID_U = (
+    "FoamFile { class volVectorField; object U; }\n"
+    "dimensions [0 1 -1 0 0 0 0];\n"
+    "internalField uniform (0.5 0 0);\n"
+    "boundaryField\n"
+    "{\n"
+    "    inlet { type fixedValue; value uniform (0.5 0 0); }\n"
+    "    outlet { type zeroGradient; }\n"
+    "    fluid_to_solid { type fixedValue; value uniform (0 0 0); }\n"
+    "}\n"
+)
+
+
+_CANONICAL_0_REGION_FLUID_P = (
+    "FoamFile { class volScalarField; object p; }\n"
+    "dimensions [0 2 -2 0 0 0 0];\n"
+    "internalField uniform 0;\n"
+    "boundaryField\n"
+    "{\n"
+    "    inlet { type zeroGradient; }\n"
+    "    outlet { type fixedValue; value uniform 0; }\n"
+    "    fluid_to_solid { type zeroGradient; }\n"
+    "}\n"
+)
+
+
+_CANONICAL_0_REGION_SOLID_T = (
+    "FoamFile { class volScalarField; object T; }\n"
+    "dimensions [0 0 0 1 0 0 0];\n"
+    "internalField uniform 300;\n"
+    "boundaryField\n"
+    "{\n"
+    "    solid_to_fluid { type fixedValue; value uniform 300; }\n"
+    "    solid_outer_wall { type fixedValue; value uniform 350; }\n"
+    "}\n"
+)
+
+
+def _make_multi_region_case(case_dir: Path) -> None:
+    """Build a synthetic chtMultiRegionFoam case directory:
+    fluid region (U, p) + solid region (T) under 0/region_<name>/.
+
+    case_011 plate-fin HX is the production-grade case this layout
+    represents. Top-level 0/<field> files are absent — that is the
+    chtMultiRegion convention.
+    """
+    for sub in ("system", "constant", "0"):
+        (case_dir / sub).mkdir(parents=True, exist_ok=True)
+    (case_dir / "0" / "region_fluid").mkdir(parents=True, exist_ok=True)
+    (case_dir / "0" / "region_solid").mkdir(parents=True, exist_ok=True)
+    (case_dir / "0" / "region_fluid" / "U").write_text(
+        _CANONICAL_0_REGION_FLUID_U,
+    )
+    (case_dir / "0" / "region_fluid" / "p").write_text(
+        _CANONICAL_0_REGION_FLUID_P,
+    )
+    (case_dir / "0" / "region_solid" / "T").write_text(
+        _CANONICAL_0_REGION_SOLID_T,
+    )
+
+
+def test_collect_bc_multi_region_emits_per_region_layout(tmp_path: Path):
+    """Test A: case with 0/region_fluid/U + 0/region_solid/T produces
+    bc_quality.json with `layout: "multi_region"` and per-region
+    sub-dicts. Verifies the backend detection + per-region parsing
+    pipeline end-to-end without invoking docker / ingest.
+    """
+    _make_multi_region_case(tmp_path)
+    manifest = _ingest_manifest_fixture()
+    # Drop the synthetic "__none_laminar__" turbulence field so the
+    # expected_fields list is just ["U", "p"].
+    manifest["bc_contract"]["turbulence_fields"] = []
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+
+    bc_path = tmp_path / "artifacts" / "bc_quality.json"
+    assert bc_path.exists()
+    bc = json.loads(bc_path.read_text())
+
+    # Multi-region marker present.
+    assert bc["bc_parsing_status"] == "ok"
+    assert bc["layout"] == "multi_region"
+    assert bc["region_count"] == 2
+    assert bc["regions_detected"] == ["region_fluid", "region_solid"]
+
+    # Top-level single-region keys ABSENT (no `fields` at top level —
+    # downstream must iterate `regions` instead). expected_fields is
+    # still present as the canonical fluid-region expectation but is
+    # marked at the top for advisory use.
+    assert "fields" not in bc
+    assert "fields_present" not in bc
+    assert "fields_missing" not in bc
+    assert bc["expected_fields"] == ["U", "p"]
+
+    # Fluid region: U and p parsed, no missing fields.
+    fluid = bc["regions"]["region_fluid"]
+    assert fluid["fields_present"] == ["U", "p"]
+    assert fluid["fields_missing"] == []
+    assert fluid["fields"]["U"]["parsed"] is True
+    assert fluid["fields"]["U"]["patches"]["inlet"]["type"] == "fixedValue"
+    assert fluid["fields"]["U"]["patches"]["fluid_to_solid"]["type"] == "fixedValue"
+    assert fluid["fields"]["p"]["parsed"] is True
+    # File paths point inside the region sub-dir.
+    assert fluid["fields"]["U"]["file"] == "0/region_fluid/U"
+
+    # Solid region: T parsed; U and p legitimately missing for a solid
+    # region (per-region expected_fields semantics is charter work,
+    # Gap #28 — for now `fields_missing` carries advisory entries).
+    solid = bc["regions"]["region_solid"]
+    assert solid["fields_missing"] == ["U", "p"]
+    # T was not in expected_fields (manifest bc_contract.turbulence_fields
+    # is empty, canonical only adds U/p) — but the file IS on disk;
+    # this advisory mismatch is exactly the gap charter work resolves.
+    # The point of this test is: solid region is surfaced + iterated
+    # without crash, fields_missing list is honest.
+    assert "fields" in solid
+
+
+def test_collect_bc_single_region_unchanged_shape(tmp_path: Path):
+    """Test B: regression guard — single-region case (no 0/region_*/
+    subdirs) produces bc_quality.json with the existing top-level
+    `fields` shape, NO `layout` key, NO `regions` key. Byte-identical
+    to pre-DEC behavior for the 99% single-region path.
+    """
+    # _make_ingestable_case produces a vanilla 0/U + 0/p layout.
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    # Existing top-level shape.
+    assert bc["bc_parsing_status"] == "ok"
+    assert bc["expected_fields"] == ["U", "p"]
+    assert bc["fields_present"] == ["U", "p"]
+    assert bc["fields_missing"] == []
+    assert "fields" in bc
+    assert bc["fields"]["U"]["parsed"] is True
+
+    # Multi-region keys ABSENT.
+    assert "layout" not in bc, (
+        "single-region cases must not gain a `layout` key — would "
+        "trigger downstream multi-region BLOCKED path."
+    )
+    assert "regions" not in bc
+    assert "regions_detected" not in bc
+    assert "region_count" not in bc
+
+
+def test_collect_bc_multi_region_empty_region_dir_graceful(tmp_path: Path):
+    """Test C: edge case — `0/region_<name>/` directory present but
+    EMPTY (no field files inside). The region is still listed in
+    `regions` dict with all expected fields marked missing. No crash,
+    bc_parsing_status remains `"ok"` so the downstream multi-region
+    BLOCKED handler fires on the schema marker rather than on a
+    parse error.
+    """
+    for sub in ("system", "constant", "0"):
+        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "0" / "region_fluid").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "0" / "region_empty").mkdir(parents=True, exist_ok=True)
+    # Only fluid has files; region_empty is empty.
+    (tmp_path / "0" / "region_fluid" / "U").write_text(
+        _CANONICAL_0_REGION_FLUID_U,
+    )
+
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert bc["bc_parsing_status"] == "ok"
+    assert bc["layout"] == "multi_region"
+    assert bc["region_count"] == 2
+    assert bc["regions_detected"] == ["region_empty", "region_fluid"]
+
+    # Empty region: both expected fields missing, no crash, fields
+    # dict carries the synthetic "missing=True" entries (NOT absent).
+    empty = bc["regions"]["region_empty"]
+    assert empty["fields_present"] == []
+    assert empty["fields_missing"] == ["U", "p"]
+    assert empty["fields"]["U"]["parsed"] is False
+    assert empty["fields"]["U"]["missing"] is True
+    assert empty["fields"]["p"]["parsed"] is False
+    assert empty["fields"]["p"]["missing"] is True
+
+    # Fluid region: U parsed, p missing.
+    fluid = bc["regions"]["region_fluid"]
+    assert fluid["fields_present"] == ["U"]
+    assert fluid["fields_missing"] == ["p"]

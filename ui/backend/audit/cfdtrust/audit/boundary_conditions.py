@@ -754,6 +754,62 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         gate["artifact"] = str(report_path.relative_to(case_dir))
         return gate
 
+    # Multi-region detection (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC,
+    # Gap #11): chtMultiRegionFoam cases place per-region fields under
+    # `0/region_<name>/<field>`. The backend parser produces a
+    # bc_quality.json with `layout: "multi_region"` and per-region
+    # sub-dicts; the current bc_contract.{inlet,outlet,wall} schema is
+    # single-stream-only so we cannot evaluate dimensions against it
+    # here. Per-region schema redesign is charter-class work
+    # (Gap #28) and explicitly out of scope for the sub-DEC.
+    #
+    # Honesty disposition: BLOCKED-with-reason rather than FAIL —
+    # the case carries real BC evidence (parsed per-region fields are
+    # surfaced in the report), the harness simply cannot YET evaluate
+    # it. Falsely PASSing on no-coverage would be the exact dishonesty
+    # the trust harness exists to prevent.
+    if bc_quality.get("layout") == "multi_region":
+        regions_dict = bc_quality.get("regions", {}) or {}
+        per_region_summary: Dict[str, Dict[str, List[str]]] = {}
+        for rname, rdata in regions_dict.items():
+            per_region_summary[rname] = {
+                "fields_present": list(rdata.get("fields_present", [])),
+                "fields_missing": list(rdata.get("fields_missing", [])),
+            }
+        gate = {
+            "status": "BLOCKED",
+            "summary": (
+                "Multi-region CHT layout detected; bc_contract evaluation "
+                "not yet wired for per-region schemas."
+            ),
+            "details": {
+                "reason": "multi_region_bc_validation_not_yet_wired",
+                "regions_detected": sorted(regions_dict.keys()),
+                "region_count": len(regions_dict),
+                "per_region_field_summary": per_region_summary,
+                "next_step": (
+                    "Per-region bc_contract schema (charter-class Gap #28) "
+                    "must land before this gate can evaluate multi-region "
+                    "cases. The backend has surfaced per-region BC evidence "
+                    "in artifacts/bc_quality.json under the `regions` key; "
+                    "downstream consumers can inspect it directly."
+                ),
+            },
+        }
+        report = {
+            "generated_at": utc_now_iso(),
+            "case_id": manifest.get("case_id"),
+            "phase": "M6",
+            "gate_status": gate["status"],
+            "reason": "multi_region_bc_validation_not_yet_wired",
+            "layout": "multi_region",
+            "regions_detected": sorted(regions_dict.keys()),
+            "per_region_field_summary": per_region_summary,
+        }
+        report_path.write_text(json.dumps(report, indent=2))
+        gate["artifact"] = str(report_path.relative_to(case_dir))
+        return gate
+
     geom_quality, geom_err = _read_json(case_dir, "geometry_quality.json")
     if geom_quality is None or geom_quality.get("status") == "blocked":
         # Cross-artifact dependency: patch coverage + type match both
