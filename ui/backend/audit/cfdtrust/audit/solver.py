@@ -260,3 +260,46 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     """Deprecated alias for `execute`. Kept for compatibility with older CLI code."""
     return execute(case_dir, manifest)
+
+
+# ---------- DEC-V61-201-SUB-INGEST: external-run ingest entry point ----------
+
+
+def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """Ingest evidence from an externally-run case (DEC-V61-201-SUB-INGEST).
+
+    Refuses non-openfoam backends — there is nothing to ingest from a
+    mocked backend, and "unknown" backends shouldn't have produced any
+    real evidence in the first place. The backend-level ingest helper
+    then validates env, runs checkMesh, persists *_quality.json, and
+    transcribes the existing solver log + residuals.
+
+    Mirrors `execute()`'s persistence pattern: the resulting gate is
+    written to `artifacts/solver_gate.json` so `read_artifacts` (and
+    therefore `cfdtrust report`) reads the SAME truth — preventing the
+    pre-M2.3a drift where execute and read_artifacts could disagree.
+    """
+    backend = manifest.get("solver_backend")
+    if backend != "openfoam":
+        gate = {
+            "status": "BLOCKED",
+            "summary": (
+                f"`cfdtrust ingest` only supports solver_backend=openfoam; "
+                f"manifest declares {backend!r}."
+            ),
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "ingest_backend_unsupported",
+                "next_step": (
+                    "Ingest is for cases run by an external OpenFOAM build "
+                    "(any fork). For mocked-backend cases there is no real "
+                    "evidence to import — use `cfdtrust run` instead."
+                ),
+            },
+        }
+        return _write_gate(case_dir, gate)
+
+    from ..backends.openfoam import ingest as _backend_ingest
+    gate = _backend_ingest(case_dir, manifest)
+    return _write_gate(case_dir, gate)

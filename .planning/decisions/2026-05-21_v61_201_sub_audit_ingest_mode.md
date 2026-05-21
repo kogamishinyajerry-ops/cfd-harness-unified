@@ -1,0 +1,92 @@
+---
+decision_id: DEC-V61-201-SUB-INGEST
+title: cfdtrust ingest mode — load externally-run cases into the audit engine
+status: Accepted
+parent_dec: DEC-V61-201
+phase: post-merge sub-DEC
+notion_sync_status: pending
+---
+
+## Why
+
+case_027 Hagen-Poiseuille dogfood (`_sandboxes/case_027_hagen_poiseuille_pipe/
+case_v65/DOGFOOD_CASE_027.md`) proved the audit subsystem has no path to advise
+on cases that were run outside the harness. The engine assumes
+`cfdtrust run → its own backend produces *_quality.json → audit reads`.
+
+V-series corpus (case_003..case_028, APU bay, etc.) is hundreds of OFv2312
+externally-run cases. Without an ingest path the audit engine is a closed
+loop limited to its 3 bundled cases.
+
+## What
+
+Add `cfdtrust ingest <case_dir>` as a new CLI subcommand that:
+
+1. Validates the case directory looks like an OpenFOAM case (reuse `run`'s env
+   checks: Docker present, image pulled, system/constant/0 dirs).
+2. Verifies it has been **externally executed**: at least one time directory
+   beyond `0/` exists, and a solver log can be located.
+3. Invokes `checkMesh` in the harness's Docker image against the existing
+   `constant/polyMesh/` (does NOT re-run blockMesh or simpleFoam).
+4. Reuses existing persistence helpers to write:
+   - `artifacts/geometry_quality.json` from `_parse_polymesh_boundary`
+   - `artifacts/mesh_quality.json` from `_parse_check_mesh_log`
+   - `artifacts/bc_quality.json` via `_collect_and_persist_bc`
+5. Locates the external solver log (searches `log_<solver>.txt`,
+   `log.<solver>`, `<solver>.log`, `solver.log`) and transcribes it to
+   `artifacts/solver.log`.
+6. Parses the log → writes `artifacts/residuals.csv` via existing
+   `_parse_simplefoam_log` + `_write_residuals_csv`.
+7. Writes `artifacts/ingest_manifest.json` recording: source log path,
+   SHA256 of source log, SHA256 of polyMesh/boundary, ingest timestamp,
+   cfdtrust version, Docker image used for checkMesh.
+8. Returns a solver gate with `details.execution = "ingested"`.
+
+## Honesty fence (added to trust_report.schema.json)
+
+- `solver_execution` enum extended: `["real", "mocked", "skipped", "ingested"]`
+- Existing fences preserved unchanged:
+  - `validation_status == "validated"` requires `solver_execution == "real"`
+  - `overall_status == "PASS"` requires `solver_execution == "real"`
+- `report.py` demotes `overall_status` from PASS to WARN when
+  `solver_execution == "ingested"` (post-hoc honesty step — harness didn't
+  witness the run, so cannot certify full PASS even if every gate is PASS).
+- Mocked-solver schema rules (Red Team F-03) carried over to ingested:
+  ingested + validated combo blocked at schema level via existing
+  `validated → real` rule.
+
+## What ingest does NOT do
+
+- Does NOT re-run blockMesh or simpleFoam (would destroy existing time dirs +
+  may fail on OpenFOAM-fork incompatibility).
+- Does NOT verify the ingested log matches the current case files (a future
+  enhancement could SHA the relevant `0/` + `constant/` files at run-time
+  and store them; for MVP we trust the user's claim that the log corresponds
+  to the current files).
+- Does NOT permit `validation_status = "validated"` on ingested cases —
+  validation requires a harness-witnessed run.
+
+## Scope class (per v2.3)
+
+Sub-DEC under DEC-V61-201. Not charter:
+- Single subsystem touched (`ui/backend/audit/`).
+- Additive CLI command + additive schema enum value.
+- No cross-subsystem coupling.
+
+## Acceptance criteria
+
+- [ ] `cfdtrust ingest _sandboxes/case_027_hagen_poiseuille_pipe/case_v65`
+      produces all 3 `*_quality.json` artifacts + `solver.log` + `residuals.csv`
+      + `ingest_manifest.json`.
+- [ ] `cfdtrust report` on the ingested case writes `solver_execution=ingested`
+      in trust_report.json.
+- [ ] `cfdtrust explain` produces gate-by-gate output reflecting actual mesh +
+      BC state, not BLOCKED-due-to-missing-artifacts.
+- [ ] pytest: 2 new ingest-specific tests in `cfdtrust_tests/` (synthetic case
+      + schema rule).
+- [ ] Existing 360-test suite still passes.
+
+## Codex review
+
+confidence: med (multi-file, schema-touch). Will run `codex-review-relay --base
+main` after commit; round cap = 3 per V133.

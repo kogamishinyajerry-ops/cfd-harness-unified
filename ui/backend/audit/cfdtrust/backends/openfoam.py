@@ -36,11 +36,13 @@ before step 2 lands.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -184,6 +186,100 @@ def _find_symlink_at_any_depth(case_dir: Path) -> Tuple[bool, str]:
         return False, ""
     except OSError as e:
         return True, f"walk failed: {e}"
+
+
+def _find_escaping_symlink_for_ingest(case_dir: Path) -> Tuple[bool, str]:
+    """Variant of `_find_symlink_at_any_depth` that allows OpenFOAM-internal
+    symlinks but flags escapes.
+
+    Built for DEC-V61-201-SUB-INGEST: an already-run case will contain
+    OpenFOAM's own runtime symlinks under `dynamicCode/<name>/lnInclude/`
+    (created by `codedFixedValue` etc.; they point to sibling files
+    inside the case dir like `../fixedValueFvPatchFieldTemplate.H`).
+    These are not a security risk — the volume mount is `case_dir:/case`,
+    and a symlink whose resolved target is INSIDE `case_dir` cannot escape
+    the mount.
+
+    Returns `(found_escape, where)`. An escape is any symlink whose
+    canonical target is NOT a descendant of `case_dir.resolve()`. Same
+    DoS bound + fail-closed-on-unreadable posture as
+    `_find_symlink_at_any_depth`.
+    """
+    case_root = case_dir.resolve()
+    paths_walked = 0
+    try:
+        stack = [case_dir]
+        while stack:
+            current = stack.pop()
+            try:
+                entries = list(current.iterdir())
+            except (OSError, PermissionError):
+                return True, f"unreadable subtree: {current.relative_to(case_dir)}"
+            for entry in entries:
+                paths_walked += 1
+                if paths_walked > _MAX_PATHS_WALKED:
+                    return True, (
+                        f"case dir exceeds {_MAX_PATHS_WALKED} entries; refusing "
+                        f"to declare symlink-safe (DoS bound)"
+                    )
+                if entry.is_symlink():
+                    try:
+                        target = entry.resolve(strict=False)
+                    except (OSError, RuntimeError) as e:
+                        # Symlink loop or unresolvable target → escape.
+                        return True, (
+                            f"symlink unresolvable ({e}): "
+                            f"{entry.relative_to(case_dir)}"
+                        )
+                    try:
+                        target.relative_to(case_root)
+                    except ValueError:
+                        return True, (
+                            f"symlink escapes case_dir: "
+                            f"{entry.relative_to(case_dir)} -> {target}"
+                        )
+                    # Symlink contained — safe; don't recurse into it
+                    # (avoids cycles even though the target is inside).
+                    continue
+                if entry.is_dir():
+                    stack.append(entry)
+        return False, ""
+    except OSError as e:
+        return True, f"walk failed: {e}"
+
+
+def _is_openfoam_compatible_ingest_case_dir(case_dir: Path) -> Tuple[bool, str]:
+    """Variant of `_is_openfoam_compatible_case_dir` for `cfdtrust ingest`.
+
+    Same depth-1 guard (case_dir + required subdirs must not be symlinks),
+    but the depth-N nested-symlink walk uses the escape-check (contained
+    symlinks allowed) since an already-run case naturally contains
+    OpenFOAM's own `dynamicCode/*/lnInclude/*` symlinks.
+    """
+    if case_dir.is_symlink():
+        return False, (
+            f"case_dir is a symlink (not allowed; resolves to {case_dir.resolve()})"
+        )
+
+    missing: list[str] = []
+    symlinked: list[str] = []
+    for d in _OPENFOAM_REQUIRED_DIRS:
+        p = case_dir / d
+        if p.is_symlink():
+            symlinked.append(d)
+            continue
+        if not p.is_dir():
+            missing.append(d)
+    if symlinked:
+        return False, f"required subdir(s) are symlinks (not allowed): {symlinked}"
+    if missing:
+        return False, f"missing required OpenFOAM subdirs: {missing}"
+
+    found_escape, where = _find_escaping_symlink_for_ingest(case_dir)
+    if found_escape:
+        return False, f"escaping symlink not allowed: {where}"
+
+    return True, ""
 
 
 def _is_openfoam_compatible_case_dir(case_dir: Path) -> Tuple[bool, str]:
@@ -1588,5 +1684,435 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     gate["details"]["residuals_csv"] = str(residuals_csv.relative_to(case_dir))
     if "artifact" not in gate:
         gate["artifact"] = str(log_path.relative_to(case_dir))
+
+    return gate
+
+
+# ---------- DEC-V61-201-SUB-INGEST: external-run ingest mode ----------
+#
+# Mirrors `run()` but skips blockMesh + simpleFoam invocation. Reads the
+# existing time directories + external solver log + polyMesh from disk;
+# re-runs only `checkMesh` against the existing polyMesh to populate
+# mesh_quality.json (no destructive operation).
+#
+# Honesty fence: the resulting solver gate carries
+# `details.execution = "ingested"`. report.py translates this to top-level
+# `solver_execution = "ingested"` and demotes any overall_status PASS to
+# WARN, because the harness did not witness the run.
+
+
+# Candidate filenames for an externally-produced solver log. Ordered so
+# that the most specific name (matching solver convention) wins.
+_INGEST_LOG_CANDIDATES = (
+    "log_simpleFoam.txt",
+    "log_pimpleFoam.txt",
+    "log_icoFoam.txt",
+    "log_potentialFoam.txt",
+    "log_foamRun.txt",
+    "log.simpleFoam",
+    "log.pimpleFoam",
+    "log.foamRun",
+    "solver.log",
+    "simpleFoam.log",
+)
+
+
+def _find_external_solver_log(case_dir: Path) -> Path | None:
+    """Locate an existing OpenFOAM solver log produced by an external run.
+
+    Search order is `_INGEST_LOG_CANDIDATES`. Returns the first existing
+    file as a `Path`, or `None` if nothing matches. The artifacts/ dir is
+    intentionally excluded — `artifacts/solver.log` is the ingest *output*,
+    not an input, so finding it would create a fixed-point loop on
+    repeated ingest of the same case.
+    """
+    for name in _INGEST_LOG_CANDIDATES:
+        p = case_dir / name
+        if p.is_file():
+            return p
+    return None
+
+
+def _find_time_directories(case_dir: Path) -> List[float]:
+    """Return sorted list of time directories > 0 in `case_dir`.
+
+    An OpenFOAM time directory is a top-level subdirectory whose name
+    parses as a non-negative float. Time 0 (initial conditions) does NOT
+    count as "the case ran" — we need at least one time > 0 to consider
+    the case externally executed.
+    """
+    result: List[float] = []
+    try:
+        for entry in case_dir.iterdir():
+            if not entry.is_dir():
+                continue
+            try:
+                t = float(entry.name)
+            except ValueError:
+                continue
+            if t > 0:
+                result.append(t)
+    except OSError:
+        return []
+    return sorted(result)
+
+
+def _file_sha256(path: Path) -> str | None:
+    """Return hex SHA256 of `path` contents, or None on OSError.
+
+    Streaming read so we don't load multi-GB time directories into memory.
+    """
+    try:
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def _utc_now_iso() -> str:
+    """Local copy of `cfdtrust.status.utc_now_iso` — avoids importing
+    `cfdtrust.status` here, which would create an upward import from the
+    backends/ subpackage to a sibling helper module."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _write_ingest_provenance(
+    case_dir: Path,
+    *,
+    external_log_path: Path,
+    boundary_path: Path | None,
+    checkmesh_image: str,
+    time_directories: List[float],
+) -> Path:
+    """Write `artifacts/ingest_manifest.json` recording external-run provenance.
+
+    Captures what was ingested + SHA256 of key source files so a later
+    audit can detect whether the underlying evidence was tampered with
+    after ingest. Same fail-tolerant write posture as other persist
+    helpers — OSError is swallowed so an unwritable artifacts/ doesn't
+    crash ingest.
+    """
+    art = case_dir / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    out = art / "ingest_manifest.json"
+    payload: Dict[str, Any] = {
+        "ingested_at": _utc_now_iso(),
+        "checkmesh_image": checkmesh_image,
+        "external_solver_log": {
+            "source_relative": str(external_log_path.relative_to(case_dir)),
+            "sha256": _file_sha256(external_log_path),
+        },
+        "polymesh_boundary": (
+            None if boundary_path is None else {
+                "source_relative": str(boundary_path.relative_to(case_dir)),
+                "sha256": _file_sha256(boundary_path),
+            }
+        ),
+        "time_directories": [str(t) for t in time_directories],
+        "honesty_note": (
+            "Ingested cases cannot reach `solver_execution=real` or "
+            "`validation_status=validated`; the harness did not witness "
+            "the solver run. See DEC-V61-201-SUB-INGEST."
+        ),
+    }
+    try:
+        out.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    except OSError:
+        # Same posture as `_persist_*_quality` (R17-F-02): provenance
+        # write failure must not lose the rest of the ingest evidence.
+        pass
+    return out
+
+
+def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """DEC-V61-201-SUB-INGEST: import an externally-run case into the harness.
+
+    Mirrors `run()` env-check preamble + persistence steps, but does NOT
+    invoke blockMesh or simpleFoam. Reuses the existing time directories
+    and external solver log; re-runs only `checkMesh` against the
+    existing `constant/polyMesh/`.
+
+    Returns a solver-execution gate dict whose `details.execution` is the
+    string `"ingested"`. report.py uses that marker to set top-level
+    `solver_execution = "ingested"` and demote overall_status PASS → WARN.
+
+    BLOCKED states (mirror `run()` env checks plus two new ones):
+      - `manifest_invalid_solver_docker_image` — same as run()
+      - `docker_not_available`                 — same as run()
+      - `openfoam_image_not_pulled`            — same as run()
+      - `case_dir_not_openfoam_compatible`     — same as run()
+      - `no_time_directory_found`              — case never ran externally
+      - `no_solver_log_found`                  — no recognisable log file
+      - `solver_log_unreadable`                — log exists but OSError on read
+    """
+    image = manifest.get("solver_docker_image", DEFAULT_IMAGE)
+
+    if not isinstance(image, str) or not image.strip():
+        return {
+            "status": "BLOCKED",
+            "summary": "manifest.solver_docker_image is not a non-empty string.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "manifest_invalid_solver_docker_image",
+                "value": repr(image),
+                "next_step": (
+                    "Either remove `solver_docker_image` from the manifest "
+                    "(default is used) or set it to a non-empty string."
+                ),
+            },
+        }
+
+    if not _is_valid_docker_image_name(image):
+        return {
+            "status": "BLOCKED",
+            "summary": "manifest.solver_docker_image is not a valid Docker image reference.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "manifest_invalid_solver_docker_image",
+                "value": repr(image),
+                "next_step": (
+                    "Image must start with alphanumeric and contain only "
+                    "[a-zA-Z0-9._:/@-]. No whitespace, no leading dash, "
+                    "no shell metacharacters."
+                ),
+            },
+        }
+
+    ok, reason = _docker_available()
+    if not ok:
+        return {
+            "status": "BLOCKED",
+            "summary": "Docker is not available for OpenFOAM checkMesh.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "docker_not_available",
+                "detail": reason,
+                "next_step": (
+                    "Install Docker Desktop and start the daemon. "
+                    "Then retry `cfdtrust ingest`."
+                ),
+            },
+        }
+
+    if not _image_present(image):
+        return {
+            "status": "BLOCKED",
+            "summary": f"OpenFOAM Docker image '{image}' is not pulled locally.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "openfoam_image_not_pulled",
+                "image": image,
+                "next_step": (
+                    f"Run `docker pull {image}` once (multi-GB download), "
+                    f"then retry `cfdtrust ingest`."
+                ),
+            },
+        }
+
+    # DEC-V61-201-SUB-INGEST: use the relaxed-but-still-safe variant of
+    # the case-dir check. An already-run case naturally contains
+    # OpenFOAM-internal symlinks under `dynamicCode/<name>/lnInclude/`
+    # (codedFixedValue artifacts). The ingest variant allows those
+    # because their resolved targets are inside `case_dir` — they cannot
+    # escape the docker volume mount — while still refusing any symlink
+    # whose canonical target is outside `case_dir`.
+    ok, reason = _is_openfoam_compatible_ingest_case_dir(case_dir)
+    if not ok:
+        return {
+            "status": "BLOCKED",
+            "summary": "Case directory does not look like an OpenFOAM case.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "case_dir_not_openfoam_compatible",
+                "detail": reason,
+                "next_step": (
+                    "Provide system/, constant/, and 0/ directories alongside "
+                    "case_manifest.yaml."
+                ),
+            },
+        }
+
+    # Ingest-specific check 1: at least one time directory > 0 must exist.
+    # 0/ alone means the case has initial conditions but never ran.
+    time_dirs = _find_time_directories(case_dir)
+    if not time_dirs:
+        return {
+            "status": "BLOCKED",
+            "summary": "Case has no time directory beyond 0/; nothing to ingest.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "no_time_directory_found",
+                "next_step": (
+                    "Run the case externally first (any compatible OpenFOAM "
+                    "build), then re-run `cfdtrust ingest`. For new cases "
+                    "authored from scratch, use `cfdtrust run` instead."
+                ),
+            },
+        }
+
+    # Ingest-specific check 2: an external solver log must be locatable.
+    external_log = _find_external_solver_log(case_dir)
+    if external_log is None:
+        return {
+            "status": "BLOCKED",
+            "summary": "No external solver log found in case directory.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "no_solver_log_found",
+                "searched": list(_INGEST_LOG_CANDIDATES),
+                "next_step": (
+                    "Place the external run's log at one of the searched "
+                    "names (commonly `log_simpleFoam.txt` from `simpleFoam "
+                    "> log_simpleFoam.txt 2>&1`), then re-run "
+                    "`cfdtrust ingest`."
+                ),
+            },
+        }
+
+    artifacts_dir = case_dir / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    log_path = artifacts_dir / "solver.log"
+    mesh_log_path = artifacts_dir / "mesh_quality.log"
+    residuals_csv = artifacts_dir / "residuals.csv"
+    timeout_s = _resolve_solver_timeout()
+
+    # --- Persist geometry from existing polyMesh/boundary ---
+    boundary_path = case_dir / "constant" / "polyMesh" / "boundary"
+    boundary_for_provenance: Path | None = None
+    if boundary_path.is_file():
+        boundary_for_provenance = boundary_path
+        try:
+            b_text = boundary_path.read_text()
+            b_parsed = _parse_polymesh_boundary(b_text)
+            _persist_geometry_quality(
+                case_dir,
+                patches=b_parsed,
+                boundary_relative=str(boundary_path.relative_to(case_dir)),
+            )
+        except OSError as e:
+            _persist_geometry_quality(
+                case_dir,
+                patches=None,
+                boundary_relative=str(boundary_path.relative_to(case_dir)),
+                blocked_reason="boundary_file_unreadable",
+                blocked_detail=str(e),
+            )
+    else:
+        # case has time dirs but no polyMesh/boundary — anomalous (the
+        # solver couldn't have run without a mesh). Surface as BLOCKED at
+        # the geometry layer; ingest continues so downstream gates show
+        # the full picture rather than aborting on first miss.
+        _persist_geometry_quality(
+            case_dir,
+            patches=None,
+            boundary_relative=None,
+            blocked_reason="boundary_file_missing",
+            blocked_detail=str(boundary_path),
+        )
+
+    # --- Persist BC from 0/ fields ---
+    try:
+        _collect_and_persist_bc(case_dir, manifest)
+    except OSError:
+        # Same fail-tolerant posture as run(): an OSError here must not
+        # lose the rest of the ingest evidence.
+        pass
+
+    # --- checkMesh on existing polyMesh (read-only operation) ---
+    cm_rc, cm_stdout, cm_stderr = _run_docker_command(
+        "checkMesh", case_dir, image, timeout=timeout_s,
+    )
+    cm_combined = cm_stdout
+    if cm_stderr:
+        cm_combined = f"{cm_combined}\n--- STDERR ---\n{cm_stderr}\n"
+    try:
+        mesh_log_path.write_text(cm_combined)
+        mesh_log_rel: str | None = str(mesh_log_path.relative_to(case_dir))
+    except OSError:
+        mesh_log_rel = None
+
+    if cm_rc == -1 and "OFA-OSERROR" in (cm_stderr or ""):
+        _persist_mesh_quality(
+            case_dir,
+            invoked=False,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=None,
+            blocked_reason="docker_invocation_failed",
+            blocked_detail=(cm_stderr or "").strip(),
+        )
+    elif cm_rc == -1 and "OFA-TIMEOUT" in (cm_stderr or ""):
+        _persist_mesh_quality(
+            case_dir,
+            invoked=True,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=None,
+            blocked_reason="checkmesh_timed_out",
+            blocked_detail=f"timeout_s={timeout_s}",
+        )
+    else:
+        cm_parsed = _parse_check_mesh_log(cm_stdout)
+        _persist_mesh_quality(
+            case_dir,
+            invoked=True,
+            returncode=cm_rc,
+            log_relative=mesh_log_rel,
+            parsed=cm_parsed,
+        )
+
+    # --- Transcribe external solver log into artifacts/solver.log ---
+    try:
+        ext_text = external_log.read_text()
+    except OSError as e:
+        return {
+            "status": "BLOCKED",
+            "summary": f"External solver log unreadable: {e}",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "solver_log_unreadable",
+                "source": str(external_log.relative_to(case_dir)),
+                "detail": str(e),
+            },
+        }
+    log_path.write_text(ext_text)
+
+    # --- Parse log + write residuals.csv ---
+    parsed = _parse_simplefoam_log(ext_text)
+    _write_residuals_csv(parsed, residuals_csv)
+
+    # --- Gate computation (same logic as a real run) ---
+    gate = _compute_gate_from_residuals(parsed, manifest)
+    # Override execution-provenance fields: the harness did NOT invoke the
+    # solver, an external runner did. report.py keys on `details.execution`
+    # to set top-level solver_execution.
+    gate["details"]["execution"] = "ingested"
+    gate["details"]["real_solver_invoked"] = False
+    gate["details"]["image"] = image
+    gate["details"]["log"] = str(log_path.relative_to(case_dir))
+    gate["details"]["residuals_csv"] = str(residuals_csv.relative_to(case_dir))
+    gate["details"]["external_log_source"] = str(external_log.relative_to(case_dir))
+    if "artifact" not in gate:
+        gate["artifact"] = str(log_path.relative_to(case_dir))
+
+    # --- Write provenance manifest ---
+    _write_ingest_provenance(
+        case_dir,
+        external_log_path=external_log,
+        boundary_path=boundary_for_provenance,
+        checkmesh_image=image,
+        time_directories=time_dirs,
+    )
 
     return gate
