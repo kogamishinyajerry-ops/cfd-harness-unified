@@ -269,32 +269,37 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
     if is_ingested:
-        # Codex R5-P1 fix: an ingested case whose solver_gate.json was
-        # lost must NOT be reclassified as `execution="real"` —
-        # `assemble()` would then skip the honesty fences (cap at WARN,
-        # cap validation_status at `partial`). The log banner preserves
-        # the provenance even after gate JSON loss.
-        return {
-            "status": "WARN",
-            "summary": (
-                f"Ingested solver artifacts present ({iterations} iterations); "
-                f"persisted solver_gate.json missing — falling back to "
-                f"log-banner classification."
-            ),
-            "artifact": str(log_path.relative_to(case_dir)),
-            "details": {
-                "execution": "ingested",
-                "log": str(log_path.relative_to(case_dir)),
-                "residuals_csv": str(residuals_path.relative_to(case_dir)),
-                "iterations": iterations,
-                "real_solver_invoked": False,
-                "warning": (
-                    "solver_gate.json was missing or unreadable; the ingest "
-                    "execution kind was recovered from the log banner. "
-                    "Re-run `cfdtrust ingest` to refresh the gate JSON."
-                ),
-            },
-        }
+        # DEC-V61-201-SUB-INGEST-P2-FOLLOWUP: don't hard-code WARN. The
+        # pre-fix branch collapsed every banner-detected outcome to WARN,
+        # which (a) silently upgraded a FAIL ingested run (residuals
+        # didn't meet targets) to WARN, and (b) prevented the
+        # PASS+ingested → partial-validation branch in `assemble()`
+        # from firing after gate-JSON loss. Re-parse the solver log via
+        # the same pure functions that produced the original gate and
+        # overlay the ingest provenance.
+        from ..backends.openfoam import (
+            _compute_gate_from_residuals,
+            _parse_simplefoam_log,
+        )
+        parsed = _parse_simplefoam_log(log_path.read_text())
+        recovered = _compute_gate_from_residuals(parsed, manifest)
+        details = dict(recovered.get("details", {}) or {})
+        # Preserve ingest provenance regardless of recomputed status —
+        # the honesty fences in `assemble()` key off `execution=="ingested"`.
+        details["execution"] = "ingested"
+        details["real_solver_invoked"] = False
+        details["log"] = str(log_path.relative_to(case_dir))
+        details["residuals_csv"] = str(residuals_path.relative_to(case_dir))
+        details["recovered_from_log_banner"] = True
+        details["warning"] = (
+            "solver_gate.json was missing or unreadable; the gate was "
+            "recovered by re-parsing solver.log + recomputing against "
+            "manifest residual_targets. Re-run `cfdtrust ingest` to "
+            "refresh the persisted gate JSON."
+        )
+        recovered["details"] = details
+        recovered["artifact"] = str(log_path.relative_to(case_dir))
+        return recovered
     # Legacy real-artifact fallback. CAUTION: a real run that FAILed but
     # didn't persist solver_gate.json would land here as PASS. Post-M2.3a
     # this branch should be reachable only for pre-fix case dirs.

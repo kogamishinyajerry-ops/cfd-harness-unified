@@ -1,10 +1,11 @@
 ---
 decision_id: DEC-V61-201-SUB-INGEST-P2-FOLLOWUP
 title: Recompute ingest gate from residuals.csv when solver_gate.json is missing
-status: Proposed
+status: Accepted
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: post-merge follow-up
-notion_sync_status: not_applicable_proposed
+notion_sync_status: pending_session_end_sync
 ---
 
 ## Why
@@ -98,3 +99,18 @@ status will be exactly what the original successful ingest produced.
 The only edge case is if residuals.csv has been corrupted while
 solver.log is intact — the gate would report no-iterations-parsed
 BLOCKED, which is the correct honest signal.
+
+## Implementation note
+
+- **Commit**: `TBD-recompute-followup` (worktree-agent-a7e599b4f6b581d31 branch; SHA updated in follow-up amendment commit if needed).
+- **Code change**: `ui/backend/audit/cfdtrust/audit/solver.py::read_artifacts()` banner-fallback branch. The previous hard-coded WARN return was replaced with a 3-step recompute:
+  1. Lazy-import `_parse_simplefoam_log` + `_compute_gate_from_residuals` from `..backends.openfoam`.
+  2. Re-parse the on-disk `solver.log` (banner lines pass through the parser harmlessly — neither `_TIME_LINE_RE` nor `_RESIDUAL_LINE_RE` match them).
+  3. Recompute the gate against `manifest.solver_contract.residual_targets`, then overlay `details.execution="ingested"` + `details.real_solver_invoked=False` + `details.recovered_from_log_banner=True` to preserve the ingest provenance regardless of recomputed status. The downstream `assemble()` honesty fences (PASS→WARN demotion + validated→partial cap) key off `execution=="ingested"`, so all three previously-shipped guarantees hold AND the partial-validation branch now fires after gate-JSON loss when residuals warrant it.
+- **LOC**: +31 / -26 in `solver.py`; net +5 LOC, well within ≤30 LOC spike-class budget.
+- **Tests added / updated** in `ui/backend/audit/cfdtrust_tests/test_ingest_mode.py`:
+  - **Updated** `test_read_artifacts_recovers_ingested_when_gate_json_missing` — canonical converged log now asserts recovered status `PASS` (was hard-coded WARN), plus the new `recovered_from_log_banner=True` provenance flag.
+  - **Updated** `test_assemble_honesty_fence_holds_via_log_banner_recovery` — end-to-end recovered gate is `PASS`, then `assemble()` writes `overall_status="WARN"` + `validation_status="partial"` (was inequality-only assertion against `PASS` / `validated`).
+  - **Added** `test_read_artifacts_recovers_ingested_fail_when_residuals_miss_targets` — non-converged ingested log + missing gate JSON → recovered status `FAIL` with `failed_fields` populated; this is the bug surface the P2 finding originally identified (silent FAIL → WARN upgrade).
+- **Test count**: 405 → 406 passing (`pytest -q ui/backend/audit/cfdtrust_tests/`), 1 skipped (unchanged). Net +1 test = +2 modifications + 1 new test - 2 existing tests adapted in place. No unrelated regressions.
+- **Honesty fences preserved**: ingested → assemble() PASS→WARN demotion + validated→partial cap untouched; only the lossy WARN-coalescing in `read_artifacts` is removed.
