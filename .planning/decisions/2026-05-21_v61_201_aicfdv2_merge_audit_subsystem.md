@@ -2,8 +2,12 @@
 decision_id: DEC-V61-201
 dec_id: V61-201
 title: Merge AI-CFD-V2 into cfd-harness-unified/ui/backend/audit/ as audit subsystem with 13-agent team + CWOS dual-governance
-status: Proposed (drafted 2026-05-21 · awaiting user ratification + Codex review per round cap=3 V133)
+status: Accepted (2026-05-21 · Codex round 2 APPROVE + user ratification via "执行下个 session 的任务" mandate)
 parent_dec: V61-200
+codex_review_rounds: 2
+codex_review_round1_verdict: CHANGES_REQUIRED (P1 packaging + P2 README/CWOS consistency + P3 DEC bookkeeping)
+codex_review_round2_verdict: APPROVE (all 3 R1 findings closed in fixup commits 3a9904d + b49c361)
+codex_review_log: /tmp/codex_review_round1.txt + /tmp/codex_review_round2.txt
 parent_artifacts:
   - github.com/kogamishinyajerry-ops/AI-CFD-V2 (source repo, to be archived after merge)
   - ui/backend/audit/README.md (subsystem charter)
