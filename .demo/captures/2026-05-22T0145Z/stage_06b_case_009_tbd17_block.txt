@@ -1,0 +1,3 @@
+[cfdtrust] FAIL ingest BLOCKED: reactingFoam log only carried 3 of 27 manifest target fields — solver gate cannot be evaluated on incomplete evidence.
+[cfdtrust] FAIL   reason: incomplete_residual_coverage
+[cfdtrust] WARN   next step: Either (a) the solver log truncated mid-run before every target field appeared (re-run to completion) or (b) the manifest declares fields the solver does not actually emit (correct `solver_contract.residual_targets`). Half coverage is not PASS — the gate refuses to declare success on fields it could not verify.

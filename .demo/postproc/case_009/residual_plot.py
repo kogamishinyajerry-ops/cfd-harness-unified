@@ -61,10 +61,11 @@ def main() -> None:
               fontsize=7, ncol=2, frameon=False)
     ax.text(
         0.01, 0.97,
-        ("MANIFEST DECLARED 27 FIELDS\n"
-         f"PARSER FOUND {len(cols)}\n"
-         "TBD-17 surface fixed in commit 3b5c43f"),
-        transform=ax.transAxes, fontsize=9,
+        (f"residuals.csv: {len(cols)} fields captured (20 species + base)\n"
+         "solver gate: BLOCKED — only 3 of 27 manifest target NAMES match\n"
+         "TBD-17 working in production (commit 3b5c43f) ·\n"
+         "engine REFUSES to declare PASS on naming mismatch coverage"),
+        transform=ax.transAxes, fontsize=8,
         verticalalignment="top",
         bbox=dict(boxstyle="round,pad=0.4",
                   facecolor="lightyellow", edgecolor="goldenrod"),
