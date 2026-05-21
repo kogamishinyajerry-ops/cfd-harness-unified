@@ -453,8 +453,18 @@ def _run_docker_command(
 # parseable transport residuals. Widening to `[\w.]+` captures dotted fields
 # while still rejecting whitespace/punctuation that would falsely match
 # patch names or diagnostic lines.
+#
+# TBD-19 (case_009 Sandia Flame D reacting dogfood): chemkin-style species
+# names contain parentheses to disambiguate spin states (`CH2(S)` =
+# singlet methylene, `CH2(T)` = triplet methylene; both appear in
+# GRI-Mech 3.0 and similar reacting mechanisms). The pre-fix `[\w.]+`
+# group stopped at the first `(`, capturing `CH2` and silently colliding
+# with the real `CH2` species. Widening to `[\w.()]+` captures
+# parenthesized species intact. The regex remains anchored on a specific
+# solver-name prefix + colon + literal `Solving for ` + comma terminator,
+# so the wider char class does NOT false-match diagnostic lines.
 _RESIDUAL_LINE_RE = re.compile(
-    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG|DILUPBiCGStab|PBiCG|DICPBiCGStab|diagonal)\s*:\s*Solving for\s+([\w.]+),"
+    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG|DILUPBiCGStab|PBiCG|DICPBiCGStab|diagonal)\s*:\s*Solving for\s+([\w.()]+),"
     r"\s*Initial residual\s*=\s*([\d.eE+\-]+),"
     r"\s*Final residual\s*=\s*([\d.eE+\-]+),"
 )
@@ -672,6 +682,56 @@ def _compute_gate_from_residuals(
                     "emits split components (Ux, Uy, Uz) but the manifest "
                     "may name combined `U`; this gate already maps `U` → "
                     "max(Ux,Uy,Uz), but other names must match exactly."
+                ),
+                "y_plus": parsed["y_plus"],
+            },
+        }
+
+    # TBD-17 fix (case_009 Sandia Flame D reacting dogfood, honesty-adjacent):
+    # PARTIAL coverage — manifest declares N target fields but parser found
+    # < N in residuals.csv — must NOT silently PASS on the subset that was
+    # found. Pre-fix, the gate iterated `targets.items()` and used
+    # `if actual is None: continue` to silently drop missing fields, then
+    # declared PASS based on the subset. For a 27-field reacting manifest
+    # whose log truncated mid-iteration (3 momentum fields parsed, 24
+    # species + temperature absent), the gate said "solver_gate=PASS" with
+    # no flag that 24/27 fields were silently dropped — the closest the
+    # dogfood arc came to surfacing a real honesty break.
+    #
+    # The top-level overall_status / validation_status are already capped
+    # at WARN / partial by solver_execution=ingested honesty fences, BUT
+    # the solver_gate ITSELF was lying internally. Choice of disposition:
+    # BLOCKED-with-reason `incomplete_residual_coverage` — most honest, as
+    # the solver gate cannot be EVALUATED when evidence is incomplete
+    # (vs. FAIL which would imply "evaluated and didn't converge"). Half
+    # evidence is not WARN, it is "cannot evaluate".
+    if targets and len(checked) < len(targets):
+        missing_target_fields = sorted(
+            tgt for tgt in targets.keys() if tgt not in checked
+        )
+        return {
+            "status": "BLOCKED",
+            "summary": (
+                f"{solver_name} log only carried {len(checked)} of "
+                f"{len(targets)} manifest target fields — solver gate "
+                f"cannot be evaluated on incomplete evidence."
+            ),
+            "details": {
+                "execution": "real",
+                "real_solver_invoked": True,
+                "reason": "incomplete_residual_coverage",
+                "incomplete_residual_coverage": True,
+                "manifest_targets": sorted(targets.keys()),
+                "checked_fields": checked,
+                "missing_target_fields": missing_target_fields,
+                "fields_in_log": sorted(final.keys()),
+                "next_step": (
+                    "Either (a) the solver log truncated mid-run before "
+                    "every target field appeared (re-run to completion) or "
+                    "(b) the manifest declares fields the solver does not "
+                    "actually emit (correct `solver_contract.residual_targets`). "
+                    "Half coverage is not PASS — the gate refuses to "
+                    "declare success on fields it could not verify."
                 ),
                 "y_plus": parsed["y_plus"],
             },
@@ -1928,6 +1988,51 @@ def _find_external_solver_log(
         if all_matches:
             all_matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
             return all_matches[0]
+
+    # TBD-15 (case_009 Sandia Flame D reacting dogfood): multi-stage
+    # reacting workflows commonly split the run into `log_cold.txt`
+    # (cold-flow stage) + `log_ignite.txt` (ignition stage) +
+    # `log_burn.txt` (burning stage). None of these match
+    # `log_<solver>.txt` / `log.<solver>` / `<solver>.log`. Fall back to a
+    # general `log_*.txt` glob, but require the file head to reference
+    # the manifest's declared solver name (e.g. `Build: reactingFoam` or
+    # `Exec: reactingFoam ...`) so this fallback does not pick up
+    # unrelated stdout dumps that happen to live alongside the case.
+    solver_name: str | None = None
+    if manifest is not None:
+        raw = manifest.get("solver")
+        if isinstance(raw, str):
+            cand = raw.strip()
+            if cand and re.match(r"^[A-Za-z0-9_-]+$", cand):
+                solver_name = cand
+    if solver_name is not None:
+        general_glob = "log_*.txt"
+        general_dirs: List[Path] = [case_dir]
+        general_dirs.extend(log_subdirs)
+        general_matches: List[Path] = []
+        for dir_to_scan in general_dirs:
+            try:
+                general_matches.extend(
+                    p for p in dir_to_scan.glob(general_glob) if p.is_file()
+                )
+            except OSError:
+                pass
+        # Newest first so multi-stage runs return the most recent stage's
+        # log (typical user expectation: "show me the latest").
+        general_matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        for cand_path in general_matches:
+            try:
+                with cand_path.open("rb") as f:
+                    head = f.read(4096).decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            # Header heuristic: OpenFOAM logs prefix every run with a
+            # banner that includes `Build  : reactingFoam-...` or
+            # `Exec   : reactingFoam ...`. Match either appearance of
+            # the solver name in the file head — bounded to first 4KB so
+            # a pathological file doesn't force a full read.
+            if solver_name in head:
+                return cand_path
     return None
 
 

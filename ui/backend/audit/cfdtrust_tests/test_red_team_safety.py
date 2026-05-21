@@ -2358,14 +2358,22 @@ def test_r15_f02_no_pass_when_zero_target_fields_found_in_log():
     assert "Ux" in gate["details"]["fields_in_log"]
 
 
-def test_r15_f02_partial_overlap_still_passes_on_overlapping_fields():
-    """R15-F-02 boundary: if AT LEAST ONE target field appears in the log,
-    the gate should NOT trigger `no_target_fields_in_log` (it falls through
-    to the normal PASS / FAIL logic on the overlapping fields).
+def test_r15_f02_partial_overlap_now_blocks_with_incomplete_coverage():
+    """R15-F-02 boundary, post-TBD-17 (case_009 Sandia Flame D reacting
+    dogfood, honesty-adjacent): if SOME manifest target fields are
+    present in the log but others are absent, the gate must BLOCK with
+    `incomplete_residual_coverage` — not silently PASS on the subset.
 
-    This protects the legitimate case where a manifest declares more
-    fields than a particular solver run emitted (e.g. user adds `omega`
-    target but case is laminar)."""
+    Pre-TBD-17, this scenario PASSed (a manifest could declare 27
+    reacting fields and the gate would declare success based on the 3
+    momentum fields it found, dropping 24 species silently). That is
+    the closest the dogfood arc came to surfacing a real honesty break:
+    the solver_gate itself was lying internally even though the
+    top-level overall_status was capped by solver_execution=ingested.
+
+    Post-TBD-17: half evidence is not WARN, it is "cannot evaluate" —
+    BLOCKED with the missing field list surfaces what was dropped so the
+    user can either re-run to completion or correct the manifest."""
     from cfdtrust.backends import openfoam as ofa
 
     log = (
@@ -2386,9 +2394,13 @@ def test_r15_f02_partial_overlap_still_passes_on_overlapping_fields():
     }
     gate = ofa._compute_gate_from_residuals(parsed, manifest)
 
-    assert gate["status"] == "PASS", f"partial overlap should PASS, got {gate!r}"
+    assert gate["status"] == "BLOCKED", (
+        f"partial overlap must BLOCK on incomplete coverage, got {gate!r}"
+    )
+    assert gate["details"]["reason"] == "incomplete_residual_coverage"
+    assert gate["details"]["incomplete_residual_coverage"] is True
     assert "Ux" in gate["details"]["checked_fields"]
-    assert "nonexistent" not in gate["details"]["checked_fields"]
+    assert gate["details"]["missing_target_fields"] == ["nonexistent"]
 
 
 def test_r15_f03_schema_rejects_image_with_leading_dash(repo_root: Path, tmp_path: Path):
