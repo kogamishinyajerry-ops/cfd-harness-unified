@@ -1,0 +1,35 @@
+=== STAGE 05 · Gap #32 · self-discovered + same-arc-fixed sentinel cleanup ===
+Date: 2026-05-22T16:00Z
+HEAD: 600022b
+Pattern: case_011 cycle-2 re-dogfood surfaced __none_laminar__ sentinel
+leaking into per-region expected_fields as if it were a literal field.
+Found in dogfood. Fixed in same arc. 12 commits later: shipped.
+
++++ git show 77825b8 --stat +++
+commit 77825b8ab857e6acff2c8f33dd867c8cfc25cc07
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 04:07:31 2026 +0800
+
+    fix(audit-ingest): Gap #32 strip __sentinel__ markers from turbulence_fields
+    
+    case_011 cycle-2 dogfood (Agent F): manifest sentinel `__none_laminar__`
+    propagated into per-region `expected_fields` as if it were a literal
+    field, then surfaced in `fields_missing` against a non-existent file
+    path. The sentinel was a historical manifest-authoring convention
+    ("no turbulence fields") that the canonical Gap #31 derivation already
+    supersedes via `physics.turbulence_model: laminar` → [].
+    
+    Fix: filter any string of shape `__<text>__` from the resolved
+    turb_fields list before it joins the expected list. Both single-region
+    and multi-region branches benefit (the expected list flows into both).
+    
+    Test: test_collect_bc_sentinel_turbulence_fields_filtered_out
+    
+    confidence: high
+
++++ snippet of the sentinel that leaked (from real bc_quality.json before fix) +++
+regions.region_cold_fluid.expected_fields: [U, p, __none_laminar__]
+regions.region_cold_fluid.fields.__none_laminar__.missing: true
+regions.region_cold_fluid.fields.__none_laminar__.file: 0/region_cold_fluid/__none_laminar__
+
+(See .planning/dogfood/DOGFOOD_CASE_011_CYCLE2_REDOGFOOD.md §Gap #32)

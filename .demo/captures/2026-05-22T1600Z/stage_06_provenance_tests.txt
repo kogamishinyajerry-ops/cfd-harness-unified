@@ -1,0 +1,31 @@
+=== STAGE 06 · Suite green + cycle-2 commit provenance ===
+Date: 2026-05-22T16:00Z
+HEAD: 600022b
+
++++ Test counts (per PROJECT_GOVERNOR_CHECKPOINT_2) +++
+    441 passed · 1 skipped (pre-existing R15 Docker-gated)
+    +32 tests since cycle-1 close (baseline 409)
+
++++ Cycle-2 commit list (since 5769673) +++
+600022b docs(milestone): project-governor checkpoint #2 · SHIP THE DEMO
+16e8dcf fix(audit-ingest): Gap #35 stream solver log in gate-JSON-loss recovery path
+77825b8 fix(audit-ingest): Gap #32 strip __sentinel__ markers from turbulence_fields
+7c42b2a docs(dogfood): cycle-2 re-dogfood case_011 + case_010 with cycle-1 fixes (Agent F)
+0ed2b06 Merge: Gap #26-#27 spike-class (step-numbered mesh-pipeline log discovery)
+68f4a70 fix(audit-ingest): Gap #26-#27 step-numbered mesh-pipeline log discovery
+8981f63 Merge: TBD-15 + TBD-20 spike-class (reacting log fallback + streaming parser)
+e8691f3 fix(audit-ingest): TBD-15 + TBD-20 spikes (reacting log fallback + streaming parser)
+de38f49 Merge: Gap #29 + #31 · 0.orig fallback + turb-model derivation (Agent C spike-class)
+f108e13 Merge: Gap #11 · multi-region CHT BC parser (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC)
+19f8dfa Merge: Gap #23 · regex-grouped patches for compressible aero (DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES)
+01d5567 feat(audit-ingest): detect + parse 0/region_*/ multi-region CHT BC layout (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC · Gap #11)
+914f944 fix(audit-ingest): close 2 case_010 LES dogfood spikes (Gap #29 + #31)
+4db8ecc feat(audit-ingest): handle regex-grouped patch blocks in bc_audit (DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES · Gap #23)
+7f40730 docs(demo): Chinese MG video — kinetic typography + real-screenshot inserts + persistent rule update
+6cf9a1c docs(demo): render cfdtrust_demo_2026-05-22.mp4 — 7:38 MP4 from real captures + real plots
+1176dae docs(demo): polish hero plots — re-ingest case_021 + case_009 surfaces TBD-17 BLOCK live
+0f4703e docs(demo): video production package — real captures + real plots + ParaView macros + persistent marketing-director agent
+e1867aa docs(demo): ship 2026-05-22 milestone demo materials + dogfood reports
+
++++ Commit count +++
+    19 commits since cycle-1 close (cycle-1 had 21)

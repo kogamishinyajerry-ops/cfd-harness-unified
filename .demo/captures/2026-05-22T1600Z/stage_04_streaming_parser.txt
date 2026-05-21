@@ -1,0 +1,55 @@
+=== STAGE 04 · Streaming log parser · bounded-RSS for 3.3 GiB logs (TBD-20) ===
+Date: 2026-05-22T16:00Z
+HEAD: 600022b
+Before: case_009-class 3.3 GiB reactingFoam logs peaked at ~13 GiB RSS during read.
+After:  bounded chunk streaming · byte-identical output proven by test.
+
++++ git show e8691f3 --stat +++
+commit e8691f35fba04105ad54438cc58ab419b659917b
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 03:54:38 2026 +0800
+
+    fix(audit-ingest): TBD-15 + TBD-20 spikes (reacting log fallback + streaming parser)
+    
+    TBD-15: extend _INGEST_LOG_FALLBACK_CANDIDATES with reacting/combustion/
+    compressible/VOF/CHT solver log names so manifest-less ingest doesn't
+    false-BLOCK on cases that have the log on disk.
+    
+    TBD-20: add _parse_simplefoam_log_stream + refactor _parse_simplefoam_log
+    to share a line-iterable inner. External-log ingest now streams from
+    path instead of read_text + splitlines, eliminating O(filesize) memory.
+    
+    Tests:
+    - test_log_fallback_includes_reacting_family
+    - test_stream_parser_equivalence (parses synthetic log via text + stream
+      paths, asserts dict equality)
+    
+    confidence: high
+
+ ui/backend/audit/cfdtrust/backends/openfoam.py     | 139 +++++++++++++++++----
+ .../audit/cfdtrust_tests/test_ingest_mode.py       |  82 ++++++++++++
+ 2 files changed, 197 insertions(+), 24 deletions(-)
+
++++ git show 16e8dcf --stat (Gap #35 follow-up streaming) +++
+commit 16e8dcfa71c39ec37e62b4be2d50aad868cde10b
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 04:08:23 2026 +0800
+
+    fix(audit-ingest): Gap #35 stream solver log in gate-JSON-loss recovery path
+    
+    audit/solver.py:284 was the second site doing _parse_simplefoam_log(
+    log_path.read_text()) on the gate-recovery-from-banner path. case_009-
+    class reacting logs (3.3 GiB) would OOM at 13 GiB peak RSS via this
+    branch when solver_gate.json was deleted or unreadable.
+    
+    Switch to the _parse_simplefoam_log_stream variant landed in TBD-20
+    (commit 8981f63). Output is byte-identical by construction — both text
+    + stream variants funnel into _parse_simplefoam_log_lines (covered by
+    test_stream_parser_equivalence).
+
++++ payoff on case_011 cycle-2: 1/1 → 3/3 residual fields tracked +++
+Cycle-1 (text path, DILUPBiCGStab regex blind): residuals.csv contained only p_rgh.
+Cycle-2 (streaming path + extended regex):       residuals.csv contains Ux, h, p_rgh
+Verify:
+iter,Ux,Uy,Uz,h,p_rgh
+     201 /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/residuals.csv

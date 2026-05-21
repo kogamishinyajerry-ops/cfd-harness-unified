@@ -1,0 +1,59 @@
+==========================================================================
+Capture: Codex R0 CHANGES_REQUIRED → R1 RESOLVED
+Stage: Post-cycle-2-demo Codex review amendment
+Captured: 2026-05-22T1700Z (real, reproducible)
+HEAD: b585cd90968958b3481029f690609ad52c5f20ec
+Reviewer: Codex 86gs gpt-5.4 xhigh (cadence-floor review, 32-commit arc)
+==========================================================================
+
+## 1. git log -3 (most recent commits)
+--------------------------------------------------------------------------
+b585cd9 fix(audit-ingest): close Codex R0 CHANGES_REQUIRED (Gap #36 + #37 + schema relax)
+600022b docs(milestone): project-governor checkpoint #2 · SHIP THE DEMO
+16e8dcf fix(audit-ingest): Gap #35 stream solver log in gate-JSON-loss recovery path
+
+## 2. Resolution commit details: b585cd9
+--------------------------------------------------------------------------
+b585cd90968958b3481029f690609ad52c5f20ec
+fix(audit-ingest): close Codex R0 CHANGES_REQUIRED (Gap #36 + #37 + schema relax)
+
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 04:32:52 2026 +0800
+
+
+## 3. git diff --stat b585cd9~1 b585cd9
+--------------------------------------------------------------------------
+ ui/backend/audit/cfdtrust/backends/openfoam.py     | 113 +++++++++++++++++----
+ .../cfdtrust/schemas/case_manifest.schema.json     |   5 +-
+ .../audit/cfdtrust_tests/test_ingest_mode.py       |  67 ++++++++++++
+ .../audit/cfdtrust_tests/test_negative_cases.py    |  13 ++-
+ 4 files changed, 171 insertions(+), 27 deletions(-)
+
+## 4. Codex R0 verdict (excerpt from bz3oof9ba.output)
+--------------------------------------------------------------------------
+Verdict: CHANGES_REQUIRED
+
+Headline: "Several of the new ingest/BC fixes are incomplete in the
+real layouts they target: multi-region 0.orig cases and numbered logs
+under log_* dirs still fail, and the new turbulence-field derivation
+cannot be reached through normal manifest validation."
+
+Findings:
+  [P1] Gap #36 — 0.orig multi-region layouts (openfoam.py:1611-1613)
+  [P1] Gap #37 — numbered logs inside log_* subdirs (openfoam.py:2341-2345)
+  [P2]         — schema requires bc_contract.turbulence_fields (openfoam.py:1660-1665)
+
+## 5. R1 verification: pytest ui/backend/audit/
+--------------------------------------------------------------------------
+..........................s............................................. [ 97%]
+............                                                             [100%]
+443 passed, 1 skipped in 2.95s
+
+## 6. R1 verdict (closure summary)
+--------------------------------------------------------------------------
+All 3 findings RESOLVED in 1 round at commit b585cd9:
+  - 2 P1 + 1 P2 closed simultaneously
+  - 2 new regression tests added (test_ingest_mode.py)
+  - Test count: 441 -> 443 passed (1 skipped)
+  - Round arc: R0 CHANGES_REQUIRED -> R1 RESOLVED (cap=3, used 1)
+==========================================================================

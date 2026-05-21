@@ -1,0 +1,42 @@
+=== CYCLE-2 RE-DOGFOOD case_010 DrivAer LES fastback ===
+Date: 2026-05-21T20:02:23Z
+HEAD: 8981f63
+Case: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case
+---
+Note: cycle-1 artifacts moved to artifacts.cycle1_baseline_backup/ for comparison.
+Layout check: 0.orig 
+
++++ cfdtrust ingest /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case +++
+[cfdtrust] FAIL ingest BLOCKED: Case has no time directory beyond 0/; nothing to ingest.
+[cfdtrust] FAIL   reason: no_time_directory_found
+[cfdtrust] WARN   next step: Run the case externally first (any compatible OpenFOAM build), then re-run `cfdtrust ingest`. For new cases authored from scratch, use `cfdtrust run` instead.
+real 0.14
+user 0.08
+sys 0.02
+EXIT_CODE=
+
++++ cfdtrust audit /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case (post-BLOCK forensics) +++
+[cfdtrust] OK   audit gate geometry_contract: BLOCKED
+[cfdtrust] OK   audit gate mesh_contract: BLOCKED
+[cfdtrust] OK   audit gate bc_contract: BLOCKED
+[cfdtrust] WARN solver state and qoi/reference gates are reported by `cfdtrust report`.
+EXIT_CODE=
+
++++ cfdtrust report /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case +++
+[cfdtrust] OK   trust_report written: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case/artifacts/trust_report.json
+        overall_status   = BLOCKED
+        solver_execution = skipped
+        validation_status= not_validated
+[cfdtrust] WARN This trust_report does NOT constitute real CFD validation.
+EXIT_CODE=
+
++++ ls artifacts/ +++
+total 48
+drwxr-xr-x@  8 Zhuanz  staff   256  5月 22 04:02 .
+drwxr-xr-x@ 12 Zhuanz  staff   384  5月 22 04:02 ..
+-rw-r--r--@  1 Zhuanz  staff   181  5月 22 04:02 bc_audit.json
+-rw-r--r--@  1 Zhuanz  staff   187  5月 22 04:02 geometry_report.json
+-rw-r--r--@  1 Zhuanz  staff   183  5月 22 04:02 mesh_report.json
+-rw-r--r--@  1 Zhuanz  staff   297  5月 22 04:02 qoi.csv
+-rw-r--r--@  1 Zhuanz  staff   372  5月 22 04:02 reference_comparison.csv
+-rw-r--r--@  1 Zhuanz  staff  3630  5月 22 04:02 trust_report.json

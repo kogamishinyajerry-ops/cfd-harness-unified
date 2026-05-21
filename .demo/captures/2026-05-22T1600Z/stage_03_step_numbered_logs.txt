@@ -1,0 +1,30 @@
+=== STAGE 03 · Step-numbered mesh-pipeline log discovery (Gap #26-#27) ===
+Date: 2026-05-22T16:00Z
+HEAD: 600022b
+Industrial CFD shops universally step-number their run scripts:
+  01_blockMesh.log, 02_snappyHexMesh.log, 03_decomposePar.log ...
+Engine now walks these alongside the unprefixed forms; highest-step-number wins.
+
++++ git show 68f4a70 --stat +++
+commit 68f4a70f36229545ccc759b814c9795aca3fd3f6
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 04:03:12 2026 +0800
+
+    fix(audit-ingest): Gap #26-#27 step-numbered mesh-pipeline log discovery
+    
+    case_010 LES dogfood: industrial run scripts often name mesh logs
+    01_blockMesh.log / 02_snappyHexMesh.log etc. (step-numbered). Engine
+    mesh-log walker now accepts these alongside the unprefixed variants;
+    when both forms exist for the same tool, the highest step number wins
+    (latest run = canonical evidence).
+    
+    Tests:
+    - test_mesh_log_discovery_step_numbered_blockmesh
+    - test_mesh_log_discovery_prefers_latest_step_number
+    
+    confidence: high
+
+ ui/backend/audit/cfdtrust/backends/openfoam.py     | 67 ++++++++++++++++++++++
+ .../audit/cfdtrust_tests/test_ingest_mode.py       | 47 +++++++++++++++
+
++++ grep step-numbered fixture in engine source +++
