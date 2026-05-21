@@ -288,6 +288,12 @@ def _is_openfoam_compatible_ingest_case_dir(case_dir: Path) -> Tuple[bool, str]:
     but the depth-N nested-symlink walk uses the escape-check (contained
     symlinks allowed) since an already-run case naturally contains
     OpenFOAM's own `dynamicCode/*/lnInclude/*` symlinks.
+
+    Gap #29 (case_010 LES dogfood): for the `0/` subdir specifically, accept
+    `0.orig/` as an equivalent — it is the canonical OpenFOAM pre-init
+    pattern (user copies `0.orig/` → `0/` immediately before running the
+    solver). For ingest the BCs can be read from either; refusing
+    `0.orig/`-only cases would block legitimate canonical-shape ingests.
     """
     if case_dir.is_symlink():
         return False, (
@@ -298,6 +304,16 @@ def _is_openfoam_compatible_ingest_case_dir(case_dir: Path) -> Tuple[bool, str]:
     symlinked: list[str] = []
     for d in _OPENFOAM_REQUIRED_DIRS:
         p = case_dir / d
+        # Gap #29: `0/` may be absent on ingest if the case carries the
+        # canonical `0.orig/` pre-init dir instead. Treat either as
+        # satisfying the `0` slot for ingest's read-only purposes.
+        if d == "0" and not p.is_symlink() and not p.is_dir():
+            alt = case_dir / "0.orig"
+            if alt.is_symlink():
+                symlinked.append("0.orig")
+                continue
+            if alt.is_dir():
+                continue
         if p.is_symlink():
             symlinked.append(d)
             continue
@@ -1415,6 +1431,32 @@ def _persist_bc_quality(
     return out_path
 
 
+def _turb_fields_from_model(turb_model: str) -> List[str]:
+    """Gap #31: derive expected turbulence-field set from declared
+    `physics.turbulence_model`. Used when manifest doesn't explicitly
+    set `bc_contract.turbulence_fields`.
+
+    - RANS (k-omega-SST / k-epsilon / k-omega):  [k, omega, nut] or [k, epsilon, nut]
+    - LES algebraic SGS (WALE / Smagorinsky):    [nut]   (no transport eqns)
+    - LES one-eq (kEqn / dynamicKEqn):           [nut, nuSgs, k]
+    - laminar / DNS:                              []
+    - Unknown → conservative RANS default        [k, omega, nut]
+    """
+    m = (turb_model or "").lower().replace("_", "-").replace(" ", "-")
+    if not m or m in ("laminar", "dns", "none"):
+        return []
+    if "wale" in m or "smagorinsky" in m or "les-algebraic" in m:
+        return ["nut"]
+    if "les" in m and ("keqn" in m or "one-eq" in m or "oneeq" in m):
+        return ["nut", "nuSgs", "k"]
+    if "epsilon" in m or "k-eps" in m or "k-epsilon" in m:
+        return ["k", "epsilon", "nut"]
+    if "omega" in m or "sst" in m or "k-omega" in m:
+        return ["k", "omega", "nut"]
+    # Unknown — conservative RANS default with hint.
+    return ["k", "omega", "nut"]
+
+
 def _collect_and_persist_bc(
     case_dir: Path,
     manifest: Dict[str, Any],
@@ -1424,12 +1466,24 @@ def _collect_and_persist_bc(
     succeeds.
 
     Field selection: always `U` and `p` (incompressible RANS canonical),
-    plus any name in `manifest.bc_contract.turbulence_fields`. The 0/
-    files exist before any solver runs (user inputs), so parser failures
-    here surface as `fields_missing` in the JSON — not BLOCKED.
+    plus any name in `manifest.bc_contract.turbulence_fields` when set
+    explicitly; otherwise derived from `physics.turbulence_model` via
+    `_turb_fields_from_model` (Gap #31 — LES-WALE solves only nut, no
+    k/omega transport eqns; hardcoding RANS expected_fields was flagging
+    legitimate LES cases as false-INCOMPLETE).
+
+    The 0/ files exist before any solver runs (user inputs), so parser
+    failures here surface as `fields_missing` in the JSON — not BLOCKED.
     """
     bc_contract = manifest.get("bc_contract", {}) or {}
-    turb_fields = list(bc_contract.get("turbulence_fields", []) or [])
+    if "turbulence_fields" in bc_contract and bc_contract.get("turbulence_fields") is not None:
+        # Explicit manifest declaration wins — preserves backward compat.
+        turb_fields = list(bc_contract.get("turbulence_fields") or [])
+    else:
+        # Gap #31: derive from physics.turbulence_model.
+        physics = manifest.get("physics", {}) or {}
+        turb_model = physics.get("turbulence_model", "") or ""
+        turb_fields = _turb_fields_from_model(turb_model)
 
     # Canonical incompressible RANS fields. Deduplicate while preserving
     # order: U, p first, then turbulence fields in manifest order.
@@ -1441,10 +1495,17 @@ def _collect_and_persist_bc(
         seen.add(fname)
         expected.append(fname)
 
+    # Gap #29: prefer `0/` but fall back to `0.orig/` for BC source
+    # selection (canonical OpenFOAM pre-init pattern). Same fall-back as
+    # `_is_openfoam_compatible_ingest_case_dir` for symmetry — if env
+    # check accepted the case via 0.orig, BC parse must read from there.
+    zero_dir_name = "0" if (case_dir / "0").is_dir() else (
+        "0.orig" if (case_dir / "0.orig").is_dir() else "0"
+    )
     fields: Dict[str, Dict[str, Any]] = {}
     for fname in expected:
-        fpath = case_dir / "0" / fname
-        rel = str(Path("0") / fname)
+        fpath = case_dir / zero_dir_name / fname
+        rel = str(Path(zero_dir_name) / fname)
         if not fpath.is_file():
             fields[fname] = {
                 "file": rel,

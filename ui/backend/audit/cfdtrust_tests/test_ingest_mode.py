@@ -1935,3 +1935,98 @@ def test_tbd19_residual_regex_captures_parenthesized_species():
         f"CH2(T) parenthesized triplet must be captured intact; got "
         f"{list(residuals.keys())}"
     )
+
+
+# ---------- M2.6 cycle 1 spike-class: case_010 LES dogfood Gap #29 + #31 ----------
+
+
+def test_ingest_accepts_zero_orig_when_zero_absent(monkeypatch, tmp_path: Path):
+    """Gap #29 (case_010 LES dogfood): when `0/` is absent but
+    `0.orig/` is present (canonical OpenFOAM pre-init workflow — user
+    copies `0.orig/` → `0/` before running solver), ingest's env check
+    must accept the case. BCs are read from `0.orig/` instead.
+    """
+    # Build an ingestable case but with `0.orig/` instead of `0/`.
+    for sub in ("system", "constant"):
+        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "constant" / "polyMesh").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "constant" / "polyMesh" / "boundary").write_text(
+        _CANONICAL_POLYMESH_BOUNDARY,
+    )
+    (tmp_path / "0.orig").mkdir()  # canonical pre-init dir, no `0/`
+    (tmp_path / "0.orig" / "U").write_text(_CANONICAL_0_U)
+    (tmp_path / "0.orig" / "p").write_text(_CANONICAL_0_P)
+    (tmp_path / "100").mkdir()
+    (tmp_path / "100" / "U").write_text("(placeholder)\n")
+    (tmp_path / "log_simpleFoam.txt").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    # Env-check should accept this shape.
+    ok, reason = ofa._is_openfoam_compatible_ingest_case_dir(tmp_path)
+    assert ok, f"Gap #29: 0.orig/ must satisfy `0` slot for ingest; got reason={reason}"
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    # Must NOT block on case_dir_not_openfoam_compatible.
+    assert gate["details"].get("reason") != "case_dir_not_openfoam_compatible"
+    # BC artifact written, reading from 0.orig/.
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    assert "U" in bc["fields"]
+    assert bc["fields"]["U"]["parsed"] is True, (
+        "Gap #29: BC parser must fall back to 0.orig/ when 0/ absent"
+    )
+    assert bc["fields"]["U"]["file"].startswith("0.orig/"), (
+        f"BC source file must point at 0.orig/U; got {bc['fields']['U']['file']}"
+    )
+
+
+def test_bc_expected_fields_rans_komega_includes_k_omega_nut(monkeypatch, tmp_path: Path):
+    """Gap #31a: when manifest declares `physics.turbulence_model =
+    k-omega-SST` AND does NOT explicitly set
+    `bc_contract.turbulence_fields`, the BC layer must expect
+    [U, p, k, omega, nut] (RANS canonical). Hardcoded expected_fields
+    is replaced by model-driven derivation.
+    """
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+
+    m = _ingest_manifest_fixture()
+    m["physics"]["turbulence_model"] = "k-omega-SST"
+    # Strip explicit turbulence_fields so derivation kicks in.
+    m["bc_contract"].pop("turbulence_fields", None)
+
+    ofa.ingest(tmp_path, m)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    expected = bc.get("expected_fields", [])
+    assert "k" in expected, f"Gap #31a: RANS k-omega-SST must expect k; got {expected}"
+    assert "omega" in expected, f"Gap #31a: must expect omega; got {expected}"
+    assert "nut" in expected, f"Gap #31a: must expect nut; got {expected}"
+
+
+def test_bc_expected_fields_les_wale_is_nut_only(monkeypatch, tmp_path: Path):
+    """Gap #31b: when manifest declares `physics.turbulence_model =
+    LES-WALE` (algebraic SGS), expected_fields must be [U, p, nut] only
+    — k and omega are NOT solved (no transport eqns for LES algebraic
+    SGS). Pre-fix, hardcoded expected_fields=[k, omega, nut] would
+    flag every legitimate LES-WALE case as false-INCOMPLETE for
+    missing k/omega.
+    """
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+
+    m = _ingest_manifest_fixture()
+    m["physics"]["turbulence_model"] = "LES-WALE"
+    # Strip explicit turbulence_fields so derivation kicks in.
+    m["bc_contract"].pop("turbulence_fields", None)
+
+    ofa.ingest(tmp_path, m)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    expected = bc.get("expected_fields", [])
+    assert "nut" in expected, f"Gap #31b: LES-WALE must expect nut; got {expected}"
+    assert "k" not in expected, (
+        f"Gap #31b: LES-WALE algebraic SGS solves NO k transport eqn; "
+        f"k must NOT be in expected_fields; got {expected}"
+    )
+    assert "omega" not in expected, (
+        f"Gap #31b: LES-WALE algebraic SGS solves NO omega transport eqn; "
+        f"omega must NOT be in expected_fields; got {expected}"
+    )
