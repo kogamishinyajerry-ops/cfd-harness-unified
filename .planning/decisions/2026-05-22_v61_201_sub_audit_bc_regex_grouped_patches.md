@@ -5,7 +5,7 @@ status: Accepted
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: post-merge follow-up (M2.6)
-notion_sync_status: pending_session_end_sync
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/367c68942bed81499746d241512268b8)
 ---
 
 ## Why
