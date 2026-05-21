@@ -182,8 +182,12 @@ def _eval_y_plus_dimension(
             "patch_evaluated": None,
             "reason": "no_solver_y_plus_data",
             "next_step": (
-                "Run `cfdtrust run <case>` with solver_backend=openfoam so "
-                "simpleFoam emits patch y+ via the yPlus function object."
+                "For run-mode cases: `cfdtrust run <case>` with "
+                "solver_backend=openfoam so simpleFoam emits patch y+ via "
+                "the yPlus function object. For ingested cases: re-mesh + "
+                "re-ingest with the yPlus function object enabled, OR "
+                "remove `y_plus_target` from manifest.mesh_contract if y+ "
+                "is not contractually required for this case."
             ),
         }
 

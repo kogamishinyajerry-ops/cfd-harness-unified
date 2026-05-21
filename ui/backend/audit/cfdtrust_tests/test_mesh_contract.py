@@ -849,3 +849,35 @@ def test_mesh_gate_does_not_silently_pass_when_thresholds_unchecked(tmp_path: Pa
     # NO solver_gate.json on disk.
     gate = mesh_gate(tmp_path, _bfs_manifest())
     assert gate["status"] == "FAIL"  # not PASS, not MOCKED
+
+
+def test_y_plus_incomplete_advice_does_not_recommend_cfdtrust_run_only(tmp_path: Path):
+    """Gap #12 (case_011 CHT dogfood): the INCOMPLETE-y+ advice used to
+    say only `cfdtrust run`, which is wrong for ingested cases — those
+    cases were already externally run. Advice must mention either
+    re-meshing/re-ingest path or manifest-y_plus_target removal, so
+    ingest users get an actionable next step rather than being told to
+    invoke a mode that would overwrite their existing time directories."""
+    _write_mesh_quality(tmp_path, {
+        "checkmesh_status": "ok",
+        "overall_mesh_ok": True,
+        "stats": {"cells": 100},
+        "geometry": {
+            "max_non_orthogonality": 0.0,
+            "max_skewness": 0.1,
+            "max_aspect_ratio": 22.0,
+        },
+    })
+    # No solver_gate.json → y+ INCOMPLETE branch.
+    gate = mesh_gate(tmp_path, _bfs_manifest())
+    yd = gate["details"]["y_plus_dimension"]
+    assert yd["reason"] == "no_solver_y_plus_data"
+    advice = yd["next_step"]
+    # Must surface ingested-case path.
+    assert "ingest" in advice.lower(), (
+        f"ingest-case path missing from y+ INCOMPLETE advice: {advice!r}"
+    )
+    # Must offer the manifest-removal escape hatch.
+    assert "y_plus_target" in advice or "mesh_contract" in advice, (
+        f"manifest-removal escape hatch missing from advice: {advice!r}"
+    )

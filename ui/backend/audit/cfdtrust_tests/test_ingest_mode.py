@@ -1500,3 +1500,114 @@ def test_trust_report_schema_rejects_ingested_with_pass_overall():
     }
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.Draft7Validator(schema).validate(bad_report)
+
+
+# ---------- Gap #13: divergence detection on no-time-dir BLOCKED ----------
+
+
+_CANONICAL_DIVERGED_LOG = (
+    "Time = 1\n"
+    "smoothSolver:  Solving for Ux, Initial residual = 1.0, Final residual = 9.0, No Iterations 1000\n"
+    "Time = 2\n"
+    "smoothSolver:  Solving for Ux, Initial residual = 1e6, Final residual = 1e9, No Iterations 1000\n"
+    "Time = 3\n"
+    "smoothSolver:  Solving for Ux, Initial residual = -nan, Final residual = -nan, No Iterations 1000\n"
+    "Time = 4\n"
+    "[1] #0  Foam::error::printStack(Foam::Ostream&) at ??:?\n"
+    "FOAM FATAL ERROR: Maximum number of iterations exceeded, divergence detected\n"
+    "From function GAMG\n"
+)
+
+
+def test_ingest_no_time_dir_with_diverged_log_attaches_likely_divergence(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #13 (case_004 NREL MRF dogfood): when the case has no time
+    directory > 0 (so ingest BLOCKs) but the solver log carries
+    divergence markers (FATAL / nan / printStack), the BLOCKED gate
+    must attach `likely_divergence: True` + `divergence_evidence` so
+    the user gets actionable diagnostic instead of the generic
+    'never-ran' next_step."""
+    _make_ingestable_case(tmp_path, with_time_dir=False, with_log=False)
+    (tmp_path / "log_simpleFoam.txt").write_text(_CANONICAL_DIVERGED_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "no_time_directory_found"
+    assert gate["details"].get("likely_divergence") is True
+    evidence = gate["details"].get("divergence_evidence")
+    assert evidence, "divergence_evidence missing"
+    assert any(
+        marker in evidence
+        for marker in ("FATAL", "printStack", "-nan", "nan")
+    ), f"unexpected divergence evidence: {evidence!r}"
+    assert gate["details"].get("divergence_log_source") == "log_simpleFoam.txt"
+
+
+def test_ingest_no_time_dir_with_clean_log_does_not_attach_divergence(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #13: preserve existing 'never-ran' path. If a solver log is
+    present but contains NO divergence markers, the BLOCKED gate must
+    NOT add likely_divergence — that surface is reserved for the case
+    where there's strong evidence the case crashed."""
+    _make_ingestable_case(tmp_path, with_time_dir=False, with_log=True)
+    # _CANONICAL_SIMPLEFOAM_LOG is clean (no FATAL/nan).
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "no_time_directory_found"
+    assert "likely_divergence" not in gate["details"]
+    assert "divergence_evidence" not in gate["details"]
+
+
+# ---------- Gap #14: versioned-suffix log discovery ----------
+
+
+def test_ingest_finds_versioned_suffix_log_picks_newest_by_mtime(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #14 (case_004 NREL MRF dogfood): industrial workflows save
+    versioned suffix variants like `log.simpleFoam.v4`,
+    `log.simpleFoam.v5` parallel to each other. After exact-name
+    exhaustion, the loader must glob `log.<solver>*` and pick newest
+    by mtime — older v4 must be ignored in favor of the v5 the user
+    actually ran most recently."""
+    import os as _os
+    import time as _time
+    _make_ingestable_case(tmp_path, with_log=False)
+    older = tmp_path / "log.simpleFoam.v4"
+    newer = tmp_path / "log.simpleFoam.v5"
+    older.write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    newer.write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    now = _time.time()
+    _os.utime(older, (now - 3600, now - 3600))
+    _os.utime(newer, (now, now))
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] != "BLOCKED", gate
+    assert gate["details"]["external_log_source"] == "log.simpleFoam.v5", (
+        f"expected newest-by-mtime .v5; got {gate['details'].get('external_log_source')!r}"
+    )
+
+
+def test_ingest_exact_log_name_still_wins_over_versioned_glob(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #14: precedence — exact-name candidates (e.g. `log.simpleFoam`)
+    must beat the glob fallback. A case that only carries the canonical
+    `log.simpleFoam` (no versioned variants) must still pick it up."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    (tmp_path / "log.simpleFoam").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] != "BLOCKED", gate
+    assert gate["details"]["external_log_source"] == "log.simpleFoam"
