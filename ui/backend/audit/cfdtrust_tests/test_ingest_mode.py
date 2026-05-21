@@ -1761,3 +1761,177 @@ def test_parse_simplefoam_log_captures_dotted_vof_fields():
     )
     # p_rgh (underscored) must still parse via the same widened group.
     assert residuals["p_rgh"] == 0.3
+
+
+# ---------- TBD-17 (case_009 Sandia Flame D reacting dogfood, honesty-adjacent) ----------
+
+
+def test_tbd17_solver_gate_blocks_on_incomplete_residual_coverage():
+    """TBD-17 (CRITICAL · honesty-adjacent): when a manifest declares N
+    target fields but the parser only finds < N in residuals.csv (e.g.
+    a 27-field reacting manifest whose log truncated mid-iteration after
+    only the 3 momentum fields were emitted), `_compute_gate_from_residuals`
+    must BLOCK with `incomplete_residual_coverage` — NOT silently PASS on
+    the 3-of-27 subset.
+
+    Pre-TBD-17, the gate's per-target loop used `if actual is None:
+    continue` to silently drop manifest fields absent from the log,
+    then declared PASS based on the present subset. For case_009
+    reacting cases that was the closest the dogfood arc came to a real
+    honesty break — the solver_gate said "PASS" with no flag that
+    24/27 fields had been silently dropped, even though the top-level
+    overall_status was correctly capped at WARN by the
+    solver_execution=ingested fences.
+
+    Disposition choice: BLOCKED-with-reason rather than FAIL — half
+    evidence cannot be EVALUATED for convergence; "cannot evaluate" is
+    the honest signal, distinct from "evaluated and failed."
+    """
+    # Synthetic short log: momentum + pressure only, no species (mirrors
+    # the case_009 truncated-log scenario where the log cut off before
+    # the species transport equations printed residuals).
+    log = (
+        "Time = 1\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 1e-06, Final residual = 1e-07, No Iterations 5\n"
+        "smoothSolver:  Solving for Uy, Initial residual = 1e-06, Final residual = 1e-07, No Iterations 5\n"
+        "smoothSolver:  Solving for Uz, Initial residual = 1e-06, Final residual = 1e-07, No Iterations 5\n"
+    )
+    # Manifest declares 8 fields total: 3 momentum + temperature + 4 species.
+    # Log only has the 3 momentum fields → coverage = 3/8.
+    manifest = {
+        "solver": "reactingFoam",
+        "solver_contract": {
+            "max_iterations": 5000,
+            "residual_targets": {
+                "Ux": 1e-5,
+                "Uy": 1e-5,
+                "Uz": 1e-5,
+                "T": 1e-5,
+                "CH4": 1e-5,
+                "O2": 1e-5,
+                "CO2": 1e-5,
+                "H2O": 1e-5,
+            },
+        },
+    }
+    parsed = ofa._parse_simplefoam_log(log)
+    gate = ofa._compute_gate_from_residuals(parsed, manifest)
+
+    # Honesty fences: BLOCKED, not PASS/FAIL.
+    assert gate["status"] == "BLOCKED", (
+        f"3/8 coverage must BLOCK, got {gate!r}"
+    )
+    assert gate["details"]["reason"] == "incomplete_residual_coverage"
+    assert gate["details"]["incomplete_residual_coverage"] is True
+    # The 5 missing target fields must be enumerated so users can see
+    # exactly what was dropped vs. what was checked.
+    assert set(gate["details"]["missing_target_fields"]) == {
+        "T", "CH4", "O2", "CO2", "H2O",
+    }, gate["details"]["missing_target_fields"]
+    # The 3 present targets are recorded (not silently dropped).
+    assert set(gate["details"]["checked_fields"]) == {"Ux", "Uy", "Uz"}
+    # Solver name lifted from manifest (Gap #22 preserved).
+    assert "reactingFoam" in gate["summary"]
+
+
+# ---------- TBD-15 (case_009 multi-stage log filename fallback) ----------
+
+
+def test_tbd15_find_external_solver_log_accepts_multi_stage_log_with_solver_in_head(
+    tmp_path: Path,
+):
+    """TBD-15 (case_009 reacting dogfood): multi-stage reacting workflows
+    commonly split runs into `log_cold.txt` (cold-flow init) and
+    `log_ignite.txt` (ignition + burn). None of these match the canonical
+    `log_<solver>.txt` / `log.<solver>` / `<solver>.log` candidates, so
+    the pre-fix loop returned None and the user got
+    `BLOCKED no_solver_log_found` on a perfectly valid ingest.
+
+    Fix: after exact-name and versioned-suffix glob exhaustion, fall
+    back to `log_*.txt` glob — but require the file head to reference
+    the manifest's declared solver name (e.g. `Build: reactingFoam-...`
+    in the OpenFOAM banner) so this fallback does not pick up unrelated
+    stdout dumps that happen to live in the case dir.
+    """
+    # Build a minimal case dir with two multi-stage logs, neither
+    # matching the canonical name list.
+    (tmp_path / "system").mkdir()
+    (tmp_path / "constant").mkdir()
+    (tmp_path / "0").mkdir()
+    # log_cold.txt — cold-flow stage, contains the OpenFOAM banner with
+    # `Build  : reactingFoam-...` to identify the solver.
+    cold_log_head = (
+        "/*--------------------------------*- C++ -*----------------------------------*\\\n"
+        "Build  : reactingFoam-11\n"
+        "Exec   : reactingFoam\n"
+        "Date   : ...\n"
+        "Time = 0.001\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.5, No Iterations 3\n"
+    )
+    (tmp_path / "log_cold.txt").write_text(cold_log_head)
+
+    manifest = {"solver": "reactingFoam"}
+    found = ofa._find_external_solver_log(tmp_path, manifest)
+    assert found is not None, (
+        "TBD-15: multi-stage log_cold.txt with reactingFoam in head must "
+        "be located via the general log_*.txt fallback"
+    )
+    assert found.name == "log_cold.txt"
+
+    # Negative: a log_*.txt file that does NOT reference the manifest
+    # solver must not be returned (false-positive guard).
+    (tmp_path / "log_unrelated_stdout.txt").write_text(
+        "This is not an OpenFOAM solver log at all, just some stdout.\n"
+    )
+    # Remove the legitimate one so the false-positive candidate would be
+    # the only match if the head heuristic were missing.
+    (tmp_path / "log_cold.txt").unlink()
+    found_neg = ofa._find_external_solver_log(tmp_path, manifest)
+    assert found_neg is None, (
+        f"TBD-15 false-positive guard: log without solver name in head "
+        f"must NOT be returned, got {found_neg!r}"
+    )
+
+
+# ---------- TBD-19 (case_009 chemkin parenthesized species names) ----------
+
+
+def test_tbd19_residual_regex_captures_parenthesized_species():
+    """TBD-19 (case_009 Sandia Flame D reacting dogfood, sibling to Gap #25):
+    chemkin-style species names contain parentheses to disambiguate spin
+    states — `CH2(S)` (singlet methylene) vs `CH2(T)` (triplet methylene),
+    both present in GRI-Mech 3.0 reacting mechanisms. The Gap #25 widened
+    `[\\w.]+` group stopped at the first `(`, capturing `CH2` and
+    silently colliding with the real `CH2` species — two distinct
+    chemical species sharing one residuals column.
+
+    Fix: widen the capture group to `[\\w.()]+` so parenthesized species
+    are captured intact and appear as a separate field from `CH2`.
+    """
+    log = (
+        "Time = 0.001\n"
+        "diagonal:  Solving for CH2, Initial residual = 0.4, "
+        "Final residual = 0.04, No Iterations 1\n"
+        "diagonal:  Solving for CH2(S), Initial residual = 0.5, "
+        "Final residual = 0.05, No Iterations 1\n"
+        "diagonal:  Solving for CH2(T), Initial residual = 0.6, "
+        "Final residual = 0.06, No Iterations 1\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+
+    assert len(parsed["iterations"]) == 1
+    residuals = parsed["iterations"][0]["residuals"]
+    # All three species captured intact, with distinct initial residuals
+    # (no collision between CH2 and CH2(S) on the `CH2` key).
+    assert residuals.get("CH2") == 0.4, (
+        f"CH2 (no parens) must remain a distinct column; got "
+        f"{list(residuals.keys())}"
+    )
+    assert residuals.get("CH2(S)") == 0.5, (
+        f"CH2(S) parenthesized singlet must be captured intact; got "
+        f"{list(residuals.keys())}"
+    )
+    assert residuals.get("CH2(T)") == 0.6, (
+        f"CH2(T) parenthesized triplet must be captured intact; got "
+        f"{list(residuals.keys())}"
+    )
