@@ -368,4 +368,21 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 
     from ..backends.openfoam import ingest as _backend_ingest
     gate = _backend_ingest(case_dir, manifest)
+    # Codex R6-P1 fix: BLOCKED gates from ingest preconditions
+    # (no_solver_log_found, case_decomposed_not_reconstructed,
+    # solver_log_unreadable, docker_not_available, ...) MUST NOT
+    # overwrite `artifacts/solver_gate.json`. The R2-P2 fix already
+    # protected the "unsupported backend" refusal path; the same
+    # protection has to extend to every other "ingest cannot proceed"
+    # outcome. Otherwise pointing `cfdtrust ingest` at a case that
+    # already had a successful `cfdtrust run` would destroy the last
+    # good gate and force the next `cfdtrust report` to read the
+    # stale ingest-BLOCKED state.
+    #
+    # The success path — PASS / WARN / FAIL solver gates carrying
+    # `details.execution="ingested"` from `_compute_gate_from_residuals`
+    # — IS persisted. That preserves the M2.3a invariant that
+    # `read_artifacts()` reads the SAME truth `execute`/`ingest` saw.
+    if gate.get("status") == "BLOCKED":
+        return gate
     return _write_gate(case_dir, gate)

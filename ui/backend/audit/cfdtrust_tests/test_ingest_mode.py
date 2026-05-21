@@ -886,6 +886,91 @@ def test_solver_ingest_refusal_does_not_persist_blocked_state(tmp_path: Path):
     assert not (tmp_path / "artifacts" / "solver_gate.json").exists()
 
 
+def test_solver_ingest_blocked_precondition_does_not_clobber_existing_gate(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R6-P1: an ingest attempt that BLOCKs on a precondition
+    (no_solver_log_found, case_decomposed_not_reconstructed,
+    solver_log_unreadable, ...) must NOT overwrite a pre-existing
+    `artifacts/solver_gate.json` from an earlier successful
+    `cfdtrust run`. Pre-fix the BLOCKED ingest gate would be persisted
+    and subsequent `cfdtrust report` would surface the stale BLOCKED
+    verdict instead of the real harness-witnessed run.
+
+    Tests the `no_solver_log_found` path (representative of all
+    backend-emitted BLOCKED-with-reason returns)."""
+    # Set up a case that has system/constant/0 + a successful prior
+    # solver_gate.json from a "previous run".
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=True)
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    prior_gate = {
+        "status": "PASS",
+        "summary": "harness-witnessed run converged",
+        "details": {
+            "execution": "real",
+            "real_solver_invoked": True,
+            "iterations": 5000,
+        },
+    }
+    (art / "solver_gate.json").write_text(json.dumps(prior_gate))
+    _patch_docker_for_ingest(monkeypatch)
+
+    # Trigger the BLOCKED-precondition path: no solver log in case dir.
+    blocked_gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    assert blocked_gate["status"] == "BLOCKED"
+    assert blocked_gate["details"]["reason"] == "no_solver_log_found"
+
+    # CRITICAL: pre-existing solver_gate.json MUST be intact.
+    persisted = json.loads((art / "solver_gate.json").read_text())
+    assert persisted["status"] == "PASS"
+    assert persisted["details"]["execution"] == "real"
+    assert persisted["summary"] == "harness-witnessed run converged"
+
+
+def test_solver_ingest_blocked_decomposed_does_not_clobber_existing_gate(
+    monkeypatch, tmp_path: Path,
+):
+    """Same protection for the `case_decomposed_not_reconstructed`
+    precondition path (R4-P2 + R6-P1 interaction)."""
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    # Decomposed-only (triggers R4-P2 BLOCK).
+    for i in range(2):
+        (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    prior_gate = {
+        "status": "PASS",
+        "summary": "harness ran the case before decomposition",
+        "details": {"execution": "real", "real_solver_invoked": True},
+    }
+    (art / "solver_gate.json").write_text(json.dumps(prior_gate))
+    _patch_docker_for_ingest(monkeypatch)
+
+    blocked_gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    assert blocked_gate["status"] == "BLOCKED"
+    assert blocked_gate["details"]["reason"] == "case_decomposed_not_reconstructed"
+    # Existing gate intact.
+    persisted = json.loads((art / "solver_gate.json").read_text())
+    assert persisted["details"]["execution"] == "real"
+
+
+def test_solver_ingest_success_still_persists_gate(monkeypatch, tmp_path: Path):
+    """Regression guard for R6-P1: successful ingest (PASS / WARN /
+    FAIL gate) must STILL be persisted to solver_gate.json. The fix
+    must not over-correct and prevent legitimate persistence."""
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+    gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    assert gate["status"] != "BLOCKED"
+    # solver_gate.json was written.
+    assert (tmp_path / "artifacts" / "solver_gate.json").exists()
+    persisted = json.loads(
+        (tmp_path / "artifacts" / "solver_gate.json").read_text()
+    )
+    assert persisted["details"]["execution"] == "ingested"
+
+
 def test_solver_ingest_persists_gate_json(monkeypatch, tmp_path: Path):
     """The solver_gate.json must be written so cfdtrust report reads
     the SAME truth (M2.3a invariant)."""

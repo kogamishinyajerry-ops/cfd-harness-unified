@@ -5,7 +5,7 @@ status: Accepted
 parent_dec: DEC-V61-201
 phase: post-merge sub-DEC
 notion_sync_status: pending
-codex_review_rounds: 6
+codex_review_rounds: 7
 codex_review_round1_verdict: CHANGES_REQUIRED (P1 log selection + P2 CLI exit + P3 explain WARN)
 codex_review_round2_verdict: CHANGES_REQUIRED (P1 DoS bound + 2× P2 state-machine bugs)
 codex_review_round3_verdict: CHANGES_REQUIRED (P1 decomposed parallel time-dir detection)
@@ -14,7 +14,11 @@ codex_review_round4_verdict: CHANGES_REQUIRED (P2 explain WARN-contributor bug +
 codex_review_round4_relay: crs (effort=high, 86gs still 502)
 codex_review_round5_verdict: CHANGES_REQUIRED (P1 honesty-fence leak when solver_gate.json missing)
 codex_review_round5_relay: 86gs (recovered, effort=xhigh)
-codex_review_round6_verdict: pending (user-ratified continuation; severity P1 honesty-fence triggered fix despite past V133 cap)
+codex_review_round6_verdict: CHANGES_REQUIRED (P1 state-clobber on blocked-precondition ingest; P2 hard-coded WARN in banner-fallback DEFERRED to DEC-V61-201-SUB-INGEST-P2-FOLLOWUP per user 2026-05-21)
+codex_review_round6_relay: 86gs stream interrupted → crs (effort=high)
+codex_review_round7_verdict: pending (user-ratified continuation; P1 regression-risk fix in commit landing this DEC update)
+known_limitations:
+  - banner-fallback in read_artifacts collapses all banner-detected outcomes to status=WARN regardless of residuals.csv content. Tracked in DEC-V61-201-SUB-INGEST-P2-FOLLOWUP. Does NOT break honesty fences (ingested case can never claim PASS/validated through this path).
 ---
 
 ## Why
