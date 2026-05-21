@@ -694,7 +694,7 @@ def test_cwos_event_rejects_unknown_agent(repo_root: Path, tmp_path: Path):
     import subprocess, os
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(repo_root / "tools" / "cwos_event.py"),
@@ -726,7 +726,7 @@ def test_cwos_event_rejects_phantom_evidence_at_write_time(repo_root: Path):
     import subprocess, os
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(repo_root / "tools" / "cwos_event.py"),
@@ -748,7 +748,7 @@ def test_cwos_event_rejects_absolute_evidence_at_write_time(repo_root: Path):
     import subprocess, os
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(repo_root / "tools" / "cwos_event.py"),
@@ -948,7 +948,7 @@ def test_cwos_event_rejects_event_when_agents_dir_missing(repo_root: Path, tmp_p
     # Note: do NOT create tmp_path/.claude/agents/. The sandbox repo
     # has no agents declared at all.
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(script),
@@ -986,7 +986,7 @@ def test_cwos_event_rejects_event_when_agents_dir_empty(repo_root: Path, tmp_pat
     script = _build_cwos_event_sandbox(repo_root, tmp_path)
     (tmp_path / ".claude" / "agents").mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(script),
@@ -1017,7 +1017,7 @@ def test_cwos_event_accepts_known_agent_in_sandbox(repo_root: Path, tmp_path: Pa
         "---\nname: test-agent\nrole: smoke\n---\n\nBody.\n"
     )
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(script),
@@ -1060,7 +1060,7 @@ def test_cwos_event_rejects_symlinked_agents_dir(repo_root: Path, tmp_path: Path
     assert (tmp_path / ".claude" / "agents").is_symlink()
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(script),
@@ -1119,7 +1119,7 @@ def test_cwos_event_rejects_event_when_md_file_is_symlinked(repo_root: Path, tmp
     assert not agents_dir.is_symlink()  # the DIR itself is real
 
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     res = subprocess.run(
         [
             sys.executable, str(script),

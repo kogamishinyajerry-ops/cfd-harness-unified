@@ -31,12 +31,19 @@ dev = [
 cfdtrust = "cfdtrust.cli:main"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+# Post-merge (DEC-V61-201): cfdtrust/ is a top-level package inside the
+# audit subsystem; the AI-CFD-V2 `src/` middle layer was flattened.
+where = ["."]
+include = ["cfdtrust*"]
+exclude = ["cfdtrust_tests*", "tools*", "cases*", "docs*"]
 
 [tool.setuptools.package-data]
 "cfdtrust.schemas" = ["*.json"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
+# Post-merge (DEC-V61-201): tests live in cfdtrust_tests/ (renamed from
+# tests/ to avoid clash with cfd-harness-unified's ui/backend/tests/);
+# importable code lives directly at the audit subsystem root, no src/.
+testpaths = ["cfdtrust_tests"]
+pythonpath = ["."]
 addopts = "-q"

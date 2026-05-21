@@ -13,7 +13,7 @@ import pytest
 @pytest.fixture
 def repo_env(repo_root: Path):
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(repo_root / "src")
+    env["PYTHONPATH"] = str(repo_root)
     return env
 
 
