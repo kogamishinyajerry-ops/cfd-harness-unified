@@ -2315,3 +2315,50 @@ def test_stream_parser_equivalence(tmp_path: Path):
     assert len(via_stream["iterations"]) == 50
     assert "wall" in via_stream["y_plus"]
     assert via_stream["converged"] is True
+
+
+# ---------- Gap #26-#27: step-numbered mesh-pipeline log discovery ----------
+
+
+def test_mesh_log_discovery_step_numbered_blockmesh(monkeypatch, tmp_path: Path):
+    """Gap #26-#27: industrial Allrun scripts name mesh logs
+    `01_blockMesh.log` (step-numbered). Discovery must find them; mesh
+    ingest must reflect them in mesh_quality.json's `mesh_pipeline_logs`."""
+    _make_ingestable_case(tmp_path)
+    # Drop ONLY the step-numbered variant (no unprefixed blockMesh log).
+    (tmp_path / "01_blockMesh.log").write_text("Create polyMesh for time = 0\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    # Direct helper assertion: step-numbered log is found and keyed by tool.
+    found = ofa._find_mesh_pipeline_logs(tmp_path)
+    assert "blockMesh" in found
+    assert found["blockMesh"].name == "01_blockMesh.log"
+
+    # Integration: ingest persists the discovery into mesh_quality.json.
+    ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    mq = json.loads((tmp_path / "artifacts" / "mesh_quality.json").read_text())
+    assert mq.get("mesh_pipeline_logs", {}).get("blockMesh") == "01_blockMesh.log"
+
+
+def test_mesh_log_discovery_prefers_latest_step_number(monkeypatch, tmp_path: Path):
+    """Gap #26-#27: when multiple step-numbered runs of the same tool
+    coexist, the highest step number (= latest run = canonical evidence)
+    must win."""
+    _make_ingestable_case(tmp_path)
+    (tmp_path / "01_snappyHexMesh.log").write_text(
+        "FOAM FATAL ERROR: locationInMesh outside domain\n"
+    )
+    (tmp_path / "03_snappyHexMesh.log").write_text(
+        "snappyHexMesh: Finished meshing in 42 s\n"
+    )
+    _patch_docker_for_ingest(monkeypatch)
+
+    found = ofa._find_mesh_pipeline_logs(tmp_path)
+    assert found["snappyHexMesh"].name == "03_snappyHexMesh.log", (
+        "highest step number must win as canonical evidence"
+    )
+
+    # Integration: mesh_report reflects the picked (newer) log path.
+    ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    mq = json.loads((tmp_path / "artifacts" / "mesh_quality.json").read_text())
+    assert mq["mesh_pipeline_logs"]["snappyHexMesh"] == "03_snappyHexMesh.log"
