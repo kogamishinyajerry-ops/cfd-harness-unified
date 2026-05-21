@@ -85,7 +85,8 @@
     },
     "solver_execution": {
       "type": "string",
-      "enum": ["real", "mocked", "skipped"]
+      "enum": ["real", "mocked", "skipped", "ingested"],
+      "$comment": "`ingested` = case was run outside the trust harness (foreign OpenFOAM fork, manual user run, etc.) and its evidence was imported via `cfdtrust ingest`. Existing fences (validated→real, PASS→real) still apply, so an ingested case can never claim `validated` or top-level `PASS` — only WARN at best. See DEC-V61-201-SUB-INGEST for rationale."
     },
     "validation_status": {
       "type": "string",

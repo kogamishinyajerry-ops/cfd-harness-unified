@@ -170,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
     add("validate-manifest", "Validate case_manifest.yaml against the schema.")
     add("audit", "Run structural gates (geometry/mesh/bc); observe solver artifacts if present.")
     add("run", "Execute the solver (mocked or real per manifest.solver_backend).")
+    add("ingest", "Import evidence from an externally-run case (DEC-V61-201-SUB-INGEST). "
+                  "Does NOT re-invoke the solver; runs checkMesh only.")
     add("report", "Assemble trust_report.json from existing audit + solver artifacts.")
 
     # M3.1: `init` doesn't take an existing case_dir; it CREATES one.
@@ -217,6 +219,9 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_audit(args.case_dir)
     if args.cmd == "run":
         return cmd_run(args.case_dir)
+    if args.cmd == "ingest":
+        from .cli_ingest import cmd_ingest
+        return cmd_ingest(args.case_dir)
     if args.cmd == "report":
         return cmd_report(args.case_dir)
     if args.cmd == "init":

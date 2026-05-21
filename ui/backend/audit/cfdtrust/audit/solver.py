@@ -81,6 +81,28 @@ MOCK_BANNER = (
     "# Residuals below are synthetic placeholders.\n"
 )
 
+# Codex R5-P1 fix: an ingested case must remain identifiable as
+# `execution="ingested"` even if `artifacts/solver_gate.json` is
+# missing or unreadable. `_write_gate()` already documents OSError as
+# a supported failure mode (returning the gate with a
+# `gate_persistence_failed` augmentation), so the fallback in
+# `read_artifacts()` is a live code path — without an in-log marker,
+# the fallback used to upgrade any non-mocked artifact to
+# `execution="real"`, silently bypassing the
+# DEC-V61-201-SUB-INGEST honesty fences (cap overall_status at WARN,
+# cap validation_status at `partial`).
+#
+# `cfdtrust ingest` prepends this banner to the transcribed
+# `artifacts/solver.log`. `read_artifacts()` checks for it in the
+# fallback branch and classifies the case as `execution="ingested"`
+# instead of `"real"`. Mirror of the MOCK_BANNER pattern.
+INGEST_BANNER = (
+    "# AI-CFD-V2 ingested external solver log\n"
+    "# WARNING: The trust harness did NOT witness this execution.\n"
+    "# overall_status caps at WARN, validation_status caps at `partial`.\n"
+    "# See DEC-V61-201-SUB-INGEST. Original log content follows below.\n"
+)
+
 
 # ---------- execution: solver.execute ----------
 
@@ -219,8 +241,17 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
 
-    log_head = log_path.read_text().splitlines()[:3]
+    # Codex R5-P1 fix: widen the head scan from 3 lines to 5 so the
+    # 4-line INGEST_BANNER is fully covered. MOCK_BANNER detection
+    # (3 lines, scanned via "mocked" keyword) still works.
+    log_head = log_path.read_text().splitlines()[:5]
     is_mocked = any("mocked" in line.lower() for line in log_head)
+    # Detect the ingest banner literally — looking for the marker line
+    # "AI-CFD-V2 ingested external solver log" so we don't false-trip
+    # on user logs that happen to contain the word "ingested".
+    is_ingested = any(
+        "ingested external solver log" in line.lower() for line in log_head
+    )
     iterations = max(0, sum(1 for _ in residuals_path.read_text().splitlines()) - 1)
 
     if is_mocked:
@@ -235,6 +266,33 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "iterations": iterations,
                 "real_solver_invoked": False,
                 "warning": "No CFD solver was executed. This does not constitute validation.",
+            },
+        }
+    if is_ingested:
+        # Codex R5-P1 fix: an ingested case whose solver_gate.json was
+        # lost must NOT be reclassified as `execution="real"` —
+        # `assemble()` would then skip the honesty fences (cap at WARN,
+        # cap validation_status at `partial`). The log banner preserves
+        # the provenance even after gate JSON loss.
+        return {
+            "status": "WARN",
+            "summary": (
+                f"Ingested solver artifacts present ({iterations} iterations); "
+                f"persisted solver_gate.json missing — falling back to "
+                f"log-banner classification."
+            ),
+            "artifact": str(log_path.relative_to(case_dir)),
+            "details": {
+                "execution": "ingested",
+                "log": str(log_path.relative_to(case_dir)),
+                "residuals_csv": str(residuals_path.relative_to(case_dir)),
+                "iterations": iterations,
+                "real_solver_invoked": False,
+                "warning": (
+                    "solver_gate.json was missing or unreadable; the ingest "
+                    "execution kind was recovered from the log banner. "
+                    "Re-run `cfdtrust ingest` to refresh the gate JSON."
+                ),
             },
         }
     # Legacy real-artifact fallback. CAUTION: a real run that FAILed but
@@ -260,3 +318,71 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     """Deprecated alias for `execute`. Kept for compatibility with older CLI code."""
     return execute(case_dir, manifest)
+
+
+# ---------- DEC-V61-201-SUB-INGEST: external-run ingest entry point ----------
+
+
+def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """Ingest evidence from an externally-run case (DEC-V61-201-SUB-INGEST).
+
+    Refuses non-openfoam backends — there is nothing to ingest from a
+    mocked backend, and "unknown" backends shouldn't have produced any
+    real evidence in the first place. The backend-level ingest helper
+    then validates env, runs checkMesh, persists *_quality.json, and
+    transcribes the existing solver log + residuals.
+
+    Mirrors `execute()`'s persistence pattern WHEN the ingest actually
+    runs: the resulting gate is written to `artifacts/solver_gate.json`
+    so `read_artifacts` (and therefore `cfdtrust report`) reads the
+    SAME truth — preventing the pre-M2.3a drift where execute and
+    read_artifacts could disagree.
+
+    Codex R2-P2 fix: when the dispatcher REFUSES (unsupported backend),
+    do NOT persist the BLOCKED gate. Persisting would poison
+    `artifacts/solver_gate.json` so every subsequent `cfdtrust report`
+    sees a BLOCKED solver gate even though the user later does the
+    right thing (`cfdtrust run`). A rejected subcommand must not modify
+    the persisted trust state.
+    """
+    backend = manifest.get("solver_backend")
+    if backend != "openfoam":
+        # Return-only, no _write_gate — refusal must not mutate state.
+        return {
+            "status": "BLOCKED",
+            "summary": (
+                f"`cfdtrust ingest` only supports solver_backend=openfoam; "
+                f"manifest declares {backend!r}."
+            ),
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "ingest_backend_unsupported",
+                "next_step": (
+                    "Ingest is for cases run by an external OpenFOAM build "
+                    "(any fork). For mocked-backend cases there is no real "
+                    "evidence to import — use `cfdtrust run` instead."
+                ),
+            },
+        }
+
+    from ..backends.openfoam import ingest as _backend_ingest
+    gate = _backend_ingest(case_dir, manifest)
+    # Codex R6-P1 fix: BLOCKED gates from ingest preconditions
+    # (no_solver_log_found, case_decomposed_not_reconstructed,
+    # solver_log_unreadable, docker_not_available, ...) MUST NOT
+    # overwrite `artifacts/solver_gate.json`. The R2-P2 fix already
+    # protected the "unsupported backend" refusal path; the same
+    # protection has to extend to every other "ingest cannot proceed"
+    # outcome. Otherwise pointing `cfdtrust ingest` at a case that
+    # already had a successful `cfdtrust run` would destroy the last
+    # good gate and force the next `cfdtrust report` to read the
+    # stale ingest-BLOCKED state.
+    #
+    # The success path — PASS / WARN / FAIL solver gates carrying
+    # `details.execution="ingested"` from `_compute_gate_from_residuals`
+    # — IS persisted. That preserves the M2.3a invariant that
+    # `read_artifacts()` reads the SAME truth `execute`/`ingest` saw.
+    if gate.get("status") == "BLOCKED":
+        return gate
+    return _write_gate(case_dir, gate)

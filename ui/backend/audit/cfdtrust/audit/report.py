@@ -62,7 +62,21 @@ def assemble(case_dir: Path, manifest: Dict[str, Any], gates: Dict[str, Dict[str
     ref_real = ref_gate.get("details", {}).get("real_comparison_performed", False)
 
     if solver_execution != "real":
-        validation_status = "not_validated"
+        # DEC-V61-201-SUB-INGEST: covers `mocked`, `skipped`, AND `ingested`.
+        # An ingested case has REAL evidence but the harness didn't witness
+        # the run, so it cannot claim `validated`. Cap at `partial` if both
+        # the solver gate and reference comparison passed against the
+        # ingested evidence; otherwise `not_validated`. Honesty fence on
+        # `validated → solver_execution=real` is preserved.
+        if (
+            solver_execution == "ingested"
+            and solver_status == "PASS"
+            and ref_real
+            and ref_status == "PASS"
+        ):
+            validation_status = "partial"
+        else:
+            validation_status = "not_validated"
     elif solver_status != "PASS":
         # Solver executed but didn't pass its own contract (residual
         # targets not met, timed out, etc.) — cannot claim validation
@@ -78,11 +92,25 @@ def assemble(case_dir: Path, manifest: Dict[str, Any], gates: Dict[str, Dict[str
         validation_status = "unknown"
 
     overall = _overall_status(gates)
+    # DEC-V61-201-SUB-INGEST honesty demotion: an ingested case whose gates
+    # all individually PASS still cannot earn top-level PASS, because the
+    # harness did not witness the solver run. WARN is the most an ingested
+    # run can claim. The schema constraint `overall=PASS → solver=real`
+    # also enforces this at write time, but demoting here keeps the in-memory
+    # overall consistent with what the schema validator will accept.
+    if solver_execution == "ingested" and overall == "PASS":
+        overall = "WARN"
 
     limitations = []
     if solver_execution == "mocked":
         limitations.append(
             "No real CFD solver was executed. This run does not constitute validation."
+        )
+    if solver_execution == "ingested":
+        limitations.append(
+            "Solver run was ingested from an external OpenFOAM invocation; the "
+            "trust harness did not witness the run. validation_status capped at "
+            "`partial` even when gates and reference comparison both PASS."
         )
     ref_gate = gates.get("reference_comparison", {})
     if not ref_gate.get("details", {}).get("real_comparison_performed", False):
@@ -109,6 +137,21 @@ def assemble(case_dir: Path, manifest: Dict[str, Any], gates: Dict[str, Dict[str
         "reference_comparison_csv": str((art / "reference_comparison.csv").relative_to(case_dir)),
         "trust_report": str(report_path.relative_to(case_dir)),
     }
+    # DEC-V61-201-SUB-INGEST: surface the ingest provenance manifest only
+    # when the CURRENT report's solver_execution is "ingested". Codex
+    # R2-P2 fix: previously the key was attached whenever the file
+    # existed on disk, which is a stale-state bug — a case that was
+    # ingested once and later re-run under `cfdtrust run` would keep
+    # advertising ingest provenance on the new harness-witnessed run,
+    # giving downstream tooling contradictory provenance signals for
+    # the same report. Gating on the live `solver_execution` value
+    # ensures the index always matches the current trust verdict.
+    if solver_execution == "ingested":
+        ingest_manifest_path = art / "ingest_manifest.json"
+        if ingest_manifest_path.exists():
+            artifacts_index["ingest_manifest"] = str(
+                ingest_manifest_path.relative_to(case_dir)
+            )
 
     report = {
         "case_id": manifest.get("case_id"),

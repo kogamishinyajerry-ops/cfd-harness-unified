@@ -415,6 +415,7 @@ def _status_badge(status: str) -> str:
     rendering — emoji only when ASCII-equivalent fits."""
     return {
         "PASS":    "PASS",
+        "WARN":    "WARN",
         "FAIL":    "FAIL",
         "BLOCKED": "BLOCKED",
         "MOCKED":  "MOCKED",
@@ -436,6 +437,7 @@ def _render_header(report: Dict[str, Any], case_id: str) -> str:
 
 def _render_tldr(report: Dict[str, Any], gate_severities: Dict[str, str]) -> str:
     overall = report.get("overall_status", "?")
+    solver_execution = report.get("solver_execution", "?")
     if overall == "PASS":
         body = (
             "All audit gates passed and the realized QoI matches the canonical "
@@ -453,6 +455,50 @@ def _render_tldr(report: Dict[str, Any], gate_severities: Dict[str, str]) -> str
             "The trust harness could not complete one or more required gates. "
             "Resolve the BLOCKED gates below before this case can be evaluated."
         )
+    elif overall == "WARN":
+        # Codex R1-P3 fix: WARN must be its own branch — previously it
+        # fell through to the FAIL message, which falsely told users
+        # the case "did NOT pass its declared case contract" even when
+        # every gate PASSed individually. The most common cause of WARN
+        # today is DEC-V61-201-SUB-INGEST's overall-status demotion for
+        # ingested cases whose gates all passed.
+        if solver_execution == "ingested":
+            body = (
+                "Every audit gate passed individually on the ingested evidence, "
+                "but the trust harness did not witness the solver run, so "
+                "overall_status is capped at WARN (per DEC-V61-201-SUB-INGEST). "
+                "validation_status is capped at `partial` for the same reason. "
+                "To upgrade to PASS / validated, re-run the case under "
+                "`cfdtrust run` so the harness owns the execution evidence."
+            )
+        else:
+            # Codex R4-P2 fix: identify WARN contributors from the
+            # actual `gates[*].status` field, NOT from `gate_severities`.
+            # `_render_per_gate()` only returns severities in
+            # {info, blocker, quality} — `none` / `pass` are not values
+            # it produces, so the pre-fix predicate `sev not in
+            # ("none", "pass")` was always True and would list every
+            # PASS gate as a WARN contributor on a single-gate-warning
+            # report. Use the gate status field directly so the list
+            # matches what users see in the per-gate breakdown.
+            gates = report.get("gates", {}) or {}
+            warn_gates = [
+                g for g, g_data in gates.items()
+                if isinstance(g_data, dict) and g_data.get("status") != "PASS"
+            ]
+            if warn_gates:
+                body = (
+                    f"The case passed its declared contract but the harness "
+                    f"surfaces non-blocking concerns in: `{warn_gates}`. Review "
+                    f"the per-gate breakdown below; nothing here voids the trust "
+                    f"verdict, but at least one gate carries a caveat."
+                )
+            else:
+                body = (
+                    "The case landed at WARN with no per-gate blockers. Inspect "
+                    "the gate-level details and limitations section to understand "
+                    "what was flagged."
+                )
     else:  # FAIL
         blocker_gates = [g for g, sev in gate_severities.items() if sev == "blocker"]
         if blocker_gates:

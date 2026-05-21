@@ -8,7 +8,7 @@ This subdirectory is the **CFD trust-contract audit engine** merged into
 
 | Path | Purpose |
 |---|---|
-| `cfdtrust/` | Python package — manifest loader, 6-gate audit (geometry/mesh/bc/solver/qoi/reference), report assembler, CLI (`cfdtrust run`, `audit`, `report`, `explain`, `doctor`) |
+| `cfdtrust/` | Python package — manifest loader, 6-gate audit (geometry/mesh/bc/solver/qoi/reference), report assembler, CLI (`cfdtrust run`, `audit`, `ingest`, `report`, `explain`, `doctor`) |
 | `cfdtrust_tests/` | 360 pytest tests covering every audit dimension |
 | `cases/` | Three canonical reference cases — flat_plate_rans_sst, backward_facing_step, channel_flow_rans_sst |
 | `tools/` | CWOS governance scripts — cwos_status.py, cwos_render_dashboard.py, cwos_event.py |
@@ -35,6 +35,44 @@ cfd-harness-unified already builds. The strategically valuable parts of
 AI-CFD-V2 (trust-contract engine, 25 rounds of Red Team adversarial review,
 13-agent multi-role governance) are kept; the duplicate workbench ambition
 is dropped. See merge commit + this commit's `DEC-V61-XXX_cfdtrust_merge.yaml`.
+
+## Ingest mode (post DEC-V61-201-SUB-INGEST)
+
+`cfdtrust ingest <case_dir>` imports evidence from an OpenFOAM case that
+was run *outside* this harness (any fork, any operator). Use this to
+advise on the `_sandboxes/` corpus and other pre-existing cases without
+re-invoking the solver.
+
+```bash
+cfdtrust ingest path/to/externally_run_case
+cfdtrust audit  path/to/externally_run_case   # gates read the ingested artifacts
+cfdtrust report path/to/externally_run_case   # solver_execution = "ingested"
+cfdtrust explain path/to/externally_run_case  # per-gate WHY + recommendations
+```
+
+What ingest does:
+- Reads existing `constant/polyMesh/boundary` and parses patches.
+- Reads existing `0/<field>` files and parses BC blocks.
+- Runs `checkMesh` (only) in the harness's Docker image against the
+  existing polyMesh — does NOT re-run blockMesh or simpleFoam.
+- Locates an external solver log (`log_simpleFoam.txt`,
+  `log.simpleFoam`, `solver.log`, etc.) and transcribes it to
+  `artifacts/solver.log`.
+- Parses the log into `artifacts/residuals.csv`.
+- Writes `artifacts/ingest_manifest.json` with SHA256 of source log +
+  polyMesh, ingest timestamp, image used, and time directories
+  observed.
+
+Honesty fences (added to `trust_report.schema.json`):
+- `solver_execution` enum extended to include `"ingested"`.
+- An ingested case can never reach `overall_status = "PASS"` (capped at
+  WARN even if every gate individually PASSes) — harness did not
+  witness the run.
+- An ingested case can never reach `validation_status = "validated"`
+  (caps at `"partial"` when both solver gate and reference comparison
+  PASS).
+- Schema-level fences `PASS → real` and `validated → real` carry over
+  unchanged from R3-F-03.
 
 ## Status at merge time
 

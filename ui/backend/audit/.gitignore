@@ -15,6 +15,7 @@ htmlcov/
 # Virtual envs
 .venv/
 venv/
+.venv-dogfood/
 
 # OS noise
 .DS_Store
