@@ -472,8 +472,19 @@ def _render_tldr(report: Dict[str, Any], gate_severities: Dict[str, str]) -> str
                 "`cfdtrust run` so the harness owns the execution evidence."
             )
         else:
+            # Codex R4-P2 fix: identify WARN contributors from the
+            # actual `gates[*].status` field, NOT from `gate_severities`.
+            # `_render_per_gate()` only returns severities in
+            # {info, blocker, quality} — `none` / `pass` are not values
+            # it produces, so the pre-fix predicate `sev not in
+            # ("none", "pass")` was always True and would list every
+            # PASS gate as a WARN contributor on a single-gate-warning
+            # report. Use the gate status field directly so the list
+            # matches what users see in the per-gate breakdown.
+            gates = report.get("gates", {}) or {}
             warn_gates = [
-                g for g, sev in gate_severities.items() if sev not in ("none", "pass")
+                g for g, g_data in gates.items()
+                if isinstance(g_data, dict) and g_data.get("status") != "PASS"
             ]
             if warn_gates:
                 body = (

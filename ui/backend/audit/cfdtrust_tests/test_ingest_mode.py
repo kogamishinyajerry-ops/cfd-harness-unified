@@ -266,26 +266,30 @@ def test_ingest_blocked_when_no_time_directory(monkeypatch, tmp_path: Path):
 # ---------- Codex R3-P1: decomposed-parallel time-dir detection ----------
 
 
-def test_ingest_recognizes_decomposed_processor_dirs(monkeypatch, tmp_path: Path):
-    """Codex R3-P1: a case run with `decomposePar` + MPI that was never
-    reconstructed has time dirs under `processor0/`, `processor1/`, ...
-    rather than at the case root. ingest must accept this layout — it's
-    a common industrial shape that the feature is meant to advise on."""
+def test_ingest_blocks_pure_decomposed_with_reconstructPar_next_step(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R4-P2: a pure-decomposed case (processor*/<time>/ but no
+    top-level time dir) must BLOCK ingest with a `reconstructPar`
+    next_step — NOT silently succeed and let downstream QoI fall back
+    to BLOCKED (which would deliver a half-working trust report).
+
+    This supersedes the pre-R4 behaviour where ingest accepted these
+    cases on the strength of `processor*/100/` alone."""
     _make_ingestable_case(tmp_path, with_time_dir=False)
-    # Decomposed layout: 4-processor run, time 100 written to each.
     for i in range(4):
         (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
         (tmp_path / f"processor{i}" / "100" / "U").write_text("(placeholder)\n")
     _patch_docker_for_ingest(monkeypatch)
 
     gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
-    # Must NOT be `no_time_directory_found` — decomposed layout counts.
-    assert gate["details"].get("reason") != "no_time_directory_found"
-    # And the ingest_manifest should record the time discovered.
-    ingest_m = json.loads(
-        (tmp_path / "artifacts" / "ingest_manifest.json").read_text()
-    )
-    assert "100.0" in ingest_m["time_directories"]
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "case_decomposed_not_reconstructed"
+    # next_step must mention reconstructPar — that's the actionable fix.
+    assert "reconstructPar" in gate["details"]["next_step"]
+    # Diagnostic carries the discovered time values so the user knows
+    # which times will materialise after reconstructPar.
+    assert "100.0" in gate["details"]["time_directories_found_under_processor"]
 
 
 def test_ingest_recognizes_mixed_top_level_and_processor_layout(
@@ -330,6 +334,90 @@ def test_find_time_directories_ignores_non_numeric_subdirs(tmp_path: Path):
         (tmp_path / name).mkdir()
     (tmp_path / "100").mkdir()
     assert ofa._find_time_directories(tmp_path) == [100.0]
+
+
+def test_ingest_hybrid_layout_top_level_present_still_accepted(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R4-P2 boundary: the post-R4 gate is "no top-level time
+    dir → BLOCK". A *hybrid* case (top-level + processor*/) must still
+    be accepted because top-level time dirs satisfy downstream QoI."""
+    _make_ingestable_case(tmp_path)  # creates top-level 100/
+    # Add leftover processor*/ from before reconstructPar.
+    for i in range(2):
+        (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
+    _patch_docker_for_ingest(monkeypatch)
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    # Top-level time dir is present → gate must NOT block on the
+    # decomposed-only reason.
+    assert gate["details"].get("reason") != "case_decomposed_not_reconstructed"
+
+
+# ---------- Codex R4-P2 (explain WARN contributors) ----------
+
+
+def test_explain_tldr_warn_non_ingested_lists_only_non_pass_gates(tmp_path: Path):
+    """Codex R4-P2: the WARN-non-ingested branch must identify
+    contributors from gate STATUS (in report["gates"][g]["status"]),
+    NOT from `gate_severities` — `_render_per_gate` never emits
+    `none`/`pass` severities, so the pre-fix predicate listed every
+    gate as a WARN contributor."""
+    from cfdtrust.cli_explain import _render_tldr
+
+    report = {
+        "overall_status": "WARN",
+        "solver_execution": "real",
+        "validation_status": "unknown",
+        "gates": {
+            "geometry_contract":     {"status": "PASS"},
+            "mesh_contract":         {"status": "WARN"},   # the actual culprit
+            "bc_contract":           {"status": "PASS"},
+            "solver_execution":      {"status": "PASS"},
+            "qoi_extraction":        {"status": "PASS"},
+            "reference_comparison":  {"status": "PASS"},
+        },
+    }
+    # severities map from _render_per_gate — would historically have
+    # marked all 6 gates with `info`/`blocker`/`quality`, never
+    # `none`/`pass`.
+    tldr = _render_tldr(report, gate_severities={
+        "geometry_contract": "info",
+        "mesh_contract":     "quality",
+        "bc_contract":       "info",
+        "solver_execution":  "info",
+        "qoi_extraction":    "info",
+        "reference_comparison": "info",
+    })
+    # The TLDR must mention mesh_contract (the actual WARN gate)…
+    assert "mesh_contract" in tldr
+    # …and must NOT mention any of the PASS gates.
+    assert "geometry_contract" not in tldr
+    assert "bc_contract" not in tldr
+    assert "qoi_extraction" not in tldr
+    assert "reference_comparison" not in tldr
+
+
+def test_explain_tldr_warn_non_ingested_empty_when_all_pass(tmp_path: Path):
+    """Edge case: WARN overall with every gate PASS (e.g., from a
+    limitations-driven demotion). The 'no per-gate blockers' branch
+    must fire."""
+    from cfdtrust.cli_explain import _render_tldr
+
+    report = {
+        "overall_status": "WARN",
+        "solver_execution": "real",
+        "validation_status": "unknown",
+        "gates": {
+            "geometry_contract":     {"status": "PASS"},
+            "mesh_contract":         {"status": "PASS"},
+            "bc_contract":           {"status": "PASS"},
+            "solver_execution":      {"status": "PASS"},
+            "qoi_extraction":        {"status": "PASS"},
+            "reference_comparison":  {"status": "PASS"},
+        },
+    }
+    tldr = _render_tldr(report, gate_severities={})
+    assert "no per-gate blockers" in tldr
 
 
 def test_ingest_blocked_when_no_solver_log(monkeypatch, tmp_path: Path):

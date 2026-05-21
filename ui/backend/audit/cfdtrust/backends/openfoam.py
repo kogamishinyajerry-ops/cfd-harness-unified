@@ -1821,6 +1821,17 @@ def _find_external_solver_log(
 _PROCESSOR_DIR_RE = re.compile(r"^processor(\d+)$")
 
 
+def _looks_like_time_name(name: str, *, positive_only: bool = False) -> bool:
+    """True iff `name` parses as a non-negative float (an OpenFOAM time
+    directory). `positive_only=True` excludes time 0 (initial conditions);
+    used by the ingest top-level-time-dir check (Codex R4-P2)."""
+    try:
+        t = float(name)
+    except ValueError:
+        return False
+    return t > 0 if positive_only else t >= 0
+
+
 def _find_time_directories(case_dir: Path) -> List[float]:
     """Return sorted list of time directories > 0 found anywhere a real
     OpenFOAM run would leave them in `case_dir`.
@@ -2080,6 +2091,52 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                     "Run the case externally first (any compatible OpenFOAM "
                     "build), then re-run `cfdtrust ingest`. For new cases "
                     "authored from scratch, use `cfdtrust run` instead."
+                ),
+            },
+        }
+
+    # Codex R4-P2 fix: pure-decomposed cases (`processor*/<time>/` with
+    # NOTHING at the case root) trip a downstream gap — `audit/qoi.py`
+    # and `qoi/wall_shear.py` only read top-level time dirs. If we
+    # accept a pure-decomposed case here, ingest succeeds but QoI +
+    # reference gates silently fall back to BLOCKED, producing a
+    # confusing partial-flow that doesn't deliver the advertised
+    # ingested-PASS/-WARN/partial trust verdict.
+    #
+    # The right behaviour is to gate at ingest time with an actionable
+    # next_step (run `reconstructPar` to materialise top-level dirs)
+    # rather than silently let the user discover the gap at `report`
+    # time. A future sub-DEC can extend `audit/qoi.py` to read
+    # processor*/ directly and lift this guard.
+    #
+    # The hybrid case (some processor*/ AND some top-level time dirs)
+    # is unaffected — top-level dirs are sufficient for QoI extraction.
+    has_top_level_time_dir = any(
+        (
+            entry.is_dir()
+            and not entry.name.startswith("processor")
+            and _looks_like_time_name(entry.name, positive_only=True)
+        )
+        for entry in case_dir.iterdir()
+    )
+    if not has_top_level_time_dir:
+        return {
+            "status": "BLOCKED",
+            "summary": (
+                "Case is parallel-decomposed (processor*/<time>/ present) but "
+                "was never reconstructed; downstream QoI extraction reads "
+                "only top-level time directories."
+            ),
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "case_decomposed_not_reconstructed",
+                "time_directories_found_under_processor": [str(t) for t in time_dirs],
+                "next_step": (
+                    "Run `reconstructPar` (in the OpenFOAM build that decomposed "
+                    "the case) to materialise top-level time directories, then "
+                    "re-run `cfdtrust ingest`. The trust harness's QoI + "
+                    "reference gates currently require reconstructed output."
                 ),
             },
         }
