@@ -1,0 +1,44 @@
+=== CYCLE-2 RE-DOGFOOD case_011 plate-fin CHT ===
+Date: 2026-05-21T19:57:53Z
+HEAD: 8981f63
+Case: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case
+---
+Note: cycle-1 artifacts moved to artifacts.cycle1_baseline_backup/ for comparison.
+
++++ cfdtrust ingest /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case +++
+[cfdtrust] WARN ingest FAIL: chtMultiRegionSimpleFoam ran 200/300 iters; 3/3 field(s) did not reach residual target.
+[cfdtrust] WARN   Solver gate FAILed on imported residuals — evidence was still ingested. Run `cfdtrust report` to assemble the full trust_report.json.
+[cfdtrust] OK     external_log_source = log_chtMultiRegionSimpleFoam.txt
+[cfdtrust] OK     checkmesh_image     = openfoam/openfoam11-paraview510:latest
+[cfdtrust] WARN Ingested run: harness did NOT witness the solver execution. trust_report will cap overall_status at WARN; validation_status cannot reach `validated`.
+real 232.65
+user 0.12
+sys 0.07
+EXIT_CODE=
+
++++ cfdtrust report /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case +++
+[cfdtrust] OK   trust_report written: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/trust_report.json
+        overall_status   = FAIL
+        solver_execution = ingested
+        validation_status= not_validated
+[cfdtrust] WARN This trust_report does NOT constitute real CFD validation.
+EXIT_CODE=
+
++++ ls artifacts/ +++
+total 976
+drwxr-xr-x@ 16 Zhuanz  staff     512  5月 22 04:01 .
+drwxr-xr-x@ 16 Zhuanz  staff     512  5月 22 03:57 ..
+-rw-r--r--@  1 Zhuanz  staff     735  5月 22 04:01 bc_audit.json
+-rw-r--r--@  1 Zhuanz  staff    2451  5月 22 03:57 bc_quality.json
+-rw-r--r--@  1 Zhuanz  staff     721  5月 22 03:57 geometry_quality.json
+-rw-r--r--@  1 Zhuanz  staff    1367  5月 22 04:01 geometry_report.json
+-rw-r--r--@  1 Zhuanz  staff     662  5月 22 04:01 ingest_manifest.json
+-rw-r--r--@  1 Zhuanz  staff     534  5月 22 04:01 mesh_quality.json
+-rw-r--r--@  1 Zhuanz  staff    3339  5月 22 04:01 mesh_quality.log
+-rw-r--r--@  1 Zhuanz  staff    1725  5月 22 04:01 mesh_report.json
+-rw-r--r--@  1 Zhuanz  staff     117  5月 22 04:01 qoi.csv
+-rw-r--r--@  1 Zhuanz  staff     172  5月 22 04:01 reference_comparison.csv
+-rw-r--r--@  1 Zhuanz  staff   13714  5月 22 04:01 residuals.csv
+-rw-r--r--@  1 Zhuanz  staff     959  5月 22 04:01 solver_gate.json
+-rw-r--r--@  1 Zhuanz  staff  428255  5月 22 04:01 solver.log
+-rw-r--r--@  1 Zhuanz  staff    6668  5月 22 04:01 trust_report.json

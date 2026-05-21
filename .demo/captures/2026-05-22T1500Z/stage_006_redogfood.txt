@@ -1,0 +1,13 @@
+=== cfdtrust ingest /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_006_onera_m6_transonic/case ===
+[cfdtrust] FAIL ingest BLOCKED: rhoCentralFoam log only carried 4 of 7 manifest target fields — solver gate cannot be evaluated on incomplete evidence.
+[cfdtrust] FAIL   reason: incomplete_residual_coverage
+[cfdtrust] WARN   next step: Either (a) the solver log truncated mid-run before every target field appeared (re-run to completion) or (b) the manifest declares fields the solver does not actually emit (correct `solver_contract.residual_targets`). Half coverage is not PASS — the gate refuses to declare success on fields it could not verify.
+EXIT_INGEST=1
+
+=== cfdtrust report /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_006_onera_m6_transonic/case ===
+[cfdtrust] OK   trust_report written: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_006_onera_m6_transonic/case/artifacts/trust_report.json
+        overall_status   = FAIL
+        solver_execution = ingested
+        validation_status= not_validated
+[cfdtrust] WARN This trust_report does NOT constitute real CFD validation.
+EXIT_REPORT=1
