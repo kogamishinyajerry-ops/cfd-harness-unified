@@ -1,0 +1,194 @@
+# AI-CFD-V2 — CWOS task registry
+# Phase 0 bootstrap tasks. Each task declares owner_agent, acceptance criteria,
+# and evidence_required so that "PASS" cannot be claimed without artifacts.
+#
+# NOTE: task status is NOT stored here. Status is derived from the latest
+# matching event in .cwos/agent_events.jsonl by tools/cwos_status.py.
+# This file is intent + acceptance; the event log is truth.
+
+tasks:
+  - task_id: PH0-MEMORY-001
+    title: Create project memory
+    owner_agent: docs-knowledge-engineer
+    objective: |
+      Create docs/project-memory/*.md so every agent reads the same North Star,
+      current scope, scope firewall, roadmap, risks, decisions, and next actions.
+    acceptance_criteria:
+      - All ten project-memory files exist.
+      - NORTH_STAR distinguishes long-term ambition from v0 wedge.
+      - SCOPE_FIREWALL enumerates out-of-scope items.
+      - ROADMAP defines Phase 0..5.
+    evidence_required:
+      - docs/project-memory/NORTH_STAR.md
+      - docs/project-memory/CURRENT_SCOPE.md
+      - docs/project-memory/SCOPE_FIREWALL.md
+      - docs/project-memory/ROADMAP.md
+      - docs/project-memory/PROGRESS.md
+      - docs/project-memory/RISK_REGISTER.md
+      - docs/project-memory/DECISION_LOG.md
+      - docs/project-memory/OPEN_QUESTIONS.md
+      - docs/project-memory/NEXT_ACTIONS.md
+      - docs/project-memory/PRODUCT_PRINCIPLES.md
+    dependencies: []
+
+  - task_id: PH0-AGENTS-001
+    title: Create Claude project agents
+    owner_agent: docs-knowledge-engineer
+    objective: Define the 13 project-level subagents with YAML frontmatter.
+    acceptance_criteria:
+      - All 13 agent files exist under .claude/agents/
+      - Each agent has mission, responsibilities, forbidden actions, required files, output format, definition of success, evidence requirements.
+    evidence_required:
+      - .claude/agents/project-governor.md
+      - .claude/agents/strategy-director.md
+      - .claude/agents/cfd-vv-director.md
+      - .claude/agents/benchmark-director.md
+      - .claude/agents/product-ui-director.md
+      - .claude/agents/engineering-director.md
+      - .claude/agents/system-architect.md
+      - .claude/agents/backend-engineer.md
+      - .claude/agents/frontend-engineer.md
+      - .claude/agents/openfoam-adapter-engineer.md
+      - .claude/agents/test-red-team.md
+      - .claude/agents/docs-knowledge-engineer.md
+      - .claude/agents/progress-intelligence-agent.md
+    dependencies: []
+
+  - task_id: PH0-SKILLS-001
+    title: Create project skills
+    owner_agent: docs-knowledge-engineer
+    objective: Define repeatable workflows as Claude Skills.
+    acceptance_criteria:
+      - Five SKILL.md files exist.
+      - Each has YAML frontmatter with description.
+    evidence_required:
+      - .claude/skills/plan-sprint/SKILL.md
+      - .claude/skills/run-trust-loop/SKILL.md
+      - .claude/skills/red-team-review/SKILL.md
+      - .claude/skills/progress-report/SKILL.md
+      - .claude/skills/update-cockpit/SKILL.md
+    dependencies: []
+
+  - task_id: PH0-CLI-001
+    title: cfdtrust CLI skeleton
+    owner_agent: backend-engineer
+    objective: |
+      Build the minimal CLI (validate-manifest, audit, run, report) with mocked
+      solver execution clearly labeled.
+    acceptance_criteria:
+      - "`cfdtrust validate-manifest cases/flat_plate_rans_sst` exits 0."
+      - "`cfdtrust report` produces trust_report.json that validates against schema."
+      - mocked solver execution is flagged in trust_report.json.
+    evidence_required:
+      - src/cfdtrust/cli.py
+      - src/cfdtrust/manifest.py
+      - src/cfdtrust/audit/report.py
+    dependencies:
+      - PH0-SCHEMA-001
+
+  - task_id: PH0-SCHEMA-001
+    title: case_manifest + trust_report JSON schemas
+    owner_agent: system-architect
+    objective: Define machine-checkable schemas for case manifests and trust reports.
+    acceptance_criteria:
+      - Schemas live under src/cfdtrust/schemas/.
+      - Both schemas validate the sample case + trust report.
+    evidence_required:
+      - src/cfdtrust/schemas/case_manifest.schema.json
+      - src/cfdtrust/schemas/trust_report.schema.json
+    dependencies: []
+
+  - task_id: PH0-CASE-001
+    title: flat_plate_rans_sst sample case
+    owner_agent: benchmark-director
+    objective: Provide the first sample case manifest and supporting directories.
+    acceptance_criteria:
+      - cases/flat_plate_rans_sst/case_manifest.yaml exists and validates.
+      - reference/, artifacts/, negative_tests/ README files exist.
+      - reference data is honestly labeled as not finalized.
+    evidence_required:
+      - cases/flat_plate_rans_sst/case_manifest.yaml
+      - cases/flat_plate_rans_sst/reference/README.md
+      - cases/flat_plate_rans_sst/artifacts/README.md
+      - cases/flat_plate_rans_sst/negative_tests/README.md
+    dependencies:
+      - PH0-SCHEMA-001
+
+  - task_id: PH0-STATUS-001
+    title: CWOS status protocol
+    owner_agent: progress-intelligence-agent
+    objective: Repo-native task / event / decision / blocker / metric state.
+    acceptance_criteria:
+      - .cwos/ files exist and parse as YAML/JSON.
+      - tools/cwos_event.py validates required fields.
+      - tools/cwos_status.py emits docs/status/project_status.json.
+    evidence_required:
+      - .cwos/tasks.yaml
+      - .cwos/agent_events.jsonl
+      - .cwos/decisions.yaml
+      - .cwos/blockers.yaml
+      - .cwos/metrics.json
+      - tools/cwos_event.py
+      - tools/cwos_status.py
+    dependencies: []
+
+  - task_id: PH0-COCKPIT-001
+    title: 1-minute project cockpit
+    owner_agent: progress-intelligence-agent
+    objective: docs/status/COCKPIT.md + .html readable in under one minute.
+    acceptance_criteria:
+      - cwos_render_dashboard.py produces both files.
+      - Cockpit contains required sections including Trust Loop Status.
+    evidence_required:
+      - tools/cwos_render_dashboard.py
+      - docs/status/COCKPIT.md
+      - docs/status/COCKPIT.html
+      - docs/status/project_status.json
+    dependencies:
+      - PH0-STATUS-001
+
+  - task_id: PH0-TESTS-001
+    title: pytest suite for Phase 0
+    owner_agent: test-red-team
+    objective: Initial pytest tests that catch obvious false-pass paths.
+    acceptance_criteria:
+      - tests/test_manifest.py validates the sample case.
+      - tests/test_trust_report.py asserts mocked solver does not claim validation.
+      - tests/test_negative_cases.py asserts schema rejects missing sections.
+      - tests/test_cwos_status.py + test_cockpit_render.py exercise tools/.
+    evidence_required:
+      - tests/test_manifest.py
+      - tests/test_trust_report.py
+      - tests/test_negative_cases.py
+      - tests/test_cwos_status.py
+      - tests/test_cockpit_render.py
+    dependencies:
+      - PH0-CLI-001
+      - PH0-STATUS-001
+      - PH0-COCKPIT-001
+
+  - task_id: PH0-DOCS-001
+    title: Strategy / VV / Product / Engineering docs
+    owner_agent: docs-knowledge-engineer
+    objective: Documents that anchor strategy, V&V philosophy, product scope, engineering plan.
+    acceptance_criteria:
+      - docs/strategy/, docs/vv/, docs/product/, docs/engineering/ contain the required files.
+      - docs/vv/CFD_CORRECTNESS_PHILOSOPHY.md states residual ≠ validation.
+      - docs/product/SCREEN_SPECS.md is limited to three Phase 0 screens.
+    evidence_required:
+      - docs/strategy/COMPETITIVE_MAP.md
+      - docs/strategy/STRATEGY_REVIEW.md
+      - docs/strategy/WEDGE_ANALYSIS.md
+      - docs/vv/CFD_CORRECTNESS_PHILOSOPHY.md
+      - docs/vv/CASE_CONTRACT_SPEC.md
+      - docs/vv/BENCHMARK_MATRIX.md
+      - docs/vv/VALIDATION_POLICY.md
+      - docs/vv/NEGATIVE_TEST_POLICY.md
+      - docs/product/UX_PRINCIPLES.md
+      - docs/product/SCREEN_SPECS.md
+      - docs/product/AI_ADVISOR_INTERACTION.md
+      - docs/engineering/ARCHITECTURE.md
+      - docs/engineering/IMPLEMENTATION_PLAN.md
+      - docs/engineering/TESTING_STRATEGY.md
+      - docs/engineering/MODULE_BOUNDARIES.md
+    dependencies: []

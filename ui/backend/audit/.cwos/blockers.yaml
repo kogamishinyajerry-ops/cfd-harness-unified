@@ -1,0 +1,34 @@
+blockers:
+  - blocker_id: BLK-001
+    title: Real OpenFOAM execution not implemented
+    severity: HIGH
+    owner_agent: openfoam-adapter-engineer
+    description: |
+      Phase 0 mocks the solver layer. Until a real OpenFOAM adapter exists,
+      no trust_report can claim validation.
+    unblocks:
+      - Validation against real reference data
+      - Phase 1 milestones
+
+  - blocker_id: BLK-002
+    title: Reference data for flat_plate_rans_sst not finalized
+    severity: HIGH
+    owner_agent: benchmark-director
+    description: |
+      case_manifest.yaml sets reference_comparison.status = placeholder.
+      A canonical published dataset must be adopted before any validation claim.
+    unblocks:
+      - Real reference_comparison.csv
+      - First true PASS instead of MOCKED
+
+  - blocker_id: BLK-003
+    title: Negative test directories are scaffold only
+    severity: MEDIUM
+    owner_agent: test-red-team
+    description: |
+      cases/flat_plate_rans_sst/negative_tests/ lists planned bad cases but
+      none are populated yet. Without them, the trust harness cannot demonstrate
+      that it actually catches bad cases.
+    unblocks:
+      - Confidence in trust gates
+      - Red Team certification of Phase 0
