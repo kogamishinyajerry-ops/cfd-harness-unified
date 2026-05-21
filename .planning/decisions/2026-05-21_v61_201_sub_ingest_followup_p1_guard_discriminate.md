@@ -92,7 +92,7 @@ flip — the precondition-protection path is preserved verbatim.
 
 ## Implementation note
 
-- **Commit**: TBD (backfilled in second commit on this branch).
+- **Commit**: `e86c011` (e86c0112fc46b473dde4551137ba7d02b04746a5).
 - **Branch**: `worktree-agent-a99d74ec81d8094d9`.
 - **Functional LOC delta** (`ui/backend/audit/cfdtrust/audit/solver.py`):
   net +2 LOC of behaviour change — extract `details = gate.get("details", {}) or {}`
