@@ -19,11 +19,10 @@ codex_review_round6_relay: 86gs stream interrupted → crs (effort=high)
 codex_review_round7_verdict: CHANGES_REQUIRED (P1 over-broad BLOCKED guard suppresses legitimate post-residual BLOCKEDs + P2 decomposed-only BLOCK too aggressive for not_finalized references) — BOTH DEFERRED per user 2026-05-21 hard-stop discipline at 7 rounds (avoids N1.1 anti-pattern)
 codex_review_round7_relay: 86gs (effort=xhigh)
 review_chain_terminated: 2026-05-21 (user explicit stop after R7; remaining findings are tracked as known_limitations + follow-up sub-DECs, NOT iterated further)
-known_limitations:
-  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized". Decomposed-only cases with placeholder/not_finalized references could be ingested today. Tracked in DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED. UX-only restriction, not a correctness break. [R7 P2]
 closed_by_followup:
   - banner-fallback in read_artifacts hard-coded WARN → CLOSED by DEC-V61-201-SUB-INGEST-P2-FOLLOWUP (recompute via _parse_simplefoam_log + _compute_gate_from_residuals; LANDED 2026-05-22, worktree-agent-a7e599b4f6b581d31). [R6 P2]
   - solver.ingest's BLOCKED-skip guard was gate-status-only; over-suppressed post-residual BLOCKEDs (e.g., no_iterations_in_log) that should persist → CLOSED by DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE (tightened guard to also require details.execution=="skipped"; LANDED 2026-05-22, worktree-agent-a99d74ec81d8094d9, +2 functional LOC + 2 tests, 407→409 passing). [R7 P1]
+  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized" → CLOSED by DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED (relaxed BLOCK to finalized-reference only, sharpened reason to `case_decomposed_not_reconstructed_with_finalized_reference`; LANDED 2026-05-22, worktree-agent-a7107260f65ff3ca5, ~10 code LOC + 2 tests added + 2 tests updated, 409 pytest passing). [R7 P2]
 ---
 
 ## Why
