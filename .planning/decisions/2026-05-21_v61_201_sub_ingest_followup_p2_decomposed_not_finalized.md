@@ -1,10 +1,11 @@
 ---
 decision_id: DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED
 title: Allow decomposed-only ingest when reference_comparison is not finalized
-status: Proposed
+status: Accepted
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: post-merge follow-up
-notion_sync_status: not_applicable_proposed
+notion_sync_status: pending_session_end_sync
 ---
 
 ## Why
@@ -88,3 +89,26 @@ step but not a wrong answer.
 Very low. The relaxed condition is conservative — when reference is
 finalized, the BLOCK is unchanged. The new accept path mirrors what
 the rest of the pipeline already does for serial not_finalized cases.
+
+## Implementation note
+
+- **Landed**: 2026-05-22 on worktree branch `worktree-agent-a7107260f65ff3ca5`
+- **Commit**: see DEC frontmatter follow-up sync (added in commit body)
+- **LOC delta**: `ui/backend/audit/cfdtrust/backends/openfoam.py` +46 / -33
+  (net +13; code-only delta ~10 LOC for the `ref_status` finalized branch
+  wrapper; balance is comment/docstring expansion documenting the relaxation).
+- **Tests**: `ui/backend/audit/cfdtrust_tests/test_ingest_mode.py` +98 / -23
+  - **Updated** `test_ingest_blocks_pure_decomposed_with_reconstructPar_next_step`
+    to use `reference_comparison.status: "finalized"` manifest and assert the
+    sharpened reason.
+  - **Updated** `test_solver_ingest_blocked_decomposed_does_not_clobber_existing_gate`
+    to use `reference_comparison.status: "finalized"` (precondition for BLOCK).
+  - **Added** `test_ingest_accepts_decomposed_only_when_reference_not_finalized`
+    (decomposed + default not_finalized manifest → no decomposed-reason BLOCK).
+  - **Added** `test_ingest_blocks_decomposed_only_when_reference_finalized_sharpened_reason`
+    (decomposed + finalized → BLOCK with sharpened reason, both recovery options
+    in next_step).
+- **pytest**: `ui/backend/audit/cfdtrust_tests/` 409 passed, 1 skipped (was 406+1
+  pre-change; +3 net: 1 updated + 2 added).
+- **R3-P1 invariant preserved**: `_find_time_directories` processor*/ detection
+  unchanged. Hybrid (top-level + processor*/) cases still pass through.

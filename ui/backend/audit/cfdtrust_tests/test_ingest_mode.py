@@ -271,27 +271,90 @@ def test_ingest_blocked_when_no_time_directory(monkeypatch, tmp_path: Path):
 def test_ingest_blocks_pure_decomposed_with_reconstructPar_next_step(
     monkeypatch, tmp_path: Path,
 ):
-    """Codex R4-P2: a pure-decomposed case (processor*/<time>/ but no
-    top-level time dir) must BLOCK ingest with a `reconstructPar`
-    next_step — NOT silently succeed and let downstream QoI fall back
-    to BLOCKED (which would deliver a half-working trust report).
+    """Codex R4-P2 (relaxed by DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-
+    FINALIZED): a pure-decomposed case (processor*/<time>/ but no
+    top-level time dir) must BLOCK ingest WHEN the manifest's
+    reference_comparison is finalized — because downstream QoI then
+    reads time directories and would silently fall back to BLOCKED.
 
-    This supersedes the pre-R4 behaviour where ingest accepted these
-    cases on the strength of `processor*/100/` alone."""
+    Sharpened reason `case_decomposed_not_reconstructed_with_finalized_reference`
+    distinguishes this from the pre-relaxation generic reason."""
     _make_ingestable_case(tmp_path, with_time_dir=False)
     for i in range(4):
         (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
         (tmp_path / f"processor{i}" / "100" / "U").write_text("(placeholder)\n")
     _patch_docker_for_ingest(monkeypatch)
 
-    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    manifest = _ingest_manifest_fixture()
+    manifest["reference_comparison"] = {"status": "finalized"}
+    gate = ofa.ingest(tmp_path, manifest)
     assert gate["status"] == "BLOCKED"
-    assert gate["details"]["reason"] == "case_decomposed_not_reconstructed"
+    assert (
+        gate["details"]["reason"]
+        == "case_decomposed_not_reconstructed_with_finalized_reference"
+    )
     # next_step must mention reconstructPar — that's the actionable fix.
     assert "reconstructPar" in gate["details"]["next_step"]
     # Diagnostic carries the discovered time values so the user knows
     # which times will materialise after reconstructPar.
     assert "100.0" in gate["details"]["time_directories_found_under_processor"]
+
+
+def test_ingest_accepts_decomposed_only_when_reference_not_finalized(
+    monkeypatch, tmp_path: Path,
+):
+    """DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED: when the
+    manifest's reference_comparison.status is `not_finalized` (or
+    placeholder), QoI + reference gates MOCK out downstream and never
+    touch time directories. Decomposed-only ingest must therefore be
+    accepted — the R4-P2 BLOCK is too aggressive for this path."""
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    for i in range(4):
+        (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
+        (tmp_path / f"processor{i}" / "100" / "U").write_text("(placeholder)\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    manifest = _ingest_manifest_fixture()  # default reference_comparison.status="not_finalized"
+    gate = ofa.ingest(tmp_path, manifest)
+    # The decomposed-only BLOCK must NOT fire — ingest proceeds past
+    # this gate. (Some other gate may still BLOCK on synthetic-fixture
+    # quirks, but never with the decomposed reason.)
+    assert (
+        gate["details"].get("reason")
+        != "case_decomposed_not_reconstructed_with_finalized_reference"
+    )
+    assert (
+        gate["details"].get("reason") != "case_decomposed_not_reconstructed"
+    )
+
+
+def test_ingest_blocks_decomposed_only_when_reference_finalized_sharpened_reason(
+    monkeypatch, tmp_path: Path,
+):
+    """DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED: when the
+    reference IS finalized, the BLOCK is preserved but with sharpened
+    reason `case_decomposed_not_reconstructed_with_finalized_reference`
+    so users see exactly why (and have two recovery options:
+    reconstructPar OR demote reference to placeholder/not_finalized)."""
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    for i in range(2):
+        (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
+    _patch_docker_for_ingest(monkeypatch)
+
+    manifest = _ingest_manifest_fixture()
+    manifest["reference_comparison"] = {"status": "finalized"}
+    gate = ofa.ingest(tmp_path, manifest)
+    assert gate["status"] == "BLOCKED"
+    assert (
+        gate["details"]["reason"]
+        == "case_decomposed_not_reconstructed_with_finalized_reference"
+    )
+    # next_step lists BOTH recovery options.
+    assert "reconstructPar" in gate["details"]["next_step"]
+    assert (
+        "placeholder" in gate["details"]["next_step"]
+        or "not_finalized" in gate["details"]["next_step"]
+    )
 
 
 def test_ingest_recognizes_mixed_top_level_and_processor_layout(
@@ -976,10 +1039,12 @@ def test_solver_ingest_blocked_precondition_does_not_clobber_existing_gate(
 def test_solver_ingest_blocked_decomposed_does_not_clobber_existing_gate(
     monkeypatch, tmp_path: Path,
 ):
-    """Same protection for the `case_decomposed_not_reconstructed`
-    precondition path (R4-P2 + R6-P1 interaction)."""
+    """Same protection for the decomposed-only precondition path
+    (R4-P2 + R6-P1 interaction). Post DEC-V61-201-SUB-INGEST-P2-
+    DECOMPOSED-NOT-FINALIZED, the BLOCK only fires when reference is
+    finalized — so the manifest must declare that to reach the gate."""
     _make_ingestable_case(tmp_path, with_time_dir=False)
-    # Decomposed-only (triggers R4-P2 BLOCK).
+    # Decomposed-only (triggers post-relaxation finalized-reference BLOCK).
     for i in range(2):
         (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
     art = tmp_path / "artifacts"
@@ -992,9 +1057,14 @@ def test_solver_ingest_blocked_decomposed_does_not_clobber_existing_gate(
     (art / "solver_gate.json").write_text(json.dumps(prior_gate))
     _patch_docker_for_ingest(monkeypatch)
 
-    blocked_gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    manifest = _ingest_manifest_fixture()
+    manifest["reference_comparison"] = {"status": "finalized"}
+    blocked_gate = solver_mod.ingest(tmp_path, manifest)
     assert blocked_gate["status"] == "BLOCKED"
-    assert blocked_gate["details"]["reason"] == "case_decomposed_not_reconstructed"
+    assert (
+        blocked_gate["details"]["reason"]
+        == "case_decomposed_not_reconstructed_with_finalized_reference"
+    )
     # Existing gate intact.
     persisted = json.loads((art / "solver_gate.json").read_text())
     assert persisted["details"]["execution"] == "real"

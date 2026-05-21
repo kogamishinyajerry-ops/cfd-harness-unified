@@ -165,7 +165,9 @@ user-ratified continuation + user-invoked hard-stop) is healthy.
      outcomes (R7 P1).
    - `DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED`: allow
      decomposed-only ingest when reference_comparison is not_finalized
-     (R7 P2).
+     (R7 P2). **LANDED 2026-05-22** (worktree-agent-a7107260f65ff3ca5,
+     ~10 code LOC in `openfoam.py` ingest path + 2 new tests + 2 updated
+     tests, 409 pytest passing).
    All three are spike-class (<30 LOC + 1-3 tests).
 3. **Future sub-DEC: extend `audit/qoi.py` + `qoi/wall_shear.py`**
    to read processor*/<time>/ directly. When that lands, the R4 ingest

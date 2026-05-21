@@ -23,7 +23,7 @@ known_limitations:
   - solver.ingest's BLOCKED-skip guard is gate-status-only; over-suppresses post-residual BLOCKEDs (e.g., no_iterations_in_log) that should persist. Tracked in DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE. Worst case is the generic ingested-WARN fallback masking a real solver-side BLOCKED reason at `cfdtrust report` time — does NOT break honesty fences. [R7 P1]
 closed_by_followup:
   - banner-fallback in read_artifacts hard-coded WARN → CLOSED by DEC-V61-201-SUB-INGEST-P2-FOLLOWUP (recompute via _parse_simplefoam_log + _compute_gate_from_residuals; LANDED 2026-05-22, worktree-agent-a7e599b4f6b581d31). [R6 P2]
-  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized". Decomposed-only cases with placeholder/not_finalized references could be ingested today. Tracked in DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED. UX-only restriction, not a correctness break. [R7 P2]
+  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized" → CLOSED by DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED (relaxed BLOCK to finalized-reference only, sharpened reason to `case_decomposed_not_reconstructed_with_finalized_reference`; LANDED 2026-05-22, worktree-agent-a7107260f65ff3ca5, ~10 code LOC + 2 tests added + 2 tests updated, 409 pytest passing). [R7 P2]
 ---
 
 ## Why

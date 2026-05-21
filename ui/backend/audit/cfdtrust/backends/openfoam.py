@@ -2095,22 +2095,25 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
 
-    # Codex R4-P2 fix: pure-decomposed cases (`processor*/<time>/` with
-    # NOTHING at the case root) trip a downstream gap — `audit/qoi.py`
-    # and `qoi/wall_shear.py` only read top-level time dirs. If we
-    # accept a pure-decomposed case here, ingest succeeds but QoI +
-    # reference gates silently fall back to BLOCKED, producing a
-    # confusing partial-flow that doesn't deliver the advertised
-    # ingested-PASS/-WARN/partial trust verdict.
+    # Codex R4-P2 fix (R7-P2 relaxation per DEC-V61-201-SUB-INGEST-P2-
+    # DECOMPOSED-NOT-FINALIZED): pure-decomposed cases (`processor*/<time>/`
+    # with NOTHING at the case root) trip a downstream gap — `audit/qoi.py`
+    # and `qoi/wall_shear.py` only read top-level time dirs WHEN
+    # `reference_comparison.status == "finalized"`. For placeholder /
+    # not_finalized reference manifests, QoI + reference both MOCK out and
+    # never touch the time directories, so the BLOCK is overly restrictive.
     #
-    # The right behaviour is to gate at ingest time with an actionable
-    # next_step (run `reconstructPar` to materialise top-level dirs)
-    # rather than silently let the user discover the gap at `report`
-    # time. A future sub-DEC can extend `audit/qoi.py` to read
-    # processor*/ directly and lift this guard.
+    # Behaviour:
+    #   - reference finalized + decomposed-only → BLOCK with sharpened reason
+    #     `case_decomposed_not_reconstructed_with_finalized_reference` and
+    #     `reconstructPar` next_step (preserves R4-P2 correctness guarantee).
+    #   - reference not_finalized/placeholder + decomposed-only → ACCEPT
+    #     (no BLOCK on this gate); downstream QoI/reference mock paths handle
+    #     the absence of top-level times. Ingest proceeds.
     #
-    # The hybrid case (some processor*/ AND some top-level time dirs)
-    # is unaffected — top-level dirs are sufficient for QoI extraction.
+    # A future sub-DEC can extend `audit/qoi.py` to read processor*/ directly
+    # and remove the BLOCK entirely. Hybrid cases (some processor*/ AND some
+    # top-level time dirs) are unaffected — top-level dirs are sufficient.
     has_top_level_time_dir = any(
         (
             entry.is_dir()
@@ -2120,26 +2123,36 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         for entry in case_dir.iterdir()
     )
     if not has_top_level_time_dir:
-        return {
-            "status": "BLOCKED",
-            "summary": (
-                "Case is parallel-decomposed (processor*/<time>/ present) but "
-                "was never reconstructed; downstream QoI extraction reads "
-                "only top-level time directories."
-            ),
-            "details": {
-                "execution": "skipped",
-                "real_solver_invoked": False,
-                "reason": "case_decomposed_not_reconstructed",
-                "time_directories_found_under_processor": [str(t) for t in time_dirs],
-                "next_step": (
-                    "Run `reconstructPar` (in the OpenFOAM build that decomposed "
-                    "the case) to materialise top-level time directories, then "
-                    "re-run `cfdtrust ingest`. The trust harness's QoI + "
-                    "reference gates currently require reconstructed output."
+        ref_status = (
+            (manifest.get("reference_comparison") or {}).get("status", "")
+        )
+        if ref_status == "finalized":
+            return {
+                "status": "BLOCKED",
+                "summary": (
+                    "Case is parallel-decomposed (processor*/<time>/ present) but "
+                    "was never reconstructed; downstream QoI extraction reads "
+                    "only top-level time directories and the manifest's "
+                    "reference_comparison is finalized."
                 ),
-            },
-        }
+                "details": {
+                    "execution": "skipped",
+                    "real_solver_invoked": False,
+                    "reason": "case_decomposed_not_reconstructed_with_finalized_reference",
+                    "time_directories_found_under_processor": [str(t) for t in time_dirs],
+                    "next_step": (
+                        "Run `reconstructPar` (in the OpenFOAM build that decomposed "
+                        "the case) to materialise top-level time directories, then "
+                        "re-run `cfdtrust ingest`. Alternatively, set "
+                        "`reference_comparison.status` to `placeholder` or "
+                        "`not_finalized` if the reference data is not staged — the "
+                        "trust harness's QoI + reference gates will then mock out "
+                        "and decomposed-only ingest can proceed."
+                    ),
+                },
+            }
+        # else: reference is placeholder/not_finalized/missing → accept the
+        # decomposed-only case. QoI + reference will mock out downstream.
 
     # Ingest-specific check 2: an external solver log must be locatable.
     # Codex R1-P1 fix: pass the manifest so the search is driven by
