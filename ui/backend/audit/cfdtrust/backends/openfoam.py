@@ -1412,6 +1412,7 @@ def _persist_bc_quality(
     expected_fields: List[str],
     blocked_reason: str | None = None,
     blocked_detail: str | None = None,
+    regions: Dict[str, Dict[str, Any]] | None = None,
 ) -> Path:
     """Write `artifacts/bc_quality.json` — single source of truth for the
     BC audit gate. Mirrors `_persist_mesh_quality` (M4.1) and
@@ -1421,12 +1422,24 @@ def _persist_bc_quality(
                                   missing: bool (when file absent)}}.
     `expected_fields` is the ordered list of fields we tried to parse
     (U, p, then `turbulence_fields` from the manifest).
+
+    Multi-region (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC, Gap #11):
+    when `regions` is provided (non-None), the payload carries a
+    top-level `layout: "multi_region"` marker plus a top-level
+    `regions` dict keyed by `region_<name>`. Each region carries its
+    own `expected_fields` / `fields_present` / `fields_missing` /
+    `fields` sub-shape using the SAME single-region grammar — so the
+    per-region inner dicts are byte-identical to what the
+    single-region path produces. Downstream audit detects the
+    `layout` marker and emits structural BLOCKED (current bc_contract
+    schema is single-stream-only; per-region schema is charter-class
+    work, Gap #28).
     """
     art = case_dir / "artifacts"
     art.mkdir(parents=True, exist_ok=True)
     out_path = art / "bc_quality.json"
 
-    if blocked_reason is not None or fields is None:
+    if blocked_reason is not None or (fields is None and regions is None):
         payload: Dict[str, Any] = {
             "bc_parsing_status": "blocked",
             "reason": blocked_reason or "unparsed",
@@ -1435,6 +1448,18 @@ def _persist_bc_quality(
             payload["detail"] = blocked_detail
         if expected_fields:
             payload["expected_fields"] = expected_fields
+    elif regions is not None:
+        # Multi-region branch. Top-level `fields` / `fields_present` /
+        # `fields_missing` are deliberately OMITTED — downstream must
+        # iterate the `regions` dict and use per-region sub-shapes.
+        payload = {
+            "bc_parsing_status": "ok",
+            "layout": "multi_region",
+            "expected_fields": expected_fields,
+            "regions": regions,
+            "regions_detected": sorted(regions.keys()),
+            "region_count": len(regions),
+        }
     else:
         payload = {
             "bc_parsing_status": "ok",
@@ -1459,36 +1484,27 @@ def _persist_bc_quality(
     return out_path
 
 
-def _collect_and_persist_bc(
-    case_dir: Path,
-    manifest: Dict[str, Any],
-) -> None:
-    """Walk the expected `0/<field>` files, parse each, and persist
-    `artifacts/bc_quality.json`. Called from `run()` after blockMesh
-    succeeds.
+def _parse_field_files_in_dir(
+    field_dir: Path,
+    field_dir_relative: str,
+    expected: List[str],
+) -> Dict[str, Dict[str, Any]]:
+    """Helper for `_collect_and_persist_bc`: read each `expected` field
+    file inside `field_dir`, return the per-field dict that the
+    single-region path historically produced under the top-level
+    `fields` key.
 
-    Field selection: always `U` and `p` (incompressible RANS canonical),
-    plus any name in `manifest.bc_contract.turbulence_fields`. The 0/
-    files exist before any solver runs (user inputs), so parser failures
-    here surface as `fields_missing` in the JSON — not BLOCKED.
+    `field_dir_relative` is the path stub used to populate `file:`
+    entries (e.g. `"0"` for single-region or `"0/region_fluid"` for a
+    multi-region case). Extracting this helper keeps the
+    single-region and per-region multi-region branches sharing
+    identical grammar — no field-file behavior diverges between
+    layouts.
     """
-    bc_contract = manifest.get("bc_contract", {}) or {}
-    turb_fields = list(bc_contract.get("turbulence_fields", []) or [])
-
-    # Canonical incompressible RANS fields. Deduplicate while preserving
-    # order: U, p first, then turbulence fields in manifest order.
-    seen: set = set()
-    expected: List[str] = []
-    for fname in ["U", "p", *turb_fields]:
-        if fname in seen:
-            continue
-        seen.add(fname)
-        expected.append(fname)
-
     fields: Dict[str, Dict[str, Any]] = {}
     for fname in expected:
-        fpath = case_dir / "0" / fname
-        rel = str(Path("0") / fname)
+        fpath = field_dir / fname
+        rel = str(Path(field_dir_relative) / fname)
         if not fpath.is_file():
             fields[fname] = {
                 "file": rel,
@@ -1522,7 +1538,133 @@ def _collect_and_persist_bc(
             "parsed": True,
             "patches": parsed,
         }
+    return fields
 
+
+def _detect_multi_region_layout(case_dir: Path) -> List[str]:
+    """Return sorted list of `region_*` sub-directory names under
+    `case_dir / "0"`, or empty list for single-region cases.
+
+    DEC-V61-201-SUB-INGEST-MULTI-REGION-BC (Gap #11): OpenFOAM
+    multi-region CHT cases (`chtMultiRegionFoam`,
+    `chtMultiRegionSimpleFoam`) place each region's initial+boundary
+    field files under `0/region_<name>/<field>` instead of
+    `0/<field>`. The convention is that EVERY region's directory is
+    named `region_<name>` (`region_fluid`, `region_solid`,
+    `region_air`, etc.) — same convention `constant/<region>/` and
+    `system/<region>/` follow elsewhere in the case.
+
+    Detection rule: any entry directly under `0/` that
+    (a) `is_dir()` (not a field FILE)
+    (b) is NOT a symlink (R-17 fence — the recursive symlink walk in
+        `_is_openfoam_compatible_case_dir` would already have BLOCKED
+        the run/ingest if any 0/ entry were a symlink; check here is
+        defensive for the case_dir grammar)
+    (c) name starts with `region_`
+
+    Returns sorted by region name for deterministic output ordering
+    in `bc_quality.json` (json.dumps sort_keys handles dict keys but
+    not the value of `regions_detected`).
+    """
+    zero_dir = case_dir / "0"
+    if not zero_dir.is_dir():
+        return []
+    try:
+        entries = list(zero_dir.iterdir())
+    except (OSError, PermissionError):
+        return []
+    regions: List[str] = []
+    for entry in entries:
+        if entry.is_symlink():
+            continue
+        if not entry.is_dir():
+            continue
+        if not entry.name.startswith("region_"):
+            continue
+        regions.append(entry.name)
+    regions.sort()
+    return regions
+
+
+def _collect_and_persist_bc(
+    case_dir: Path,
+    manifest: Dict[str, Any],
+) -> None:
+    """Walk the expected `0/<field>` files (single-region) OR
+    `0/region_<name>/<field>` files (multi-region CHT), parse each,
+    and persist `artifacts/bc_quality.json`. Called from `run()`
+    after blockMesh succeeds and from `ingest()` for already-run
+    cases.
+
+    Field selection: always `U` and `p` (incompressible RANS canonical),
+    plus any name in `manifest.bc_contract.turbulence_fields`. The 0/
+    files exist before any solver runs (user inputs), so parser failures
+    here surface as `fields_missing` in the JSON — not BLOCKED.
+
+    Layout detection (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC, Gap #11):
+    if `0/` contains any `region_<name>/` sub-directories, switch to
+    the multi-region branch. Each region runs the SAME field-collection
+    grammar rooted at `0/region_<name>/<field>`, and results are
+    accumulated into a top-level `regions[name]` dict. Single-region
+    cases (no `region_*` subdirs) take the existing top-level path
+    BYTE-IDENTICALLY — `bc_quality.json` produced for single-region
+    cases is unchanged from the pre-DEC layout.
+    """
+    bc_contract = manifest.get("bc_contract", {}) or {}
+    turb_fields = list(bc_contract.get("turbulence_fields", []) or [])
+
+    # Canonical incompressible RANS fields. Deduplicate while preserving
+    # order: U, p first, then turbulence fields in manifest order.
+    seen: set = set()
+    expected: List[str] = []
+    for fname in ["U", "p", *turb_fields]:
+        if fname in seen:
+            continue
+        seen.add(fname)
+        expected.append(fname)
+
+    # Multi-region detection. Note we look at on-disk layout, NOT the
+    # manifest — the manifest's bc_contract schema is single-stream
+    # today (Gap #28 charter work would change that). The on-disk
+    # layout is the ground truth for what the case actually carries.
+    region_names = _detect_multi_region_layout(case_dir)
+
+    if region_names:
+        # Multi-region branch. Per-region expected_fields uses the same
+        # default list for now — per-region-class expectations
+        # (solid-region wants only `T`, fluid wants U/p/turbulence)
+        # require manifest schema work that is OUT OF SCOPE for this
+        # sub-DEC (see DEC frontmatter, Gap #28).
+        regions: Dict[str, Dict[str, Any]] = {}
+        for rname in region_names:
+            region_dir = case_dir / "0" / rname
+            region_rel = str(Path("0") / rname)
+            region_fields = _parse_field_files_in_dir(
+                region_dir, region_rel, expected,
+            )
+            regions[rname] = {
+                "expected_fields": expected,
+                "fields_present": sorted(
+                    fname for fname, fdata in region_fields.items()
+                    if fdata.get("parsed", False)
+                ),
+                "fields_missing": sorted(
+                    fname for fname, fdata in region_fields.items()
+                    if not fdata.get("parsed", False)
+                    and fdata.get("missing", False)
+                ),
+                "fields": region_fields,
+            }
+        _persist_bc_quality(
+            case_dir,
+            fields=None,
+            expected_fields=expected,
+            regions=regions,
+        )
+        return
+
+    # Single-region branch (unchanged behavior).
+    fields = _parse_field_files_in_dir(case_dir / "0", "0", expected)
     _persist_bc_quality(case_dir, fields=fields, expected_fields=expected)
 
 
