@@ -1210,6 +1210,13 @@ def _persist_geometry_quality(
 
 _BOUNDARY_FIELD_OPEN_RE = re.compile(r"\bboundaryField\s*\{")
 
+# DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES:
+# canonical OpenFOAM grouped-patch header — `"(name1|name2|...)"` or
+# `(name1|name2|...)` (the surrounding quotes are conventional but not
+# required). One BC block declares many patches in one shot. Common in
+# compressible aero benchmark cases (ONERA M6, RAE 2822, ...).
+_GROUPED_PATCH_HEADER_RE = re.compile(r'"?\(\s*([^)]+?)\s*\)"?')
+
 # M7.1: numeric tokens — sign, digits, decimal, scientific notation.
 _NUM_TOKEN = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
 # `value uniform <scalar>;`  e.g. `value uniform 0.293;` or `value uniform 0;`
@@ -1289,12 +1296,38 @@ def _parse_field_boundary_field(text: str) -> Dict[str, Dict[str, Any]]:
         j = _skip_ws(j)
         if j >= m:
             break
-        name_start = j
-        while j < m and (inner[j].isalnum() or inner[j] == "_"):
-            j += 1
-        if j == name_start:
-            break
-        name = inner[name_start:j]
+
+        # DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES:
+        # accept either single-name `patch_name { ... }` (legacy path)
+        # OR canonical grouped form `"(name1|name2|...)" { ... }` (new path).
+        # The grouped form is one BC block declaring many patches; we
+        # expand it into N synthetic per-patch entries that all share
+        # the same parsed block, so downstream consumers (bc_quality
+        # persistence, audit gate) see exactly what they would have
+        # seen had the case author written N separate single-patch
+        # blocks.
+        grouped_names: List[str] | None = None
+        if inner[j] in ('"', '('):
+            gm = _GROUPED_PATCH_HEADER_RE.match(inner, j)
+            if gm is None:
+                # Malformed grouped header — stop walking to mirror the
+                # existing "silent break on unparseable" posture.
+                break
+            raw_names = gm.group(1).split("|")
+            grouped_names = [s.strip() for s in raw_names if s.strip()]
+            j = gm.end()
+            # `grouped_names` may be empty (e.g. `"(|)"`); we still
+            # consume the block below to keep the walker advancing, but
+            # write nothing into `patches`. Matches existing posture for
+            # untyped / malformed blocks (silent skip).
+            name = None
+        else:
+            name_start = j
+            while j < m and (inner[j].isalnum() or inner[j] == "_"):
+                j += 1
+            if j == name_start:
+                break
+            name = inner[name_start:j]
 
         j = _skip_ws(j)
         if j >= m or inner[j] != "{":
@@ -1356,7 +1389,18 @@ def _parse_field_boundary_field(text: str) -> Dict[str, Dict[str, Any]]:
         if extracted_params:
             patch_entry["params"] = extracted_params
 
-        patches[name] = patch_entry
+        # DEC-V61-201-SUB-INGEST-BC-REGEX-GROUPED-PATCHES:
+        # fan out one BC block to N patch entries when grouped syntax
+        # was matched; the legacy single-name path writes one entry.
+        # Both paths write the SAME shape into `patches`.
+        if grouped_names is not None:
+            for gname in grouped_names:
+                # Each synthetic entry is a shallow copy so downstream
+                # mutation (none today, but cheap insurance) on one
+                # patch can't bleed across siblings.
+                patches[gname] = dict(patch_entry)
+        else:
+            patches[name] = patch_entry
 
     return patches
 
