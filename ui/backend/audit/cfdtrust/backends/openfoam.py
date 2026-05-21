@@ -1818,17 +1818,38 @@ def _find_external_solver_log(
     return None
 
 
-def _find_time_directories(case_dir: Path) -> List[float]:
-    """Return sorted list of time directories > 0 in `case_dir`.
+_PROCESSOR_DIR_RE = re.compile(r"^processor(\d+)$")
 
-    An OpenFOAM time directory is a top-level subdirectory whose name
-    parses as a non-negative float. Time 0 (initial conditions) does NOT
-    count as "the case ran" — we need at least one time > 0 to consider
-    the case externally executed.
+
+def _find_time_directories(case_dir: Path) -> List[float]:
+    """Return sorted list of time directories > 0 found anywhere a real
+    OpenFOAM run would leave them in `case_dir`.
+
+    An OpenFOAM time directory is a subdirectory whose name parses as a
+    non-negative float. Time 0 (initial conditions) does NOT count as
+    "the case ran" — we need at least one time > 0.
+
+    Codex R3-P1 (post-V133 ratified): in addition to top-level time
+    dirs (the layout used when `reconstructPar` has been run, or when
+    the case ran serial), also recognise the decomposed-parallel
+    layout where time dirs live under `processor0/`, `processor1/`,
+    etc. — a very common industrial shape when an MPI run was never
+    reconstructed. Returning empty in that case (the pre-R3 behaviour)
+    forced false-BLOCKED on a major class of valid ingest inputs.
+
+    Layouts handled:
+      case_dir/100/              ← serial or reconstructed
+      case_dir/processor0/100/   ← decomposed, never reconstructed
+      both (deduped on time value via set)
     """
-    result: List[float] = []
-    try:
-        for entry in case_dir.iterdir():
+    result: set[float] = set()
+
+    def _scan_directory_for_time_subdirs(parent: Path) -> None:
+        try:
+            entries = list(parent.iterdir())
+        except OSError:
+            return
+        for entry in entries:
             if not entry.is_dir():
                 continue
             try:
@@ -1836,9 +1857,28 @@ def _find_time_directories(case_dir: Path) -> List[float]:
             except ValueError:
                 continue
             if t > 0:
-                result.append(t)
+                result.add(t)
+
+    # Top-level (serial or reconstructed)
+    _scan_directory_for_time_subdirs(case_dir)
+
+    # Decomposed: processor0/, processor1/, ... Only the FIRST processor
+    # dir's contents are scanned for time dirs — all processor*/ should
+    # contain the same set of time values (one per write step). Scanning
+    # all of them would multiply the work N-fold for no information gain.
+    try:
+        processor_dirs = sorted(
+            (
+                p for p in case_dir.iterdir()
+                if p.is_dir() and _PROCESSOR_DIR_RE.match(p.name)
+            ),
+            key=lambda p: int(_PROCESSOR_DIR_RE.match(p.name).group(1)),  # type: ignore[union-attr]
+        )
     except OSError:
-        return []
+        processor_dirs = []
+    if processor_dirs:
+        _scan_directory_for_time_subdirs(processor_dirs[0])
+
     return sorted(result)
 
 

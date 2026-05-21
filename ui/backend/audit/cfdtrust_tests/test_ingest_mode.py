@@ -263,6 +263,75 @@ def test_ingest_blocked_when_no_time_directory(monkeypatch, tmp_path: Path):
     assert not (tmp_path / "artifacts" / "mesh_quality.json").exists()
 
 
+# ---------- Codex R3-P1: decomposed-parallel time-dir detection ----------
+
+
+def test_ingest_recognizes_decomposed_processor_dirs(monkeypatch, tmp_path: Path):
+    """Codex R3-P1: a case run with `decomposePar` + MPI that was never
+    reconstructed has time dirs under `processor0/`, `processor1/`, ...
+    rather than at the case root. ingest must accept this layout — it's
+    a common industrial shape that the feature is meant to advise on."""
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    # Decomposed layout: 4-processor run, time 100 written to each.
+    for i in range(4):
+        (tmp_path / f"processor{i}" / "100").mkdir(parents=True)
+        (tmp_path / f"processor{i}" / "100" / "U").write_text("(placeholder)\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    # Must NOT be `no_time_directory_found` — decomposed layout counts.
+    assert gate["details"].get("reason") != "no_time_directory_found"
+    # And the ingest_manifest should record the time discovered.
+    ingest_m = json.loads(
+        (tmp_path / "artifacts" / "ingest_manifest.json").read_text()
+    )
+    assert "100.0" in ingest_m["time_directories"]
+
+
+def test_ingest_recognizes_mixed_top_level_and_processor_layout(
+    monkeypatch, tmp_path: Path,
+):
+    """When both layouts coexist (post-reconstruction artifacts left
+    behind alongside the decomposed dirs), time-dir detection should
+    dedup across both sources."""
+    _make_ingestable_case(tmp_path)  # creates top-level 100/
+    # Decomposed copies for a later time too.
+    for i in range(2):
+        (tmp_path / f"processor{i}" / "200").mkdir(parents=True)
+        (tmp_path / f"processor{i}" / "200" / "U").write_text("(placeholder)\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    times = ofa._find_time_directories(tmp_path)
+    # Union of top-level (100) + processor (200). Sorted.
+    assert times == [100.0, 200.0]
+
+
+def test_ingest_blocked_when_processor_dirs_have_only_time_zero(
+    monkeypatch, tmp_path: Path,
+):
+    """Negative: even with processor*/ present, if none of them has a
+    time dir > 0 (e.g., decomposed but never run), ingest must still
+    BLOCK with no_time_directory_found."""
+    _make_ingestable_case(tmp_path, with_time_dir=False)
+    # Decomposed `0/` only — case was decomposed but solver never ran.
+    for i in range(2):
+        (tmp_path / f"processor{i}" / "0").mkdir(parents=True)
+    _patch_docker_for_ingest(monkeypatch)
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "no_time_directory_found"
+
+
+def test_find_time_directories_ignores_non_numeric_subdirs(tmp_path: Path):
+    """Sanity: regression guard around the float-parsing branch.
+    Subdirs whose names aren't numeric (constant/, system/, postProcessing/,
+    a stray 'backup_5000_old/') must NOT count as time dirs."""
+    for name in ("constant", "system", "postProcessing", "backup_5000_old"):
+        (tmp_path / name).mkdir()
+    (tmp_path / "100").mkdir()
+    assert ofa._find_time_directories(tmp_path) == [100.0]
+
+
 def test_ingest_blocked_when_no_solver_log(monkeypatch, tmp_path: Path):
     """Case ran (has time dir) but log file is missing."""
     _make_ingestable_case(tmp_path, with_log=False)

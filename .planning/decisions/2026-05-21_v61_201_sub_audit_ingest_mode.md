@@ -5,6 +5,12 @@ status: Accepted
 parent_dec: DEC-V61-201
 phase: post-merge sub-DEC
 notion_sync_status: pending
+codex_review_rounds: 4
+codex_review_round1_verdict: CHANGES_REQUIRED (P1 log selection + P2 CLI exit + P3 explain WARN)
+codex_review_round2_verdict: CHANGES_REQUIRED (P1 DoS bound + 2× P2 state-machine bugs)
+codex_review_round3_verdict: CHANGES_REQUIRED (P1 decomposed parallel time-dir detection)
+codex_review_round3_relay: crs (effort=high, fallback after 86gs 502 Upstream access forbidden)
+codex_review_round4_verdict: pending (user-ratified continuation past V133 cap=3)
 ---
 
 ## Why
