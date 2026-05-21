@@ -16,9 +16,13 @@ codex_review_round5_verdict: CHANGES_REQUIRED (P1 honesty-fence leak when solver
 codex_review_round5_relay: 86gs (recovered, effort=xhigh)
 codex_review_round6_verdict: CHANGES_REQUIRED (P1 state-clobber on blocked-precondition ingest; P2 hard-coded WARN in banner-fallback DEFERRED to DEC-V61-201-SUB-INGEST-P2-FOLLOWUP per user 2026-05-21)
 codex_review_round6_relay: 86gs stream interrupted → crs (effort=high)
-codex_review_round7_verdict: pending (user-ratified continuation; P1 regression-risk fix in commit landing this DEC update)
+codex_review_round7_verdict: CHANGES_REQUIRED (P1 over-broad BLOCKED guard suppresses legitimate post-residual BLOCKEDs + P2 decomposed-only BLOCK too aggressive for not_finalized references) — BOTH DEFERRED per user 2026-05-21 hard-stop discipline at 7 rounds (avoids N1.1 anti-pattern)
+codex_review_round7_relay: 86gs (effort=xhigh)
+review_chain_terminated: 2026-05-21 (user explicit stop after R7; remaining findings are tracked as known_limitations + follow-up sub-DECs, NOT iterated further)
 known_limitations:
-  - banner-fallback in read_artifacts collapses all banner-detected outcomes to status=WARN regardless of residuals.csv content. Tracked in DEC-V61-201-SUB-INGEST-P2-FOLLOWUP. Does NOT break honesty fences (ingested case can never claim PASS/validated through this path).
+  - banner-fallback in read_artifacts collapses all banner-detected outcomes to status=WARN regardless of residuals.csv content. Tracked in DEC-V61-201-SUB-INGEST-P2-FOLLOWUP. Does NOT break honesty fences (ingested case can never claim PASS/validated through this path). [R6 P2]
+  - solver.ingest's BLOCKED-skip guard is gate-status-only; over-suppresses post-residual BLOCKEDs (e.g., no_iterations_in_log) that should persist. Tracked in DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE. Worst case is the generic ingested-WARN fallback masking a real solver-side BLOCKED reason at `cfdtrust report` time — does NOT break honesty fences. [R7 P1]
+  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized". Decomposed-only cases with placeholder/not_finalized references could be ingested today. Tracked in DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED. UX-only restriction, not a correctness break. [R7 P2]
 ---
 
 ## Why
