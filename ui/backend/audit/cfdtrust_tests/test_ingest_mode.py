@@ -360,6 +360,71 @@ def test_ingest_blocked_diagnostic_lists_both_candidate_sets(
     assert "log_simpleFoam.txt" in gate["details"]["searched_fallback"]
 
 
+def test_ingest_accepts_large_case_above_run_paths_cap(monkeypatch, tmp_path: Path):
+    """Codex R2-P1: a case whose entry count exceeds `_MAX_PATHS_WALKED`
+    (the run() DoS bound, 10k) must NOT be rejected by ingest. Industrial
+    cases with many saved time directories routinely break this cap.
+
+    Test strategy: monkeypatch `_MAX_PATHS_WALKED_INGEST` to a tiny
+    value and `_MAX_PATHS_WALKED` to an even tinier one, then build a
+    case that exceeds the run() cap but is well within the ingest cap.
+    We assert ingest succeeds (no `case_dir_not_openfoam_compatible`).
+    """
+    _make_ingestable_case(tmp_path)
+    # Add many empty regular files (no symlinks) so the walker sees a
+    # large entry count without spending real time on stat().
+    deep = tmp_path / "100" / "many"
+    deep.mkdir(parents=True, exist_ok=True)
+    for i in range(50):
+        (deep / f"f{i}").write_text("x")
+    # Pretend the run() cap is 20 (so this case definitely overflows it)
+    # and the ingest cap is 1000 (so the same case fits comfortably).
+    monkeypatch.setattr(ofa, "_MAX_PATHS_WALKED", 20)
+    monkeypatch.setattr(ofa, "_MAX_PATHS_WALKED_INGEST", 1000)
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+    # Must NOT be `case_dir_not_openfoam_compatible` due to the entry
+    # count. Either PASS / FAIL on residuals is acceptable here — the
+    # ingest-shape gate is what we're testing.
+    assert gate["details"].get("reason") != "case_dir_not_openfoam_compatible"
+
+
+def test_ingest_walker_fail_opens_on_cap_hit_when_no_escape_found(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R2-P1: when the walker hits its budget without finding any
+    escaping symlink, ingest must accept the case (not refuse). The cap
+    is a walk budget for ingest, not a fail-closed bound like run()."""
+    _make_ingestable_case(tmp_path)
+    # Same setup as above but make the bound extremely small so the
+    # walker hits it before exhausting the tree.
+    monkeypatch.setattr(ofa, "_MAX_PATHS_WALKED_INGEST", 1)
+    # No escaping symlinks added — walker will hit the cap with nothing
+    # bad found. Direct unit test of the walker for clarity.
+    found_escape, where = ofa._find_escaping_symlink_for_ingest(tmp_path)
+    assert found_escape is False, (
+        "ingest walker must fail-open on cap-hit (no escape found in budget)"
+    )
+    assert where == ""
+
+
+def test_ingest_walker_still_catches_escape_within_budget(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R2-P1 follow-up: even with a larger ingest cap, an actual
+    escaping symlink (target outside case_dir) must still be caught."""
+    _make_ingestable_case(tmp_path)
+    # Create an external file and a symlink that escapes case_dir.
+    outside = tmp_path.parent / "escape_target.txt"
+    outside.write_text("BAD")
+    (tmp_path / "evil_link").symlink_to(outside)
+
+    found_escape, where = ofa._find_escaping_symlink_for_ingest(tmp_path)
+    assert found_escape is True
+    assert "escape" in where or "escapes" in where
+
+
 def test_ingest_log_search_rejects_unsafe_solver_name(monkeypatch, tmp_path: Path):
     """Codex R1-P1 defense-in-depth: a manifest with `solver: '../etc/passwd'`
     must not coerce the search into a parent directory. Only the
@@ -519,6 +584,20 @@ def test_solver_ingest_refuses_mocked_backend(tmp_path: Path):
     assert gate["details"]["reason"] == "ingest_backend_unsupported"
 
 
+def test_solver_ingest_refusal_does_not_persist_blocked_state(tmp_path: Path):
+    """Codex R2-P2: refusing the backend must NOT write
+    artifacts/solver_gate.json. Persisting a refusal would poison
+    `cfdtrust report` forever — read_artifacts prefers the persisted
+    gate, so a later `cfdtrust run` would still appear BLOCKED.
+    """
+    m = _ingest_manifest_fixture()
+    m["solver_backend"] = "mocked"
+    gate = solver_mod.ingest(tmp_path, m)
+    assert gate["status"] == "BLOCKED"
+    # No solver_gate.json should exist (file was never created).
+    assert not (tmp_path / "artifacts" / "solver_gate.json").exists()
+
+
 def test_solver_ingest_persists_gate_json(monkeypatch, tmp_path: Path):
     """The solver_gate.json must be written so cfdtrust report reads
     the SAME truth (M2.3a invariant)."""
@@ -647,6 +726,45 @@ def test_report_artifacts_index_omits_ingest_manifest_for_non_ingested(tmp_path:
     # check that we did not over-demote.
     assert report["overall_status"] == "PASS"
     assert report["validation_status"] == "validated"
+
+
+def test_report_omits_ingest_manifest_for_real_run_even_if_stale_file_present(
+    tmp_path: Path,
+):
+    """Codex R2-P2: stale `artifacts/ingest_manifest.json` on disk must
+    NOT be advertised when the current report's solver_execution is
+    `real`. Previously the artifacts index attached the file whenever
+    it existed, regardless of the live verdict — that left downstream
+    tooling with contradictory provenance for the same report.
+    """
+    (tmp_path / "artifacts").mkdir(parents=True, exist_ok=True)
+    # Stale provenance from an earlier ingest.
+    (tmp_path / "artifacts" / "ingest_manifest.json").write_text(
+        json.dumps({"ingested_at": "2026-05-21T00:00:00Z"})
+    )
+    # Current report is a real harness-witnessed run.
+    gates = {
+        "geometry_contract":     {"status": "PASS", "summary": "ok"},
+        "mesh_contract":         {"status": "PASS", "summary": "ok"},
+        "bc_contract":           {"status": "PASS", "summary": "ok"},
+        "solver_execution":      {
+            "status": "PASS",
+            "summary": "real",
+            "details": {"execution": "real", "real_solver_invoked": True},
+        },
+        "qoi_extraction":        {"status": "PASS", "summary": "ok"},
+        "reference_comparison":  {
+            "status": "PASS",
+            "summary": "ref matched",
+            "details": {"real_comparison_performed": True},
+        },
+    }
+    rp = assemble(tmp_path, _ingest_manifest_fixture(), gates)
+    report = json.loads(rp.read_text())
+    # Honesty: the live report is `real`, so no ingest provenance is
+    # advertised even though the stale file is still on disk.
+    assert "ingest_manifest" not in report["artifacts"]
+    assert report["solver_execution"] == "real"
 
 
 # ---------- schema: new enum value accepted ----------

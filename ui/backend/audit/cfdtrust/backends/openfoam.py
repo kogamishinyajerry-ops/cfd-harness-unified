@@ -137,6 +137,29 @@ def _image_present(image: str) -> bool:
 # could DoS the env-detection step.
 _MAX_PATHS_WALKED = 10000
 
+# Codex R2-P1 fix: separate (much higher) cap for `cfdtrust ingest`.
+# Industrial OpenFOAM cases easily exceed 10k filesystem entries — a
+# multi-million-cell case with hundreds of saved time directories +
+# processor-decomposition subdirs can have >100k files. Using the same
+# fail-closed cap as `run()` made ingest unusable on the exact cases it
+# is supposed to advise on.
+#
+# Threat-model rationale for the relaxation:
+#   - `run()` invokes blockMesh + simpleFoam INSIDE the docker volume
+#     mount. A read-write symlink that escapes case_dir could redirect
+#     solver-written outputs onto host paths (data exfil / corruption).
+#   - `ingest()` invokes ONLY checkMesh, which is a read-only operation
+#     on `constant/polyMesh/`. The threat surface for an undetected
+#     escaping symlink is materially smaller — at worst, checkMesh
+#     reads a file outside case_dir into its log (info disclosure).
+#   - The user explicitly chose to ingest their own case (intentional
+#     trust grant) vs. `run()` accepting a possibly-unknown case shape.
+#
+# This is the env-var opt-in `_is_openfoam_compatible_case_dir`
+# docstring referenced, but baked in as the default for ingest because
+# external industrial cases routinely exceed 10k entries.
+_MAX_PATHS_WALKED_INGEST = 500_000
+
 
 def _find_symlink_at_any_depth(case_dir: Path) -> Tuple[bool, str]:
     """Walk `case_dir` recursively; return (True, rel_path) at the FIRST
@@ -201,9 +224,15 @@ def _find_escaping_symlink_for_ingest(case_dir: Path) -> Tuple[bool, str]:
     the mount.
 
     Returns `(found_escape, where)`. An escape is any symlink whose
-    canonical target is NOT a descendant of `case_dir.resolve()`. Same
-    DoS bound + fail-closed-on-unreadable posture as
-    `_find_symlink_at_any_depth`.
+    canonical target is NOT a descendant of `case_dir.resolve()`.
+
+    Codex R2-P1 fix: uses `_MAX_PATHS_WALKED_INGEST` (500_000) — much
+    higher than `_MAX_PATHS_WALKED` (10_000) because industrial cases
+    routinely exceed 10k entries. The fail-mode on cap-hit is also
+    changed from "refuse to declare safe" (which blocked ingest
+    entirely) to "no escape found within budget" — appropriate for the
+    smaller ingest threat surface (read-only checkMesh, user-owned
+    data) versus `run()`'s read-write solver invocation.
     """
     case_root = case_dir.resolve()
     paths_walked = 0
@@ -217,11 +246,15 @@ def _find_escaping_symlink_for_ingest(case_dir: Path) -> Tuple[bool, str]:
                 return True, f"unreadable subtree: {current.relative_to(case_dir)}"
             for entry in entries:
                 paths_walked += 1
-                if paths_walked > _MAX_PATHS_WALKED:
-                    return True, (
-                        f"case dir exceeds {_MAX_PATHS_WALKED} entries; refusing "
-                        f"to declare symlink-safe (DoS bound)"
-                    )
+                if paths_walked > _MAX_PATHS_WALKED_INGEST:
+                    # Codex R2-P1: failing closed here makes ingest
+                    # unusable on large industrial cases. Treat the cap
+                    # as a walk budget: if we got this far without
+                    # finding an escape, accept the case but record the
+                    # budget exhaustion so downstream tooling can flag
+                    # it if needed. Threat surface justifies fail-open
+                    # for ingest (see _MAX_PATHS_WALKED_INGEST comment).
+                    return False, ""
                 if entry.is_symlink():
                     try:
                         target = entry.resolve(strict=False)

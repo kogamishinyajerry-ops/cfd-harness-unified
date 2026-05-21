@@ -137,13 +137,21 @@ def assemble(case_dir: Path, manifest: Dict[str, Any], gates: Dict[str, Dict[str
         "reference_comparison_csv": str((art / "reference_comparison.csv").relative_to(case_dir)),
         "trust_report": str(report_path.relative_to(case_dir)),
     }
-    # DEC-V61-201-SUB-INGEST: surface the ingest provenance manifest when
-    # the case was ingested rather than run. Absent for run/mocked cases.
-    ingest_manifest_path = art / "ingest_manifest.json"
-    if ingest_manifest_path.exists():
-        artifacts_index["ingest_manifest"] = str(
-            ingest_manifest_path.relative_to(case_dir)
-        )
+    # DEC-V61-201-SUB-INGEST: surface the ingest provenance manifest only
+    # when the CURRENT report's solver_execution is "ingested". Codex
+    # R2-P2 fix: previously the key was attached whenever the file
+    # existed on disk, which is a stale-state bug — a case that was
+    # ingested once and later re-run under `cfdtrust run` would keep
+    # advertising ingest provenance on the new harness-witnessed run,
+    # giving downstream tooling contradictory provenance signals for
+    # the same report. Gating on the live `solver_execution` value
+    # ensures the index always matches the current trust verdict.
+    if solver_execution == "ingested":
+        ingest_manifest_path = art / "ingest_manifest.json"
+        if ingest_manifest_path.exists():
+            artifacts_index["ingest_manifest"] = str(
+                ingest_manifest_path.relative_to(case_dir)
+            )
 
     report = {
         "case_id": manifest.get("case_id"),

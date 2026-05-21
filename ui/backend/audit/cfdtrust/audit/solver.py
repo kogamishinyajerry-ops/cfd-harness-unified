@@ -274,14 +274,23 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     then validates env, runs checkMesh, persists *_quality.json, and
     transcribes the existing solver log + residuals.
 
-    Mirrors `execute()`'s persistence pattern: the resulting gate is
-    written to `artifacts/solver_gate.json` so `read_artifacts` (and
-    therefore `cfdtrust report`) reads the SAME truth — preventing the
-    pre-M2.3a drift where execute and read_artifacts could disagree.
+    Mirrors `execute()`'s persistence pattern WHEN the ingest actually
+    runs: the resulting gate is written to `artifacts/solver_gate.json`
+    so `read_artifacts` (and therefore `cfdtrust report`) reads the
+    SAME truth — preventing the pre-M2.3a drift where execute and
+    read_artifacts could disagree.
+
+    Codex R2-P2 fix: when the dispatcher REFUSES (unsupported backend),
+    do NOT persist the BLOCKED gate. Persisting would poison
+    `artifacts/solver_gate.json` so every subsequent `cfdtrust report`
+    sees a BLOCKED solver gate even though the user later does the
+    right thing (`cfdtrust run`). A rejected subcommand must not modify
+    the persisted trust state.
     """
     backend = manifest.get("solver_backend")
     if backend != "openfoam":
-        gate = {
+        # Return-only, no _write_gate — refusal must not mutate state.
+        return {
             "status": "BLOCKED",
             "summary": (
                 f"`cfdtrust ingest` only supports solver_backend=openfoam; "
@@ -298,7 +307,6 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 ),
             },
         }
-        return _write_gate(case_dir, gate)
 
     from ..backends.openfoam import ingest as _backend_ingest
     gate = _backend_ingest(case_dir, manifest)
