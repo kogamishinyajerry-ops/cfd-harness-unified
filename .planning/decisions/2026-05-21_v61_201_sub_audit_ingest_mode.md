@@ -4,7 +4,7 @@ title: cfdtrust ingest mode — load externally-run cases into the audit engine
 status: Accepted
 parent_dec: DEC-V61-201
 phase: post-merge sub-DEC
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/367c68942bed812894dadee49f80a6e4)
 codex_review_rounds: 7
 codex_review_round1_verdict: CHANGES_REQUIRED (P1 log selection + P2 CLI exit + P3 explain WARN)
 codex_review_round2_verdict: CHANGES_REQUIRED (P1 DoS bound + 2× P2 state-machine bugs)
