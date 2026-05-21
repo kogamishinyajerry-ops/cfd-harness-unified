@@ -44,7 +44,7 @@ import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 
 # Default image. Override via `manifest.solver_docker_image` if a case needs
@@ -506,19 +506,16 @@ _YPLUS_LINE_RE = re.compile(
 )
 
 
-def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
-    """Pure function: simpleFoam log text → structured residual + y+ data.
+def _parse_simplefoam_log_lines(lines: Iterable[str]) -> Dict[str, Any]:
+    """Inner parser: consumes any iterable of log lines.
 
-    Returns:
-        {
-          'iterations': [{'iter': int, 'residuals': {field: initial_residual_float}}, ...],
-          'final_iter': int,
-          'y_plus': {patch_name: {'min': float, 'max': float, 'avg': float}},
-          'converged': bool,    # SIMPLE residualControl triggered early exit
-        }
+    Shared by `_parse_simplefoam_log` (text-mode, str input) and
+    `_parse_simplefoam_log_stream` (file-mode, path input). Both callers
+    funnel into this single state-machine implementation so the two
+    parse paths are byte-identical by construction.
 
-    Per-iteration `residuals` keyed by `Initial residual` (canonical CFD
-    convention for "did the iter make progress from where it started?").
+    Each item in `lines` is a single log line, with or without a
+    trailing newline; we `.rstrip()` defensively.
     """
     iterations: List[Dict[str, Any]] = []
     y_plus_by_patch: Dict[str, Dict[str, float]] = {}
@@ -538,7 +535,7 @@ def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
     # remain unchanged.
     iter_counter = 0
 
-    for raw_line in log_text.splitlines():
+    for raw_line in lines:
         line = raw_line.rstrip()
 
         m_time = _TIME_LINE_RE.match(line)
@@ -603,6 +600,52 @@ def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
         "y_plus": y_plus_by_patch,
         "converged": converged,
     }
+
+
+def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
+    """Pure function: simpleFoam log text → structured residual + y+ data.
+
+    Returns:
+        {
+          'iterations': [{'iter': int, 'residuals': {field: initial_residual_float}}, ...],
+          'final_iter': int,
+          'y_plus': {patch_name: {'min': float, 'max': float, 'avg': float}},
+          'converged': bool,    # SIMPLE residualControl triggered early exit
+        }
+
+    Per-iteration `residuals` keyed by `Initial residual` (canonical CFD
+    convention for "did the iter make progress from where it started?").
+
+    For subprocess-stdout callers where the whole log is already in
+    memory. For path-on-disk callers backed by externally-produced logs
+    that may be multi-GiB (TBD-20: case_009 reactingFoam log = 3.3 GiB),
+    prefer `_parse_simplefoam_log_stream(path)` to avoid O(filesize)
+    peak RSS.
+    """
+    return _parse_simplefoam_log_lines(log_text.splitlines())
+
+
+def _parse_simplefoam_log_stream(log_path: Path) -> Dict[str, Any]:
+    """Streaming variant of `_parse_simplefoam_log` for on-disk logs.
+
+    TBD-20 (case_009 dogfood): a 3.3 GiB reactingFoam log routed through
+    `read_text() + splitlines()` materialised 13.0 GiB peak RSS — the
+    full file plus its UTF-8 expanded representation plus the str-list
+    of every line all coexisted. For ingest-mode external-log
+    transcription this is gratuitous; the parser only ever needs one
+    line at a time.
+
+    File objects in Python are line-iterables, so the inner parser is
+    drop-in. UTF-8 errors are tolerated (`errors="replace"`) to match
+    `read_text()`'s default permissive behavior — industrial OpenFOAM
+    logs frequently embed non-UTF-8 bytes via subprocess pipes.
+
+    Returns the same dict shape as `_parse_simplefoam_log`. Byte-identical
+    output is guaranteed by construction — both paths funnel into
+    `_parse_simplefoam_log_lines`.
+    """
+    with open(log_path, "r", encoding="utf-8", errors="replace") as fh:
+        return _parse_simplefoam_log_lines(fh)
 
 
 def _compute_gate_from_residuals(
@@ -2084,8 +2127,16 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 
 # Generic fallback filenames for an externally-produced solver log,
 # used when the manifest does not declare a solver or when none of the
-# manifest-derived candidates exist on disk. Order = most-specific first.
+# manifest-derived candidates exist on disk. Order = most-specific first,
+# grouped by solver family.
+#
+# TBD-15: reacting / combustion / compressible / VOF / CHT solver names
+# were absent from the fallback list, so manifest-less ingest of those
+# cases false-BLOCKED with `no_solver_log_found` even when the log sat
+# right there on disk. Manifest-derived primary candidates already cover
+# the manifest-declared path; this fix is purely for the fallback path.
 _INGEST_LOG_FALLBACK_CANDIDATES = (
+    # incompressible (historical core)
     "log_simpleFoam.txt",
     "log_pimpleFoam.txt",
     "log_icoFoam.txt",
@@ -2094,6 +2145,37 @@ _INGEST_LOG_FALLBACK_CANDIDATES = (
     "log.simpleFoam",
     "log.pimpleFoam",
     "log.foamRun",
+    # reacting / combustion / chemistry
+    "log_reactingFoam.txt",
+    "log_reactingPimpleFoam.txt",
+    "log_chemFoam.txt",
+    "log_XiFoam.txt",
+    "log_fireFoam.txt",
+    "log.reactingFoam",
+    "log.reactingPimpleFoam",
+    "log.chemFoam",
+    "log.XiFoam",
+    "log.fireFoam",
+    # compressible / density-based
+    "log_rhoCentralFoam.txt",
+    "log_rhoSimpleFoam.txt",
+    "log_rhoPimpleFoam.txt",
+    "log_sonicFoam.txt",
+    "log.rhoCentralFoam",
+    "log.rhoSimpleFoam",
+    "log.rhoPimpleFoam",
+    "log.sonicFoam",
+    # VOF / free-surface
+    "log_interFoam.txt",
+    "log_compressibleInterFoam.txt",
+    "log.interFoam",
+    "log.compressibleInterFoam",
+    # CHT / multi-region
+    "log_chtMultiRegionFoam.txt",
+    "log_chtMultiRegionSimpleFoam.txt",
+    "log.chtMultiRegionFoam",
+    "log.chtMultiRegionSimpleFoam",
+    # generic name fallbacks (kept last; least-specific)
     "solver.log",
     "simpleFoam.log",
 )
@@ -2788,8 +2870,25 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         )
 
     # --- Transcribe external solver log into artifacts/solver.log ---
+    # Codex R5-P1 fix: prepend the INGEST_BANNER so the log itself
+    # carries provenance. If `artifacts/solver_gate.json` is later
+    # missing or unreadable, `audit/solver.py::read_artifacts()` detects
+    # the banner and classifies execution as "ingested" instead of
+    # silently upgrading to "real" (which would bypass the
+    # DEC-V61-201-SUB-INGEST honesty fences).
+    #
+    # TBD-20: case_009 dogfood produced a 3.3 GiB reactingFoam log; the
+    # historical `external_log.read_text()` + `_parse_simplefoam_log(ext_text)`
+    # path materialised 13.0 GiB peak RSS. Both transcription and parsing
+    # now stream from disk in bounded chunks; peak RSS is now O(chunk),
+    # not O(filesize).
+    from ..audit.solver import INGEST_BANNER
     try:
-        ext_text = external_log.read_text()
+        with open(external_log, "r", encoding="utf-8", errors="replace") as src, \
+                open(log_path, "w", encoding="utf-8") as dst:
+            dst.write(INGEST_BANNER)
+            for chunk in iter(lambda: src.read(1 << 20), ""):  # 1 MiB chunks
+                dst.write(chunk)
     except OSError as e:
         return {
             "status": "BLOCKED",
@@ -2802,17 +2901,9 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "detail": str(e),
             },
         }
-    # Codex R5-P1 fix: prepend the INGEST_BANNER so the log itself
-    # carries provenance. If `artifacts/solver_gate.json` is later
-    # missing or unreadable, `audit/solver.py::read_artifacts()` detects
-    # the banner and classifies execution as "ingested" instead of
-    # silently upgrading to "real" (which would bypass the
-    # DEC-V61-201-SUB-INGEST honesty fences).
-    from ..audit.solver import INGEST_BANNER
-    log_path.write_text(INGEST_BANNER + ext_text)
 
     # --- Parse log + write residuals.csv ---
-    parsed = _parse_simplefoam_log(ext_text)
+    parsed = _parse_simplefoam_log_stream(external_log)
     _write_residuals_csv(parsed, residuals_csv)
 
     # --- Gate computation (same logic as a real run) ---
