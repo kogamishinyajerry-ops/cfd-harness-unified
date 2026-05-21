@@ -2274,7 +2274,14 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "detail": str(e),
             },
         }
-    log_path.write_text(ext_text)
+    # Codex R5-P1 fix: prepend the INGEST_BANNER so the log itself
+    # carries provenance. If `artifacts/solver_gate.json` is later
+    # missing or unreadable, `audit/solver.py::read_artifacts()` detects
+    # the banner and classifies execution as "ingested" instead of
+    # silently upgrading to "real" (which would bypass the
+    # DEC-V61-201-SUB-INGEST honesty fences).
+    from ..audit.solver import INGEST_BANNER
+    log_path.write_text(INGEST_BANNER + ext_text)
 
     # --- Parse log + write residuals.csv ---
     parsed = _parse_simplefoam_log(ext_text)

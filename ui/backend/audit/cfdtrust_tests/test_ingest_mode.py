@@ -215,8 +215,10 @@ def test_ingest_writes_all_artifacts_on_happy_path(monkeypatch, tmp_path: Path):
     assert (art / "residuals.csv").exists()
     assert (art / "ingest_manifest.json").exists()
 
-    # solver.log content was transcribed from external log
-    assert (art / "solver.log").read_text() == _CANONICAL_SIMPLEFOAM_LOG
+    # solver.log content was transcribed from external log (R5-P1:
+    # INGEST_BANNER is prepended for honesty-fence recovery; original
+    # log content immediately follows).
+    assert (art / "solver.log").read_text().endswith(_CANONICAL_SIMPLEFOAM_LOG)
 
     # residuals.csv has the iter / Ux / p columns
     residuals_text = (art / "residuals.csv").read_text()
@@ -397,6 +399,128 @@ def test_explain_tldr_warn_non_ingested_lists_only_non_pass_gates(tmp_path: Path
     assert "reference_comparison" not in tldr
 
 
+def test_ingest_prepends_ingest_banner_to_solver_log(monkeypatch, tmp_path: Path):
+    """Codex R5-P1: the transcribed `artifacts/solver.log` must start
+    with INGEST_BANNER so read_artifacts can recover the ingest
+    provenance even if solver_gate.json is later lost."""
+    from cfdtrust.audit.solver import INGEST_BANNER
+
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+    ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    log_content = (tmp_path / "artifacts" / "solver.log").read_text()
+    assert log_content.startswith(INGEST_BANNER)
+    # Original log content still present after the banner.
+    assert _CANONICAL_SIMPLEFOAM_LOG in log_content
+
+
+def test_read_artifacts_recovers_ingested_when_gate_json_missing(
+    monkeypatch, tmp_path: Path,
+):
+    """Codex R5-P1: simulate `solver_gate.json` loss after a successful
+    ingest. read_artifacts() must classify as `execution="ingested"`
+    (NOT `"real"`) by detecting the banner — preserving the honesty
+    fences in `assemble()`."""
+    from cfdtrust.audit.solver import read_artifacts
+
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+    solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    # Simulate the failure mode: solver_gate.json lost (e.g., OSError
+    # at write time augmented `gate_persistence_failed`, or user
+    # accidentally `rm`ed it).
+    (tmp_path / "artifacts" / "solver_gate.json").unlink()
+
+    recovered = read_artifacts(tmp_path, _ingest_manifest_fixture())
+    # MUST be ingested, NOT real — that's the whole fix.
+    assert recovered["details"]["execution"] == "ingested", (
+        "fallback must preserve ingested classification when gate JSON missing; "
+        "silently upgrading to 'real' bypasses DEC-V61-201-SUB-INGEST honesty fences"
+    )
+    assert recovered["details"]["real_solver_invoked"] is False
+    # Status is WARN — the fallback recovered the provenance but the
+    # full gate evaluation (residual targets vs final iter) was lost.
+    assert recovered["status"] == "WARN"
+
+
+def test_read_artifacts_real_fallback_still_works_for_non_banner_logs(
+    tmp_path: Path,
+):
+    """Regression guard: a real (non-mocked, non-banner) log still
+    falls back to `execution="real"` per the legacy path. The R5-P1
+    fix must NOT regress the existing fallback behaviour for true
+    real runs whose solver_gate.json was lost."""
+    from cfdtrust.audit.solver import read_artifacts
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    # A real-shaped log with NO banner of any kind.
+    (art / "solver.log").write_text(
+        "Time = 1\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.1, No Iterations 5\n"
+    )
+    (art / "residuals.csv").write_text("iter,Ux\n1,1.0e-1\n")
+    out = read_artifacts(tmp_path, _ingest_manifest_fixture())
+    assert out["details"]["execution"] == "real"
+    assert out["status"] == "PASS"
+
+
+def test_ingest_banner_detection_avoids_false_positive_on_word_ingested(
+    tmp_path: Path,
+):
+    """Codex R5-P1 defense-in-depth: the banner check matches the literal
+    phrase 'ingested external solver log', NOT just the word 'ingested'.
+    A user log that mentions 'this run was previously ingested' in some
+    application diagnostic must NOT be misclassified."""
+    from cfdtrust.audit.solver import read_artifacts
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    (art / "solver.log").write_text(
+        "Time = 1\n"
+        "  Note: this case was previously ingested by another tool.\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.1, No Iterations 5\n"
+    )
+    (art / "residuals.csv").write_text("iter,Ux\n1,1.0e-1\n")
+    out = read_artifacts(tmp_path, _ingest_manifest_fixture())
+    # Should fall through to "real" because the banner phrase isn't present.
+    assert out["details"]["execution"] == "real"
+
+
+def test_assemble_honesty_fence_holds_via_log_banner_recovery(monkeypatch, tmp_path: Path):
+    """Codex R5-P1 end-to-end: with solver_gate.json deleted post-ingest,
+    the full `cfdtrust report` pipeline must STILL cap overall_status at
+    WARN and validation_status at `partial`. The banner-based recovery
+    plus the existing assemble() fences should hold the line."""
+    from cfdtrust.audit.solver import read_artifacts
+
+    _make_ingestable_case(tmp_path)
+    _patch_docker_for_ingest(monkeypatch)
+    solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    # Wipe the gate JSON — the bug Codex R5-P1 surfaced.
+    (tmp_path / "artifacts" / "solver_gate.json").unlink()
+
+    # Now simulate cfdtrust report: read_artifacts + assemble.
+    manifest = _ingest_manifest_fixture()
+    solver_gate = read_artifacts(tmp_path, manifest)
+    gates = {
+        "geometry_contract":     {"status": "PASS"},
+        "mesh_contract":         {"status": "PASS"},
+        "bc_contract":           {"status": "PASS"},
+        "solver_execution":      solver_gate,
+        "qoi_extraction":        {"status": "PASS"},
+        "reference_comparison":  {
+            "status": "PASS",
+            "details": {"real_comparison_performed": True},
+        },
+    }
+    rp = assemble(tmp_path, manifest, gates)
+    report = json.loads(rp.read_text())
+    # Honesty fences hold even after gate JSON loss.
+    assert report["solver_execution"] == "ingested"
+    assert report["overall_status"] != "PASS"
+    assert report["validation_status"] != "validated"
+
+
 def test_explain_tldr_warn_non_ingested_empty_when_all_pass(tmp_path: Path):
     """Edge case: WARN overall with every gate PASS (e.g., from a
     limitations-driven demotion). The 'no per-gate blockers' branch
@@ -451,8 +575,11 @@ def test_ingest_finds_log_simpleFoam_first(monkeypatch, tmp_path: Path):
     _patch_docker_for_ingest(monkeypatch)
     gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
     assert gate["details"]["external_log_source"] == "log_simpleFoam.txt"
-    # And the transcribed solver.log content equals the chosen log
-    assert (tmp_path / "artifacts" / "solver.log").read_text() == _CANONICAL_SIMPLEFOAM_LOG
+    # And the transcribed solver.log content ends with the chosen log
+    # (R5-P1: INGEST_BANNER is prepended for honesty-fence recovery).
+    assert (tmp_path / "artifacts" / "solver.log").read_text().endswith(
+        _CANONICAL_SIMPLEFOAM_LOG
+    )
 
 
 # ---------- Codex R1-P1: log selection derives from manifest.solver ----------
@@ -475,7 +602,11 @@ def test_ingest_log_search_prefers_manifest_solver_over_fallback(
     m["solver"] = "pisoFoam"
     gate = ofa.ingest(tmp_path, m)
     assert gate["details"]["external_log_source"] == "log_pisoFoam.txt"
-    assert (tmp_path / "artifacts" / "solver.log").read_text() == _CANONICAL_SIMPLEFOAM_LOG
+    # R5-P1: INGEST_BANNER is prepended for honesty-fence recovery; the
+    # original log content (from the manifest-derived candidate) follows.
+    assert (tmp_path / "artifacts" / "solver.log").read_text().endswith(
+        _CANONICAL_SIMPLEFOAM_LOG
+    )
 
 
 def test_ingest_finds_solver_specific_log_when_fallback_absent(

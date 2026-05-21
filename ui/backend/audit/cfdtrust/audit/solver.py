@@ -81,6 +81,28 @@ MOCK_BANNER = (
     "# Residuals below are synthetic placeholders.\n"
 )
 
+# Codex R5-P1 fix: an ingested case must remain identifiable as
+# `execution="ingested"` even if `artifacts/solver_gate.json` is
+# missing or unreadable. `_write_gate()` already documents OSError as
+# a supported failure mode (returning the gate with a
+# `gate_persistence_failed` augmentation), so the fallback in
+# `read_artifacts()` is a live code path — without an in-log marker,
+# the fallback used to upgrade any non-mocked artifact to
+# `execution="real"`, silently bypassing the
+# DEC-V61-201-SUB-INGEST honesty fences (cap overall_status at WARN,
+# cap validation_status at `partial`).
+#
+# `cfdtrust ingest` prepends this banner to the transcribed
+# `artifacts/solver.log`. `read_artifacts()` checks for it in the
+# fallback branch and classifies the case as `execution="ingested"`
+# instead of `"real"`. Mirror of the MOCK_BANNER pattern.
+INGEST_BANNER = (
+    "# AI-CFD-V2 ingested external solver log\n"
+    "# WARNING: The trust harness did NOT witness this execution.\n"
+    "# overall_status caps at WARN, validation_status caps at `partial`.\n"
+    "# See DEC-V61-201-SUB-INGEST. Original log content follows below.\n"
+)
+
 
 # ---------- execution: solver.execute ----------
 
@@ -219,8 +241,17 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
 
-    log_head = log_path.read_text().splitlines()[:3]
+    # Codex R5-P1 fix: widen the head scan from 3 lines to 5 so the
+    # 4-line INGEST_BANNER is fully covered. MOCK_BANNER detection
+    # (3 lines, scanned via "mocked" keyword) still works.
+    log_head = log_path.read_text().splitlines()[:5]
     is_mocked = any("mocked" in line.lower() for line in log_head)
+    # Detect the ingest banner literally — looking for the marker line
+    # "AI-CFD-V2 ingested external solver log" so we don't false-trip
+    # on user logs that happen to contain the word "ingested".
+    is_ingested = any(
+        "ingested external solver log" in line.lower() for line in log_head
+    )
     iterations = max(0, sum(1 for _ in residuals_path.read_text().splitlines()) - 1)
 
     if is_mocked:
@@ -235,6 +266,33 @@ def read_artifacts(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "iterations": iterations,
                 "real_solver_invoked": False,
                 "warning": "No CFD solver was executed. This does not constitute validation.",
+            },
+        }
+    if is_ingested:
+        # Codex R5-P1 fix: an ingested case whose solver_gate.json was
+        # lost must NOT be reclassified as `execution="real"` —
+        # `assemble()` would then skip the honesty fences (cap at WARN,
+        # cap validation_status at `partial`). The log banner preserves
+        # the provenance even after gate JSON loss.
+        return {
+            "status": "WARN",
+            "summary": (
+                f"Ingested solver artifacts present ({iterations} iterations); "
+                f"persisted solver_gate.json missing — falling back to "
+                f"log-banner classification."
+            ),
+            "artifact": str(log_path.relative_to(case_dir)),
+            "details": {
+                "execution": "ingested",
+                "log": str(log_path.relative_to(case_dir)),
+                "residuals_csv": str(residuals_path.relative_to(case_dir)),
+                "iterations": iterations,
+                "real_solver_invoked": False,
+                "warning": (
+                    "solver_gate.json was missing or unreadable; the ingest "
+                    "execution kind was recovered from the log banner. "
+                    "Re-run `cfdtrust ingest` to refresh the gate JSON."
+                ),
             },
         }
     # Legacy real-artifact fallback. CAUTION: a real run that FAILed but
