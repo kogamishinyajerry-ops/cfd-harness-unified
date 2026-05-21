@@ -1678,9 +1678,49 @@ def _turb_fields_from_model(turb_model: str) -> List[str]:
     return ["k", "omega", "nut"]
 
 
+def _detect_multi_region_layout_in_dir(zero_dir: Path) -> List[str]:
+    """Return sorted list of `region_*` sub-directory names directly
+    under the given dir, or [] if the dir doesn't exist / has no
+    region_* entries. Inner helper for _detect_multi_region_layout
+    (which also handles the 0/ vs 0.orig/ slot resolution).
+    """
+    if not zero_dir.is_dir():
+        return []
+    try:
+        entries = list(zero_dir.iterdir())
+    except (OSError, PermissionError):
+        return []
+    regions: List[str] = []
+    for entry in entries:
+        if entry.is_symlink():
+            continue
+        if not entry.is_dir():
+            continue
+        if not entry.name.startswith("region_"):
+            continue
+        regions.append(entry.name)
+    regions.sort()
+    return regions
+
+
+def _resolve_zero_dir_name(case_dir: Path) -> str:
+    """Codex P1-1 follow-up to Gap #29: ingest accepts 0.orig/ as the
+    `0/` slot. Multi-region detection + per-region walking must
+    use the SAME resolved dir name. Returns "0" when 0/ exists,
+    else "0.orig" when 0.orig/ exists, else "0" (caller will
+    handle the missing case downstream).
+    """
+    if (case_dir / "0").is_dir():
+        return "0"
+    if (case_dir / "0.orig").is_dir():
+        return "0.orig"
+    return "0"
+
+
 def _detect_multi_region_layout(case_dir: Path) -> List[str]:
     """Return sorted list of `region_*` sub-directory names under
-    `case_dir / "0"`, or empty list for single-region cases.
+    `case_dir / "0"` (or `0.orig/` if `0/` is absent), or empty
+    list for single-region cases.
 
     DEC-V61-201-SUB-INGEST-MULTI-REGION-BC (Gap #11): OpenFOAM
     multi-region CHT cases (`chtMultiRegionFoam`,
@@ -1703,24 +1743,19 @@ def _detect_multi_region_layout(case_dir: Path) -> List[str]:
     in `bc_quality.json` (json.dumps sort_keys handles dict keys but
     not the value of `regions_detected`).
     """
-    zero_dir = case_dir / "0"
-    if not zero_dir.is_dir():
-        return []
-    try:
-        entries = list(zero_dir.iterdir())
-    except (OSError, PermissionError):
-        return []
-    regions: List[str] = []
-    for entry in entries:
-        if entry.is_symlink():
-            continue
-        if not entry.is_dir():
-            continue
-        if not entry.name.startswith("region_"):
-            continue
-        regions.append(entry.name)
-    regions.sort()
-    return regions
+    # Codex P1-1 (Gap #36): multi-region CHT cases may carry their
+    # region directories under `0.orig/` instead of `0/` when staged
+    # pre-init (canonical OpenFOAM Allrun copies `0.orig/` → `0/`
+    # before the solver runs). Gap #29 made ingest accept the
+    # 0.orig-only env shape; this makes the region walker honor it
+    # too. Precedence: `0/` always wins if it exists AND carries
+    # region_* entries; only fall back to `0.orig/` when 0/ has no
+    # regions (typically because 0/ is absent or contains a flat
+    # single-region layout).
+    regions = _detect_multi_region_layout_in_dir(case_dir / "0")
+    if regions:
+        return regions
+    return _detect_multi_region_layout_in_dir(case_dir / "0.orig")
 
 
 def _collect_and_persist_bc(
@@ -1796,10 +1831,19 @@ def _collect_and_persist_bc(
         # (solid-region wants only `T`, fluid wants U/p/turbulence)
         # require manifest schema work that is OUT OF SCOPE for this
         # sub-DEC (see DEC frontmatter, Gap #28).
+        # Codex P1-1 (Gap #36): when regions live under 0.orig/ (the
+        # ingest-accepted pre-init shape per Gap #29), walk THAT dir.
+        zero_slot = _resolve_zero_dir_name(case_dir)
+        # When 0/ exists but is region-empty, _detect_multi_region_layout
+        # already preferred 0.orig/ above — recheck which dir holds the
+        # region entries we're iterating, so the relative-path strings
+        # match what's on disk.
+        if not _detect_multi_region_layout_in_dir(case_dir / zero_slot):
+            zero_slot = "0.orig" if (case_dir / "0.orig").is_dir() else zero_slot
         regions: Dict[str, Dict[str, Any]] = {}
         for rname in region_names:
-            region_dir = case_dir / "0" / rname
-            region_rel = str(Path("0") / rname)
+            region_dir = case_dir / zero_slot / rname
+            region_rel = str(Path(zero_slot) / rname)
             region_fields = _parse_field_files_in_dir(
                 region_dir, region_rel, expected,
             )
@@ -2362,6 +2406,33 @@ def _find_external_solver_log(
             p = subdir / name
             if p.is_file():
                 return p
+    # Codex P1-2 (Gap #37): step-numbered variants inside versioned
+    # log/ subdirs. case_006 ONERA M6 production layout writes
+    # `log_v64_v3/02_rhoSimpleFoam.log` etc. — exact-name matching
+    # above misses these. Walk each subdir for `NN_<candidate>` /
+    # `NN_<solver>.log` and pick the highest step (latest run wins).
+    if log_subdirs:
+        step_re = re.compile(r"^(\d{2})_(.+)$")
+        for subdir in log_subdirs:
+            try:
+                entries = list(subdir.iterdir())
+            except OSError:
+                continue
+            matches: List[Tuple[int, Path]] = []
+            for entry in entries:
+                if not entry.is_file():
+                    continue
+                m = step_re.match(entry.name)
+                if not m:
+                    continue
+                tail = m.group(2)
+                # tail matches any of our exact candidate basenames OR
+                # the bare `<solver>.log` shape derived from manifest.
+                if tail in candidates:
+                    matches.append((int(m.group(1)), entry))
+            if matches:
+                matches.sort(key=lambda kv: kv[0], reverse=True)
+                return matches[0][1]
     # Gap #14 (+ Gap #17 extension): versioned-suffix glob fallback.
     # Only fires if manifest carries a sanitised solver name.
     solver_glob: str | None = None

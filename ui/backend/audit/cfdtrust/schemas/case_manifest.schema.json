@@ -85,7 +85,7 @@
     },
     "bc_contract": {
       "type": "object",
-      "required": ["inlet", "outlet", "wall", "turbulence_fields"],
+      "required": ["inlet", "outlet", "wall"],
       "additionalProperties": true,
       "properties": {
         "inlet": { "type": "object", "additionalProperties": true },
@@ -93,8 +93,7 @@
         "wall": { "type": "object", "additionalProperties": true },
         "turbulence_fields": {
           "type": "array",
-          "items": { "type": "string" },
-          "minItems": 1
+          "items": { "type": "string" }
         }
       }
     },

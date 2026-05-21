@@ -53,10 +53,17 @@ def test_empty_required_patches_fails(broken_case_dir):
         validate_manifest(case)
 
 
-def test_empty_turbulence_fields_fails(broken_case_dir):
+def test_empty_turbulence_fields_now_accepted(broken_case_dir):
+    """Codex P2 (Gap #31 schema relaxation): explicit empty
+    `turbulence_fields: []` is now a legitimate declaration that the
+    case has no turbulence transport fields (laminar / DNS). The
+    schema's old `minItems: 1` was blocking the case_010 LES-WALE
+    pattern where the only sub-grid field is `nut` and the user wants
+    Gap #31 derivation to fill it in. Missing-key also valid (derivation
+    fires). Sentinel-string convention (`__none_laminar__`) handled by
+    Gap #32 filter, not by schema validation."""
     case = broken_case_dir(lambda m: m["bc_contract"].__setitem__("turbulence_fields", []))
-    with pytest.raises(ManifestError):
-        validate_manifest(case)
+    validate_manifest(case)  # must not raise
 
 
 def test_invalid_reference_status_fails(broken_case_dir):

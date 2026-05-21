@@ -2386,3 +2386,70 @@ def test_collect_bc_sentinel_turbulence_fields_filtered_out(tmp_path: Path):
     assert bc["expected_fields"] == ["U", "p"]
     # And it doesn't ghost into fields_missing either.
     assert "__none_laminar__" not in bc.get("fields_missing", [])
+
+
+# ---------- Codex CHANGES_REQUIRED R0 cycle 3 fixes (Gap #36 / #37) ----------
+
+
+def test_collect_bc_multi_region_in_zero_orig(tmp_path: Path):
+    """Codex P1-1 (Gap #36): when CHT case has 0.orig/region_*/ but
+    no 0/ (canonical pre-Allrun shape ingest now accepts per Gap #29),
+    multi-region detection MUST still light up. Pre-fix, the regions
+    walker only inspected 0/ and silently fell through to the single-
+    region path, writing a broken bc_quality.json."""
+    for sub in ("system", "constant"):
+        (tmp_path / sub).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "0.orig").mkdir()
+    (tmp_path / "0.orig" / "region_fluid").mkdir()
+    (tmp_path / "0.orig" / "region_solid").mkdir()
+    (tmp_path / "0.orig" / "region_fluid" / "U").write_text(
+        _CANONICAL_0_REGION_FLUID_U,
+    )
+    (tmp_path / "0.orig" / "region_fluid" / "p").write_text(
+        _CANONICAL_0_REGION_FLUID_P,
+    )
+    (tmp_path / "0.orig" / "region_solid" / "T").write_text(
+        _CANONICAL_0_REGION_SOLID_T,
+    )
+
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert bc["layout"] == "multi_region", (
+        f"Gap #36: 0.orig/region_*/ must trigger multi_region; got {bc}"
+    )
+    assert bc["region_count"] == 2
+    assert bc["regions_detected"] == ["region_fluid", "region_solid"]
+    # Per-region file paths reflect 0.orig/ source, not 0/.
+    fluid = bc["regions"]["region_fluid"]
+    assert fluid["fields"]["U"]["file"] == "0.orig/region_fluid/U", (
+        f"file path must point at on-disk source; got {fluid['fields']['U']['file']}"
+    )
+
+
+def test_external_log_step_numbered_in_versioned_subdir(monkeypatch, tmp_path: Path):
+    """Codex P1-2 (Gap #37): case_006 ONERA M6 production layout writes
+    log_v64_v3/02_rhoSimpleFoam.log etc. — step-numbered inside
+    versioned log/ subdirs. Pre-fix, the log_* subdir walker only
+    tried exact basenames and missed step-numbered variants, ending
+    at no_solver_log_found despite the file being on disk."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    (tmp_path / "log_v64_v3").mkdir()
+    (tmp_path / "log_v64_v3" / "01_blockMesh.log").write_text("ok\n")
+    (tmp_path / "log_v64_v3" / "02_rhoSimpleFoam.log").write_text(
+        _CANONICAL_SIMPLEFOAM_LOG,
+    )
+    _patch_docker_for_ingest(monkeypatch)
+
+    m = _ingest_manifest_fixture()
+    m["solver"] = "rhoSimpleFoam"
+
+    found = ofa._find_external_solver_log(tmp_path, m)
+    assert found is not None, (
+        "Gap #37: step-numbered log in versioned subdir must be discovered"
+    )
+    assert found.name == "02_rhoSimpleFoam.log"
+    assert "log_v64_v3" in str(found)
