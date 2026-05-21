@@ -1809,12 +1809,30 @@ def _find_external_solver_log(
     intentionally excluded — `artifacts/solver.log` is the ingest
     *output*, not an input, so finding it would create a fixed-point
     loop on repeated ingest.
+
+    Gap #10 (case_011 plate-fin CHT dogfood): also search the bounded
+    `case_dir/log/` subdirectory. Many `Allrun.sh` layouts redirect
+    each solver step's stdout into `log/<solver>.log` rather than the
+    top-level `log_<solver>.txt`. Top-level remains precedence so the
+    pre-existing behaviour is preserved; `log/` is searched only as a
+    fallback. We deliberately do NOT recurse — arbitrary subdir walks
+    invite DoS-on-deep-trees plus ambiguity when multiple solver logs
+    live at different depths.
     """
     primary, fallback = _candidate_log_names(manifest)
-    for name in (*primary, *fallback):
+    candidates = (*primary, *fallback)
+    # Top-level pass (preserves existing precedence).
+    for name in candidates:
         p = case_dir / name
         if p.is_file():
             return p
+    # log/ subdir fallback (Gap #10) — bounded, non-recursive.
+    log_subdir = case_dir / "log"
+    if log_subdir.is_dir():
+        for name in candidates:
+            p = log_subdir / name
+            if p.is_file():
+                return p
     return None
 
 

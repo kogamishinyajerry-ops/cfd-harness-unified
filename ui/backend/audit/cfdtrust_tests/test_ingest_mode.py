@@ -693,6 +693,55 @@ def test_ingest_blocked_diagnostic_lists_both_candidate_sets(
     assert "log_simpleFoam.txt" in gate["details"]["searched_fallback"]
 
 
+# ---------- Gap #10: log/ subdir fallback (case_011 dogfood) ----------
+
+
+def test_ingest_finds_log_in_log_subdir_when_top_level_absent(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #10 (case_011 plate-fin CHT): when `Allrun.sh` writes solver
+    output to `case_dir/log/<solver>.log` and nothing sits at the top
+    level, ingest must still locate the log via the bounded subdir
+    fallback. Provenance must record the full relative path so users
+    can audit where the log came from."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    log_subdir = tmp_path / "log"
+    log_subdir.mkdir()
+    (log_subdir / "simpleFoam.log").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] != "BLOCKED"
+    assert gate["details"]["external_log_source"] == "log/simpleFoam.log"
+    # provenance in ingest_manifest also points at the subdir location
+    ingest_m = json.loads(
+        (tmp_path / "artifacts" / "ingest_manifest.json").read_text()
+    )
+    assert (
+        ingest_m["external_solver_log"]["source_relative"]
+        == "log/simpleFoam.log"
+    )
+
+
+def test_ingest_top_level_log_wins_over_log_subdir(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #10: top-level precedence must be preserved. When the case
+    carries BOTH `case_dir/log_simpleFoam.txt` (top level) AND
+    `case_dir/log/simpleFoam.log` (subdir), the top-level one wins so
+    existing ingest behaviour is not perturbed."""
+    _make_ingestable_case(tmp_path)  # writes log_simpleFoam.txt
+    log_subdir = tmp_path / "log"
+    log_subdir.mkdir()
+    (log_subdir / "simpleFoam.log").write_text("SUBDIR LOG — MUST NOT WIN\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["details"]["external_log_source"] == "log_simpleFoam.txt"
+
+
 def test_ingest_accepts_large_case_above_run_paths_cap(monkeypatch, tmp_path: Path):
     """Codex R2-P1: a case whose entry count exceeds `_MAX_PATHS_WALKED`
     (the run() DoS bound, 10k) must NOT be rejected by ingest. Industrial
