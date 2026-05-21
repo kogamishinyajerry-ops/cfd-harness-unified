@@ -1055,6 +1055,58 @@ def _persist_mesh_quality(
     return out_path
 
 
+# Gap #26-#27: mesh-pipeline log discovery. Industrial Allrun scripts often
+# name mesh logs `01_blockMesh.log` / `02_snappyHexMesh.log` /
+# `03_surfaceFeatureExtract.log` (step-numbered). Unprefixed canonical
+# variants (`log_<tool>.txt` / `log.<tool>` / `<tool>.log`) still take
+# precedence; step-numbered variants are an additive fallback.
+# Tie-breaker when multiple step-numbered logs for the same tool exist
+# (e.g. two snappyHexMesh runs): highest step number wins (latest run =
+# canonical evidence). Unprefixed + step-numbered both present: step-
+# numbered wins (latest run supersedes interactive leftover).
+_MESH_PIPELINE_TOOLS: Tuple[str, ...] = (
+    "blockMesh", "snappyHexMesh", "surfaceFeatureExtract",
+    "extrudeMesh", "splitMeshRegions", "checkMesh",
+)
+_STEP_NUMBERED_MESH_LOG_RE = re.compile(
+    r"^(\d{2})_(?:log\.)?(?P<tool>[A-Za-z]+)(?:\.log|\.txt)?$"
+)
+
+
+def _find_mesh_pipeline_logs(case_dir: Path) -> Dict[str, Path]:
+    """Return {tool_name: Path} for mesh-pipeline logs in case_dir top-level.
+
+    Step-numbered wins over unprefixed; highest step wins among siblings.
+    """
+    if not case_dir.is_dir():
+        return {}
+    step_numbered: Dict[str, Tuple[int, Path]] = {}
+    unprefixed: Dict[str, Path] = {}
+    try:
+        entries = list(case_dir.iterdir())
+    except OSError:
+        return {}
+    for entry in entries:
+        if not entry.is_file():
+            continue
+        name = entry.name
+        m = _STEP_NUMBERED_MESH_LOG_RE.match(name)
+        if m and m.group("tool") in _MESH_PIPELINE_TOOLS:
+            step, tool = int(m.group(1)), m.group("tool")
+            best = step_numbered.get(tool)
+            if best is None or step > best[0]:
+                step_numbered[tool] = (step, entry)
+            continue
+        for tool in _MESH_PIPELINE_TOOLS:
+            if name in (f"log_{tool}.txt", f"log.{tool}", f"{tool}.log"):
+                unprefixed.setdefault(tool, entry)
+                break
+    out: Dict[str, Path] = dict(unprefixed)
+    for tool, (_step, path) in step_numbered.items():
+        out[tool] = path
+    return out
+
+
 # ---------- M5.1: polyMesh/boundary parser + persistence ----------
 #
 # blockMesh writes `constant/polyMesh/boundary` listing every patch in the
@@ -2868,6 +2920,21 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             log_relative=mesh_log_rel,
             parsed=cm_parsed,
         )
+
+    # Gap #26-#27: persist any mesh-pipeline logs found on disk
+    # (step-numbered or unprefixed) as evidence next to mesh_quality.json.
+    pipeline_logs = _find_mesh_pipeline_logs(case_dir)
+    if pipeline_logs:
+        mq_path = artifacts_dir / "mesh_quality.json"
+        try:
+            mq = json.loads(mq_path.read_text()) if mq_path.is_file() else {}
+            mq["mesh_pipeline_logs"] = {
+                tool: str(p.relative_to(case_dir))
+                for tool, p in sorted(pipeline_logs.items())
+            }
+            mq_path.write_text(json.dumps(mq, indent=2, sort_keys=True))
+        except (OSError, json.JSONDecodeError):
+            pass
 
     # --- Transcribe external solver log into artifacts/solver.log ---
     # Codex R5-P1 fix: prepend the INGEST_BANNER so the log itself
