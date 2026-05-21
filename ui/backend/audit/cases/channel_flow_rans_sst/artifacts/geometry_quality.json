@@ -1,0 +1,33 @@
+{
+  "boundary_file": "constant/polyMesh/boundary",
+  "patch_count": 5,
+  "patches": {
+    "bottomWall": {
+      "nFaces": 100,
+      "startFace": 9950,
+      "type": "wall"
+    },
+    "frontAndBack": {
+      "nFaces": 10000,
+      "startFace": 10150,
+      "type": "empty"
+    },
+    "inlet": {
+      "nFaces": 50,
+      "startFace": 9850,
+      "type": "cyclic"
+    },
+    "outlet": {
+      "nFaces": 50,
+      "startFace": 9900,
+      "type": "cyclic"
+    },
+    "topWall": {
+      "nFaces": 100,
+      "startFace": 10050,
+      "type": "wall"
+    }
+  },
+  "polymesh_boundary_parsed": true,
+  "status": "ok"
+}

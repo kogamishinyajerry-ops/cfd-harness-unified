@@ -1,0 +1,113 @@
+# AI-CFD-V2 sample case manifest — flat plate, steady incompressible RANS, k-omega SST.
+# Phase 0: structural completeness only. Real reference data is NOT finalized.
+
+case_id: flat_plate_rans_sst
+case_family: canonical_rans_verification
+# Phase 0 honesty (Red Team F-04): declare mocked while the OpenFOAM adapter
+# is not yet implemented. Flip back to `openfoam` when Phase 1 lands
+# src/cfdtrust/backends/openfoam.py.
+solver_backend: mocked
+solver: simpleFoam
+
+physics:
+  regime: steady_incompressible_RANS
+  fluid: generic_air
+  turbulence_model: kOmegaSST
+  compressible: false
+  steady: true
+
+geometry_contract:
+  required_patches:
+    - inlet
+    - outlet
+    - wall
+    - top
+    - frontAndBack
+  dimensionality: "2.5D"
+  unit_system: SI
+
+mesh_contract:
+  checkmesh_required: true
+  boundary_layer_required: true
+  y_plus_target:
+    min: 0.5
+    max: 5.0
+    wall_function_policy: low_re_resolved
+  quality_thresholds:
+    max_non_orthogonality: 65
+    max_skewness: 4.0
+    max_aspect_ratio: 1000
+
+bc_contract:
+  inlet:
+    velocity: { type: fixedValue, magnitude_m_s: 30.0 }
+    pressure: { type: zeroGradient }
+    k: { type: turbulentIntensityKineticEnergyInlet, intensity: 0.01 }
+    omega: { type: turbulentMixingLengthFrequencyInlet, mixingLength: 0.01 }
+  outlet:
+    pressure: { type: fixedValue, value_Pa: 0.0 }
+    velocity: { type: zeroGradient }
+  wall:
+    velocity: { type: noSlip }
+    k: { type: kqRWallFunction }
+    omega: { type: omegaWallFunction }
+  turbulence_fields:
+    - k
+    - omega
+    - nut
+
+solver_contract:
+  residual_targets:
+    Ux: 1.0e-5
+    Uy: 1.0e-5
+    p: 1.0e-5
+    k: 1.0e-5
+    omega: 1.0e-5
+  max_iterations: 500
+  qoi_stability:
+    window_iterations: 50
+    relative_drift_tolerance: 1.0e-3
+
+qoi:
+  - name: skin_friction_coefficient
+    kind: line_distribution
+    units: dimensionless
+    tolerance: 0.05
+  - name: drag_force
+    kind: scalar
+    units: N
+    tolerance: 0.05
+
+reference_comparison:
+  status: finalized
+  source: NASA TMR 2D flat plate, SST, CFL3D solution
+  source_url: https://tmbwg.github.io/turbmodels/flatplate_sst.html
+  # SHA-256 of the ORIGINAL NASA tecplot file (cf_plate_sstv.dat).
+  source_sha256: a56bd2d16818456af015b13839f0a991b4b85bfa6c18242e7c331a2c7a4d40e8
+  reference_csv: reference/cf_reference.csv
+  # R16-F-01 fix: SHA-256 of the in-repo derived CSV that the gate actually
+  # reads. Verified at load time — refuses to compare against tampered
+  # reference data (e.g. a swapped curve that would make our run silently
+  # PASS).
+  reference_csv_sha256: 48eb163b4d56a390c87e4085d763a612697c65c7504e6470348e628bb9d21f2c
+  qoi: skin_friction_coefficient
+  tolerance: 0.10
+  x_min_compare_m: 0.01
+  notes: |
+    NASA TMR canonical Cf curve (CFL3D, k-omega SST, on-plate region only).
+    Local case Re_L = 4e6 vs NASA canonical Re_L = 5e6 (25% mismatch);
+    tolerance widened from 0.05 to 0.10 to accommodate (~5% Cf delta).
+    Comparison skips x < 0.01 m (laminar/transition region not predicted
+    by k-omega SST).
+    See `reference/provenance.md` for full citation, license, and
+    regeneration instructions.
+
+required_artifacts:
+  - geometry_report.json
+  - mesh_report.json
+  - bc_audit.json
+  - solver.log
+  - residuals.csv
+  - qoi.csv
+  - reference_comparison.csv
+  - trust_report.json

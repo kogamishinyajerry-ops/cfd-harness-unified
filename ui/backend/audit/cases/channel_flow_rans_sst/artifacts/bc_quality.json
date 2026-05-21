@@ -1,0 +1,131 @@
+{
+  "bc_parsing_status": "ok",
+  "expected_fields": [
+    "U",
+    "p",
+    "k",
+    "omega",
+    "nut"
+  ],
+  "fields": {
+    "U": {
+      "file": "0/U",
+      "parsed": true,
+      "patches": {
+        "bottomWall": {
+          "type": "noSlip"
+        },
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "cyclic"
+        },
+        "outlet": {
+          "type": "cyclic"
+        },
+        "topWall": {
+          "type": "noSlip"
+        }
+      }
+    },
+    "k": {
+      "file": "0/k",
+      "parsed": true,
+      "patches": {
+        "bottomWall": {
+          "type": "kqRWallFunction",
+          "value_scalar": 0.015
+        },
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "cyclic"
+        },
+        "outlet": {
+          "type": "cyclic"
+        },
+        "topWall": {
+          "type": "kqRWallFunction",
+          "value_scalar": 0.015
+        }
+      }
+    },
+    "nut": {
+      "file": "0/nut",
+      "parsed": true,
+      "patches": {
+        "bottomWall": {
+          "type": "nutkWallFunction",
+          "value_scalar": 0.0
+        },
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "cyclic"
+        },
+        "outlet": {
+          "type": "cyclic"
+        },
+        "topWall": {
+          "type": "nutkWallFunction",
+          "value_scalar": 0.0
+        }
+      }
+    },
+    "omega": {
+      "file": "0/omega",
+      "parsed": true,
+      "patches": {
+        "bottomWall": {
+          "type": "omegaWallFunction",
+          "value_scalar": 74.6
+        },
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "cyclic"
+        },
+        "outlet": {
+          "type": "cyclic"
+        },
+        "topWall": {
+          "type": "omegaWallFunction",
+          "value_scalar": 74.6
+        }
+      }
+    },
+    "p": {
+      "file": "0/p",
+      "parsed": true,
+      "patches": {
+        "bottomWall": {
+          "type": "zeroGradient"
+        },
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "cyclic"
+        },
+        "outlet": {
+          "type": "cyclic"
+        },
+        "topWall": {
+          "type": "zeroGradient"
+        }
+      }
+    }
+  },
+  "fields_missing": [],
+  "fields_present": [
+    "U",
+    "k",
+    "nut",
+    "omega",
+    "p"
+  ]
+}

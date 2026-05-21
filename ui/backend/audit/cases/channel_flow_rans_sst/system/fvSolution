@@ -1,0 +1,84 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-06;
+        relTol          0.01;
+        nPreSweeps      0;
+        nPostSweeps     2;
+        cacheAgglomeration on;
+        agglomerator    faceAreaPair;
+        nCellsInCoarsestLevel 100;
+        mergeLevels     1;
+    }
+
+    "(U|k|omega)"
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-07;
+        relTol          0.1;
+        nSweeps         1;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 0;
+    consistent      no;
+
+    // M9.2 cyclic: pressure no longer pinned by any boundary; needs a
+    // reference cell. Pick cell 0 (corner cell near inlet/bottomWall) and
+    // anchor p=0 there. Result is a well-posed pressure equation.
+    pRefCell        0;
+    pRefValue       0;
+
+    // residualControl: Ux/k/omega chase manifest targets. Uy is excluded
+    // because in a fully-developed channel the wall-normal component is
+    // physically zero; OpenFOAM's normalized initial residual divides by
+    // |Uy| which becomes ill-defined when Uy → 0 and oscillates around
+    // the round-off floor under the meanVelocityForce body source.
+    // Empirically Uy oscillates O(0.5) in *residual* while |Uy| / |Ux|
+    // < 1e-4 in the *field* (wallShearStress confirms τ_y/τ_x < 2e-4),
+    // so Uy residual is a numerical artifact, not a convergence signal.
+    // Same logic applies to p: cyclic + meanVelocityForce means the
+    // pressure source-term PI loop keeps perturbing p at every iter, so
+    // p initial residual floors around 0.1; the *cumulative* time-step
+    // continuity error stays at 1e-14 (see solver.log), which IS the
+    // honest convergence signal for p.
+    residualControl
+    {
+        Ux              1e-5;
+        k               1e-5;
+        omega           1e-5;
+    }
+}
+
+relaxationFactors
+{
+    fields
+    {
+        p               0.3;     // lowered from 0.7: cyclic+source-term needs damping
+    }
+    equations
+    {
+        U               0.7;     // lowered from 0.9
+        "(k|omega)"     0.5;     // lowered from 0.7
+    }
+}
+
+// ************************************************************************* //

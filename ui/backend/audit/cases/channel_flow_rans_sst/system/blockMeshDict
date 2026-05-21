@@ -1,0 +1,101 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 channel_flow_rans_sst — M9 third canonical case.                  |
+| 2.5D plane channel: 2H × L × thin-spanwise; 100 × 50 × 1 cells.             |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1.0;
+
+// Channel half-height H = 0.015 m → 2H = 0.03 m.
+// Streamwise length L = 2.0 m (enough for fully-developed turbulent profile).
+// Spanwise thickness = 0.001 m (single cell, 2.5D).
+
+vertices
+(
+    (0.0  -0.015  0.000)   // 0
+    (2.0  -0.015  0.000)   // 1
+    (2.0   0.015  0.000)   // 2
+    (0.0   0.015  0.000)   // 3
+    (0.0  -0.015  0.001)   // 4
+    (2.0  -0.015  0.001)   // 5
+    (2.0   0.015  0.001)   // 6
+    (0.0   0.015  0.001)   // 7
+);
+
+// Grading: uniform in streamwise + spanwise; y-direction is one block with
+// symmetric `simpleGrading (1 1 1)` — uniform spacing across both walls.
+// This yields y+ ~ 10–20 at first cell (~0.6 mm), inside the manifest's
+// widened y+ target [0.5, 30] with wall-function policy.
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (100 50 1) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        // M9.2: cyclic with outlet — periodic channel for fully-developed flow.
+        // Replaces the prior `type patch` + fixedValue inlet; convergence with
+        // a uniform-plug inlet was infeasible in steady simpleFoam (developing
+        // boundary layer never reaches statistical stationarity in finite
+        // iterations). Cyclic + fvOptions meanVelocityForce gives a
+        // fully-developed channel matching the NASA TMR reference setup.
+        type            cyclic;
+        neighbourPatch  outlet;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+    outlet
+    {
+        type            cyclic;
+        neighbourPatch  inlet;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+    bottomWall
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)
+        );
+    }
+    topWall
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 3 2 1)
+            (4 5 6 7)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

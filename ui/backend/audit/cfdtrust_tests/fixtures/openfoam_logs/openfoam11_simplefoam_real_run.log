@@ -1,0 +1,41 @@
+    patch wall y+ : min = 8.77148, max = 8.77148, average = 8.77148
+
+Time = 1s
+
+smoothSolver:  Solving for Ux, Initial residual = 1, Final residual = 0.0914823, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 0, Final residual = 0, No Iterations 0
+GAMG:  Solving for p, Initial residual = 1, Final residual = 0.00840346, No Iterations 14
+time step continuity errors : sum local = 7.61411e-06, global = -4.88111e-07, cumulative = -4.88111e-07
+smoothSolver:  Solving for omega, Initial residual = 0.0282609, Final residual = 0.0010449, No Iterations 1
+smoothSolver:  Solving for k, Initial residual = 1, Final residual = 0.0529835, No Iterations 1
+ExecutionTime = 0.355623 s  ClockTime = 0 s
+
+Time = 158s
+
+smoothSolver:  Solving for Ux, Initial residual = 2.79891e-07, Final residual = 1.39563e-08, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 1.01828e-05, Final residual = 6.25236e-07, No Iterations 1
+GAMG:  Solving for p, Initial residual = 9.62754e-06, Final residual = 8.68394e-07, No Iterations 2
+time step continuity errors : sum local = 1.06943e-06, global = 2.37053e-09, cumulative = -5.78792e-05
+smoothSolver:  Solving for omega, Initial residual = 7.97776e-08, Final residual = 7.97776e-08, No Iterations 0
+smoothSolver:  Solving for k, Initial residual = 8.48952e-08, Final residual = 8.48952e-08, No Iterations 0
+ExecutionTime = 1.9729 s  ClockTime = 2 s
+
+Time = 159s
+
+smoothSolver:  Solving for Ux, Initial residual = 2.71545e-07, Final residual = 1.3678e-08, No Iterations 1
+smoothSolver:  Solving for Uy, Initial residual = 9.77106e-06, Final residual = 5.9674e-07, No Iterations 1
+GAMG:  Solving for p, Initial residual = 9.22732e-06, Final residual = 8.35688e-07, No Iterations 2
+time step continuity errors : sum local = 1.02915e-06, global = 1.82061e-09, cumulative = -5.78774e-05
+smoothSolver:  Solving for omega, Initial residual = 7.97527e-08, Final residual = 7.97527e-08, No Iterations 0
+smoothSolver:  Solving for k, Initial residual = 8.48719e-08, Final residual = 8.48719e-08, No Iterations 0
+ExecutionTime = 1.98011 s  ClockTime = 2 s
+
+
+SIMPLE solution converged in 159 iterations
+
+End
+
+
+--- STDERR ---
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+

@@ -1,0 +1,63 @@
+{
+  "generated_at": "2026-05-21T07:40:28Z",
+  "case_id": "channel_flow_rans_sst",
+  "phase": "M4",
+  "gate_status": "PASS",
+  "checkmesh_invoked": true,
+  "checkmesh_overall_ok": true,
+  "checkmesh_failed_count": 0,
+  "stats": {
+    "boundary_patches": 5,
+    "cells": 5000,
+    "faces": 20150,
+    "internal_faces": 9850,
+    "points": 10302
+  },
+  "quality_dimension": {
+    "dimension_status": "PASS",
+    "metrics": {
+      "max_non_orthogonality": {
+        "actual": 0.0,
+        "threshold": 65.0,
+        "ok": true
+      },
+      "max_skewness": {
+        "actual": 1.11021e-13,
+        "threshold": 4.0,
+        "ok": true
+      },
+      "max_aspect_ratio": {
+        "actual": 33.3333,
+        "threshold": 1000.0,
+        "ok": true
+      }
+    },
+    "fails": [],
+    "incompletes": []
+  },
+  "y_plus_dimension": {
+    "dimension_status": "PASS",
+    "patch_evaluated": "bottomWall",
+    "actual_avg": 11.1999,
+    "actual_min": 11.1092,
+    "actual_max": 11.5758,
+    "target_min": 0.5,
+    "target_max": 30.0,
+    "ok": true
+  },
+  "declared_contract": {
+    "checkmesh_required": true,
+    "boundary_layer_required": true,
+    "y_plus_target": {
+      "min": 0.5,
+      "max": 30.0,
+      "wall_function_policy": "high_re_wall_function"
+    },
+    "quality_thresholds": {
+      "max_non_orthogonality": 65,
+      "max_skewness": 4.0,
+      "max_aspect_ratio": 1000
+    }
+  },
+  "checkmesh_log": "artifacts/mesh_quality.log"
+}

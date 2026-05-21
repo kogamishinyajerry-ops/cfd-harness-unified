@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-05-21T02:44:48Z",
+  "case_id": "backward_facing_step",
+  "phase": "Phase 0 scaffold",
+  "declared_sections": {
+    "inlet": {
+      "velocity": {
+        "type": "fixedValue",
+        "magnitude_m_s": 44.2
+      },
+      "pressure": {
+        "type": "zeroGradient"
+      },
+      "k": {
+        "type": "turbulentIntensityKineticEnergyInlet",
+        "intensity": 0.01
+      },
+      "omega": {
+        "type": "turbulentMixingLengthFrequencyInlet",
+        "mixingLength": 0.00127
+      }
+    },
+    "outlet": {
+      "pressure": {
+        "type": "fixedValue",
+        "value_Pa": 0.0
+      },
+      "velocity": {
+        "type": "zeroGradient"
+      }
+    },
+    "wall": {
+      "velocity": {
+        "type": "noSlip"
+      },
+      "k": {
+        "type": "kqRWallFunction"
+      },
+      "omega": {
+        "type": "omegaWallFunction"
+      }
+    },
+    "turbulence_fields": [
+      "k",
+      "omega",
+      "nut"
+    ]
+  },
+  "missing_sections": [],
+  "openfoam_zero_dir_inspected": false,
+  "notes": [
+    "Phase 0 scaffold: no inspection of 0/ directory.",
+    "Future work: parse 0/U, 0/p, 0/k, 0/omega and verify against contract."
+  ]
+}

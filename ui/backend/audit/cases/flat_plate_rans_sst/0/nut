@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+| nut: turbulent kinematic viscosity. Populated by the turbulence model at  |
+|      runtime; initial field is 0 + wall-function BC at the wall.          |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      nut;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    wall
+    {
+        // High-Re wall-modeled function. Manifest declares
+        // wall_function_policy: low_re_resolved — flagged in CASE_NOTES.md
+        // as a Phase 1/Phase 2 reconciliation item.
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+    top
+    {
+        type            symmetryPlane;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

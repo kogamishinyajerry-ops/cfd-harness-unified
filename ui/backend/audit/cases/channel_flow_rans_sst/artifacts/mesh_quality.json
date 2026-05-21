@@ -1,0 +1,22 @@
+{
+  "checkmesh_invoked": true,
+  "checkmesh_returncode": 0,
+  "checkmesh_status": "ok",
+  "failed_checks_count": 0,
+  "geometry": {
+    "avg_non_orthogonality": 0.0,
+    "max_aspect_ratio": 33.3333,
+    "max_cell_openness": 1.41172e-16,
+    "max_non_orthogonality": 0.0,
+    "max_skewness": 1.11021e-13
+  },
+  "log": "artifacts/mesh_quality.log",
+  "overall_mesh_ok": true,
+  "stats": {
+    "boundary_patches": 5,
+    "cells": 5000,
+    "faces": 20150,
+    "internal_faces": 9850,
+    "points": 10302
+  }
+}

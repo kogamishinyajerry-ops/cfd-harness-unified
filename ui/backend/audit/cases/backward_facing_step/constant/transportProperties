@@ -1,0 +1,21 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | AI-CFD-V2 M2 — backward_facing_step             |
+|  \\    /   O peration     | OpenFOAM 11                                     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transportModel  Newtonian;
+
+// Kinematic viscosity (m²/s) — air at ~15 °C, sea level.
+// Re_H = U * H / nu = 44.2 * 0.0127 / 1.5e-5 = 37 421 (~ NASA TMR target 36 000)
+nu              1.5e-05;
+
+// ************************************************************************* //

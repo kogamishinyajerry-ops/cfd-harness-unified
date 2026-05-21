@@ -1,0 +1,89 @@
+{
+  "case_id": "backward_facing_step",
+  "generated_at": "2026-05-21T02:44:48Z",
+  "overall_status": "MOCKED",
+  "solver_execution": "mocked",
+  "validation_status": "not_validated",
+  "gates": {
+    "geometry_contract": {
+      "status": "MOCKED",
+      "summary": "Declared 6 required patches; no real geometry inspected.",
+      "details": {
+        "name": "geometry_contract",
+        "note": "Phase 0 placeholder \u2014 not real evidence."
+      },
+      "artifact": "artifacts/geometry_report.json"
+    },
+    "mesh_contract": {
+      "status": "MOCKED",
+      "summary": "Mesh contract recorded; checkMesh not run.",
+      "details": {
+        "name": "mesh_contract",
+        "note": "Phase 0 placeholder \u2014 not real evidence."
+      },
+      "artifact": "artifacts/mesh_report.json"
+    },
+    "bc_contract": {
+      "status": "MOCKED",
+      "summary": "BC contract structurally complete; no 0/ directory inspected.",
+      "details": {
+        "name": "bc_contract",
+        "note": "Phase 0 placeholder \u2014 not real evidence."
+      },
+      "artifact": "artifacts/bc_audit.json"
+    },
+    "solver_execution": {
+      "status": "MOCKED",
+      "summary": "Mocked solver artifacts present (2000 iterations).",
+      "artifact": "artifacts/solver.log",
+      "details": {
+        "execution": "mocked",
+        "log": "artifacts/solver.log",
+        "residuals_csv": "artifacts/residuals.csv",
+        "iterations": 2000,
+        "real_solver_invoked": false,
+        "warning": "No CFD solver was executed. This does not constitute validation."
+      }
+    },
+    "qoi_extraction": {
+      "status": "MOCKED",
+      "summary": "QoI extraction not yet performed; 2 declared QoIs.",
+      "details": {
+        "name": "qoi_extraction",
+        "note": "Phase 0 placeholder \u2014 not real evidence.",
+        "generated_at": "2026-05-21T02:44:48Z"
+      },
+      "artifact": "artifacts/qoi.csv"
+    },
+    "reference_comparison": {
+      "status": "MOCKED",
+      "summary": "Reference comparison status = finalized; no real comparison performed (solver_backend != openfoam or wallShearStress not emitted yet).",
+      "artifact": "artifacts/reference_comparison.csv",
+      "details": {
+        "reference_status": "finalized",
+        "real_comparison_performed": false,
+        "note": "Real comparison runs only when solver_backend=openfoam AND a real run has emitted wallShearStress at the latest time step."
+      }
+    }
+  },
+  "artifacts": {
+    "geometry_report": "artifacts/geometry_report.json",
+    "mesh_report": "artifacts/mesh_report.json",
+    "bc_audit": "artifacts/bc_audit.json",
+    "solver_log": "artifacts/solver.log",
+    "residuals_csv": "artifacts/residuals.csv",
+    "qoi_csv": "artifacts/qoi.csv",
+    "reference_comparison_csv": "artifacts/reference_comparison.csv",
+    "trust_report": "artifacts/trust_report.json"
+  },
+  "limitations": [
+    "No real CFD solver was executed. This run does not constitute validation.",
+    "Reference comparison is a placeholder. No published data was compared against."
+  ],
+  "next_actions": [
+    "Implement real OpenFOAM adapter (Phase 1).",
+    "Finalize reference dataset for flat_plate_rans_sst.",
+    "Add seeded negative-test fixtures.",
+    "Run Red Team review on this trust loop."
+  ]
+}

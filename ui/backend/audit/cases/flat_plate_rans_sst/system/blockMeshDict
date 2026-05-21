@@ -1,0 +1,91 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+| 2.5D box, graded toward bottom wall (target y+ ~ 1 at U=30 m/s)            |
+| NOTE: NASA TMR has a leading symmetry section before the plate; this       |
+|       scaffold collapses both into one no-slip wall. See CASE_NOTES.md.    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+scale   1;
+
+vertices
+(
+    (0  0    0     )   // 0
+    (2  0    0     )   // 1
+    (2  1    0     )   // 2
+    (0  1    0     )   // 3
+    (0  0    0.05  )   // 4
+    (2  0    0.05  )   // 5
+    (2  1    0.05  )   // 6
+    (0  1    0.05  )   // 7
+);
+
+blocks
+(
+    // Cells: 100 in x (streamwise), 60 in y (wall-normal, graded), 1 in z (2.5D).
+    // simpleGrading (1 50 1) → expansion ratio 50 across y so the first cell at
+    // the wall is small enough for y+ ~ 1 at the inlet velocity.
+    hex (0 1 2 3 4 5 6 7) (100 60 1) simpleGrading (1 50 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+    outlet
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+    wall
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)
+        );
+    }
+    top
+    {
+        type symmetryPlane;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+    frontAndBack
+    {
+        type empty;
+        faces
+        (
+            (0 3 2 1)
+            (4 5 6 7)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

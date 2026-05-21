@@ -1,0 +1,202 @@
+{
+  "generated_at": "2026-05-21T07:40:28Z",
+  "case_id": "channel_flow_rans_sst",
+  "phase": "M8",
+  "gate_status": "PASS",
+  "zero_dir_inspected": true,
+  "file_presence_dimension": {
+    "dimension_status": "PASS",
+    "present": [
+      "U",
+      "k",
+      "nut",
+      "omega",
+      "p"
+    ],
+    "missing_files": [],
+    "unparseable_files": []
+  },
+  "patch_coverage_dimension": {
+    "dimension_status": "PASS",
+    "checked_fields": [
+      "U",
+      "k",
+      "nut",
+      "omega",
+      "p"
+    ],
+    "polymesh_patch_count": 5,
+    "gaps_by_field": {}
+  },
+  "type_match_dimension": {
+    "dimension_status": "PASS",
+    "checked_count": 14,
+    "unresolvable_keys": [],
+    "field_class_missing": [],
+    "type_mismatches": [],
+    "checked": [
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "U",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "p",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "k",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "omega",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "U",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "p",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "k",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "omega",
+        "declared_type": "cyclic",
+        "realized_type": "cyclic"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "bottomWall",
+        "field": "U",
+        "declared_type": "noSlip",
+        "realized_type": "noSlip"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "topWall",
+        "field": "U",
+        "declared_type": "noSlip",
+        "realized_type": "noSlip"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "bottomWall",
+        "field": "k",
+        "declared_type": "kqRWallFunction",
+        "realized_type": "kqRWallFunction"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "topWall",
+        "field": "k",
+        "declared_type": "kqRWallFunction",
+        "realized_type": "kqRWallFunction"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "bottomWall",
+        "field": "omega",
+        "declared_type": "omegaWallFunction",
+        "realized_type": "omegaWallFunction"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "topWall",
+        "field": "omega",
+        "declared_type": "omegaWallFunction",
+        "realized_type": "omegaWallFunction"
+      }
+    ]
+  },
+  "value_match_dimension": {
+    "dimension_status": "PASS",
+    "matched": [],
+    "note": "manifest.bc_contract has no recognized numeric declarations."
+  },
+  "derived_consistency_dimension": {
+    "dimension_status": "PASS",
+    "matched_count": 0,
+    "note": "no patch declares both magnitude_m_s + intensity (no derivation possible)."
+  },
+  "expected_fields": [
+    "U",
+    "p",
+    "k",
+    "omega",
+    "nut"
+  ],
+  "realized_patch_count": 5,
+  "declared_bc_contract": {
+    "inlet": {
+      "velocity": {
+        "type": "cyclic"
+      },
+      "pressure": {
+        "type": "cyclic"
+      },
+      "k": {
+        "type": "cyclic"
+      },
+      "omega": {
+        "type": "cyclic"
+      }
+    },
+    "outlet": {
+      "velocity": {
+        "type": "cyclic"
+      },
+      "pressure": {
+        "type": "cyclic"
+      },
+      "k": {
+        "type": "cyclic"
+      },
+      "omega": {
+        "type": "cyclic"
+      }
+    },
+    "wall": {
+      "velocity": {
+        "type": "noSlip"
+      },
+      "k": {
+        "type": "kqRWallFunction"
+      },
+      "omega": {
+        "type": "omegaWallFunction"
+      }
+    },
+    "turbulence_fields": [
+      "k",
+      "omega",
+      "nut"
+    ]
+  }
+}

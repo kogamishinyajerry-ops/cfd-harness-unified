@@ -1,0 +1,14 @@
+{
+  "status": "MOCKED",
+  "summary": "Synthetic solver log with 500 pseudo-iterations. No real CFD executed.",
+  "artifact": "artifacts/solver.log",
+  "details": {
+    "execution": "mocked",
+    "log": "artifacts/solver.log",
+    "residuals_csv": "artifacts/residuals.csv",
+    "iterations": 500,
+    "generated_at": "2026-05-21T03:38:06Z",
+    "real_solver_invoked": false,
+    "warning": "No CFD solver was executed. This does not constitute validation."
+  }
+}
