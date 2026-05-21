@@ -1065,6 +1065,101 @@ def test_solver_ingest_success_still_persists_gate(monkeypatch, tmp_path: Path):
     assert persisted["details"]["execution"] == "ingested"
 
 
+# ---------- DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE (R7-P1 follow-up) ----------
+
+
+def test_solver_ingest_post_residual_blocked_persists_real_diagnostic(
+    monkeypatch, tmp_path: Path,
+):
+    """DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE: a post-residual
+    BLOCKED gate (e.g., `no_iterations_in_log` from a log that
+    transcribed cleanly but contained zero parseable iterations) MUST
+    persist to `artifacts/solver_gate.json`. These gates carry
+    `details.execution == "ingested"` (set by `openfoam.ingest()` after
+    `_compute_gate_from_residuals`) — they are REAL ingested-solver
+    evidence outcomes, not precondition refusals.
+
+    Pre-fix (R6-P1's status-only guard): such gates fell through the
+    `if status == BLOCKED: return gate` short-circuit and were dropped.
+    `cfdtrust report` then read the banner-fallback path in
+    `read_artifacts()` and surfaced the generic ingested-WARN message
+    instead of the actual `no_iterations_in_log` diagnostic — masking
+    the real solver-side failure reason.
+    """
+    _make_ingestable_case(tmp_path, with_log=False)
+    # Log file exists (so we pass the precondition check) but contains
+    # zero parseable `Time = N` iterations → triggers the post-residual
+    # `no_iterations_in_log` BLOCKED in `_compute_gate_from_residuals`.
+    (tmp_path / "log_simpleFoam.txt").write_text(
+        "Starting time loop\n"
+        "Some preamble that has no Time = lines whatsoever.\n"
+        "End of log (solver crashed before first iteration printout).\n"
+    )
+    _patch_docker_for_ingest(monkeypatch)
+
+    blocked_gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    assert blocked_gate["status"] == "BLOCKED"
+    assert blocked_gate["details"]["reason"] == "no_iterations_in_log"
+    # The discriminator that drives the new guard: post-residual outcomes
+    # are stamped `execution="ingested"` by the backend wrapper.
+    assert blocked_gate["details"]["execution"] == "ingested"
+
+    # CRITICAL: this real diagnostic MUST be persisted to disk so
+    # `cfdtrust report` surfaces `no_iterations_in_log` instead of the
+    # generic ingested-WARN banner-fallback.
+    gate_path = tmp_path / "artifacts" / "solver_gate.json"
+    assert gate_path.exists(), (
+        "post-residual BLOCKED (execution=ingested) must persist — "
+        "dropping it forces report to fall back to the generic "
+        "ingested-WARN banner and masks the real diagnostic"
+    )
+    persisted = json.loads(gate_path.read_text())
+    assert persisted["status"] == "BLOCKED"
+    assert persisted["details"]["reason"] == "no_iterations_in_log"
+    assert persisted["details"]["execution"] == "ingested"
+
+
+def test_solver_ingest_precondition_blocked_still_protected_by_discriminator(
+    monkeypatch, tmp_path: Path,
+):
+    """DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE: the tighter guard
+    must NOT regress the R6-P1 protection. Precondition refusals carry
+    `details.execution == "skipped"` and still must NOT clobber an
+    existing solver_gate.json from an earlier successful `cfdtrust run`.
+
+    This is the symmetric inverse of the test above: same fixture shape
+    as the original R6-P1 test (no_solver_log_found path), but explicitly
+    asserts the prior-gate-intact invariant under the new discriminator
+    logic."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=True)
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    prior_gate = {
+        "status": "PASS",
+        "summary": "harness-witnessed run converged",
+        "details": {
+            "execution": "real",
+            "real_solver_invoked": True,
+            "iterations": 5000,
+        },
+    }
+    (art / "solver_gate.json").write_text(json.dumps(prior_gate))
+    _patch_docker_for_ingest(monkeypatch)
+
+    blocked_gate = solver_mod.ingest(tmp_path, _ingest_manifest_fixture())
+    assert blocked_gate["status"] == "BLOCKED"
+    assert blocked_gate["details"]["reason"] == "no_solver_log_found"
+    # The discriminator that drives the guard: precondition refusals are
+    # stamped `execution="skipped"` by the backend.
+    assert blocked_gate["details"]["execution"] == "skipped"
+
+    # Existing solver_gate.json from prior `cfdtrust run` is INTACT.
+    persisted = json.loads((art / "solver_gate.json").read_text())
+    assert persisted["status"] == "PASS"
+    assert persisted["details"]["execution"] == "real"
+    assert persisted["summary"] == "harness-witnessed run converged"
+
+
 def test_solver_ingest_persists_gate_json(monkeypatch, tmp_path: Path):
     """The solver_gate.json must be written so cfdtrust report reads
     the SAME truth (M2.3a invariant)."""

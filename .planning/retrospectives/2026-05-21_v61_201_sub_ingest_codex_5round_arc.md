@@ -162,7 +162,9 @@ user-ratified continuation + user-invoked hard-stop) is healthy.
      `solver.py`, +1 net test, 405→406 passing).
    - `DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE`: tighten the R6
      BLOCKED-skip guard to discriminate precondition vs post-residual
-     outcomes (R7 P1).
+     outcomes (R7 P1). **LANDED 2026-05-22**
+     (worktree-agent-a99d74ec81d8094d9, +2 functional LOC in
+     `solver.py` + 2 net tests, 407→409 passing).
    - `DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED`: allow
      decomposed-only ingest when reference_comparison is not_finalized
      (R7 P2).

@@ -373,21 +373,32 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 
     from ..backends.openfoam import ingest as _backend_ingest
     gate = _backend_ingest(case_dir, manifest)
-    # Codex R6-P1 fix: BLOCKED gates from ingest preconditions
-    # (no_solver_log_found, case_decomposed_not_reconstructed,
-    # solver_log_unreadable, docker_not_available, ...) MUST NOT
-    # overwrite `artifacts/solver_gate.json`. The R2-P2 fix already
-    # protected the "unsupported backend" refusal path; the same
-    # protection has to extend to every other "ingest cannot proceed"
-    # outcome. Otherwise pointing `cfdtrust ingest` at a case that
-    # already had a successful `cfdtrust run` would destroy the last
-    # good gate and force the next `cfdtrust report` to read the
-    # stale ingest-BLOCKED state.
+    # Codex R6-P1 fix (tightened by R7-P1 follow-up
+    # DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE): BLOCKED gates
+    # from ingest *preconditions* (no_solver_log_found,
+    # case_decomposed_not_reconstructed, solver_log_unreadable,
+    # docker_not_available, ...) MUST NOT overwrite
+    # `artifacts/solver_gate.json` — every precondition refusal in
+    # the backend carries `details.execution == "skipped"`, so we
+    # gate on that discriminator instead of bare status==BLOCKED.
+    # Otherwise pointing `cfdtrust ingest` at a case that already
+    # had a successful `cfdtrust run` would destroy the last good
+    # gate and force the next `cfdtrust report` to read the stale
+    # ingest-BLOCKED state.
+    #
+    # Post-residual BLOCKED gates (e.g., no_iterations_in_log,
+    # fields_missing_in_log from `_compute_gate_from_residuals`)
+    # carry `details.execution == "ingested"` — those ARE real
+    # ingested-solver evidence outcomes and MUST be persisted, or
+    # `cfdtrust report` falls back to the banner-fallback path in
+    # `read_artifacts()` and surfaces the generic ingested-WARN
+    # message instead of the actual diagnostic (R7-P1 regression).
     #
     # The success path — PASS / WARN / FAIL solver gates carrying
     # `details.execution="ingested"` from `_compute_gate_from_residuals`
     # — IS persisted. That preserves the M2.3a invariant that
     # `read_artifacts()` reads the SAME truth `execute`/`ingest` saw.
-    if gate.get("status") == "BLOCKED":
+    details = gate.get("details", {}) or {}
+    if gate.get("status") == "BLOCKED" and details.get("execution") == "skipped":
         return gate
     return _write_gate(case_dir, gate)

@@ -20,10 +20,10 @@ codex_review_round7_verdict: CHANGES_REQUIRED (P1 over-broad BLOCKED guard suppr
 codex_review_round7_relay: 86gs (effort=xhigh)
 review_chain_terminated: 2026-05-21 (user explicit stop after R7; remaining findings are tracked as known_limitations + follow-up sub-DECs, NOT iterated further)
 known_limitations:
-  - solver.ingest's BLOCKED-skip guard is gate-status-only; over-suppresses post-residual BLOCKEDs (e.g., no_iterations_in_log) that should persist. Tracked in DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE. Worst case is the generic ingested-WARN fallback masking a real solver-side BLOCKED reason at `cfdtrust report` time — does NOT break honesty fences. [R7 P1]
+  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized". Decomposed-only cases with placeholder/not_finalized references could be ingested today. Tracked in DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED. UX-only restriction, not a correctness break. [R7 P2]
 closed_by_followup:
   - banner-fallback in read_artifacts hard-coded WARN → CLOSED by DEC-V61-201-SUB-INGEST-P2-FOLLOWUP (recompute via _parse_simplefoam_log + _compute_gate_from_residuals; LANDED 2026-05-22, worktree-agent-a7e599b4f6b581d31). [R6 P2]
-  - case_decomposed_not_reconstructed BLOCKs ingest for ALL manifests, but `audit/qoi.py` only needs top-level times when reference_comparison.status=="finalized". Decomposed-only cases with placeholder/not_finalized references could be ingested today. Tracked in DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED. UX-only restriction, not a correctness break. [R7 P2]
+  - solver.ingest's BLOCKED-skip guard was gate-status-only; over-suppressed post-residual BLOCKEDs (e.g., no_iterations_in_log) that should persist → CLOSED by DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE (tightened guard to also require details.execution=="skipped"; LANDED 2026-05-22, worktree-agent-a99d74ec81d8094d9, +2 functional LOC + 2 tests, 407→409 passing). [R7 P1]
 ---
 
 ## Why
