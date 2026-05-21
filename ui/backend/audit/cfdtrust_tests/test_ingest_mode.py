@@ -2233,3 +2233,85 @@ def test_bc_expected_fields_les_wale_is_nut_only(monkeypatch, tmp_path: Path):
         f"Gap #31b: LES-WALE algebraic SGS solves NO omega transport eqn; "
         f"omega must NOT be in expected_fields; got {expected}"
     )
+
+
+# ---------- TBD-15 · reacting/combustion solver log fallback names ----------
+
+
+def test_log_fallback_includes_reacting_family(monkeypatch, tmp_path: Path):
+    """TBD-15 (case_009 dogfood): a reacting case with no `manifest.solver`
+    declaration must still find `log_reactingFoam.txt` via the generic
+    fallback list. Pre-fix, the fallback tuple only listed incompressible
+    solvers (simpleFoam / pimpleFoam / icoFoam / potentialFoam / foamRun)
+    and false-BLOCKED reacting / combustion / VOF / compressible / CHT
+    cases even when the log sat right there on disk."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    # Drop a reactingFoam log on disk under its canonical filename.
+    (tmp_path / "log_reactingFoam.txt").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    # Manifest WITHOUT manifest["solver"] — exercise the fallback path
+    # exclusively (per `_candidate_log_names`, manifest-derived primary
+    # is empty when solver is absent).
+    manifest = _ingest_manifest_fixture()
+    del manifest["solver"]
+
+    gate = ofa.ingest(tmp_path, manifest)
+    # The fallback must locate log_reactingFoam.txt; the gate may be
+    # any status OTHER than the specific "no log found" BLOCK.
+    assert gate["details"].get("reason") != "no_solver_log_found", (
+        f"TBD-15: fallback must locate reactingFoam log; got {gate}"
+    )
+    # And the chosen external log must be the reactingFoam one.
+    assert gate["details"].get("external_log_source") == "log_reactingFoam.txt", (
+        f"TBD-15: expected log_reactingFoam.txt; got {gate['details'].get('external_log_source')}"
+    )
+
+
+# ---------- TBD-20 · streaming log parser for multi-GiB logs ----------
+
+
+def test_stream_parser_equivalence(tmp_path: Path):
+    """TBD-20: the streaming parser `_parse_simplefoam_log_stream` must
+    return a dict byte-identical to `_parse_simplefoam_log` for the same
+    input. We build a synthetic multi-iteration log in memory, write it
+    to a tmp file, parse both via text-mode and stream-mode, and assert
+    dict equality. This is the load-bearing correctness invariant —
+    case_009's 3.3 GiB reactingFoam log was unusable via text-mode (OOM
+    at 13.0 GiB peak RSS); the stream variant only has value if it
+    produces the identical structured output."""
+    # Build a multi-iteration log with the canonical residual format,
+    # mixed with y+ output and a SIMPLE convergence message. ~5 KiB —
+    # enough variety to exercise every state-machine branch.
+    lines = []
+    for t in range(1, 51):
+        lines.append(f"Time = {t}")
+        lines.append(
+            f"smoothSolver:  Solving for Ux, Initial residual = {1.0/t:.6e}, "
+            f"Final residual = {1.0/(t*10):.6e}, No Iterations 5"
+        )
+        lines.append(
+            f"GAMG:  Solving for p, Initial residual = {0.5/t:.6e}, "
+            f"Final residual = {0.5/(t*10):.6e}, No Iterations 8"
+        )
+        if t == 25:
+            lines.append("patch wall y+ : min = 0.5, max = 5.0, average = 2.3")
+    lines.append("SIMPLE solution converged in 50 iterations")
+    log_text = "\n".join(lines) + "\n"
+
+    log_path = tmp_path / "log_streaming_equivalence.txt"
+    log_path.write_text(log_text)
+
+    via_text = ofa._parse_simplefoam_log(log_text)
+    via_stream = ofa._parse_simplefoam_log_stream(log_path)
+
+    assert via_text == via_stream, (
+        f"TBD-20: stream parser output must equal text parser output. "
+        f"text={via_text}\nstream={via_stream}"
+    )
+    # Spot-check the structural invariants too — guards against a
+    # degenerate case where both paths return the same empty result.
+    assert via_stream["final_iter"] == 50
+    assert len(via_stream["iterations"]) == 50
+    assert "wall" in via_stream["y_plus"]
+    assert via_stream["converged"] is True
