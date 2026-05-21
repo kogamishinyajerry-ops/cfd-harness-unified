@@ -444,7 +444,7 @@ def _run_docker_command(
 #   smoothSolver:  Solving for Ux, Initial residual = 0.123, Final residual = 0.001, No Iterations 5
 #   GAMG:  Solving for p, Initial residual = 0.45, Final residual = 0.003, No Iterations 12
 _RESIDUAL_LINE_RE = re.compile(
-    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG)\s*:\s*Solving for\s+(\w+),"
+    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG|DILUPBiCGStab|PBiCG|DICPBiCGStab)\s*:\s*Solving for\s+(\w+),"
     r"\s*Initial residual\s*=\s*([\d.eE+\-]+),"
     r"\s*Final residual\s*=\s*([\d.eE+\-]+),"
 )

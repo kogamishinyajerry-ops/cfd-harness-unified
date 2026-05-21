@@ -2025,6 +2025,41 @@ def test_parse_simplefoam_log_handles_empty_input():
     assert parsed["converged"] is False
 
 
+def test_parse_simplefoam_log_recognizes_ofv2312_default_solvers():
+    """Gap #9: OpenFOAM v2312 default fvSolution emits `DILUPBiCGStab` (and
+    cousins `PBiCG` / `DICPBiCGStab`) for momentum/turbulence rows. Pre-fix
+    `_RESIDUAL_LINE_RE` only matched smoothSolver/GAMG/PCG/PBiCGStab/DICPCG,
+    so case_021 (NASA TMR flat plate) silently produced an empty residuals
+    dict → false BLOCKED `no_iterations_in_log` on a converged run.
+    """
+    from cfdtrust.backends import openfoam as ofa
+
+    log = (
+        "Time = 1\n"
+        "DILUPBiCGStab:  Solving for Ux, Initial residual = 1, Final residual = 1.8e-05, No Iterations 1\n"
+        "DILUPBiCGStab:  Solving for k, Initial residual = 0.9, Final residual = 4.0e-05, No Iterations 1\n"
+        "Time = 2\n"
+        "PBiCG:  Solving for Ux, Initial residual = 0.5, Final residual = 5.0e-06, No Iterations 1\n"
+        "DICPBiCGStab:  Solving for k, Initial residual = 0.4, Final residual = 4.0e-06, No Iterations 1\n"
+        "Time = 3\n"
+        "DILUPBiCGStab:  Solving for Ux, Initial residual = 0.1, Final residual = 1.0e-07, No Iterations 1\n"
+        "DILUPBiCGStab:  Solving for k, Initial residual = 0.08, Final residual = 8.0e-08, No Iterations 1\n"
+    )
+
+    parsed = ofa._parse_simplefoam_log(log)
+
+    assert parsed["final_iter"] == 3
+    assert len(parsed["iterations"]) == 3
+    # Each iteration must carry Ux + k residuals (proves the new solver names
+    # were captured, not dropped).
+    for it in parsed["iterations"]:
+        assert "Ux" in it["residuals"], f"Ux missing at iter={it['iter']}"
+        assert "k" in it["residuals"], f"k missing at iter={it['iter']}"
+    assert parsed["iterations"][0]["residuals"]["Ux"] == 1.0
+    assert parsed["iterations"][1]["residuals"]["Ux"] == 0.5
+    assert parsed["iterations"][2]["residuals"]["Ux"] == 0.1
+
+
 def test_compute_gate_from_residuals_passes_when_converged():
     """2c gate positive: a parsed log that meets every residual target
     produces PASS with `real_solver_invoked: True`. Manifest split-component
