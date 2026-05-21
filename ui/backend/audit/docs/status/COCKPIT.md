@@ -1,9 +1,9 @@
 # AI-CFD-V2 — Project Cockpit
 
-> Generated: `2026-05-21T08:21:41Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+> Generated: `2026-05-21T08:26:33Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
 > All sections below are derived from repo state. No hand-written narrative lives here.
 
-## Overall Status: 🔴 RED
+## Overall Status: 🟡 AMBER
 
 ## Phase Progress
 
@@ -59,7 +59,7 @@
 ## Integrity Checks
 
 - PASS events without evidence: **0** (must be 0)
-- PASS events with phantom evidence (paths do not resolve): **3** (must be 0)
+- PASS events with phantom evidence (paths do not resolve): **0** (must be 0)
 - mocked solver reports: 2
 - real solver reports:   1
 - agents declared: 13

@@ -160,7 +160,7 @@ def test_derive_bright_spots_excludes_phantom_evidence(tmp_path: Path, repo_root
     """
     rd = _load_render_dashboard()
 
-    real_path = "CLAUDE.md"  # known to exist at repo_root
+    real_path = "README.md"  # known to exist at repo_root
     assert (repo_root / real_path).exists(), "fixture sanity"
 
     events = [
@@ -199,7 +199,7 @@ def test_count_phantom_evidence_pass_events(tmp_path: Path, repo_root: Path):
     events = [
         {
             "time": "2099-01-01T00:00:00Z", "agent": "a", "task_id": "T1",
-            "status": "PASS", "summary": "ok", "evidence": ["CLAUDE.md"],
+            "status": "PASS", "summary": "ok", "evidence": ["README.md"],
         },
         {
             "time": "2099-01-02T00:00:00Z", "agent": "b", "task_id": "T2",
@@ -208,7 +208,7 @@ def test_count_phantom_evidence_pass_events(tmp_path: Path, repo_root: Path):
         {
             "time": "2099-01-03T00:00:00Z", "agent": "c", "task_id": "T3",
             "status": "PASS", "summary": "another lie",
-            "evidence": ["CLAUDE.md", "missing.txt"],  # one real, one phantom = still phantom
+            "evidence": ["README.md", "missing.txt"],  # one real, one phantom = still phantom
         },
     ]
     log = _write_events(tmp_path, events)

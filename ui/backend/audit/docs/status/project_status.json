@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-21T08:21:41Z",
+  "generated_at": "2026-05-21T08:26:33Z",
   "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
   "git": {
     "branch": "feature/audit-cfdtrust-merge",
-    "head": "26925e0decf96bf49a462a3565b1991ec41be303",
+    "head": "5d607d0ca2e421092da831ff530552a069800d4a",
     "dirty": true
   },
-  "overall_status": "RED",
+  "overall_status": "AMBER",
   "phase": "Phase 1 \u2014 Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)",
   "tasks": {
     "total": 10,
@@ -431,7 +431,7 @@
   ],
   "metrics": {
     "schema_version": 1,
-    "generated_at": "2026-05-21T08:21:41Z",
+    "generated_at": "2026-05-21T08:26:33Z",
     "total_tasks": 10,
     "completed_tasks": 10,
     "blocked_tasks": 3,
@@ -441,6 +441,6 @@
     "mocked_solver_reports": 2,
     "real_solver_reports": 1,
     "notes": "Baseline metrics. Populated by tools/cwos_status.py.",
-    "phantom_evidence_pass_events": 3
+    "phantom_evidence_pass_events": 0
   }
 }
