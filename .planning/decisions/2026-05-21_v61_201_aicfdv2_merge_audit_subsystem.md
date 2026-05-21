@@ -74,19 +74,43 @@ dropped.
    marked archived (read-only) post-merge; AI-CFD-V2/README updated with
    migration note pointing to this DEC + the merge commit.
 
-## Merge mechanics (5 phases, 10 commits)
+## Merge mechanics — code-committed work (A through partial E)
 
-| Phase | Commit count | Description |
+The five-phase plan has its **commit-backed work complete** on the
+feature branch; the **post-commit work** (push + GitHub archive +
+AI-CFD-V2/README migration note) is gated on this Codex review +
+user ratification per V133. Two boundaries to keep distinct.
+
+### Commit-backed phases (committed on feature/audit-cfdtrust-merge)
+
+| Phase | Commits | Description |
 |---|---|---|
 | A | 1 | Worktree branch created from main, audit/ skeleton + README |
 | B | 2 | cfdtrust/ source package + cfdtrust_tests/ + cases/ migration |
 | C | 1 | 13 agents copied to .claude/agents/ with scope: ui/backend/audit/ |
-| D | 2 | .cwos/ + tools/ + docs/ + audit-local .gitignore + agent duplicate |
-| E | this DEC + merge commit + push + repo archive | (in progress) |
+| D | 2 | .cwos/ + tools/ + docs/ + audit-local .gitignore + agent duplicate + phantom fixup |
+| E (partial) | 2 | DEC V61-201 + RESUME_NEXT_SESSION checkpoint |
 
-Branch: `feature/audit-cfdtrust-merge`, worktree at
-`/Users/Zhuanz/Desktop/cfd-audit-merge`. Not yet pushed; PR / merge into
-main is part of Phase E.
+Code-committed total: 8 commits on `feature/audit-cfdtrust-merge`.
+Re-running `git log main..HEAD --oneline` in the worktree at
+`/Users/Zhuanz/Desktop/cfd-audit-merge` is the source of truth; any
+later Codex-round fix commits will extend this count.
+
+### Phase E remainder (post-commit, not yet done)
+
+These steps run AFTER Codex APPROVE + user ratification:
+
+- `git push origin feature/audit-cfdtrust-merge` (publishes the branch)
+- Update this DEC's frontmatter `status: Proposed` → `Accepted` with
+  Codex round count recorded
+- `gh repo archive kogamishinyajerry-ops/AI-CFD-V2` (mark read-only)
+- Commit migration note to `/Users/Zhuanz/Desktop/AI-CFD-V2/README.md`
+  pointing at this DEC + the merge commit SHA, push to AI-CFD-V2 origin
+- Drop `ui/backend/audit/RESUME_NEXT_SESSION.md` (no longer needed once
+  the resume path is closed)
+
+Branch + worktree: `feature/audit-cfdtrust-merge` at
+`/Users/Zhuanz/Desktop/cfd-audit-merge`. Not yet pushed.
 
 ## Test fence
 
@@ -157,24 +181,38 @@ unified main (single git revert). Still feasible but with more friction.
 
 ## Acceptance criteria
 
-- [x] All 5 phases (A-E) committed with documented commit messages
-- [x] 360/360 tests pass in new location
-- [x] cockpit `overall_status` = AMBER (matches pre-merge baseline)
-- [x] No test introduces phantom_count > 0
-- [x] cfd-harness-unified main branch untouched (work is on feature branch)
-- [x] codex/v4-import-blueprint-fidelity branch untouched
+Two groups: commit-backed (must be true in the feature branch tree) and
+post-commit (only executed once Codex APPROVE + user ratification land).
+
+### Commit-backed (verifiable from `feature/audit-cfdtrust-merge` HEAD)
+
+- [x] Phases A-D committed with documented commit messages
+- [x] Phase E partial: DEC V61-201 + RESUME_NEXT_SESSION committed
+- [x] 360 / 1 skip pytest count in audit subsystem matches AI-CFD-V2 baseline
+- [x] `pip install -e .[dev]` from `ui/backend/audit/` produces working `cfdtrust` CLI (Codex R1 P1 integration fence)
+- [x] cockpit `overall_status` = AMBER, `phantom_count` = 0 (matches AI-CFD-V2 pre-merge baseline)
+- [x] cfd-harness-unified `main` branch untouched
+- [x] `codex/v4-import-blueprint-fidelity` branch untouched
 - [x] Kogami workflow files (P-1..P-5) untouched
 - [x] This DEC (V61-201) written + committed
-- [ ] Codex review (round cap=3) — next session
+- [x] README + DEC + CWOS marker events tell one singular timeline (Codex R1 P2 fixup committed)
+
+### Post-commit (gated on Codex APPROVE + user ratification)
+
+- [ ] Codex review APPROVE (V133 round cap=3 — currently round 1 returned CHANGES_REQUIRED P1/P2/P3; round 2 will verify fixups)
 - [ ] User ratification
-- [ ] Push feature/audit-cfdtrust-merge to origin
-- [ ] AI-CFD-V2 GitHub repo archived (final phase E step)
-- [ ] AI-CFD-V2/README migration note commit (final phase E step)
+- [ ] `git push origin feature/audit-cfdtrust-merge`
+- [ ] DEC frontmatter `status`: `Proposed` → `Accepted` (with Codex round count recorded)
+- [ ] `gh repo archive kogamishinyajerry-ops/AI-CFD-V2`
+- [ ] Migration note appended to AI-CFD-V2/README pointing at this DEC + merge commit SHA, pushed to AI-CFD-V2 origin
+- [ ] `ui/backend/audit/RESUME_NEXT_SESSION.md` deleted in the same push
 
 ## Follow-ups
 
-1. **Next session Codex review** of this DEC + the 9 merge commits
-   (round 1, v2.3 round cap=3 applies)
+1. **Codex review** of this DEC + the current 8 (+ fixup) merge commits
+   (round 1 returned CHANGES_REQUIRED — P1 packaging + P2 README/CWOS
+   consistency + P3 DEC bookkeeping — all addressed in fixup commits
+   on this branch; round 2 verifies the fixups; v2.3 round cap=3)
 2. **Notion session-end batch sync** to add this DEC to the Decisions DB
 3. **Update cfd-harness-unified/.claude/MODEL_ROUTING.md** to note that
    the 13 new agents are scoped to the audit subsystem (avoids

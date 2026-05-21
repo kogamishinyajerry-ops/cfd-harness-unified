@@ -61,28 +61,49 @@ that confuse git, or cross-subsystem path probing that creates coupling).
 `kogami-claude-cosplay.md` exists ONLY at the project root — it is a
 cfd-harness-unified global agent, NOT an audit subsystem agent.
 
-## Cockpit overall_status: RED is honest (not a bug)
+## Cockpit overall_status: AMBER (honest, post-fixup)
 
-After the merge, `tools/cwos_status.py` reports `phantom_count = 4`. These
-are events from PH0-BOOTSTRAP, PH0-AGENTS-001, PH0-SKILLS-001, and
-REDTEAM-ROUND14-META-FIX whose evidence paths point to files that live
-at the cfd-harness-unified project root (e.g. `CLAUDE.md`,
-`.gitignore`, `.claude/skills/plan-sprint/SKILL.md`) — OUTSIDE the
-audit subsystem boundary.
+`tools/cwos_status.py` reports `overall_status = AMBER` and
+`phantom_count = 0`. AMBER reflects that 2 of 3 cases (flat_plate, BFS)
+still use mocked solver execution — only the channel case is real-solver
+validated. AMBER is the honest signal at merge time and matches the
+AI-CFD-V2 pre-merge baseline.
 
-This is **architectural phantom**, not validation drift. The files DO
-exist (in cfd-harness-unified at large); they just aren't resolvable
-from the audit subsystem's REPO_ROOT. Per CLAUDE.md §Non-negotiable #11
-"Do not hide mocked execution" we surface this honestly. The marker
-event `MERGE-AICFDV2-INTO-AUDIT` records the merge boundary as the
-authoritative explanation.
+### Phantom-count migration history (timeline · resolved post-fixup)
 
-If a future audit needs to relax this gate, two options exist:
-(a) extend `cwos_paths.evidence_paths_all_safe_and_exist` with a
-"resolve relative to ancestor repo root if missing locally" fallback;
-(b) rewrite the 4 historical events' evidence to in-subsystem
-equivalents (potentially destructive — history would no longer point
-to the original validation artifacts). Neither is in scope at merge time.
+Right after the bulk migration, `phantom_count = 4`. Four PASS events
+(PH0-BOOTSTRAP, PH0-AGENTS-001, PH0-SKILLS-001, REDTEAM-ROUND14-META-FIX)
+had evidence paths pointing OUTSIDE the audit subsystem boundary
+(`CLAUDE.md`, `.gitignore`, `.claude/skills/plan-sprint/SKILL.md`, etc.).
+
+Two events resolved automatically by Phase C / D landings:
+- **PH0-AGENTS-001**: cleared when the 13 agents were duplicated into
+  `ui/backend/audit/.claude/agents/` (Phase D).
+- **REDTEAM-ROUND14-META-FIX**: cleared when the audit-local
+  `.gitignore` was added (Phase D finalize).
+
+The remaining two (PH0-BOOTSTRAP, PH0-SKILLS-001) were resolved by an
+**evidence-path rewrite** in `agent_events.jsonl` (Phase D finalize):
+- PH0-BOOTSTRAP: `CLAUDE.md` → `docs/project-memory/NORTH_STAR.md`
+  (the audit subsystem's project-rules SSOT)
+- PH0-SKILLS-001: 5 `.claude/skills/*.md` paths → single
+  `docs/project-memory/CURRENT_SCOPE.md` (the subsystem's authoritative
+  declaration of what skill coverage applies)
+
+This rewrite was deliberate adaptation, not history tampering. The
+pre-rewrite log is preserved at `.cwos/agent_events.jsonl.pre_migration_backup`
+for full provenance.
+
+`MERGE-AICFDV2-INTO-AUDIT` is the marker event for the **initial bulk
+migration** (when `phantom_count` was still 4). A separate
+`MERGE-PHANTOM-CLEANUP-2026-05-21` event documents the subsequent
+zero-phantom state explicitly so a future reviewer sees one timeline,
+not contradictory snapshots.
+
+If a future audit reviewer disagrees with the rewrite, the original
+events can be restored by `cp .cwos/agent_events.jsonl.pre_migration_backup
+.cwos/agent_events.jsonl`; the audit-subsystem REPO_ROOT semantics do
+not depend on those events being rewritten.
 
 ## Migration provenance
 

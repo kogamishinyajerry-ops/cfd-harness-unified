@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset='utf-8'><title>AI-CFD-V2 Cockpit</title><style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#111}pre{white-space:pre-wrap;background:#0b1020;color:#dbe6ff;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5}h1{font-size:22px}.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:13px;margin-left:8px}.green{background:#d2f5dd;color:#0a6b2c}.amber{background:#fff1c2;color:#7a5300}.red{background:#ffd6d6;color:#8a0d0d}</style></head><body><h1>AI-CFD-V2 Cockpit<span class='badge amber'>AMBER</span></h1><pre># AI-CFD-V2 — Project Cockpit
 
-&gt; Generated: `2026-05-21T08:26:33Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+&gt; Generated: `2026-05-21T08:47:51Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
 &gt; All sections below are derived from repo state. No hand-written narrative lives here.
 
 ## Overall Status: 🟡 AMBER
@@ -45,11 +45,11 @@
 
 ## Bright Spots
 
+- `MERGE-PHANTOM-CLEANUP-2026-05-21` — project-governor — Supersedes MERGE-AICFDV2-INTO-AUDIT regarding phantom_count. After Phase D landings (13 agents duplicated into audit/.claude/agents/ + audit-local .gitignore + evidence rewrites in PH0-BOOTSTRAP and PH0-SKILLS-001), phantom_count=0 and cockpit overall_status=AMBER (matches AI-CFD-V2 pre-merge baseline). Pre-rewrite log preserved at .cwos/agent_events.jsonl.pre_migration_backup. Read README.md §Phantom-count migration history for the singular timeline.  _(evidence files: 3)_
 - `MERGE-AICFDV2-INTO-AUDIT` — project-governor — AI-CFD-V2 merged into cfd-harness-unified/ui/backend/audit/. Historical CWOS events preserved verbatim; 4 cross-repo evidence references are architectural phantoms (CLAUDE.md, .gitignore, cross-subsystem .claude/agents/* / .claude/skills/* live at cfd-harness-unified root); phantom_count=4 = honest signal of merge boundary, NOT validation drift.  _(evidence files: 2)_
 - `M92-ARTIFACTS-LANDED` — openfoam-adapter-engineer — M9.2 channel artifacts landed in-repo (governance fix): cfdtrust run+audit+report executed inside cases/channel_flow_rans_sst/; 11 evidence files now under git, validation_status=validated, max_rel_err 2.22% vs MKM 1999 DNS  _(evidence files: 8)_
 - `PH1-R25-META` — test-red-team — Red Team Round-25 review of M9.2: 0 HIGH/MED/LOW fixes; 3 LOW documented design choices (per-case targets, U-resolution order, source-term floor)  _(evidence files: 2)_
 - `M92-CHANNEL-CONVERGE` — openfoam-adapter-engineer — M9.2: channel converges via cyclic+meanVelocityForce; all 6 gates PASS, validated within 2.22% of NASA MKM 1999 DNS Cf  _(evidence files: 8)_
-- `PH1-R24-META` — test-red-team — Round-24 M9.1 meta scan: 15 probes, 1 HIGH closed in batch (R24-F-01: validation_status could claim validated despite solver FAIL when ref happened to PASS — latent since project start, surfaced by M9.1 channel reference wiring). 2 LOW info documented. Every silent-validation path now closed.  _(evidence files: 3)_
 
 ## Decisions Needed
 

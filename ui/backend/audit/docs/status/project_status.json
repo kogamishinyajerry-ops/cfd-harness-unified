@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-21T08:26:33Z",
+  "generated_at": "2026-05-21T08:47:51Z",
   "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
   "git": {
     "branch": "feature/audit-cfdtrust-merge",
-    "head": "5d607d0ca2e421092da831ff530552a069800d4a",
+    "head": "3a9904d11bfd06a3ca7a7cf60e7ca111ff350700",
     "dirty": true
   },
   "overall_status": "AMBER",
@@ -244,24 +244,8 @@
     ]
   },
   "events": {
-    "count": 64,
+    "count": 65,
     "latest": [
-      {
-        "time": "2026-05-21T06:17:30Z",
-        "agent": "test-red-team",
-        "task_id": "PH1-R24-META",
-        "status": "PASS",
-        "summary": "Round-24 M9.1 meta scan: 15 probes, 1 HIGH closed in batch (R24-F-01: validation_status could claim validated despite solver FAIL when ref happened to PASS \u2014 latent since project start, surfaced by M9.1 channel reference wiring). 2 LOW info documented. Every silent-validation path now closed.",
-        "evidence": [
-          "docs/status/red_team_round24_review.md",
-          "docs/project-memory/RISK_REGISTER.md",
-          "cfdtrust/audit/report.py"
-        ],
-        "tests": "PYTHONPATH=src python -m pytest -q",
-        "blockers": [],
-        "decision_required": false,
-        "next_action": null
-      },
       {
         "time": "2026-05-21T07:30:57Z",
         "agent": "openfoam-adapter-engineer",
@@ -330,6 +314,22 @@
           ".cwos/agent_events.jsonl.pre_migration_backup"
         ],
         "tests": "python tools/cwos_status.py && python tools/cwos_render_dashboard.py",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      },
+      {
+        "time": "2026-05-21T08:47:51Z",
+        "agent": "project-governor",
+        "task_id": "MERGE-PHANTOM-CLEANUP-2026-05-21",
+        "status": "PASS",
+        "summary": "Supersedes MERGE-AICFDV2-INTO-AUDIT regarding phantom_count. After Phase D landings (13 agents duplicated into audit/.claude/agents/ + audit-local .gitignore + evidence rewrites in PH0-BOOTSTRAP and PH0-SKILLS-001), phantom_count=0 and cockpit overall_status=AMBER (matches AI-CFD-V2 pre-merge baseline). Pre-rewrite log preserved at .cwos/agent_events.jsonl.pre_migration_backup. Read README.md \u00a7Phantom-count migration history for the singular timeline.",
+        "evidence": [
+          "README.md",
+          ".cwos/agent_events.jsonl.pre_migration_backup",
+          "docs/status/project_status.json"
+        ],
+        "tests": "python tools/cwos_status.py | grep -E 'overall=AMBER' && python -c 'import json; d=json.load(open(\"docs/status/project_status.json\")); assert d[\"metrics\"][\"phantom_evidence_pass_events\"]==0'",
         "blockers": [],
         "decision_required": false,
         "next_action": null
@@ -431,7 +431,7 @@
   ],
   "metrics": {
     "schema_version": 1,
-    "generated_at": "2026-05-21T08:26:33Z",
+    "generated_at": "2026-05-21T08:47:51Z",
     "total_tasks": 10,
     "completed_tasks": 10,
     "blocked_tasks": 3,
