@@ -102,7 +102,7 @@ BLOCKED, which is the correct honest signal.
 
 ## Implementation note
 
-- **Commit**: `TBD-recompute-followup` (worktree-agent-a7e599b4f6b581d31 branch; SHA updated in follow-up amendment commit if needed).
+- **Commit**: `bbe2c4e` on `worktree-agent-a7e599b4f6b581d31`.
 - **Code change**: `ui/backend/audit/cfdtrust/audit/solver.py::read_artifacts()` banner-fallback branch. The previous hard-coded WARN return was replaced with a 3-step recompute:
   1. Lazy-import `_parse_simplefoam_log` + `_compute_gate_from_residuals` from `..backends.openfoam`.
   2. Re-parse the on-disk `solver.log` (banner lines pass through the parser harmlessly — neither `_TIME_LINE_RE` nor `_RESIDUAL_LINE_RE` match them).
