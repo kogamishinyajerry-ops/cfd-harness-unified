@@ -1818,6 +1818,16 @@ def _find_external_solver_log(
     fallback. We deliberately do NOT recurse — arbitrary subdir walks
     invite DoS-on-deep-trees plus ambiguity when multiple solver logs
     live at different depths.
+
+    Gap #14 (case_004 NREL MRF dogfood): industrial workflows commonly
+    save versioned suffix variants like `log.simpleFoam.v4`,
+    `log.simpleFoam.fullrun` next to each other. Exact-name matching
+    misses these. After exact-name exhaustion (which preserves Gap
+    #10 / R1-P1 precedence semantics), fall back to `log.<solver>*`
+    glob and pick the newest-by-mtime match. Glob is restricted to the
+    sanitised manifest solver prefix only — never falls back to a bare
+    `log.*` glob (would mismatch unrelated `log.checkMesh`, etc.).
+    Applied in BOTH top-level and `log/` subdir.
     """
     primary, fallback = _candidate_log_names(manifest)
     candidates = (*primary, *fallback)
@@ -1833,6 +1843,61 @@ def _find_external_solver_log(
             p = log_subdir / name
             if p.is_file():
                 return p
+    # Gap #14: versioned-suffix glob fallback. Only fires if manifest
+    # carries a sanitised solver name (re-derived from primary list).
+    solver_glob: str | None = None
+    for name in primary:
+        if name.startswith("log."):
+            # name == "log.<solver>" → glob "log.<solver>*"
+            solver_glob = f"{name}*"
+            break
+    if solver_glob is not None:
+        for dir_to_scan in (case_dir, log_subdir if log_subdir.is_dir() else None):
+            if dir_to_scan is None:
+                continue
+            try:
+                matches = [p for p in dir_to_scan.glob(solver_glob) if p.is_file()]
+            except OSError:
+                matches = []
+            if matches:
+                matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                return matches[0]
+    return None
+
+
+# Gap #13: divergence-marker patterns. case_004 NREL diverged-at-iter-4
+# left a solver.log with FATAL + nan + Foam::error::printStack but never
+# wrote any time dir. Listed in order of strongest-to-weakest signal —
+# any one match is sufficient evidence to flag likely_divergence.
+_DIVERGENCE_MARKERS: Tuple[str, ...] = (
+    "FOAM FATAL ERROR",
+    "Foam::error::printStack",
+    "floating point exception",
+    "-nan",
+    " nan ",
+    " inf ",
+    "+inf",
+    "-inf",
+)
+
+
+def _scan_solver_log_for_divergence(log_path: Path) -> str | None:
+    """Return the first divergence-marker line found in `log_path`, or
+    None if the log is clean. Reads the tail of the file (last 64 KiB)
+    so industrial logs that grew to tens of MiB before crashing don't
+    force full reads — divergence symptoms always appear near the end."""
+    try:
+        size = log_path.stat().st_size
+        with log_path.open("rb") as f:
+            if size > 65536:
+                f.seek(size - 65536)
+            tail = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in tail.splitlines():
+        for marker in _DIVERGENCE_MARKERS:
+            if marker in line:
+                return line.strip()[:240]  # cap evidence length
     return None
 
 
@@ -2098,19 +2163,33 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     # 0/ alone means the case has initial conditions but never ran.
     time_dirs = _find_time_directories(case_dir)
     if not time_dirs:
+        details: Dict[str, Any] = {
+            "execution": "skipped",
+            "real_solver_invoked": False,
+            "reason": "no_time_directory_found",
+            "next_step": (
+                "Run the case externally first (any compatible OpenFOAM "
+                "build), then re-run `cfdtrust ingest`. For new cases "
+                "authored from scratch, use `cfdtrust run` instead."
+            ),
+        }
+        # Gap #13: case_004 NREL diverged-at-iter-4 surface. If a solver
+        # log IS locatable and carries divergence markers, the case
+        # almost-certainly ran but blew up before any writeInterval —
+        # surface that to the user instead of generic "never ran" advice.
+        divergence_log = _find_external_solver_log(case_dir, manifest)
+        if divergence_log is not None:
+            evidence = _scan_solver_log_for_divergence(divergence_log)
+            if evidence is not None:
+                details["likely_divergence"] = True
+                details["divergence_evidence"] = evidence
+                details["divergence_log_source"] = str(
+                    divergence_log.relative_to(case_dir)
+                )
         return {
             "status": "BLOCKED",
             "summary": "Case has no time directory beyond 0/; nothing to ingest.",
-            "details": {
-                "execution": "skipped",
-                "real_solver_invoked": False,
-                "reason": "no_time_directory_found",
-                "next_step": (
-                    "Run the case externally first (any compatible OpenFOAM "
-                    "build), then re-run `cfdtrust ingest`. For new cases "
-                    "authored from scratch, use `cfdtrust run` instead."
-                ),
-            },
+            "details": details,
         }
 
     # Codex R4-P2 fix (R7-P2 relaxation per DEC-V61-201-SUB-INGEST-P2-
