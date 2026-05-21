@@ -1,0 +1,19 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+transportModel  Newtonian;
+
+// Kinematic viscosity of air at ~15 C, 1 atm.
+// Re_L = U*L/nu = 30 * 1 / 1.5e-5 = 2e6 → fully-turbulent boundary layer on plate.
+nu              1.5e-05;
+
+// ************************************************************************* //

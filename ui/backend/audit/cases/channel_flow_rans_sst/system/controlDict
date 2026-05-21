@@ -1,0 +1,82 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | AI-CFD-V2 Phase 1 step 2b scaffold              |
+|  \\    /   O peration     | OpenFOAM 11                                     |
+|   \\  /    A nd           | Case: flat_plate_rans_sst                       |
+|    \\/     M anipulation  | See CASE_NOTES.md for production/placeholder    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     simpleFoam;
+
+startFrom       startTime;
+startTime       0;
+
+stopAt          endTime;
+endTime         1000;         // matches manifest.solver_contract.max_iterations (M9 channel)
+
+deltaT          1;            // steady — pseudo time-step
+
+writeControl    timeStep;
+writeInterval   100;          // keep at least 5 snapshots within 500 iters
+purgeWrite      0;
+
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+
+timeFormat      general;
+timePrecision   6;
+
+runTimeModifiable true;
+
+// Function objects: residuals get written every iteration so the
+// trust harness has a structured log to parse into residuals.csv.
+// yPlus is reported at writeInterval so the post-run audit (Phase 1 step
+// 2c gate computation) can compare against `mesh_contract.y_plus_target`.
+functions
+{
+    residuals
+    {
+        type            residuals;
+        libs            ("libutilityFunctionObjects.so");
+        fields          (U p k omega);
+        writeControl    timeStep;
+        writeInterval   1;
+    }
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    timeStep;
+        writeInterval   100;
+        log             yes;
+        patches         (bottomWall topWall);
+    }
+    // Sub-commit 2d: wallShearStress FO emits per-face wall shear stress at
+    // each output write step. Combined with x-coordinate of each face center
+    // (extracted via the same FO machinery), this gives the Cf(x)
+    // distribution that drives reference_comparison against NASA TMR.
+    //
+    // Output convention (OpenFOAM 11): vector field `wallShearStress`
+    // written to `<time>/wallShearStress` for the patches listed.
+    // The post-processing extractor reads this AND the mesh's face-center
+    // x-coordinates to assemble `qoi.csv` rows of (x, Cf).
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;     // emit at every solver write step (every 100 iters)
+        log             yes;
+        patches         (bottomWall topWall);
+    }
+}
+
+// ************************************************************************* //

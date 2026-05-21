@@ -1,0 +1,55 @@
+{
+  "generated_at": "2026-05-21T08:13:26Z",
+  "case_id": "flat_plate_rans_sst",
+  "phase": "M6",
+  "gate_status": "MOCKED",
+  "zero_dir_inspected": false,
+  "declared_sections": {
+    "inlet": {
+      "velocity": {
+        "type": "fixedValue",
+        "magnitude_m_s": 30.0
+      },
+      "pressure": {
+        "type": "zeroGradient"
+      },
+      "k": {
+        "type": "turbulentIntensityKineticEnergyInlet",
+        "intensity": 0.01
+      },
+      "omega": {
+        "type": "turbulentMixingLengthFrequencyInlet",
+        "mixingLength": 0.01
+      }
+    },
+    "outlet": {
+      "pressure": {
+        "type": "fixedValue",
+        "value_Pa": 0.0
+      },
+      "velocity": {
+        "type": "zeroGradient"
+      }
+    },
+    "wall": {
+      "velocity": {
+        "type": "noSlip"
+      },
+      "k": {
+        "type": "kqRWallFunction"
+      },
+      "omega": {
+        "type": "omegaWallFunction"
+      }
+    },
+    "turbulence_fields": [
+      "k",
+      "omega",
+      "nut"
+    ]
+  },
+  "notes": [
+    "solver_backend=mocked; 0/ files were not parsed by the backend.",
+    "BC validation requires a real-backend run."
+  ]
+}

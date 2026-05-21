@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-cfd-v2/schemas/trust_report.schema.json",
+  "title": "trust_report",
+  "type": "object",
+  "required": [
+    "case_id",
+    "generated_at",
+    "overall_status",
+    "solver_execution",
+    "validation_status",
+    "gates",
+    "artifacts",
+    "limitations",
+    "next_actions"
+  ],
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "$comment": "Red Team F-03: mocked solver may NEVER claim validated. The rule now lives in the schema, not only in report.py.",
+      "if": {
+        "properties": { "solver_execution": { "const": "mocked" } },
+        "required": ["solver_execution"]
+      },
+      "then": {
+        "properties": {
+          "validation_status": { "not": { "const": "validated" } }
+        }
+      }
+    },
+    {
+      "$comment": "Red Team F-03: overall_status PASS forbids mocked or skipped solver execution.",
+      "if": {
+        "properties": { "overall_status": { "const": "PASS" } },
+        "required": ["overall_status"]
+      },
+      "then": {
+        "properties": {
+          "solver_execution": { "const": "real" }
+        }
+      }
+    },
+    {
+      "$comment": "Red Team F-03: a validated report requires a real solver run.",
+      "if": {
+        "properties": { "validation_status": { "const": "validated" } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "properties": {
+          "solver_execution": { "const": "real" }
+        }
+      }
+    },
+    {
+      "$comment": "R16-F-07: a `validated` report requires reference_comparison gate to be PASS. Pre-fix, a regression in the aggregator could stamp validation_status=validated with reference_comparison.status=FAIL.",
+      "if": {
+        "properties": { "validation_status": { "const": "validated" } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "properties": {
+          "gates": {
+            "properties": {
+              "reference_comparison": {
+                "properties": {
+                  "status": { "const": "PASS" }
+                },
+                "required": ["status"]
+              }
+            },
+            "required": ["reference_comparison"]
+          }
+        },
+        "required": ["gates"]
+      }
+    }
+  ],
+  "properties": {
+    "case_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "overall_status": {
+      "type": "string",
+      "enum": ["PASS", "WARN", "FAIL", "BLOCKED", "MOCKED"]
+    },
+    "solver_execution": {
+      "type": "string",
+      "enum": ["real", "mocked", "skipped"]
+    },
+    "validation_status": {
+      "type": "string",
+      "enum": ["validated", "not_validated", "partial", "unknown"]
+    },
+    "gates": {
+      "type": "object",
+      "required": [
+        "geometry_contract",
+        "mesh_contract",
+        "bc_contract",
+        "solver_execution",
+        "qoi_extraction",
+        "reference_comparison"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "geometry_contract": { "$ref": "#/definitions/gate" },
+        "mesh_contract": { "$ref": "#/definitions/gate" },
+        "bc_contract": { "$ref": "#/definitions/gate" },
+        "solver_execution": { "$ref": "#/definitions/gate" },
+        "qoi_extraction": { "$ref": "#/definitions/gate" },
+        "reference_comparison": { "$ref": "#/definitions/gate" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "definitions": {
+    "gate": {
+      "type": "object",
+      "required": ["status"],
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PASS", "WARN", "FAIL", "BLOCKED", "MOCKED", "SKIPPED"]
+        },
+        "summary": { "type": "string" },
+        "artifact": { "type": "string" },
+        "details": { "type": "object", "additionalProperties": true }
+      }
+    }
+  }
+}

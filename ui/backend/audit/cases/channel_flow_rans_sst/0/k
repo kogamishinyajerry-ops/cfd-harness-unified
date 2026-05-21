@@ -1,0 +1,45 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Channel turbulent kinetic energy. M9.2 cyclic: inlet/outlet cyclic; wall    |
+| functions on top/bottom; internal seeded with k_design = 0.015 from the     |
+| (U=10, I=0.01) derivation.                                                   |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 0.015;
+
+boundaryField
+{
+    inlet
+    {
+        type            cyclic;
+    }
+    outlet
+    {
+        type            cyclic;
+    }
+    bottomWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.015;
+    }
+    topWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.015;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,54 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | AI-CFD-V2 M2 — backward_facing_step             |
+|  \\    /   O peration     | OpenFOAM 11                                     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+// omega = sqrt(k) / (C_mu^0.25 * L) ; C_mu = 0.09, L = 0.00127 m (~0.1H)
+// = sqrt(0.293) / (0.547 * 0.00127) = 779 1/s
+internalField   uniform 779;
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    0.00127;
+        value           uniform 779;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            omegaWallFunction;
+        value           uniform 779;
+    }
+    stepFace
+    {
+        type            omegaWallFunction;
+        value           uniform 779;
+    }
+    topWall
+    {
+        type            omegaWallFunction;
+        value           uniform 779;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

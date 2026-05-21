@@ -1,0 +1,131 @@
+# AI-CFD-V2 canonical case 2: Driver-Seegmiller backward-facing step.
+# Steady incompressible RANS, k-omega SST, M ~ 0.128 (incompressible-OK).
+# Reference: NASA TMR 2D backward step validation case
+# (https://tmbwg.github.io/turbmodels/backstep_val.html).
+#
+# Honesty disclosure: this case ships scaffolded with the same coarse-mesh +
+# high-Re wall-function strategy as flat_plate_rans_sst. The harness is
+# expected to FAIL the reference_comparison gate (M2 explicit goal is to
+# prove harness GENERALITY, not PASS — that's M1 territory).
+
+case_id: backward_facing_step
+case_family: canonical_rans_validation
+solver_backend: mocked  # flip to `openfoam` for a live run; see flat_plate manifest
+solver: simpleFoam
+
+physics:
+  regime: steady_incompressible_RANS
+  fluid: generic_air
+  turbulence_model: kOmegaSST
+  compressible: false
+  steady: true
+
+# Domain geometry (units = m):
+#   H (step height) = 0.0127 m (0.5 inch, Driver-Seegmiller)
+#   upstream channel: x in [-4H, 0], y in [0, 9H]
+#   downstream channel: x in [0, 30H], y in [-H, 9H]
+#   2.5D extrusion: z in [0, 0.5H]
+# Reynolds: U_ref * H / nu = 44.2 * 0.0127 / 1.5e-5 = 37,400 (~ Re_H ~ 36000 target)
+geometry_contract:
+  required_patches:
+    - inlet
+    - outlet
+    - bottomWall
+    - stepFace
+    - topWall
+    - frontAndBack
+  dimensionality: "2.5D"
+  unit_system: SI
+
+mesh_contract:
+  checkmesh_required: true
+  boundary_layer_required: true
+  y_plus_target:
+    min: 0.5
+    max: 5.0
+    wall_function_policy: low_re_resolved
+  quality_thresholds:
+    max_non_orthogonality: 65
+    max_skewness: 4.0
+    max_aspect_ratio: 1000
+
+bc_contract:
+  inlet:
+    velocity: { type: fixedValue, magnitude_m_s: 44.2 }
+    pressure: { type: zeroGradient }
+    k: { type: turbulentIntensityKineticEnergyInlet, intensity: 0.01 }
+    omega: { type: turbulentMixingLengthFrequencyInlet, mixingLength: 0.00127 }  # ~0.1H
+  outlet:
+    pressure: { type: fixedValue, value_Pa: 0.0 }
+    velocity: { type: zeroGradient }
+  wall:
+    velocity: { type: noSlip }
+    k: { type: kqRWallFunction }
+    omega: { type: omegaWallFunction }
+  turbulence_fields:
+    - k
+    - omega
+    - nut
+
+solver_contract:
+  residual_targets:
+    Ux: 1.0e-5
+    Uy: 1.0e-5
+    p: 1.0e-5
+    k: 1.0e-5
+    omega: 1.0e-5
+  max_iterations: 2000  # BFS recirculation can be slow; flat_plate converged at 159
+  qoi_stability:
+    window_iterations: 100
+    relative_drift_tolerance: 1.0e-3
+
+qoi:
+  - name: skin_friction_coefficient
+    kind: line_distribution
+    units: dimensionless
+    tolerance: 0.10
+  - name: reattachment_length_xH
+    kind: scalar
+    units: dimensionless
+    tolerance: 0.10
+    note: "Phase 1 placeholder; scalar QoI extraction lands in a later milestone."
+
+reference_comparison:
+  status: finalized
+  source: NASA TMR Driver-Seegmiller backward-facing step (experiment)
+  source_url: https://tmbwg.github.io/turbmodels/backstep_val.html
+  # SHA-256 of the upstream tabular Cf file (cf.exp.dat). Verified at fetch time
+  # 2026-05-21; see reference/provenance.md for citation + license.
+  source_sha256: cd9b6434b7956bc58e859de6af654cd7f891e25303babf1dd8633d6c58f74276
+  reference_csv: reference/cf_reference.csv
+  reference_csv_sha256: dbcf9e02f7b7d80d4a9aebf44f585c09fc4dace482b1c771bcfd92e76ea7d33e
+  qoi: skin_friction_coefficient
+  # M2.3b: which polyMesh boundary patch carries the comparison-target wall
+  # shear stress data. Flat_plate had a single patch literally named 'wall';
+  # BFS has bottomWall / stepFace / topWall — the canonical NASA TMR
+  # Driver-Seegmiller Cf reference is along the bottomWall downstream of
+  # the step, so that's the patch we extract Cf from.
+  wall_patch: bottomWall
+  tolerance: 0.20
+  # Reference Cf data uses x/H normalized coordinate; we convert to x_m at load
+  # time (x_m = x_over_H * H). x_min_compare_m=0.0 means "downstream of step
+  # only" — the recirculation+reattachment zone is the case's interesting
+  # region.
+  x_min_compare_m: 0.0
+  notes: |
+    Driver-Seegmiller experimental Cf (20 data points, x/H from -3.96 to
+    35.99). Reattachment at x/H = 6.26 +- 0.10 is the canonical scalar QoI
+    not yet wired in this milestone. Tolerance 0.20 (wider than flat-plate's
+    0.10) acknowledges that k-omega SST is known to under-predict
+    reattachment length by ~15-20%, which propagates into Cf error in the
+    recirculation region.
+
+required_artifacts:
+  - geometry_report.json
+  - mesh_report.json
+  - bc_audit.json
+  - solver.log
+  - residuals.csv
+  - qoi.csv
+  - reference_comparison.csv
+  - trust_report.json

@@ -1,0 +1,516 @@
+{
+  "case_id": "channel_flow_rans_sst",
+  "generated_at": "2026-05-21T07:40:28Z",
+  "overall_status": "PASS",
+  "solver_execution": "real",
+  "validation_status": "validated",
+  "gates": {
+    "geometry_contract": {
+      "status": "PASS",
+      "summary": "presence PASS (5/5); dimensionality PASS.",
+      "artifact": "artifacts/geometry_report.json",
+      "details": {
+        "presence_dimension": {
+          "dimension_status": "PASS",
+          "missing": [],
+          "present": [
+            "bottomWall",
+            "frontAndBack",
+            "inlet",
+            "outlet",
+            "topWall"
+          ],
+          "extras": []
+        },
+        "dimensionality_dimension": {
+          "dimension_status": "PASS",
+          "declared": "2.5D",
+          "empty_patches": [
+            "frontAndBack"
+          ],
+          "reason": null
+        },
+        "realized_patch_count": 5,
+        "boundary_file": "constant/polyMesh/boundary"
+      }
+    },
+    "mesh_contract": {
+      "status": "PASS",
+      "summary": "quality PASS; y+ PASS.",
+      "artifact": "artifacts/mesh_report.json",
+      "details": {
+        "quality_dimension": {
+          "dimension_status": "PASS",
+          "metrics": {
+            "max_non_orthogonality": {
+              "actual": 0.0,
+              "threshold": 65.0,
+              "ok": true
+            },
+            "max_skewness": {
+              "actual": 1.11021e-13,
+              "threshold": 4.0,
+              "ok": true
+            },
+            "max_aspect_ratio": {
+              "actual": 33.3333,
+              "threshold": 1000.0,
+              "ok": true
+            }
+          },
+          "fails": [],
+          "incompletes": []
+        },
+        "y_plus_dimension": {
+          "dimension_status": "PASS",
+          "patch_evaluated": "bottomWall",
+          "actual_avg": 11.1999,
+          "actual_min": 11.1092,
+          "actual_max": 11.5758,
+          "target_min": 0.5,
+          "target_max": 30.0,
+          "ok": true
+        },
+        "checkmesh_overall_ok": true,
+        "checkmesh_log": "artifacts/mesh_quality.log"
+      }
+    },
+    "bc_contract": {
+      "status": "PASS",
+      "summary": "file_presence PASS (5 fields); patch_coverage PASS; type_match PASS (14 pairs); value_match PASS (0 pairs); derived PASS (0 pairs).",
+      "artifact": "artifacts/bc_audit.json",
+      "details": {
+        "file_presence": {
+          "dimension_status": "PASS",
+          "present": [
+            "U",
+            "k",
+            "nut",
+            "omega",
+            "p"
+          ],
+          "missing_files": [],
+          "unparseable_files": []
+        },
+        "patch_coverage": {
+          "dimension_status": "PASS",
+          "checked_fields": [
+            "U",
+            "k",
+            "nut",
+            "omega",
+            "p"
+          ],
+          "polymesh_patch_count": 5,
+          "gaps_by_field": {}
+        },
+        "type_match": {
+          "dimension_status": "PASS",
+          "checked_count": 14,
+          "unresolvable_keys": [],
+          "field_class_missing": [],
+          "type_mismatches": [],
+          "checked": [
+            {
+              "manifest_key": "inlet",
+              "resolved_patch": "inlet",
+              "field": "U",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "inlet",
+              "resolved_patch": "inlet",
+              "field": "p",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "inlet",
+              "resolved_patch": "inlet",
+              "field": "k",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "inlet",
+              "resolved_patch": "inlet",
+              "field": "omega",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "outlet",
+              "resolved_patch": "outlet",
+              "field": "U",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "outlet",
+              "resolved_patch": "outlet",
+              "field": "p",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "outlet",
+              "resolved_patch": "outlet",
+              "field": "k",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "outlet",
+              "resolved_patch": "outlet",
+              "field": "omega",
+              "declared_type": "cyclic",
+              "realized_type": "cyclic"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "bottomWall",
+              "field": "U",
+              "declared_type": "noSlip",
+              "realized_type": "noSlip"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "topWall",
+              "field": "U",
+              "declared_type": "noSlip",
+              "realized_type": "noSlip"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "bottomWall",
+              "field": "k",
+              "declared_type": "kqRWallFunction",
+              "realized_type": "kqRWallFunction"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "topWall",
+              "field": "k",
+              "declared_type": "kqRWallFunction",
+              "realized_type": "kqRWallFunction"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "bottomWall",
+              "field": "omega",
+              "declared_type": "omegaWallFunction",
+              "realized_type": "omegaWallFunction"
+            },
+            {
+              "manifest_key": "wall",
+              "resolved_patch": "topWall",
+              "field": "omega",
+              "declared_type": "omegaWallFunction",
+              "realized_type": "omegaWallFunction"
+            }
+          ]
+        },
+        "value_match": {
+          "dimension_status": "PASS",
+          "matched": [],
+          "note": "manifest.bc_contract has no recognized numeric declarations."
+        },
+        "derived_consistency": {
+          "dimension_status": "PASS",
+          "matched_count": 0,
+          "note": "no patch declares both magnitude_m_s + intensity (no derivation possible)."
+        },
+        "realized_patch_count": 5
+      }
+    },
+    "solver_execution": {
+      "status": "PASS",
+      "summary": "simpleFoam converged at iter 1000 (all 3 field residuals \u2264 target).",
+      "details": {
+        "execution": "real",
+        "real_solver_invoked": true,
+        "final_iter": 1000,
+        "max_iter": 1000,
+        "final_residuals": {
+          "Ux": 0.000564399,
+          "Uy": 0.670899,
+          "p": 0.272818,
+          "omega": 0.0014939,
+          "k": 0.00518352
+        },
+        "checked_fields": [
+          "Ux",
+          "k",
+          "omega"
+        ],
+        "y_plus": {
+          "bottomWall": {
+            "min": 11.1092,
+            "max": 11.5758,
+            "avg": 11.1999
+          },
+          "topWall": {
+            "min": 11.1113,
+            "max": 11.5735,
+            "avg": 11.1786
+          }
+        },
+        "image": "openfoam/openfoam11-paraview510:latest",
+        "log": "artifacts/solver.log",
+        "residuals_csv": "artifacts/residuals.csv"
+      },
+      "artifact": "artifacts/solver.log"
+    },
+    "qoi_extraction": {
+      "status": "PASS",
+      "summary": "Extracted 100 wall-face Cf samples from OpenFOAM output.",
+      "artifact": "artifacts/qoi.csv",
+      "details": {
+        "real_extraction_performed": true,
+        "n_samples": 100,
+        "generated_at": "2026-05-21T07:40:28Z"
+      }
+    },
+    "reference_comparison": {
+      "status": "PASS",
+      "summary": "reference comparison: 25 pts; max relative error 2.22% at x=1.9900 m (tolerance 10.0%).",
+      "details": {
+        "tolerance": 0.1,
+        "x_min_compare": 1.5,
+        "n_compared": 25,
+        "max_rel_error": 0.022223623489146645,
+        "max_rel_error_x": 1.9900000000000002,
+        "rows": [
+          {
+            "x_m": 1.51,
+            "Cf_run": 0.006033320000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.0001366799999999984,
+            "rel_error": 0.02215235008103702,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.5299999999999998,
+            "Cf_run": 0.00603332,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013668000000000013,
+            "rel_error": 0.0221523500810373,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.55,
+            "Cf_run": 0.006033320000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.0001366799999999984,
+            "rel_error": 0.02215235008103702,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.5700000000000003,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.59,
+            "Cf_run": 0.0060333400000000025,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999765,
+            "rel_error": 0.022149108589950995,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.6099999999999999,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.63,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.65,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.67,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.69,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.71,
+            "Cf_run": 0.0060333400000000025,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999765,
+            "rel_error": 0.022149108589950995,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.73,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.75,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.77,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.79,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.81,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.83,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.85,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.87,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.89,
+            "Cf_run": 0.006033340000000002,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999852,
+            "rel_error": 0.022149108589951137,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.9100000000000001,
+            "Cf_run": 0.006033340000000001,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999999939,
+            "rel_error": 0.022149108589951276,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.93,
+            "Cf_run": 0.006033340000000027,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999997337,
+            "rel_error": 0.02214910858994706,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.9499999999999997,
+            "Cf_run": 0.006033340000000252,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.00013665999999974785,
+            "rel_error": 0.02214910858991051,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.97,
+            "Cf_run": 0.0060333000000083285,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.0001366999999916716,
+            "rel_error": 0.022155591570773354,
+            "within_tolerance": true
+          },
+          {
+            "x_m": 1.9900000000000002,
+            "Cf_run": 0.006032880243071965,
+            "Cf_ref": 0.00617,
+            "abs_error": 0.0001371197569280348,
+            "rel_error": 0.022223623489146645,
+            "within_tolerance": true
+          }
+        ],
+        "reference_status": "finalized",
+        "reference_source": "NASA TMR plane channel + Moser-Kim-Mansour 1999 DNS at Re_tau\u2248590",
+        "reference_csv": "reference/cf_reference.csv",
+        "real_comparison_performed": true,
+        "u_inf_source": "physics.reference_velocity_m_s",
+        "latest_time": "1000",
+        "u_inf_m_s": 10.0
+      },
+      "artifact": "artifacts/reference_comparison.csv"
+    }
+  },
+  "artifacts": {
+    "geometry_report": "artifacts/geometry_report.json",
+    "mesh_report": "artifacts/mesh_report.json",
+    "bc_audit": "artifacts/bc_audit.json",
+    "solver_log": "artifacts/solver.log",
+    "residuals_csv": "artifacts/residuals.csv",
+    "qoi_csv": "artifacts/qoi.csv",
+    "reference_comparison_csv": "artifacts/reference_comparison.csv",
+    "trust_report": "artifacts/trust_report.json"
+  },
+  "limitations": [
+    "Phase 0 scaffold \u2014 limitations not exhaustively enumerated."
+  ],
+  "next_actions": [
+    "Implement real OpenFOAM adapter (Phase 1).",
+    "Finalize reference dataset for flat_plate_rans_sst.",
+    "Add seeded negative-test fixtures.",
+    "Run Red Team review on this trust loop."
+  ]
+}

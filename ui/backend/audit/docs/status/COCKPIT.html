@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><title>AI-CFD-V2 Cockpit</title><style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#111}pre{white-space:pre-wrap;background:#0b1020;color:#dbe6ff;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5}h1{font-size:22px}.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:13px;margin-left:8px}.green{background:#d2f5dd;color:#0a6b2c}.amber{background:#fff1c2;color:#7a5300}.red{background:#ffd6d6;color:#8a0d0d}</style></head><body><h1>AI-CFD-V2 Cockpit<span class='badge amber'>AMBER</span></h1><pre># AI-CFD-V2 — Project Cockpit
+
+&gt; Generated: `2026-05-21T08:47:51Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+&gt; All sections below are derived from repo state. No hand-written narrative lives here.
+
+## Overall Status: 🟡 AMBER
+
+## Phase Progress
+
+- Total tasks: **10**
+  - PASS: 10
+
+## Trust Loop Status
+
+| case_id | overall | solver | validation | path |
+|---|---|---|---|---|
+| `flat_plate_rans_sst` | 🟡 MOCKED | mocked | not_validated | `cases/flat_plate_rans_sst/artifacts/trust_report.json` |
+| `channel_flow_rans_sst` | 🟢 PASS | real | validated | `cases/channel_flow_rans_sst/artifacts/trust_report.json` |
+| `backward_facing_step` | 🟡 MOCKED | mocked | not_validated | `cases/backward_facing_step/artifacts/trust_report.json` |
+
+## Agent Matrix
+
+| agent | description | declared in |
+|---|---|---|
+| `backend-engineer` | Implements the cfdtrust CLI, manifest loader, audit modules, report assembler, status scripts, and pytest tests. Default executor for Pha... | `.claude/agents/backend-engineer.md` |
+| `benchmark-director` | Owns the benchmark matrix, sample cases, reference data policy, mesh levels, and seeded negative-test fixtures. | `.claude/agents/benchmark-director.md` |
+| `cfd-vv-director` | Owns CFD verification &amp; validation philosophy, trust gates, QoI, tolerances, benchmark policy, and the rules governing when a trust_repor... | `.claude/agents/cfd-vv-director.md` |
+| `docs-knowledge-engineer` | Maintains repo-native project memory, agent docs, skill descriptions, onboarding material, and the docs index. Owns documentation hygiene. | `.claude/agents/docs-knowledge-engineer.md` |
+| `engineering-director` | Converts roadmap items into concrete implementation tasks with acceptance criteria, tests, and required artifacts. Owns CWOS task registr... | `.claude/agents/engineering-director.md` |
+| `frontend-engineer` | Implements ONLY the minimal static cockpit / trust-report UI in Phase 0. Refuses to build a full CFD workbench UI. | `.claude/agents/frontend-engineer.md` |
+| `openfoam-adapter-engineer` | Designs and (in Phase 1+) implements the OpenFOAM adapter. In Phase 0, creates the mocked execution boundary and explicit labels. | `.claude/agents/openfoam-adapter-engineer.md` |
+| `product-ui-director` | Owns low-cognitive-load user experience for the cockpit and the three Phase-0 screens (Case Contract / Run Timeline / Trust Report). Refu... | `.claude/agents/product-ui-director.md` |
+| `progress-intelligence-agent` | Compresses all repo state (agents, events, tests, trust reports, blockers, decisions) into a 1-minute cockpit the owner can read without... | `.claude/agents/progress-intelligence-agent.md` |
+| `project-governor` | Owns North Star, current scope, true progress, roadmap discipline, task routing, and the decision log. Has authority to reject scope-exte... | `.claude/agents/project-governor.md` |
+| `strategy-director` | Reviews proposed work for strategic value, scope drift, wedge quality, and competitive positioning. Says no to popular but wedge-breaking... | `.claude/agents/strategy-director.md` |
+| `system-architect` | Owns repo architecture, module boundaries, data model, API boundaries, artifact registry, and the OpenFOAM adapter boundary. | `.claude/agents/system-architect.md` |
+| `test-red-team` | Attacks the project — looks for false PASS, missing evidence, AI overconfidence, hidden mocked execution, weak trust gates, and Definitio... | `.claude/agents/test-red-team.md` |
+
+## Blockers
+
+- **BLK-001** [HIGH] Real OpenFOAM execution not implemented — owner: `openfoam-adapter-engineer`
+- **BLK-002** [HIGH] Reference data for flat_plate_rans_sst not finalized — owner: `benchmark-director`
+- **BLK-003** [MEDIUM] Negative test directories are scaffold only — owner: `test-red-team`
+
+## Bright Spots
+
+- `MERGE-PHANTOM-CLEANUP-2026-05-21` — project-governor — Supersedes MERGE-AICFDV2-INTO-AUDIT regarding phantom_count. After Phase D landings (13 agents duplicated into audit/.claude/agents/ + audit-local .gitignore + evidence rewrites in PH0-BOOTSTRAP and PH0-SKILLS-001), phantom_count=0 and cockpit overall_status=AMBER (matches AI-CFD-V2 pre-merge baseline). Pre-rewrite log preserved at .cwos/agent_events.jsonl.pre_migration_backup. Read README.md §Phantom-count migration history for the singular timeline.  _(evidence files: 3)_
+- `MERGE-AICFDV2-INTO-AUDIT` — project-governor — AI-CFD-V2 merged into cfd-harness-unified/ui/backend/audit/. Historical CWOS events preserved verbatim; 4 cross-repo evidence references are architectural phantoms (CLAUDE.md, .gitignore, cross-subsystem .claude/agents/* / .claude/skills/* live at cfd-harness-unified root); phantom_count=4 = honest signal of merge boundary, NOT validation drift.  _(evidence files: 2)_
+- `M92-ARTIFACTS-LANDED` — openfoam-adapter-engineer — M9.2 channel artifacts landed in-repo (governance fix): cfdtrust run+audit+report executed inside cases/channel_flow_rans_sst/; 11 evidence files now under git, validation_status=validated, max_rel_err 2.22% vs MKM 1999 DNS  _(evidence files: 8)_
+- `PH1-R25-META` — test-red-team — Red Team Round-25 review of M9.2: 0 HIGH/MED/LOW fixes; 3 LOW documented design choices (per-case targets, U-resolution order, source-term floor)  _(evidence files: 2)_
+- `M92-CHANNEL-CONVERGE` — openfoam-adapter-engineer — M9.2: channel converges via cyclic+meanVelocityForce; all 6 gates PASS, validated within 2.22% of NASA MKM 1999 DNS Cf  _(evidence files: 8)_
+
+## Decisions Needed
+
+1. **OQ-0003** — Should Phase 2 (negative tests) precede or follow Phase 1 (real solver)?  _(see `docs/project-memory/OPEN_QUESTIONS.md`)_
+2. **OQ-0004** — What is the absolute floor for &quot;validation_status: validated&quot;?  _(see `docs/project-memory/OPEN_QUESTIONS.md`)_
+3. **OQ-0005** — How should the AI advisor surface its uncertainty?  _(see `docs/project-memory/OPEN_QUESTIONS.md`)_
+
+## Integrity Checks
+
+- PASS events without evidence: **0** (must be 0)
+- PASS events with phantom evidence (paths do not resolve): **0** (must be 0)
+- mocked solver reports: 2
+- real solver reports:   1
+- agents declared: 13
+- open questions: 3 surfaced (top 3)
+
+## Next Best Actions
+
+1. Run bootstrap verification  _(see `docs/project-memory/NEXT_ACTIONS.md`)_
+2. Red Team review of the bootstrap  _(see `docs/project-memory/NEXT_ACTIONS.md`)_
+3. Select canonical reference dataset for `flat_plate_rans_sst`  _(see `docs/project-memory/NEXT_ACTIONS.md`)_
+4. Decide OpenFOAM adapter strategy (docker vs native vs both)  _(see `docs/project-memory/NEXT_ACTIONS.md`)_
+5. Populate 3 seeded negative-test directories  _(see `docs/project-memory/NEXT_ACTIONS.md`)_
+
+---
+_Cockpit is generated by `tools/cwos_render_dashboard.py`. Do not hand-edit. To change narrative content, edit the source documents (`.claude/agents/*.md`, `OPEN_QUESTIONS.md`, `NEXT_ACTIONS.md`, `agent_events.jsonl`) and re-run `make cockpit`._
+</pre></body></html>

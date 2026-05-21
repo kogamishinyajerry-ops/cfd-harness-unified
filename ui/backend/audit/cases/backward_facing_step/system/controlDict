@@ -1,0 +1,68 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | AI-CFD-V2 M2 step 1 — backward_facing_step      |
+|  \\    /   O peration     | OpenFOAM 11                                     |
+|   \\  /    A nd           | Driver-Seegmiller validation case               |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     simpleFoam;
+
+startFrom       startTime;
+startTime       0;
+
+stopAt          endTime;
+endTime         2000;        // matches manifest.solver_contract.max_iterations; BFS reattachment is slow
+
+deltaT          1;
+
+writeControl    timeStep;
+writeInterval   500;
+purgeWrite      0;
+
+writeFormat     ascii;
+writePrecision  6;
+writeCompression off;
+
+timeFormat      general;
+timePrecision   6;
+
+runTimeModifiable true;
+
+functions
+{
+    residuals
+    {
+        type            residuals;
+        libs            ("libutilityFunctionObjects.so");
+        fields          (U p k omega);
+        writeControl    timeStep;
+        writeInterval   1;
+    }
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        log             yes;
+        patches         (bottomWall stepFace topWall);
+    }
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        log             yes;
+        patches         (bottomWall stepFace);
+    }
+}
+
+// ************************************************************************* //

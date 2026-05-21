@@ -1,0 +1,40 @@
+decisions:
+  - decision_id: DEC-0001
+    title: v0 wedge is OpenFOAM-based CFD Trust Workbench, not a full STAR-CCM+ clone
+    status: ACCEPTED
+    decided_at: "2026-05-20"
+    decided_by: project-governor + project-owner
+    rationale: |
+      Building a full CFD workbench in one shot reliably fails. The first credible
+      thing to build is a machine-auditable trust contract around a single canonical
+      benchmark, with the solver layer mockable so the rest of the loop is exercised.
+
+  - decision_id: DEC-0002
+    title: flat_plate_rans_sst is the first sample case
+    status: ACCEPTED
+    decided_at: "2026-05-20"
+    decided_by: cfd-vv-director + benchmark-director
+    rationale: |
+      Flat plate steady-RANS with k-omega SST is the most-studied verification
+      case; reference data is well-known, geometry is trivial, and the case
+      forces us to define every contract section (mesh / BC / QoI / reference).
+
+  - decision_id: DEC-0003
+    title: Phase 0 may use mocked solver execution; must be clearly labeled
+    status: ACCEPTED
+    decided_at: "2026-05-20"
+    decided_by: cfd-vv-director + project-governor
+    rationale: |
+      Real OpenFOAM integration is not the wedge; a mocked solver gate lets us
+      exercise the rest of the trust loop while making the mock impossible to
+      hide. Every mocked trust_report must include solver_execution: mocked and
+      validation_status: not_validated.
+
+  - decision_id: DEC-0004
+    title: First UI is cockpit + trust report, not a full CFD workbench
+    status: ACCEPTED
+    decided_at: "2026-05-20"
+    decided_by: product-ui-director
+    rationale: |
+      A 1-minute cockpit + a per-case trust report is enough UI for Phase 0.
+      Anything else slides into "STAR-CCM+ clone" scope.

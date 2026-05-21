@@ -1,0 +1,446 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-21T08:47:51Z",
+  "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
+  "git": {
+    "branch": "feature/audit-cfdtrust-merge",
+    "head": "3a9904d11bfd06a3ca7a7cf60e7ca111ff350700",
+    "dirty": true
+  },
+  "overall_status": "AMBER",
+  "phase": "Phase 1 \u2014 Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)",
+  "tasks": {
+    "total": 10,
+    "by_status": {
+      "PASS": 10
+    },
+    "tasks": [
+      {
+        "task_id": "PH0-MEMORY-001",
+        "title": "Create project memory",
+        "owner_agent": "docs-knowledge-engineer",
+        "objective": "Create docs/project-memory/*.md so every agent reads the same North Star,\ncurrent scope, scope firewall, roadmap, risks, decisions, and next actions.\n",
+        "acceptance_criteria": [
+          "All ten project-memory files exist.",
+          "NORTH_STAR distinguishes long-term ambition from v0 wedge.",
+          "SCOPE_FIREWALL enumerates out-of-scope items.",
+          "ROADMAP defines Phase 0..5."
+        ],
+        "evidence_required": [
+          "docs/project-memory/NORTH_STAR.md",
+          "docs/project-memory/CURRENT_SCOPE.md",
+          "docs/project-memory/SCOPE_FIREWALL.md",
+          "docs/project-memory/ROADMAP.md",
+          "docs/project-memory/PROGRESS.md",
+          "docs/project-memory/RISK_REGISTER.md",
+          "docs/project-memory/DECISION_LOG.md",
+          "docs/project-memory/OPEN_QUESTIONS.md",
+          "docs/project-memory/NEXT_ACTIONS.md",
+          "docs/project-memory/PRODUCT_PRINCIPLES.md"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-AGENTS-001",
+        "title": "Create Claude project agents",
+        "owner_agent": "docs-knowledge-engineer",
+        "objective": "Define the 13 project-level subagents with YAML frontmatter.",
+        "acceptance_criteria": [
+          "All 13 agent files exist under .claude/agents/",
+          "Each agent has mission, responsibilities, forbidden actions, required files, output format, definition of success, evidence requirements."
+        ],
+        "evidence_required": [
+          ".claude/agents/project-governor.md",
+          ".claude/agents/strategy-director.md",
+          ".claude/agents/cfd-vv-director.md",
+          ".claude/agents/benchmark-director.md",
+          ".claude/agents/product-ui-director.md",
+          ".claude/agents/engineering-director.md",
+          ".claude/agents/system-architect.md",
+          ".claude/agents/backend-engineer.md",
+          ".claude/agents/frontend-engineer.md",
+          ".claude/agents/openfoam-adapter-engineer.md",
+          ".claude/agents/test-red-team.md",
+          ".claude/agents/docs-knowledge-engineer.md",
+          ".claude/agents/progress-intelligence-agent.md"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-SKILLS-001",
+        "title": "Create project skills",
+        "owner_agent": "docs-knowledge-engineer",
+        "objective": "Define repeatable workflows as Claude Skills.",
+        "acceptance_criteria": [
+          "Five SKILL.md files exist.",
+          "Each has YAML frontmatter with description."
+        ],
+        "evidence_required": [
+          ".claude/skills/plan-sprint/SKILL.md",
+          ".claude/skills/run-trust-loop/SKILL.md",
+          ".claude/skills/red-team-review/SKILL.md",
+          ".claude/skills/progress-report/SKILL.md",
+          ".claude/skills/update-cockpit/SKILL.md"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-CLI-001",
+        "title": "cfdtrust CLI skeleton",
+        "owner_agent": "backend-engineer",
+        "objective": "Build the minimal CLI (validate-manifest, audit, run, report) with mocked\nsolver execution clearly labeled.\n",
+        "acceptance_criteria": [
+          "`cfdtrust validate-manifest cases/flat_plate_rans_sst` exits 0.",
+          "`cfdtrust report` produces trust_report.json that validates against schema.",
+          "mocked solver execution is flagged in trust_report.json."
+        ],
+        "evidence_required": [
+          "src/cfdtrust/cli.py",
+          "src/cfdtrust/manifest.py",
+          "src/cfdtrust/audit/report.py"
+        ],
+        "dependencies": [
+          "PH0-SCHEMA-001"
+        ],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-SCHEMA-001",
+        "title": "case_manifest + trust_report JSON schemas",
+        "owner_agent": "system-architect",
+        "objective": "Define machine-checkable schemas for case manifests and trust reports.",
+        "acceptance_criteria": [
+          "Schemas live under src/cfdtrust/schemas/.",
+          "Both schemas validate the sample case + trust report."
+        ],
+        "evidence_required": [
+          "src/cfdtrust/schemas/case_manifest.schema.json",
+          "src/cfdtrust/schemas/trust_report.schema.json"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-CASE-001",
+        "title": "flat_plate_rans_sst sample case",
+        "owner_agent": "benchmark-director",
+        "objective": "Provide the first sample case manifest and supporting directories.",
+        "acceptance_criteria": [
+          "cases/flat_plate_rans_sst/case_manifest.yaml exists and validates.",
+          "reference/, artifacts/, negative_tests/ README files exist.",
+          "reference data is honestly labeled as not finalized."
+        ],
+        "evidence_required": [
+          "cases/flat_plate_rans_sst/case_manifest.yaml",
+          "cases/flat_plate_rans_sst/reference/README.md",
+          "cases/flat_plate_rans_sst/artifacts/README.md",
+          "cases/flat_plate_rans_sst/negative_tests/README.md"
+        ],
+        "dependencies": [
+          "PH0-SCHEMA-001"
+        ],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-STATUS-001",
+        "title": "CWOS status protocol",
+        "owner_agent": "progress-intelligence-agent",
+        "objective": "Repo-native task / event / decision / blocker / metric state.",
+        "acceptance_criteria": [
+          ".cwos/ files exist and parse as YAML/JSON.",
+          "tools/cwos_event.py validates required fields.",
+          "tools/cwos_status.py emits docs/status/project_status.json."
+        ],
+        "evidence_required": [
+          ".cwos/tasks.yaml",
+          ".cwos/agent_events.jsonl",
+          ".cwos/decisions.yaml",
+          ".cwos/blockers.yaml",
+          ".cwos/metrics.json",
+          "tools/cwos_event.py",
+          "tools/cwos_status.py"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-COCKPIT-001",
+        "title": "1-minute project cockpit",
+        "owner_agent": "progress-intelligence-agent",
+        "objective": "docs/status/COCKPIT.md + .html readable in under one minute.",
+        "acceptance_criteria": [
+          "cwos_render_dashboard.py produces both files.",
+          "Cockpit contains required sections including Trust Loop Status."
+        ],
+        "evidence_required": [
+          "tools/cwos_render_dashboard.py",
+          "docs/status/COCKPIT.md",
+          "docs/status/COCKPIT.html",
+          "docs/status/project_status.json"
+        ],
+        "dependencies": [
+          "PH0-STATUS-001"
+        ],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-TESTS-001",
+        "title": "pytest suite for Phase 0",
+        "owner_agent": "test-red-team",
+        "objective": "Initial pytest tests that catch obvious false-pass paths.",
+        "acceptance_criteria": [
+          "tests/test_manifest.py validates the sample case.",
+          "tests/test_trust_report.py asserts mocked solver does not claim validation.",
+          "tests/test_negative_cases.py asserts schema rejects missing sections.",
+          "tests/test_cwos_status.py + test_cockpit_render.py exercise tools/."
+        ],
+        "evidence_required": [
+          "tests/test_manifest.py",
+          "tests/test_trust_report.py",
+          "tests/test_negative_cases.py",
+          "tests/test_cwos_status.py",
+          "tests/test_cockpit_render.py"
+        ],
+        "dependencies": [
+          "PH0-CLI-001",
+          "PH0-STATUS-001",
+          "PH0-COCKPIT-001"
+        ],
+        "derived_status": "PASS"
+      },
+      {
+        "task_id": "PH0-DOCS-001",
+        "title": "Strategy / VV / Product / Engineering docs",
+        "owner_agent": "docs-knowledge-engineer",
+        "objective": "Documents that anchor strategy, V&V philosophy, product scope, engineering plan.",
+        "acceptance_criteria": [
+          "docs/strategy/, docs/vv/, docs/product/, docs/engineering/ contain the required files.",
+          "docs/vv/CFD_CORRECTNESS_PHILOSOPHY.md states residual \u2260 validation.",
+          "docs/product/SCREEN_SPECS.md is limited to three Phase 0 screens."
+        ],
+        "evidence_required": [
+          "docs/strategy/COMPETITIVE_MAP.md",
+          "docs/strategy/STRATEGY_REVIEW.md",
+          "docs/strategy/WEDGE_ANALYSIS.md",
+          "docs/vv/CFD_CORRECTNESS_PHILOSOPHY.md",
+          "docs/vv/CASE_CONTRACT_SPEC.md",
+          "docs/vv/BENCHMARK_MATRIX.md",
+          "docs/vv/VALIDATION_POLICY.md",
+          "docs/vv/NEGATIVE_TEST_POLICY.md",
+          "docs/product/UX_PRINCIPLES.md",
+          "docs/product/SCREEN_SPECS.md",
+          "docs/product/AI_ADVISOR_INTERACTION.md",
+          "docs/engineering/ARCHITECTURE.md",
+          "docs/engineering/IMPLEMENTATION_PLAN.md",
+          "docs/engineering/TESTING_STRATEGY.md",
+          "docs/engineering/MODULE_BOUNDARIES.md"
+        ],
+        "dependencies": [],
+        "derived_status": "PASS"
+      }
+    ]
+  },
+  "events": {
+    "count": 65,
+    "latest": [
+      {
+        "time": "2026-05-21T07:30:57Z",
+        "agent": "openfoam-adapter-engineer",
+        "task_id": "M92-CHANNEL-CONVERGE",
+        "status": "PASS",
+        "summary": "M9.2: channel converges via cyclic+meanVelocityForce; all 6 gates PASS, validated within 2.22% of NASA MKM 1999 DNS Cf",
+        "evidence": [
+          "cases/channel_flow_rans_sst/system/blockMeshDict",
+          "cases/channel_flow_rans_sst/system/fvOptions",
+          "cases/channel_flow_rans_sst/system/fvSolution",
+          "cases/channel_flow_rans_sst/case_manifest.yaml",
+          "cases/channel_flow_rans_sst/CASE_NOTES.md",
+          "cfdtrust/audit/qoi.py",
+          "cfdtrust_tests/test_channel_flow.py",
+          "docs/project-memory/PROGRESS.md"
+        ],
+        "tests": "PYTHONPATH=src python -m pytest tests/test_channel_flow.py",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      },
+      {
+        "time": "2026-05-21T07:30:57Z",
+        "agent": "test-red-team",
+        "task_id": "PH1-R25-META",
+        "status": "PASS",
+        "summary": "Red Team Round-25 review of M9.2: 0 HIGH/MED/LOW fixes; 3 LOW documented design choices (per-case targets, U-resolution order, source-term floor)",
+        "evidence": [
+          "docs/status/red_team_round25_review.md",
+          "cfdtrust_tests/test_channel_flow.py"
+        ],
+        "tests": "PYTHONPATH=src python -m pytest tests/test_channel_flow.py -q",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      },
+      {
+        "time": "2026-05-21T07:40:56Z",
+        "agent": "openfoam-adapter-engineer",
+        "task_id": "M92-ARTIFACTS-LANDED",
+        "status": "PASS",
+        "summary": "M9.2 channel artifacts landed in-repo (governance fix): cfdtrust run+audit+report executed inside cases/channel_flow_rans_sst/; 11 evidence files now under git, validation_status=validated, max_rel_err 2.22% vs MKM 1999 DNS",
+        "evidence": [
+          "cases/channel_flow_rans_sst/artifacts/trust_report.json",
+          "cases/channel_flow_rans_sst/artifacts/residuals.csv",
+          "cases/channel_flow_rans_sst/artifacts/qoi.csv",
+          "cases/channel_flow_rans_sst/artifacts/reference_comparison.csv",
+          "cases/channel_flow_rans_sst/artifacts/geometry_report.json",
+          "cases/channel_flow_rans_sst/artifacts/mesh_report.json",
+          "cases/channel_flow_rans_sst/artifacts/bc_audit.json",
+          "cases/channel_flow_rans_sst/artifacts/solver_gate.json"
+        ],
+        "tests": "PYTHONPATH=src python -c \"import json; d=json.load(open('cases/channel_flow_rans_sst/artifacts/trust_report.json')); assert d['overall_status']=='PASS' and d['validation_status']=='validated'\"",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      },
+      {
+        "time": "2026-05-21T08:21:41Z",
+        "agent": "project-governor",
+        "task_id": "MERGE-AICFDV2-INTO-AUDIT",
+        "status": "PASS",
+        "summary": "AI-CFD-V2 merged into cfd-harness-unified/ui/backend/audit/. Historical CWOS events preserved verbatim; 4 cross-repo evidence references are architectural phantoms (CLAUDE.md, .gitignore, cross-subsystem .claude/agents/* / .claude/skills/* live at cfd-harness-unified root); phantom_count=4 = honest signal of merge boundary, NOT validation drift.",
+        "evidence": [
+          "README.md",
+          ".cwos/agent_events.jsonl.pre_migration_backup"
+        ],
+        "tests": "python tools/cwos_status.py && python tools/cwos_render_dashboard.py",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      },
+      {
+        "time": "2026-05-21T08:47:51Z",
+        "agent": "project-governor",
+        "task_id": "MERGE-PHANTOM-CLEANUP-2026-05-21",
+        "status": "PASS",
+        "summary": "Supersedes MERGE-AICFDV2-INTO-AUDIT regarding phantom_count. After Phase D landings (13 agents duplicated into audit/.claude/agents/ + audit-local .gitignore + evidence rewrites in PH0-BOOTSTRAP and PH0-SKILLS-001), phantom_count=0 and cockpit overall_status=AMBER (matches AI-CFD-V2 pre-merge baseline). Pre-rewrite log preserved at .cwos/agent_events.jsonl.pre_migration_backup. Read README.md \u00a7Phantom-count migration history for the singular timeline.",
+        "evidence": [
+          "README.md",
+          ".cwos/agent_events.jsonl.pre_migration_backup",
+          "docs/status/project_status.json"
+        ],
+        "tests": "python tools/cwos_status.py | grep -E 'overall=AMBER' && python -c 'import json; d=json.load(open(\"docs/status/project_status.json\")); assert d[\"metrics\"][\"phantom_evidence_pass_events\"]==0'",
+        "blockers": [],
+        "decision_required": false,
+        "next_action": null
+      }
+    ],
+    "pass_without_evidence": []
+  },
+  "decisions": [
+    {
+      "decision_id": "DEC-0001",
+      "title": "v0 wedge is OpenFOAM-based CFD Trust Workbench, not a full STAR-CCM+ clone",
+      "status": "ACCEPTED",
+      "decided_at": "2026-05-20",
+      "decided_by": "project-governor + project-owner",
+      "rationale": "Building a full CFD workbench in one shot reliably fails. The first credible\nthing to build is a machine-auditable trust contract around a single canonical\nbenchmark, with the solver layer mockable so the rest of the loop is exercised.\n"
+    },
+    {
+      "decision_id": "DEC-0002",
+      "title": "flat_plate_rans_sst is the first sample case",
+      "status": "ACCEPTED",
+      "decided_at": "2026-05-20",
+      "decided_by": "cfd-vv-director + benchmark-director",
+      "rationale": "Flat plate steady-RANS with k-omega SST is the most-studied verification\ncase; reference data is well-known, geometry is trivial, and the case\nforces us to define every contract section (mesh / BC / QoI / reference).\n"
+    },
+    {
+      "decision_id": "DEC-0003",
+      "title": "Phase 0 may use mocked solver execution; must be clearly labeled",
+      "status": "ACCEPTED",
+      "decided_at": "2026-05-20",
+      "decided_by": "cfd-vv-director + project-governor",
+      "rationale": "Real OpenFOAM integration is not the wedge; a mocked solver gate lets us\nexercise the rest of the trust loop while making the mock impossible to\nhide. Every mocked trust_report must include solver_execution: mocked and\nvalidation_status: not_validated.\n"
+    },
+    {
+      "decision_id": "DEC-0004",
+      "title": "First UI is cockpit + trust report, not a full CFD workbench",
+      "status": "ACCEPTED",
+      "decided_at": "2026-05-20",
+      "decided_by": "product-ui-director",
+      "rationale": "A 1-minute cockpit + a per-case trust report is enough UI for Phase 0.\nAnything else slides into \"STAR-CCM+ clone\" scope.\n"
+    }
+  ],
+  "blockers": [
+    {
+      "blocker_id": "BLK-001",
+      "title": "Real OpenFOAM execution not implemented",
+      "severity": "HIGH",
+      "owner_agent": "openfoam-adapter-engineer",
+      "description": "Phase 0 mocks the solver layer. Until a real OpenFOAM adapter exists,\nno trust_report can claim validation.\n",
+      "unblocks": [
+        "Validation against real reference data",
+        "Phase 1 milestones"
+      ]
+    },
+    {
+      "blocker_id": "BLK-002",
+      "title": "Reference data for flat_plate_rans_sst not finalized",
+      "severity": "HIGH",
+      "owner_agent": "benchmark-director",
+      "description": "case_manifest.yaml sets reference_comparison.status = placeholder.\nA canonical published dataset must be adopted before any validation claim.\n",
+      "unblocks": [
+        "Real reference_comparison.csv",
+        "First true PASS instead of MOCKED"
+      ]
+    },
+    {
+      "blocker_id": "BLK-003",
+      "title": "Negative test directories are scaffold only",
+      "severity": "MEDIUM",
+      "owner_agent": "test-red-team",
+      "description": "cases/flat_plate_rans_sst/negative_tests/ lists planned bad cases but\nnone are populated yet. Without them, the trust harness cannot demonstrate\nthat it actually catches bad cases.\n",
+      "unblocks": [
+        "Confidence in trust gates",
+        "Red Team certification of Phase 0"
+      ]
+    }
+  ],
+  "trust_reports": [
+    {
+      "case_id": "flat_plate_rans_sst",
+      "path": "cases/flat_plate_rans_sst/artifacts/trust_report.json",
+      "overall_status": "MOCKED",
+      "solver_execution": "mocked",
+      "validation_status": "not_validated"
+    },
+    {
+      "case_id": "channel_flow_rans_sst",
+      "path": "cases/channel_flow_rans_sst/artifacts/trust_report.json",
+      "overall_status": "PASS",
+      "solver_execution": "real",
+      "validation_status": "validated"
+    },
+    {
+      "case_id": "backward_facing_step",
+      "path": "cases/backward_facing_step/artifacts/trust_report.json",
+      "overall_status": "MOCKED",
+      "solver_execution": "mocked",
+      "validation_status": "not_validated"
+    }
+  ],
+  "metrics": {
+    "schema_version": 1,
+    "generated_at": "2026-05-21T08:47:51Z",
+    "total_tasks": 10,
+    "completed_tasks": 10,
+    "blocked_tasks": 3,
+    "tests_passed": 0,
+    "tests_failed": 0,
+    "trust_reports_found": 3,
+    "mocked_solver_reports": 2,
+    "real_solver_reports": 1,
+    "notes": "Baseline metrics. Populated by tools/cwos_status.py.",
+    "phantom_evidence_pass_events": 0
+  }
+}

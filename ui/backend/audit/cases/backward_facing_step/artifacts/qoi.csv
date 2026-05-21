@@ -1,0 +1,3 @@
+name,x_m,value,units,source
+skin_friction_coefficient,,N/A (Phase 0 mocked),dimensionless,phase0_mocked
+reattachment_length_xH,,N/A (Phase 0 mocked),dimensionless,phase0_mocked

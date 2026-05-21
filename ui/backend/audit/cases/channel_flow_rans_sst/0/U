@@ -1,0 +1,43 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Channel velocity field. M9.2 cyclic: inlet/outlet types are `cyclic`;        |
+| bulk velocity Ubar=(10 0 0) m/s is enforced via system/fvOptions             |
+| meanVelocityForce, not via inlet `fixedValue`.                               |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (10 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            cyclic;
+    }
+    outlet
+    {
+        type            cyclic;
+    }
+    bottomWall
+    {
+        type            noSlip;
+    }
+    topWall
+    {
+        type            noSlip;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

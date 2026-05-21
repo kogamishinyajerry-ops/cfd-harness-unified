@@ -1,0 +1,64 @@
+{
+  "generated_at": "2026-05-21T07:40:28Z",
+  "case_id": "channel_flow_rans_sst",
+  "phase": "M5",
+  "gate_status": "PASS",
+  "polymesh_inspected": true,
+  "realized_patches": {
+    "bottomWall": {
+      "nFaces": 100,
+      "startFace": 9950,
+      "type": "wall"
+    },
+    "frontAndBack": {
+      "nFaces": 10000,
+      "startFace": 10150,
+      "type": "empty"
+    },
+    "inlet": {
+      "nFaces": 50,
+      "startFace": 9850,
+      "type": "cyclic"
+    },
+    "outlet": {
+      "nFaces": 50,
+      "startFace": 9900,
+      "type": "cyclic"
+    },
+    "topWall": {
+      "nFaces": 100,
+      "startFace": 10050,
+      "type": "wall"
+    }
+  },
+  "realized_patch_count": 5,
+  "declared_required_patches": [
+    "inlet",
+    "outlet",
+    "topWall",
+    "bottomWall",
+    "frontAndBack"
+  ],
+  "declared_dimensionality": "2.5D",
+  "presence_dimension": {
+    "dimension_status": "PASS",
+    "missing": [],
+    "present": [
+      "bottomWall",
+      "frontAndBack",
+      "inlet",
+      "outlet",
+      "topWall"
+    ],
+    "extras": []
+  },
+  "dimensionality_dimension": {
+    "dimension_status": "PASS",
+    "declared": "2.5D",
+    "empty_patches": [
+      "frontAndBack"
+    ],
+    "reason": null
+  },
+  "boundary_file": "constant/polyMesh/boundary"
+}

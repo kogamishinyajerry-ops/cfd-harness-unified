@@ -1,0 +1,44 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| Channel specific dissipation rate. M9.2 cyclic: inlet/outlet cyclic.        |
+| Seeded with omega_design = 74.6 from sqrt(k)/(Cmu^0.25 * mixingLength).      |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 74.6;
+
+boundaryField
+{
+    inlet
+    {
+        type            cyclic;
+    }
+    outlet
+    {
+        type            cyclic;
+    }
+    bottomWall
+    {
+        type            omegaWallFunction;
+        value           uniform 74.6;
+    }
+    topWall
+    {
+        type            omegaWallFunction;
+        value           uniform 74.6;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

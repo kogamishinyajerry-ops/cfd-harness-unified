@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-05-21T08:13:26Z",
+  "case_id": "flat_plate_rans_sst",
+  "phase": "M4",
+  "gate_status": "MOCKED",
+  "checkmesh_invoked": false,
+  "declared_contract": {
+    "checkmesh_required": true,
+    "boundary_layer_required": true,
+    "y_plus_target": {
+      "min": 0.5,
+      "max": 5.0,
+      "wall_function_policy": "low_re_resolved"
+    },
+    "quality_thresholds": {
+      "max_non_orthogonality": 65,
+      "max_skewness": 4.0,
+      "max_aspect_ratio": 1000
+    }
+  },
+  "notes": [
+    "solver_backend=mocked; checkMesh was not invoked.",
+    "Mesh quality cannot be validated without a real backend run."
+  ]
+}

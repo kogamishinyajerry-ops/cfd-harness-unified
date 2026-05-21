@@ -1,0 +1,30 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| M9.2: drives mean velocity in the periodic channel.                          |
+|                                                                              |
+| With cyclic inlet/outlet there is no pressure gradient at the boundary to    |
+| accelerate the flow. `meanVelocityForce` is an OpenFOAM fvOptions source     |
+| term that adds a uniform body force each iteration tuned to maintain a       |
+| target bulk velocity. This is the canonical setup for fully-developed        |
+| periodic-channel CFD validation against DNS data.                            |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+momentumSource
+{
+    type            meanVelocityForce;
+
+    selectionMode   all;
+
+    fields          (U);
+    Ubar            (10 0 0);   // target bulk velocity; matches manifest design intent
+}
+
+// ************************************************************************* //

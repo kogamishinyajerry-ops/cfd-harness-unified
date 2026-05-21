@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-05-21T02:44:48Z",
+  "case_id": "backward_facing_step",
+  "phase": "Phase 0 scaffold",
+  "geometry_contract_present": true,
+  "required_patches_declared": [
+    "inlet",
+    "outlet",
+    "bottomWall",
+    "stepFace",
+    "topWall",
+    "frontAndBack"
+  ],
+  "patch_inspection": "not_performed",
+  "notes": [
+    "Phase 0 scaffold: no real polyMesh/STL inspection.",
+    "Future work: parse constant/polyMesh/boundary, verify required patches exist."
+  ]
+}

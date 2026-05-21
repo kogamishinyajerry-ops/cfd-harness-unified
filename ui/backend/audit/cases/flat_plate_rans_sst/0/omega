@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+| omega = sqrt(k) / (C_mu^0.25 * L_t)                                        |
+|       = sqrt(0.135) / (0.5477 * 0.01) ≈ 67                                |
+|   per manifest.bc_contract.inlet.omega.mixingLength = 0.01                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 67;
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    0.01;          // matches manifest
+        value           uniform 67;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    wall
+    {
+        // matches manifest.bc_contract.wall.omega.type = omegaWallFunction
+        type            omegaWallFunction;
+        value           uniform 67;
+    }
+    top
+    {
+        type            symmetryPlane;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

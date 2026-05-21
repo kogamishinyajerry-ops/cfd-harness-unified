@@ -1,0 +1,42 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (30 0 0);   // matches manifest inlet velocity 30 m/s
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (30 0 0);
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    wall
+    {
+        type            noSlip;
+    }
+    top
+    {
+        type            symmetryPlane;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

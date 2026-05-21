@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | AI-CFD-V2 M2 — backward_facing_step             |
+|  \\    /   O peration     | OpenFOAM 11                                     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    object      k;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 2 -2 0 0 0 0];
+
+// k = 1.5 * (I*U)² ; I = 0.01, U = 44.2 m/s → k = 0.293 m²/s²
+internalField   uniform 0.293;
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentIntensityKineticEnergyInlet;
+        intensity       0.01;
+        value           uniform 0.293;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+    bottomWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.293;
+    }
+    stepFace
+    {
+        type            kqRWallFunction;
+        value           uniform 0.293;
+    }
+    topWall
+    {
+        type            kqRWallFunction;
+        value           uniform 0.293;
+    }
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //
