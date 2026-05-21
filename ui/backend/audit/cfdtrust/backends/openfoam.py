@@ -443,8 +443,18 @@ def _run_docker_command(
 # simpleFoam emits lines like:
 #   smoothSolver:  Solving for Ux, Initial residual = 0.123, Final residual = 0.001, No Iterations 5
 #   GAMG:  Solving for p, Initial residual = 0.45, Final residual = 0.003, No Iterations 12
+#
+# Gap #20 (case_006 ONERA M6 transonic dogfood): density-based compressible
+# solvers like `rhoCentralFoam` use the trivial `diagonal:` solver for
+# rho/rhoUx/rhoUy/rhoUz/rhoE — without it the residual stream went unparsed.
+# Gap #25 (case_007 KCS ship VOF dogfood): VOF phase fields are dotted names
+# (`alpha.water`, `alpha.air`, ...). `\w` does NOT match `.`, so the
+# alpha-fraction line was previously skipped, leaving VOF cases with no
+# parseable transport residuals. Widening to `[\w.]+` captures dotted fields
+# while still rejecting whitespace/punctuation that would falsely match
+# patch names or diagnostic lines.
 _RESIDUAL_LINE_RE = re.compile(
-    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG|DILUPBiCGStab|PBiCG|DICPBiCGStab)\s*:\s*Solving for\s+(\w+),"
+    r"^(?:smoothSolver|GAMG|PCG|PBiCGStab|DICPCG|DILUPBiCGStab|PBiCG|DICPBiCGStab|diagonal)\s*:\s*Solving for\s+([\w.]+),"
     r"\s*Initial residual\s*=\s*([\d.eE+\-]+),"
     r"\s*Final residual\s*=\s*([\d.eE+\-]+),"
 )
@@ -489,6 +499,18 @@ def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
     current_iter: int | None = None
     current_residuals: Dict[str, float] = {}
     converged = False
+    # Gap #21 (case_006 ONERA M6 / case_007 KCS VOF dogfood): `final_iter`
+    # semantically means "how many iterations the solver ran". For
+    # steady-state runs OpenFOAM emits integer `Time = N` and the value
+    # IS the iteration count (preserved behavior). But density-based
+    # compressible runs and VOF runs use sub-second timesteps
+    # (`Time = 1e-06`, `Time = 2e-06`, ...) which `int(float(...))`
+    # collapses to 0, making 5000-step runs report `final_iter: 0`.
+    # When the parsed timestamp is < 1 (sub-second), fall back to a
+    # monotonically incrementing counter so the iteration count is at
+    # least faithfully reported. Steady-state semantics (iter == Time)
+    # remain unchanged.
+    iter_counter = 0
 
     for raw_line in log_text.splitlines():
         line = raw_line.rstrip()
@@ -498,9 +520,16 @@ def _parse_simplefoam_log(log_text: str) -> Dict[str, Any]:
             if current_iter is not None and current_residuals:
                 iterations.append({"iter": current_iter, "residuals": current_residuals})
             try:
-                current_iter = int(float(m_time.group(1)))
+                t_val = float(m_time.group(1))
             except ValueError:
                 current_iter = None
+                current_residuals = {}
+                continue
+            iter_counter += 1
+            t_int = int(t_val)
+            # Gap #21: when `int(timestamp)` would be 0 (sub-second
+            # transient), use the counter so we don't lose the iter.
+            current_iter = t_int if t_int >= 1 else iter_counter
             current_residuals = {}
             continue
 
@@ -569,11 +598,23 @@ def _compute_gate_from_residuals(
     contract = manifest.get("solver_contract", {})
     targets = contract.get("residual_targets", {})
     max_iter = int(contract.get("max_iterations", 500))
+    # Gap #22 (case_006 / case_007 dogfood): summary messages historically
+    # hardcoded "simpleFoam …", which lies for rhoCentralFoam, interFoam,
+    # chtMultiRegionSimpleFoam, etc. Read the manifest's declared solver
+    # name (top-level `solver` field, same source as
+    # `_candidate_log_names`); fall back to "solver" if missing or
+    # ill-typed. Honesty fences keep all other behavior identical.
+    raw_solver = manifest.get("solver")
+    solver_name = (
+        raw_solver.strip()
+        if isinstance(raw_solver, str) and raw_solver.strip()
+        else "solver"
+    )
 
     if not parsed["iterations"]:
         return {
             "status": "BLOCKED",
-            "summary": "simpleFoam log contained zero parseable iterations.",
+            "summary": f"{solver_name} log contained zero parseable iterations.",
             "details": {
                 "execution": "attempted",
                 "real_solver_invoked": True,
@@ -616,7 +657,7 @@ def _compute_gate_from_residuals(
         return {
             "status": "BLOCKED",
             "summary": (
-                "simpleFoam converged but none of the manifest's target fields "
+                f"{solver_name} converged but none of the manifest's target fields "
                 f"({sorted(targets.keys())}) appeared in the log."
             ),
             "details": {
@@ -627,7 +668,7 @@ def _compute_gate_from_residuals(
                 "fields_in_log": sorted(final.keys()),
                 "next_step": (
                     "Check `solver_contract.residual_targets` field names "
-                    "against actual simpleFoam residual lines. OpenFOAM 11 "
+                    f"against actual {solver_name} residual lines. OpenFOAM 11 "
                     "emits split components (Ux, Uy, Uz) but the manifest "
                     "may name combined `U`; this gate already maps `U` → "
                     "max(Ux,Uy,Uz), but other names must match exactly."
@@ -642,7 +683,7 @@ def _compute_gate_from_residuals(
         return {
             "status": "FAIL",
             "summary": (
-                f"simpleFoam ran {parsed['final_iter']}/{max_iter} iters; "
+                f"{solver_name} ran {parsed['final_iter']}/{max_iter} iters; "
                 f"{len(failed)}/{len(checked)} field(s) did not reach residual target."
             ),
             "details": {
@@ -660,7 +701,7 @@ def _compute_gate_from_residuals(
     return {
         "status": "PASS",
         "summary": (
-            f"simpleFoam converged at iter {parsed['final_iter']} "
+            f"{solver_name} converged at iter {parsed['final_iter']} "
             f"(all {len(checked)} field residuals ≤ target)."
         ),
         "details": {
@@ -1836,15 +1877,37 @@ def _find_external_solver_log(
         p = case_dir / name
         if p.is_file():
             return p
-    # log/ subdir fallback (Gap #10) — bounded, non-recursive.
-    log_subdir = case_dir / "log"
-    if log_subdir.is_dir():
+    # Gap #10 + Gap #17: bounded subdir fallback. Original Gap #10 walked
+    # only `case_dir/log/`; Gap #17 (case_006 ONERA M6 dogfood) extends
+    # to ALSO walk one-level into `case_dir/log_*/` because industrial
+    # Allrun layouts version their log directories
+    # (`log_v64_v2/04_solver.log`, `log_v64_v3/...`). Single-level
+    # globbing only — recursive walks invite DoS-on-deep-trees and
+    # ambiguity. The `log` plain directory remains first so existing
+    # Gap #10 precedence is preserved.
+    plain_log = case_dir / "log"
+    try:
+        versioned_dirs = sorted(
+            (
+                p for p in case_dir.glob("log_*")
+                if p.is_dir()
+            ),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        versioned_dirs = []
+    log_subdirs: List[Path] = []
+    if plain_log.is_dir():
+        log_subdirs.append(plain_log)
+    log_subdirs.extend(versioned_dirs)
+    for subdir in log_subdirs:
         for name in candidates:
-            p = log_subdir / name
+            p = subdir / name
             if p.is_file():
                 return p
-    # Gap #14: versioned-suffix glob fallback. Only fires if manifest
-    # carries a sanitised solver name (re-derived from primary list).
+    # Gap #14 (+ Gap #17 extension): versioned-suffix glob fallback.
+    # Only fires if manifest carries a sanitised solver name.
     solver_glob: str | None = None
     for name in primary:
         if name.startswith("log."):
@@ -1852,16 +1915,19 @@ def _find_external_solver_log(
             solver_glob = f"{name}*"
             break
     if solver_glob is not None:
-        for dir_to_scan in (case_dir, log_subdir if log_subdir.is_dir() else None):
-            if dir_to_scan is None:
-                continue
+        glob_dirs: List[Path] = [case_dir]
+        glob_dirs.extend(log_subdirs)
+        all_matches: List[Path] = []
+        for dir_to_scan in glob_dirs:
             try:
-                matches = [p for p in dir_to_scan.glob(solver_glob) if p.is_file()]
+                all_matches.extend(
+                    p for p in dir_to_scan.glob(solver_glob) if p.is_file()
+                )
             except OSError:
-                matches = []
-            if matches:
-                matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                return matches[0]
+                pass
+        if all_matches:
+            all_matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            return all_matches[0]
     return None
 
 

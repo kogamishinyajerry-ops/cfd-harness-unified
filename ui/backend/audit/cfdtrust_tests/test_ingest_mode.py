@@ -1611,3 +1611,153 @@ def test_ingest_exact_log_name_still_wins_over_versioned_glob(
 
     assert gate["status"] != "BLOCKED", gate
     assert gate["details"]["external_log_source"] == "log.simpleFoam"
+
+
+# ---------- Gap #17: versioned log_*/ subdir discovery (case_006 dogfood) ----------
+
+
+def test_ingest_finds_log_in_versioned_log_subdir(monkeypatch, tmp_path: Path):
+    """Gap #17 (case_006 ONERA M6 transonic dogfood): industrial Allrun
+    layouts version their log directories
+    (`log_v64_v2/04_solver.log`, `log_v64_v3/...`). The exact candidate
+    names (`log_<solver>.txt`, `log.<solver>`, `<solver>.log`) must be
+    searched inside any single-level `log_*/` subdir in addition to the
+    `log/` subdir from Gap #10."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    versioned = tmp_path / "log_v64_v2"
+    versioned.mkdir()
+    (versioned / "simpleFoam.log").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["status"] != "BLOCKED", gate
+    assert gate["details"]["external_log_source"] == "log_v64_v2/simpleFoam.log"
+
+
+def test_ingest_log_subdir_still_wins_over_versioned_log_subdir(
+    monkeypatch, tmp_path: Path,
+):
+    """Gap #17: precedence — when BOTH `log/` (Gap #10) and `log_v64_*/`
+    (Gap #17) carry solver logs, the plain `log/` directory wins to
+    preserve Gap #10 behaviour."""
+    _make_ingestable_case(tmp_path, with_log=False)
+    plain = tmp_path / "log"
+    plain.mkdir()
+    (plain / "simpleFoam.log").write_text(_CANONICAL_SIMPLEFOAM_LOG)
+    versioned = tmp_path / "log_v64_v2"
+    versioned.mkdir()
+    (versioned / "simpleFoam.log").write_text("VERSIONED — MUST NOT WIN\n")
+    _patch_docker_for_ingest(monkeypatch)
+
+    gate = ofa.ingest(tmp_path, _ingest_manifest_fixture())
+
+    assert gate["details"]["external_log_source"] == "log/simpleFoam.log"
+
+
+# ---------- Gap #20: diagonal solver in residual regex ----------
+
+
+def test_parse_simplefoam_log_captures_diagonal_solver_residuals():
+    """Gap #20 (case_006 ONERA M6 / rhoCentralFoam): density-based
+    compressible solvers use the `diagonal:` solver for rho-related
+    fields. The residual regex must capture these or compressible runs
+    will report zero parseable residuals.
+    """
+    log = (
+        "Time = 1\n"
+        "diagonal:  Solving for rho, Initial residual = 0.5, Final residual = 0.0001, No Iterations 1\n"
+        "diagonal:  Solving for rhoUx, Initial residual = 0.4, Final residual = 0.0001, No Iterations 1\n"
+        "diagonal:  Solving for rhoE, Initial residual = 0.3, Final residual = 0.0001, No Iterations 1\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+
+    assert len(parsed["iterations"]) == 1
+    residuals = parsed["iterations"][0]["residuals"]
+    assert residuals["rho"] == 0.5
+    assert residuals["rhoUx"] == 0.4
+    assert residuals["rhoE"] == 0.3
+
+
+# ---------- Gap #21: counter for sub-second transient timestamps ----------
+
+
+def test_parse_simplefoam_log_counts_iters_for_subsecond_timesteps():
+    """Gap #21 (case_006 / case_007 transient dogfood): when the run is
+    transient with sub-second timesteps (`Time = 1e-06`), the iter
+    field must report the count of timesteps, NOT `int(timestamp) == 0`.
+    Steady-state runs (Time = 1, 2, 3) preserve iter == int(Time)
+    semantics (verified by existing
+    test_parse_simplefoam_log_extracts_iterations_and_yplus).
+    """
+    lines = []
+    for step in range(1, 6):
+        lines.append(f"Time = {step}e-06")
+        lines.append(
+            "diagonal:  Solving for rho, Initial residual = 0.5, "
+            "Final residual = 0.0001, No Iterations 1"
+        )
+    parsed = ofa._parse_simplefoam_log("\n".join(lines) + "\n")
+
+    # 5 sub-second timesteps → final_iter must be 5 (not 0).
+    assert parsed["final_iter"] == 5, (
+        f"sub-second iters collapsed; got final_iter={parsed['final_iter']}"
+    )
+    assert len(parsed["iterations"]) == 5
+    iters = [it["iter"] for it in parsed["iterations"]]
+    assert iters == [1, 2, 3, 4, 5]
+
+
+# ---------- Gap #22: gate.summary uses manifest solver name ----------
+
+
+def test_gate_summary_uses_manifest_solver_name_not_hardcoded_simplefoam():
+    """Gap #22 (case_006 / case_007 dogfood): when the manifest declares
+    `solver: rhoCentralFoam` (or any non-simpleFoam solver), the gate
+    summary string must use that name, not lie by saying
+    "simpleFoam converged …"."""
+    manifest = {
+        "solver": "rhoCentralFoam",
+        "solver_contract": {
+            "residual_targets": {"rho": 1.0e-3},
+            "max_iterations": 1000,
+        },
+    }
+    log = (
+        "Time = 1\n"
+        "diagonal:  Solving for rho, Initial residual = 1e-4, "
+        "Final residual = 1e-5, No Iterations 1\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+    gate = ofa._compute_gate_from_residuals(parsed, manifest)
+
+    assert gate["status"] == "PASS", gate
+    assert "rhoCentralFoam" in gate["summary"], gate["summary"]
+    assert "simpleFoam" not in gate["summary"], gate["summary"]
+
+
+# ---------- Gap #25: VOF dotted-field names (alpha.water) ----------
+
+
+def test_parse_simplefoam_log_captures_dotted_vof_fields():
+    """Gap #25 (case_007 KCS ship VOF dogfood): VOF transport residuals
+    use dotted phase-field names (`alpha.water`, `alpha.air`).
+    The widened `[\\w.]+` capture group must extract them, otherwise
+    every VOF case looks like "no residuals parsed"."""
+    log = (
+        "Time = 1\n"
+        "MULES: Solving for alpha.water\n"
+        "smoothSolver:  Solving for alpha.water, Initial residual = 0.5, "
+        "Final residual = 0.001, No Iterations 3\n"
+        "GAMG:  Solving for p_rgh, Initial residual = 0.3, "
+        "Final residual = 0.0001, No Iterations 5\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+
+    assert len(parsed["iterations"]) == 1
+    residuals = parsed["iterations"][0]["residuals"]
+    assert residuals["alpha.water"] == 0.5, (
+        f"alpha.water missing from residuals; got {list(residuals.keys())}"
+    )
+    # p_rgh (underscored) must still parse via the same widened group.
+    assert residuals["p_rgh"] == 0.3
