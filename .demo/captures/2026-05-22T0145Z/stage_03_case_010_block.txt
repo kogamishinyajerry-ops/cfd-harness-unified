@@ -1,0 +1,3 @@
+[cfdtrust] FAIL ingest BLOCKED: Case directory does not look like an OpenFOAM case.
+[cfdtrust] FAIL   reason: case_dir_not_openfoam_compatible
+[cfdtrust] WARN   next step: Provide system/, constant/, and 0/ directories alongside case_manifest.yaml.

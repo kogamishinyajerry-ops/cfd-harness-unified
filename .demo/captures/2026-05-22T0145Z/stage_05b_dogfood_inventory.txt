@@ -1,0 +1,7 @@
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_004_nrel_phase_vi_mrf/case/DOGFOOD_CASE_004.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_006_onera_m6_transonic/case/DOGFOOD_CASE_006.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_010_drivaer_fastback_les/case/DOGFOOD_CASE_010.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_021_nasa_tmr_flat_plate/case_v65/DOGFOOD_CASE_021.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_007_kcs_ship_vof/case/DOGFOOD_CASE_007.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case/DOGFOOD_CASE_011.md
+/Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_027_hagen_poiseuille_pipe/case_v65/DOGFOOD_CASE_027.md

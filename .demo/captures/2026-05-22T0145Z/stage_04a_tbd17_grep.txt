@@ -1,0 +1,80 @@
+commit e1867aa201c9d9b03402b3d2b8c590f66c509fe7
+Author:     claude-opus47-app <claude-opus47-app@anthropic.com>
+AuthorDate: Fri May 22 01:43:04 2026 +0800
+Commit:     claude-opus47-app <claude-opus47-app@anthropic.com>
+CommitDate: Fri May 22 01:43:04 2026 +0800
+
+    docs(demo): ship 2026-05-22 milestone demo materials + dogfood reports
+    
+    Project-governor agent verdict: SHIP THE DEMO. Marketing director agent
+    produced 4 stakeholder-facing deliverables framing the milestone as
+    "an industrial CFD workbench whose AI advisor refuses to fabricate
+    verdicts" — 9 physics regimes verified, 1 self-discovered honesty bug
+    (TBD-17) caught and shipped in-arc.
+    
+    Deliverables:
+    - DEMO.md (root) — 5-min walkthrough + pitch + 30-sec elevator
+    - .planning/milestones/CHANGELOG_MILESTONE_2026-05-22.md — stakeholder
+      changelog with capability matrix + commit provenance
+    - .planning/V_SERIES_CORPUS_MAP.md — V-series death-mode catalog map
+    - .planning/milestones/DEMO_SCREEN_RECORDING_OUTLINE.md — annotated
+      recording script for asciinema/OBS
+    
+    Plus 2 new dogfood reports from cycle 1.5/2:
+    - .planning/dogfood/DOGFOOD_CASE_009.md — Sandia Flame D (reacting,
+      surfaced TBD-17 silent-skip bug + fix landed commit 3b5c43f)
+    - .planning/dogfood/DOGFOOD_CASE_028.md — APU bay industrial 34-patch
+      buoyant CHT (ingest succeeds, honest FAIL on patch enumeration)
+    
+    Strategic framing per DEC-V61-130 + user SSOT
+    feedback_claude_code_is_the_advisor.md: advisor surface is Claude Code
+    session reading V-series corpus, NOT a wired-up RAG button. Demo
+    explicitly does NOT promise M6 charter-class work (Gap #28 schema
+    redesign / Gap #23 compressible regex / etc.) — those are queued
+    post-demo.
+    
+    confidence: high
+
+commit 5769673a06db72295c3c4442ca55f1248808392a
+Merge: 93c70ce 3b5c43f
+Author:     claude-opus47-app <claude-opus47-app@anthropic.com>
+AuthorDate: Fri May 22 01:33:44 2026 +0800
+Commit:     claude-opus47-app <claude-opus47-app@anthropic.com>
+CommitDate: Fri May 22 01:33:44 2026 +0800
+
+    Merge: TBD-17 honesty-adjacent + 2 reacting spikes (case_009 findings)
+    
+    TBD-17 (CRITICAL): solver_gate emits BLOCKED with incomplete_residual_coverage
+    when manifest target fields are absent from residuals.csv. Closes the
+    loudest honesty-adjacent surface in the dogfood arc — top-level fences
+    held, but sub-gate was silently skipping missing fields.
+    
+    TBD-15: log_*.txt fallback gated by solver-name in head (multi-stage
+    reacting workflows like log_cold.txt + log_ignite.txt).
+    
+    TBD-19: residual regex captures parenthesized species (CH2(S) vs CH2
+    chemkin singlet/triplet preserved as distinct columns).
+    
+    confidence: high
+
+commit 3b5c43f311f1f9a14091ca05ceade69574c67f0a
+Author:     claude-opus47-app <claude-opus47-app@anthropic.com>
+AuthorDate: Fri May 22 01:32:54 2026 +0800
+Commit:     claude-opus47-app <claude-opus47-app@anthropic.com>
+CommitDate: Fri May 22 01:32:54 2026 +0800
+
+    fix(audit-ingest): honesty-adjacent + 2 reacting spikes (TBD-15/#17/#19 from case_009)
+    
+    TBD-17 (CRITICAL): solver_gate no longer silently skips manifest
+    target fields absent from residuals.csv; emits BLOCKED with
+    incomplete_residual_coverage + missing_target_fields list when
+    coverage < 100%. Closes the loudest honesty-adjacent surface
+    discovered in the dogfood arc.
+    
+    TBD-15: _find_external_solver_log accepts log_*.txt fallback when
+    head contains solver name (multi-stage reacting workflows).
+    
+    TBD-19: residual field regex captures parenthesized species names
+    (CH2(S) vs CH2 — chemkin singlet/triplet distinction preserved).
+    
+    confidence: high

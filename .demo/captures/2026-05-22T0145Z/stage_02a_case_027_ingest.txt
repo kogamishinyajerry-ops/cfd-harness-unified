@@ -1,0 +1,4 @@
+[cfdtrust] OK   ingest PASS: simpleFoam converged at iter 5000 (all 2 field residuals ≤ target).
+[cfdtrust] OK     external_log_source = log_simpleFoam.txt
+[cfdtrust] OK     checkmesh_image     = openfoam/openfoam11-paraview510:latest
+[cfdtrust] WARN Ingested run: harness did NOT witness the solver execution. trust_report will cap overall_status at WARN; validation_status cannot reach `validated`.

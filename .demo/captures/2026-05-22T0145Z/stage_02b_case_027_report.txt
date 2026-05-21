@@ -1,0 +1,5 @@
+[cfdtrust] OK   trust_report written: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_027_hagen_poiseuille_pipe/case_v65/artifacts/trust_report.json
+        overall_status   = FAIL
+        solver_execution = ingested
+        validation_status= not_validated
+[cfdtrust] WARN This trust_report does NOT constitute real CFD validation.

@@ -1,0 +1,21 @@
+e1867aa docs(demo): ship 2026-05-22 milestone demo materials + dogfood reports
+5769673 Merge: TBD-17 honesty-adjacent + 2 reacting spikes (case_009 findings)
+3b5c43f fix(audit-ingest): honesty-adjacent + 2 reacting spikes (TBD-15/#17/#19 from case_009)
+93c70ce Merge: close 5 dogfood spikes from case_006 + case_007 (Gap #17/#20/#21/#22/#25)
+c5354e1 fix(audit-ingest): close 5 dogfood spikes from case_006 + case_007 (Gap #17/#20/#21/#22/#25)
+a03b066 Merge: close 3 dogfood spikes (Gap #12+#13+#14)
+a82edde fix(audit-ingest): close 3 dogfood spikes (Gap #12+#13+#14)
+bd29b77 docs(notion-sync): backfill notion_sync_status for 2 newly-Accepted follow-up DECs
+22c5e83 Merge: DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED land
+666acea Merge: DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE land
+8af43cb Merge: Gap #10 — search case_dir/log/ subdir for solver log
+9de3430 docs(audit-ingest): backfill commit SHA into DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE implementation note
+e86c011 feat(audit-ingest): discriminate precondition vs post-residual BLOCKED (DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE)
+7144192 feat(audit-ingest): relax decomposed BLOCK to finalized-reference only (DEC-V61-201-SUB-INGEST-P2-DECOMPOSED-NOT-FINALIZED)
+adc4c24 fix(audit-ingest): search case_dir/log/ subdir for solver log (Gap #10)
+553237d docs(notion-sync): backfill notion_sync_status for 2 Accepted DECs
+3781e16 Merge: DEC-V61-201-SUB-INGEST-P2-FOLLOWUP land (gate recompute from residuals)
+f45ec3b Merge: Gap #9 DILUPBiCGStab residual regex fix
+981df56 docs(audit-ingest): backfill commit SHA bbe2c4e into P2-FOLLOWUP DEC implementation note
+bbe2c4e feat(audit): recompute ingest gate from residuals when solver_gate.json missing (DEC-V61-201-SUB-INGEST-P2-FOLLOWUP)
+00518d3 fix(audit): extend _RESIDUAL_LINE_RE to OFv2312 default solvers (Gap #9)

@@ -1,0 +1,71 @@
+# Trust Report Explanation: `case_027_hagen_poiseuille_pipe`
+
+- Generated: `2026-05-21T17:57:44Z`
+- Overall status: **FAIL**
+- Solver execution: `ingested`
+- Validation status: `not_validated`
+
+## TL;DR
+
+This case did NOT pass its declared case contract. The harness surfaces issues in: `['mesh_contract', 'bc_contract']`. Per the honesty rules, the trust report does NOT claim validation when any audit gate FAILs.
+
+## Per-gate breakdown
+
+### `geometry_contract`: **PASS**
+
+**Summary:** presence PASS (6/6); dimensionality PASS.
+
+**Why:** All 6 realized polyMesh patches match the manifest's `required_patches`, and the manifest's declared dimensionality matches the realized mesh (empty patches present iff 2.5D/2D).
+
+
+### `mesh_contract`: **FAIL**
+
+**Summary:** quality FAIL on ['max_skewness']; y+ INCOMPLETE (no_solver_y_plus_data).
+
+**Why:** `max_skewness` is 9.174271638e+149 but the manifest's threshold is 4.0.
+
+**Recommendation:** Improve mesh quality: refine cells, use grading, or run `renumberMesh` to reduce non-orthogonality.
+
+
+### `bc_contract`: **FAIL**
+
+**Summary:** file_presence FAIL (missing=['__none_laminar__'], unparseable=[]); patch_coverage FAIL (gaps={'U': ['axis'], 'p': ['axis']}); type_match PASS (5 pairs); value_match PASS (0 pairs); derived PASS (0 pairs).
+
+**Why:** missing 0/<field> files: `['__none_laminar__']`; missing BC entries per field: `{'U': ['axis'], 'p': ['axis']}`.
+
+**Recommendation:** Create the missing field files in the case's `0/` directory. For each field, declare a `boundaryField` block listing every polyMesh patch. Add the missing patch entries to each affected 0/<field> file. OpenFOAM requires every polyMesh patch to have a BC declaration in every solved field.
+
+
+### `solver_execution`: **PASS**
+
+**Summary:** simpleFoam converged at iter 5000 (all 2 field residuals ≤ target).
+
+**Why:** simpleFoam converged at iteration 5000 with all residual targets met.
+
+
+### `qoi_extraction`: **MOCKED**
+
+**Summary:** QoI extraction not yet performed; 1 declared QoIs.
+
+**Why:** QoI extraction not yet performed for this case.
+
+**Recommendation:** Wire the QoI extractor for this case-family if quantitative comparison is needed.
+
+
+### `reference_comparison`: **MOCKED**
+
+**Summary:** Reference comparison status = not_finalized; no real comparison performed (solver_backend != openfoam or wallShearStress not emitted yet).
+
+**Why:** No reference comparison performed (manifest declares `reference_comparison.status: not_finalized`).
+
+**Recommendation:** Finalize reference data — see `reference_comparison.source_url` for the upstream pointer.
+
+
+## Honesty disclosures
+
+- Solver run was ingested from an external OpenFOAM invocation; the trust harness did not witness the run. validation_status capped at `partial` even when gates and reference comparison both PASS.
+- Reference comparison is a placeholder. No published data was compared against.
+
+## Next best action
+
+Address the blocker on `mesh_contract` first (status: `FAIL`). Earlier gates in the audit chain affect downstream gates, so fixing geometry/mesh/BC issues often resolves apparent solver / reference failures too.

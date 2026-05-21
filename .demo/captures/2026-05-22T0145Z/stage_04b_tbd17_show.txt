@@ -1,0 +1,24 @@
+commit 3b5c43f311f1f9a14091ca05ceade69574c67f0a
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Fri May 22 01:32:54 2026 +0800
+
+    fix(audit-ingest): honesty-adjacent + 2 reacting spikes (TBD-15/#17/#19 from case_009)
+    
+    TBD-17 (CRITICAL): solver_gate no longer silently skips manifest
+    target fields absent from residuals.csv; emits BLOCKED with
+    incomplete_residual_coverage + missing_target_fields list when
+    coverage < 100%. Closes the loudest honesty-adjacent surface
+    discovered in the dogfood arc.
+    
+    TBD-15: _find_external_solver_log accepts log_*.txt fallback when
+    head contains solver name (multi-stage reacting workflows).
+    
+    TBD-19: residual field regex captures parenthesized species names
+    (CH2(S) vs CH2 — chemkin singlet/triplet distinction preserved).
+    
+    confidence: high
+
+ ui/backend/audit/cfdtrust/backends/openfoam.py     | 107 ++++++++++++-
+ .../audit/cfdtrust_tests/test_ingest_mode.py       | 174 +++++++++++++++++++++
+ .../audit/cfdtrust_tests/test_red_team_safety.py   |  32 ++--
+ 3 files changed, 302 insertions(+), 11 deletions(-)
