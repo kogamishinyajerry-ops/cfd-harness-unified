@@ -2362,3 +2362,27 @@ def test_mesh_log_discovery_prefers_latest_step_number(monkeypatch, tmp_path: Pa
     ofa.ingest(tmp_path, _ingest_manifest_fixture())
     mq = json.loads((tmp_path / "artifacts" / "mesh_quality.json").read_text())
     assert mq["mesh_pipeline_logs"]["snappyHexMesh"] == "03_snappyHexMesh.log"
+
+
+def test_collect_bc_sentinel_turbulence_fields_filtered_out(tmp_path: Path):
+    """Gap #32 (case_011 cycle-2 dogfood): __none_laminar__ sentinel in
+    manifest.bc_contract.turbulence_fields must NOT propagate into
+    bc_quality.json as a literal expected_field. The sentinel is a
+    manifest-authoring convention to signal "no turbulence fields";
+    the canonical way is now `turbulence_fields: []` or omit-the-key
+    (Gap #31 derivation), but historical sentinel manifests are
+    accepted + filtered."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = ["__none_laminar__"]
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "__none_laminar__" not in bc["expected_fields"], (
+        f"sentinel must be filtered; got {bc['expected_fields']}"
+    )
+    # The valid fields still come through.
+    assert bc["expected_fields"] == ["U", "p"]
+    # And it doesn't ghost into fields_missing either.
+    assert "__none_laminar__" not in bc.get("fields_missing", [])

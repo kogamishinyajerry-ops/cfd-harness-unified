@@ -1759,6 +1759,21 @@ def _collect_and_persist_bc(
         turb_model = physics.get("turbulence_model", "") or ""
         turb_fields = _turb_fields_from_model(turb_model)
 
+    # Gap #32 (case_011 cycle-2 dogfood): strip `__sentinel__` markers
+    # like `__none_laminar__` that some manifest-authoring conventions
+    # use to signal "no turbulence fields expected". Without this filter,
+    # the sentinel propagates into bc_quality.json as a literal
+    # expected_field, then surfaces as `missing` against a non-existent
+    # file path (e.g. `0/region_cold_fluid/__none_laminar__`). The
+    # canonical way to declare "no turb fields" is either explicit
+    # `turbulence_fields: []` or omitting the key entirely (so Gap #31
+    # derivation fires). Both already work; this just cleans up the
+    # historical sentinel convention without breaking older manifests.
+    turb_fields = [
+        f for f in turb_fields
+        if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
+    ]
+
     # Canonical incompressible RANS fields. Deduplicate while preserving
     # order: U, p first, then turbulence fields in manifest order.
     seen: set = set()
