@@ -157,7 +157,9 @@ user-ratified continuation + user-invoked hard-stop) is healthy.
 2. **Three concrete follow-up sub-DECs filed** as a direct outcome of
    this arc's hard stop:
    - `DEC-V61-201-SUB-INGEST-P2-FOLLOWUP`: recompute ingest gate from
-     residuals.csv when solver_gate.json is missing (R6 P2).
+     residuals.csv when solver_gate.json is missing (R6 P2). **LANDED
+     2026-05-22** (worktree-agent-a7e599b4f6b581d31, +31/-26 LOC in
+     `solver.py`, +1 net test, 405→406 passing).
    - `DEC-V61-201-SUB-INGEST-P1-GUARD-DISCRIMINATE`: tighten the R6
      BLOCKED-skip guard to discriminate precondition vs post-residual
      outcomes (R7 P1).

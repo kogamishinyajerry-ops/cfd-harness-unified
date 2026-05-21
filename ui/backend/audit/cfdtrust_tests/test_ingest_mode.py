@@ -418,10 +418,13 @@ def test_ingest_prepends_ingest_banner_to_solver_log(monkeypatch, tmp_path: Path
 def test_read_artifacts_recovers_ingested_when_gate_json_missing(
     monkeypatch, tmp_path: Path,
 ):
-    """Codex R5-P1: simulate `solver_gate.json` loss after a successful
-    ingest. read_artifacts() must classify as `execution="ingested"`
-    (NOT `"real"`) by detecting the banner — preserving the honesty
-    fences in `assemble()`."""
+    """Codex R5-P1 + P2-FOLLOWUP: simulate `solver_gate.json` loss after
+    a successful ingest. read_artifacts() must (1) classify as
+    `execution="ingested"` (NOT `"real"`) by detecting the banner, AND
+    (2) recompute the gate status from the residuals (NOT hard-code
+    WARN). The canonical fixture log converges all targets so the
+    recomputed status is PASS — the `assemble()` honesty fences will
+    then demote the overall to WARN + partial-validation."""
     from cfdtrust.audit.solver import read_artifacts
 
     _make_ingestable_case(tmp_path)
@@ -439,9 +442,47 @@ def test_read_artifacts_recovers_ingested_when_gate_json_missing(
         "silently upgrading to 'real' bypasses DEC-V61-201-SUB-INGEST honesty fences"
     )
     assert recovered["details"]["real_solver_invoked"] is False
-    # Status is WARN — the fallback recovered the provenance but the
-    # full gate evaluation (residual targets vs final iter) was lost.
-    assert recovered["status"] == "WARN"
+    assert recovered["details"]["recovered_from_log_banner"] is True
+    # Status is PASS — the canonical log's final residuals (1e-7) meet
+    # the manifest target (1e-3). Pre-P2-FOLLOWUP this was a hard-coded
+    # WARN, which silently demoted real evidence and blocked the
+    # PASS+ingested → partial-validation path in assemble().
+    assert recovered["status"] == "PASS"
+
+
+def test_read_artifacts_recovers_ingested_fail_when_residuals_miss_targets(
+    tmp_path: Path,
+):
+    """DEC-V61-201-SUB-INGEST-P2-FOLLOWUP: a non-converged ingested case
+    whose `solver_gate.json` is lost must recover as status=FAIL via
+    re-parsing the log + recomputing against manifest residual_targets.
+    Pre-P2-FOLLOWUP this was hard-coded WARN — silently upgrading real
+    FAIL evidence."""
+    from cfdtrust.audit.solver import INGEST_BANNER, read_artifacts
+    art = tmp_path / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+    # Banner-prefixed log whose final residuals (1e-1) are well ABOVE
+    # the manifest target (1e-3). No "converged" message either.
+    (art / "solver.log").write_text(
+        INGEST_BANNER
+        + "Time = 1\n"
+        + "smoothSolver:  Solving for Ux, Initial residual = 5.0e-1, Final residual = 1.0e-1, No Iterations 5\n"
+        + "GAMG:  Solving for p, Initial residual = 5.0e-1, Final residual = 1.0e-1, No Iterations 12\n"
+        + "Time = 2\n"
+        + "smoothSolver:  Solving for Ux, Initial residual = 1.0e-1, Final residual = 5.0e-2, No Iterations 5\n"
+        + "GAMG:  Solving for p, Initial residual = 1.0e-1, Final residual = 5.0e-2, No Iterations 6\n"
+    )
+    (art / "residuals.csv").write_text("iter,Ux,p\n1,5.0e-1,5.0e-1\n2,1.0e-1,1.0e-1\n")
+    recovered = read_artifacts(tmp_path, _ingest_manifest_fixture())
+    assert recovered["details"]["execution"] == "ingested"
+    assert recovered["details"]["real_solver_invoked"] is False
+    assert recovered["details"]["recovered_from_log_banner"] is True
+    assert recovered["status"] == "FAIL", (
+        "non-converged ingested run must recover as FAIL — silently "
+        "upgrading to WARN demotes real failure evidence"
+    )
+    # Failed-field details propagate from _compute_gate_from_residuals.
+    assert "failed_fields" in recovered["details"]
 
 
 def test_read_artifacts_real_fallback_still_works_for_non_banner_logs(
@@ -487,10 +528,13 @@ def test_ingest_banner_detection_avoids_false_positive_on_word_ingested(
 
 
 def test_assemble_honesty_fence_holds_via_log_banner_recovery(monkeypatch, tmp_path: Path):
-    """Codex R5-P1 end-to-end: with solver_gate.json deleted post-ingest,
-    the full `cfdtrust report` pipeline must STILL cap overall_status at
-    WARN and validation_status at `partial`. The banner-based recovery
-    plus the existing assemble() fences should hold the line."""
+    """Codex R5-P1 + P2-FOLLOWUP end-to-end: with solver_gate.json
+    deleted post-ingest on a fully-converged case, the recomputed
+    solver gate is PASS and `assemble()` then writes
+    overall_status=WARN + validation_status=`partial`. Pre-P2-FOLLOWUP
+    the hard-coded WARN solver gate forced `validation_status` to
+    `not_validated`, blocking the partial-validation branch from
+    firing after gate-JSON loss."""
     from cfdtrust.audit.solver import read_artifacts
 
     _make_ingestable_case(tmp_path)
@@ -502,6 +546,7 @@ def test_assemble_honesty_fence_holds_via_log_banner_recovery(monkeypatch, tmp_p
     # Now simulate cfdtrust report: read_artifacts + assemble.
     manifest = _ingest_manifest_fixture()
     solver_gate = read_artifacts(tmp_path, manifest)
+    assert solver_gate["status"] == "PASS"
     gates = {
         "geometry_contract":     {"status": "PASS"},
         "mesh_contract":         {"status": "PASS"},
@@ -515,10 +560,10 @@ def test_assemble_honesty_fence_holds_via_log_banner_recovery(monkeypatch, tmp_p
     }
     rp = assemble(tmp_path, manifest, gates)
     report = json.loads(rp.read_text())
-    # Honesty fences hold even after gate JSON loss.
+    # Honesty fences hold AND the partial-validation branch fires.
     assert report["solver_execution"] == "ingested"
-    assert report["overall_status"] != "PASS"
-    assert report["validation_status"] != "validated"
+    assert report["overall_status"] == "WARN"
+    assert report["validation_status"] == "partial"
 
 
 def test_explain_tldr_warn_non_ingested_empty_when_all_pass(tmp_path: Path):
