@@ -174,21 +174,29 @@ export function WorkbenchShellV4() {
                 onClick={() => {
                   const target = dynamicFrame.topbar_cta.target_step;
                   if (target == null) return;
-                  // Codex R1 P1 fix: V4 pipeline is more granular than the
-                  // backend 5-step spine (e.g., V4 import + geometry both
-                  // map to backend step 1). The backend's target_step says
-                  // "advance to the next step", but V4 always advances ONE
-                  // V4 step — never skips intra-spine V4 hops like
-                  // import → geometry. Walking V4_PIPELINE_STEPS forward
-                  // and matching by translated backend step is what made
-                  // import→mesh skip geometry (R0 attempt). Just take the
-                  // next V4 step in pipeline order.
+                  // Codex R2 P2 fix: balance two contracts —
+                  //  (a) backend target_step is the upper bound: never
+                  //      skip past it in one click
+                  //  (b) V4 step granularity matters: never skip an
+                  //      intra-spine V4 step (e.g. import → geometry
+                  //      both map to backend 1; we want to visit
+                  //      geometry, not jump straight to mesh)
+                  // Approach: advance ONE V4 step at a time, but only
+                  // if that next V4 step's backend step is ≤ target.
+                  // From V4 `import` + target=2: next V4 = geometry
+                  // (backend 1 ≤ 2 OK). On the next click from geometry,
+                  // next V4 = mesh (backend 2 == target OK). On the click
+                  // after that from mesh (backend 2 == target), next V4
+                  // = physics (backend 3 > target=2 — refused, CTA noops
+                  // until the backend issues a new target_step).
                   const currentIdx = V4_PIPELINE_STEPS.findIndex(
                     (s) => s.id === activeStep,
                   );
                   if (currentIdx < 0) return;
                   if (currentIdx + 1 >= V4_PIPELINE_STEPS.length) return;
-                  setActiveStep(V4_PIPELINE_STEPS[currentIdx + 1].id);
+                  const nextV4 = V4_PIPELINE_STEPS[currentIdx + 1];
+                  if (v4StepToBackendStep(nextV4.id) > target) return;
+                  setActiveStep(nextV4.id);
                 }}
               />
             </div>
