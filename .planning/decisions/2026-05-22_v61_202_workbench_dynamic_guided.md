@@ -1,11 +1,12 @@
 ---
 decision_id: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 title: Workbench dynamic guided UX — strategic pivot from audit-engine depth to full-flow usability
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: null
 phase: M3.0 (post-audit-engine-deepening phase open)
-notion_sync_status: pending_accepted
+notion_sync_status: pending
 autonomous_governance: false
 counter_status: v6.1 N/A (external gate · user-ratified pivot)
 charter_class: true
@@ -114,10 +115,10 @@ This DEC becomes Accepted (and the pivot operative) when:
 - [x] SSOT doc landed at `.planning/workbench/GUIDED_CASE_CONSTRUCTION_FLOW.md`
 - [x] Memory anchor saved at
       `~/.claude/projects/-Users-Zhuanz/memory/feedback_cfd_workbench_dynamic_guided_pivot.md`
-- [x] This DEC body lands with status=Proposed + frontmatter complete
-- [ ] DEC frontmatter flipped Proposed → Accepted (next commit, after this body is in)
+- [x] This DEC body lands with status=Accepted + frontmatter complete
+- [x] DEC frontmatter flipped Proposed → Accepted (this commit)
 - [ ] Notion sync (Decisions DB) — batched at session end per v2.3 rule "Notion only mirrors Accepted DECs"
-- [ ] DEC-V61-201-SUB-INGEST-VOF-CONTRACT confirmed as the last
+- [x] DEC-V61-201-SUB-INGEST-VOF-CONTRACT confirmed as the last
       audit-engine charter (Accepted 2026-05-22; if any new audit-engine
       sub-DEC slips through before this DEC's Accepted flip, it must be
       withdrawn or rebased onto the spike-class exemption).
@@ -145,10 +146,12 @@ This DEC becomes Accepted (and the pivot operative) when:
 
 ## Status
 
-**Proposed (2026-05-22)** — awaiting frontmatter flip to Accepted +
-Notion sync. SSOT body + memory + this charter all in place. Pivot is
-operationally live (no new audit-engine charters proposed in this
-session post-2026-05-22).
+**Accepted (2026-05-22).** User-ratified strategic pivot — the pivot itself
+was direct user utterance, the SSOT was written + landed per Q2, the
+charter body lands per Q3, and the audit-engine freeze is operative as of
+DEC-V61-201-SUB-INGEST-VOF-CONTRACT's Accepted flip (also 2026-05-22).
+
+Notion sync queued for session-end batch per v2.3 rule.
 
 ## Provenance
 
