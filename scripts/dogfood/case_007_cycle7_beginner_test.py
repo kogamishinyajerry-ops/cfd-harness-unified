@@ -144,6 +144,11 @@ def main():
     # transition so the dogfood validates the topbar.target_step
     # contract instead of manufacturing the arc client-side.
     step_transitions: list[tuple[int, int]] = []
+    # Codex R1 P2 #1 fix: capture the step-5 terminal CTA snapshot so
+    # we validate the documented step-5 contract (kind=submit_solve,
+    # target_step=None) instead of unconditionally breaking on
+    # current_step == 5.
+    step5_topbar_snapshot: dict | None = None
     decide_calls = 0
     current_step = 1
     last_field_seen_per_step: dict[int, str | None] = {}
@@ -191,21 +196,44 @@ def main():
 
         if rail["kind"] == "step_default" and topbar.get("enabled"):
             # Engineer clicks next_step / submit_solve.
-            if topbar["kind"] == "submit_solve" or current_step == 5:
+            if current_step == 5:
+                # Codex R1 P2 #1 fix: snapshot the terminal frame's
+                # topbar so the step-5 CTA contract (kind=submit_solve,
+                # target_step=None) gets validated in checks below.
+                # Without this, a regression to kind="next_step" at the
+                # terminal frame would still pass the dogfood.
+                step5_topbar_snapshot = dict(topbar)
+                break
+            if topbar["kind"] == "submit_solve":
+                # submit_solve before step 5 is itself a regression;
+                # break and let the step-5-reached check fail.
                 break
             # Codex R0 P2 #2 fix: trust the backend's target_step rather
             # than incrementing manually. If decide() ever returns a
             # wrong target (back-edge, skip, None on next_step), this
             # harness must surface that — record the transition and
             # let the forward-only acceptance check catch any regression.
+            #
+            # Codex R1 P2 #2 fix: also reject non-positive / out-of-range
+            # target_step BEFORE assigning to current_step, so we never
+            # crash on `/workbench_frame?step=0` before the
+            # transitions_well_formed check can fire.
             target = topbar.get("target_step")
-            if topbar["kind"] == "next_step" and isinstance(target, int):
+            if (
+                topbar["kind"] == "next_step"
+                and isinstance(target, int)
+                and 1 <= target <= 5
+            ):
                 step_transitions.append((current_step, target))
                 current_step = target
             else:
-                # Malformed next_step — record an obviously-invalid
-                # transition so the forward-only check fails loudly.
-                step_transitions.append((current_step, -1))
+                # Malformed next_step (non-int, out-of-range, or wrong
+                # CTA kind for a forward step). Record the actual bad
+                # value (default -1 if not even an int) so the
+                # transitions_well_formed check fails loudly with the
+                # offending payload.
+                bad_to = target if isinstance(target, int) else -1
+                step_transitions.append((current_step, bad_to))
                 break
             continue
 
@@ -278,6 +306,15 @@ def main():
         for frm, to in step_transitions
     )
 
+    # Codex R1 P2 #1 fix: step-5 terminal frame must have
+    # kind=submit_solve AND target_step=None AND enabled=True.
+    step5_cta_valid = (
+        step5_topbar_snapshot is not None
+        and step5_topbar_snapshot.get("kind") == "submit_solve"
+        and step5_topbar_snapshot.get("target_step") is None
+        and step5_topbar_snapshot.get("enabled") is True
+    )
+
     checks = [
         (f"≤{MAX_DECIDE_CALLS} decide() calls (junior 30-min budget)",
          decide_calls <= MAX_DECIDE_CALLS),
@@ -285,6 +322,8 @@ def main():
          forward_only),
         ("Backend topbar.target_step is well-formed (frm+1, ≤5, never -1)",
          transitions_well_formed and len(step_transitions) >= 1),
+        ("Step-5 terminal CTA contract (submit_solve, target_step=None, enabled)",
+         step5_cta_valid),
         ("Reached step 5 (proves engine drives all the way to solveable)",
          max(steps_visited_order) >= 5),
         ("Rail severity monotonically non-increasing within each step",

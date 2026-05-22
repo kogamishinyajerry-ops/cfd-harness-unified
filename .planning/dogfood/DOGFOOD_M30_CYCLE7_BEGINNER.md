@@ -3,9 +3,10 @@
 **DEC**: `2026-05-23_v61_202_sub_m30_cycle7_beginner_test.md` (Proposed)
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle7_beginner_test.py`
-**Verdict**: **PASS** (7/7 checks · all-PASS gate · post Codex R0 P2 fixes)
-**Codex**: R0 = 2 P2 findings (severity check vacuous · transitions client-side)
-fixed in R1 — see closure addendum.
+**Verdict**: **PASS** (8/8 checks · all-PASS gate · post Codex R0+R1 P2 fixes)
+**Codex**: R0 = 2 P2 (severity vacuous, transitions client-side) · R1 = 2 P2
+(step-5 CTA not validated, target_step=0 crashes harness) — all fixed
+verbatim, 2 rounds total under v2.3 cap=3.
 
 ---
 
@@ -61,12 +62,13 @@ This is the M3.0 litmus surrogate. It is **necessary but not sufficient**:
 
 ---
 
-## Checks (verbatim from the dogfood · post R1)
+## Checks (verbatim from the dogfood · post R2)
 
 ```
   [PASS] ≤20 decide() calls (junior 30-min budget)
   [PASS] Forward-only step arc (no back-edges, no repeats)
   [PASS] Backend topbar.target_step is well-formed (frm+1, ≤5, never -1)
+  [PASS] Step-5 terminal CTA contract (submit_solve, target_step=None, enabled)
   [PASS] Reached step 5 (proves engine drives all the way to solveable)
   [PASS] Rail severity monotonically non-increasing within each step
   [PASS] Provenance log exists with one line per decide() call
@@ -135,8 +137,9 @@ solver are step_default given a sparse but consistent manifest.
 
 ---
 
-## Codex R0 closure (2 P2 fixes · verbatim · single round)
+## Codex closure (2 rounds · 4 P2 fixes verbatim · under v2.3 cap=3)
 
+**R0** (2 P2):
 - **P2 #1**: severity-monotonic check was reading `rail.severity` (no such
   field on the wire schema) and `SEVERITY_RANK` missed `critical`/`warning`
   (the gap vocabulary). Every frame collapsed to rank 0 → check vacuous.
@@ -148,8 +151,17 @@ solver are step_default given a sparse but consistent manifest.
   in `step_transitions` and assert each is one-step forward (`to == frm+1`,
   `to ≤ 5`, never -1). New check #3 added.
 
-No R1 review round needed — verbatim fixes, single iteration, well under
-v2.3 cap=3.
+**R1** (2 more P2 — second-order holes from the R0 fixes):
+- **P2 #1**: step-5 terminal CTA not validated. If decide() regresses and
+  emits `kind=next_step` or non-null `target_step` at step 5, the test
+  still PASSed because `current_step == 5` broke out unconditionally.
+  Fix: snapshot the step-5 topbar before breaking; validate
+  `kind=submit_solve, target_step=None, enabled=True`. New check #4 added.
+- **P2 #2**: `target_step=0` or negative would crash the harness on the
+  next `/workbench_frame?step=0` GET before `transitions_well_formed`
+  could fire. Fix: validate `1 <= target <= 5` before assigning; record
+  `(current_step, bad_target)` so the existing check fails loudly with
+  the offending payload visible.
 
 ## Bottom line
 
