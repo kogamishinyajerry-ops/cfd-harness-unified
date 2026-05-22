@@ -304,12 +304,20 @@ def _check_frame_shape(regime: str, step: int, frame: dict) -> list[tuple[str, b
 # `forbidden_title_substring` guards against regressions to the
 # pre-Codex-R0 generic-gap surface.
 _SEMANTIC_EXPECTATIONS = [
-    # Clean RANS/LES — full imported-user manifest filled. Step 3+4
+    # RANS — manifest clean AND audit artifacts all PASS. Step 3+4
     # must reach step_default, NOT fall back to generic Fill: gaps.
     ("RANS-flatplate", 3, "step_default", "物理已设", "Fill: physics.solver"),
     ("RANS-flatplate", 4, "step_default", "边界已设", "Fill: bc.patches"),
+    # LES — manifest is clean (Step 3 step_default expected), but the
+    # bc_audit.json artifact staged a WARN via patch_coverage gaps. If
+    # decide() is later improved to surface that WARN as problem_fix
+    # at Step 4, we want this dogfood to still PASS (the UX is
+    # better, not worse). So Step 4 only asserts the negative guard:
+    # rail must NOT show the generic "Fill: bc.patches" fallback.
+    # exp_kind=None means "no kind requirement".
+    # Codex R2 P2 fix.
     ("LES-channel", 3, "step_default", "物理已设", "Fill: physics.solver"),
-    ("LES-channel", 4, "step_default", "边界已设", "Fill: bc.patches"),
+    ("LES-channel", 4, None, None, "Fill: bc.patches"),
     # Regimes whose artifacts explicitly carry FAILs at Step 4 — rail
     # must surface the audit signal, not a generic gap.
     ("Compressible-wedge", 4, "problem_fix", None, "Fill: bc.patches"),
@@ -332,13 +340,14 @@ def _check_semantic_expectations(
             continue
         actual_kind = trace["rail_kind"]
         actual_title = trace["rail_title"] or ""
-        out.append(
-            (
-                f"[semantic {regime} step={step}] rail.kind == {exp_kind} "
-                f"(got {actual_kind})",
-                actual_kind == exp_kind,
+        if exp_kind is not None:
+            out.append(
+                (
+                    f"[semantic {regime} step={step}] rail.kind == {exp_kind} "
+                    f"(got {actual_kind})",
+                    actual_kind == exp_kind,
+                )
             )
-        )
         if exp_title_sub:
             out.append(
                 (
