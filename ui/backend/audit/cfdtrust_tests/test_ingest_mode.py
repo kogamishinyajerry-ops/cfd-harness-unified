@@ -2850,6 +2850,113 @@ def test_phase_fields_derived_from_vof_contract_alpha_field_name(tmp_path: Path)
     )
 
 
+def test_vof_contract_pressure_field_defaults_to_p_rgh(tmp_path: Path):
+    """Codex R0 P1 (Gap #48): interFoam / compressibleInterFoam writes
+    `0/p_rgh` (hydrostatic-decomposed pressure), NOT `0/p`. When
+    vof_contract is present, expected_fields MUST contain p_rgh, not p,
+    so the engine looks at the file actually on disk. Pre-fix, cycle 6
+    charter was unusable on case_007 because expected_fields hardcoded
+    'p'."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["vof_contract"] = {
+        "phases": ["water", "air"],
+        "alpha_field_name": "alpha.water",
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "p_rgh" in bc["expected_fields"], (
+        f"Gap #48: vof_contract presence must default pressure file to "
+        f"p_rgh; got {bc['expected_fields']}"
+    )
+    assert "p" not in bc["expected_fields"], (
+        f"Gap #48: bare 'p' must NOT appear when vof_contract present; "
+        f"got {bc['expected_fields']}"
+    )
+
+
+def test_vof_contract_pressure_field_name_override_honored(tmp_path: Path):
+    """Codex R0 P1 (Gap #48): explicit vof_contract.pressure_field_name
+    override wins over the p_rgh default. Authors using a non-canonical
+    pressure-file name (rare) can set this and the engine walks that
+    file."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["vof_contract"] = {
+        "phases": ["water", "air"],
+        "alpha_field_name": "alpha.water",
+        "pressure_field_name": "p_buoyant",
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "p_buoyant" in bc["expected_fields"], (
+        f"Gap #48 override: explicit pressure_field_name must be honored; "
+        f"got {bc['expected_fields']}"
+    )
+    assert "p_rgh" not in bc["expected_fields"]
+    assert "p" not in bc["expected_fields"]
+
+
+def test_vof_contract_phases_drives_interfoam_two_phase_derivation(
+    tmp_path: Path,
+):
+    """Codex R0 P2 (Gap #49): when bc_contract.phase_fields AND
+    vof_contract.alpha_field_name are BOTH absent but vof_contract.phases
+    is set, derive expected_fields from phases per OpenFOAM convention.
+
+    interFoam 2-phase: ONLY first phase transported (second = 1 - alpha[0],
+    no separate file). expected_fields must contain alpha.<phase[0]> and
+    must NOT contain alpha.<phase[1]>."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["bc_contract"].pop("phase_fields", None)
+    # Phases set, but no alpha_field_name → must derive from phases.
+    manifest["vof_contract"] = {
+        "phases": ["water", "air"],
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "alpha.water" in bc["expected_fields"], (
+        f"Gap #49: 2-phase interFoam must derive alpha.<phase[0]>; "
+        f"got {bc['expected_fields']}"
+    )
+    assert "alpha.air" not in bc["expected_fields"], (
+        f"Gap #49: interFoam transports ONLY the first phase; alpha.air "
+        f"must NOT appear; got {bc['expected_fields']}"
+    )
+
+
+def test_vof_contract_phases_drives_multiphase_interfoam_derivation(
+    tmp_path: Path,
+):
+    """Codex R0 P2 (Gap #49): multiphaseInterFoam (3+ phases) transports
+    ALL phases — each gets its own 0/alpha.<phase> file. expected_fields
+    must contain every alpha.<phase>."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["solver"] = "multiphaseInterFoam"
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["bc_contract"].pop("phase_fields", None)
+    manifest["vof_contract"] = {
+        "phases": ["water", "oil", "air"],
+        "interface_method": "VOF_MULES",
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    for expected_alpha in ("alpha.water", "alpha.oil", "alpha.air"):
+        assert expected_alpha in bc["expected_fields"], (
+            f"Gap #49: multiphaseInterFoam (N≥3) must derive {expected_alpha}; "
+            f"got {bc['expected_fields']}"
+        )
+
+
 def test_alpha_dotted_residual_already_parsed():
     """Gap #25 regression guard (TBD-3 follow-up): the residual regex
     `[\\w.()]+` group correctly captures dotted phase-field names like

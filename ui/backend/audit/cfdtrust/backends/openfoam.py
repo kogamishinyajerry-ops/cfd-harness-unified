@@ -1894,28 +1894,56 @@ def _collect_and_persist_bc(
     # TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): bc_contract.phase_fields
     # is an optional list (mirrors turbulence_fields, thermal_fields)
     # declaring multiphase alpha field names whose 0/<field> BC files
-    # engine should walk. Defaults to [] for single-phase. interFoam
-    # cases typically declare ['alpha.water']; multiphaseInterFoam ships
-    # ['alpha.water', 'alpha.oil', ...]. When absent + vof_contract
-    # carries alpha_field_name, derive [alpha_field_name] so authors
-    # don't repeat themselves.
+    # engine should walk. Defaults derived from vof_contract presence:
+    #
+    # Codex R0 P2 (Gap #49): use vof_contract.phases to drive derivation
+    # when bc_contract.phase_fields AND vof_contract.alpha_field_name are
+    # both absent. Honors interFoam vs multiphaseInterFoam convention:
+    #   - 2-phase (interFoam): ONLY first phase transported → [alpha.<phase[0]>]
+    #     (the second phase fraction = 1 - alpha[0]; no separate file)
+    #   - 3+-phase (multiphaseInterFoam): all transported →
+    #     [alpha.<phase[0]>, alpha.<phase[1]>, ...]
+    vof_contract_manifest = manifest.get("vof_contract", {}) or {}
     if "phase_fields" in bc_contract and bc_contract.get("phase_fields") is not None:
         phase_fields = list(bc_contract.get("phase_fields") or [])
     else:
-        vof_contract = manifest.get("vof_contract", {}) or {}
-        alpha_name = vof_contract.get("alpha_field_name")
-        phase_fields = [alpha_name] if alpha_name else []
+        alpha_name = vof_contract_manifest.get("alpha_field_name")
+        if alpha_name:
+            phase_fields = [alpha_name]
+        else:
+            vof_phases = list(vof_contract_manifest.get("phases", []) or [])
+            if len(vof_phases) == 2:
+                # interFoam: only first phase transported.
+                phase_fields = [f"alpha.{vof_phases[0]}"]
+            elif len(vof_phases) >= 3:
+                # multiphaseInterFoam: all phases transported.
+                phase_fields = [f"alpha.{p}" for p in vof_phases]
+            else:
+                phase_fields = []
     phase_fields = [
         f for f in phase_fields
         if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
     ]
 
+    # Codex R0 P1 (Gap #48): interFoam / compressibleInterFoam ships
+    # `0/p_rgh` (hydrostatic-decomposed pressure), NOT `0/p`. When
+    # vof_contract is present and pressure_field_name not overridden,
+    # default the canonical pressure-file name to p_rgh. This makes the
+    # cycle-6 charter actually usable on its target case_007 shape,
+    # which has 0/p_rgh on disk. The bc_contract.pressure semantic
+    # (declared inlet/outlet/wall pressure BC type) still maps to the
+    # same expected field — engine just looks at the right filename.
+    if vof_contract_manifest:
+        pressure_field = vof_contract_manifest.get("pressure_field_name") or "p_rgh"
+    else:
+        pressure_field = "p"
+
     # Canonical incompressible RANS fields + turbulence + thermal +
-    # phase. Deduplicate while preserving order: U, p first, then
-    # turbulence fields, then thermal fields, then phase fields.
+    # phase. Deduplicate while preserving order: U, pressure first
+    # (p or p_rgh per VOF), then turbulence, thermal, phase.
     seen: set = set()
     expected: List[str] = []
-    for fname in ["U", "p", *turb_fields, *thermal_fields, *phase_fields]:
+    for fname in ["U", pressure_field, *turb_fields, *thermal_fields, *phase_fields]:
         if fname in seen:
             continue
         seen.add(fname)

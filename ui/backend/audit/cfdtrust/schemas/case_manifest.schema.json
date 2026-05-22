@@ -127,6 +127,11 @@
           "type": "string",
           "minLength": 1
         },
+        "pressure_field_name": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Codex R0 P1: interFoam / compressibleInterFoam ships 0/p_rgh (hydrostatic-decomposed pressure), NOT 0/p. When vof_contract is present and this field is absent, engine defaults to p_rgh. Explicit override only when authors use a non-canonical pressure name."
+        },
         "surface_tension_N_per_m": { "type": "number", "minimum": 0 },
         "interface_compression_coeff": {
           "type": "number",
