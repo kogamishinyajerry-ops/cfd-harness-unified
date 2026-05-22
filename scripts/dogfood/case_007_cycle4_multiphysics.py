@@ -315,9 +315,12 @@ _SEMANTIC_EXPECTATIONS = [
     # better, not worse). So Step 4 only asserts the negative guard:
     # rail must NOT show the generic "Fill: bc.patches" fallback.
     # exp_kind=None means "no kind requirement".
-    # Codex R2 P2 fix.
+    # Codex R2 P2 fix · refined by R3 P3: exp_kind=("step_default",
+    # "problem_fix") explicitly excludes info_gap. The LES manifest
+    # has no missing required fields, so info_gap would be a real
+    # regression (would disable the topbar CTA on a complete manifest).
     ("LES-channel", 3, "step_default", "物理已设", "Fill: physics.solver"),
-    ("LES-channel", 4, None, None, "Fill: bc.patches"),
+    ("LES-channel", 4, ("step_default", "problem_fix"), None, "Fill: bc.patches"),
     # Regimes whose artifacts explicitly carry FAILs at Step 4 — rail
     # must surface the audit signal, not a generic gap.
     ("Compressible-wedge", 4, "problem_fix", None, "Fill: bc.patches"),
@@ -341,13 +344,19 @@ def _check_semantic_expectations(
         actual_kind = trace["rail_kind"]
         actual_title = trace["rail_title"] or ""
         if exp_kind is not None:
-            out.append(
-                (
-                    f"[semantic {regime} step={step}] rail.kind == {exp_kind} "
-                    f"(got {actual_kind})",
-                    actual_kind == exp_kind,
+            if isinstance(exp_kind, (tuple, list, set, frozenset)):
+                ok = actual_kind in exp_kind
+                label = (
+                    f"[semantic {regime} step={step}] rail.kind in "
+                    f"{sorted(exp_kind)} (got {actual_kind})"
                 )
-            )
+            else:
+                ok = actual_kind == exp_kind
+                label = (
+                    f"[semantic {regime} step={step}] rail.kind == "
+                    f"{exp_kind} (got {actual_kind})"
+                )
+            out.append((label, ok))
         if exp_title_sub:
             out.append(
                 (
