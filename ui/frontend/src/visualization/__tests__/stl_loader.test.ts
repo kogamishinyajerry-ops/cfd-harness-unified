@@ -23,7 +23,10 @@ const readerInstance = {
   getOutputPort: vi.fn(),
   delete: vi.fn(),
 };
-vi.mock("@kitware/vtk.js/IO/Geometry/STLReader", () => ({
+// DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL Codex R0 P2 fix: mock key
+// must match the imported specifier exactly. stl_loader.ts now uses
+// the `.js` suffix (Playwright ESM resolver requirement).
+vi.mock("@kitware/vtk.js/IO/Geometry/STLReader.js", () => ({
   default: {
     newInstance: () => readerInstance,
   },

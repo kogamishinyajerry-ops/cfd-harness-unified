@@ -42,6 +42,7 @@ import { FacePickProvider } from "../step_panel_shell/FacePickContext";
 import { DynamicBottomCards } from "../step_panel_shell/dynamic_frame/DynamicBottomCards";
 import { DynamicFramePanel } from "../step_panel_shell/dynamic_frame/DynamicFramePanel";
 import { DynamicTopbarCta } from "../step_panel_shell/dynamic_frame/DynamicTopbarCta";
+import { DynamicViewportOverlays } from "../step_panel_shell/dynamic_frame/DynamicViewportOverlays";
 import { FacePickUrlSync } from "../step_panel_shell/dynamic_frame/FacePickUrlSync";
 import { useWorkbenchFrame } from "../step_panel_shell/dynamic_frame/useWorkbenchFrame";
 import { v4StepToBackendStep } from "./step_id_translator";
@@ -173,19 +174,31 @@ export function WorkbenchShellV4() {
                 onClick={() => {
                   const target = dynamicFrame.topbar_cta.target_step;
                   if (target == null) return;
-                  // Reverse-map 1..5 backend step → V4 step id (best-effort
-                  // landing: 1→geometry / 2→mesh / 3→physics / 4→boundary / 5→solver).
-                  const targetV4: V4PipelineStepId =
-                    target === 1
-                      ? "geometry"
-                      : target === 2
-                        ? "mesh"
-                        : target === 3
-                          ? "physics"
-                          : target === 4
-                            ? "boundary"
-                            : "solver";
-                  setActiveStep(targetV4);
+                  // Codex R0 P1 fix: V4 step ↔ backend step is many-to-one
+                  // (import/geometry both → 1, solver/post/doe all → 5).
+                  // Reverse-mapping the BACKEND target step to a V4 step is
+                  // lossy and can skip ahead in V4 order (e.g., from V4
+                  // `import` a backend target=2 would jump to `mesh` over
+                  // `geometry`). Instead, advance the V4 step in V4 order:
+                  // find the current V4 step's index in V4_PIPELINE_STEPS,
+                  // then walk forward until the next step whose translated
+                  // backend step equals the CTA's target_step. Falls back
+                  // to next-step if no exact match found.
+                  const currentIdx = V4_PIPELINE_STEPS.findIndex(
+                    (s) => s.id === activeStep,
+                  );
+                  let nextV4: V4PipelineStepId | null = null;
+                  for (let i = currentIdx + 1; i < V4_PIPELINE_STEPS.length; i++) {
+                    const candidate = V4_PIPELINE_STEPS[i];
+                    if (v4StepToBackendStep(candidate.id) === target) {
+                      nextV4 = candidate.id;
+                      break;
+                    }
+                  }
+                  if (nextV4 === null && currentIdx + 1 < V4_PIPELINE_STEPS.length) {
+                    nextV4 = V4_PIPELINE_STEPS[currentIdx + 1].id;
+                  }
+                  if (nextV4 !== null) setActiveStep(nextV4);
                 }}
               />
             </div>
@@ -203,6 +216,14 @@ export function WorkbenchShellV4() {
         </V4ErrorBoundary>
 
         <main className="flex min-w-0 flex-1 flex-col">
+          {/* Codex R0 P2 fix: render dynamic viewport overlays so
+              focus_patch / focus_region cues + mesh diagnostics
+              (cell_count_badge, checkmesh_warn) appear over the canvas. */}
+          {dynamicFrameEnabled && dynamicFrame ? (
+            <DynamicViewportOverlays
+              overlays={dynamicFrame.viewport_overlays}
+            />
+          ) : null}
           <V4ErrorBoundary zone="MainCanvas">
             <MainCanvasV4 activeStep={activeStep} caseId={caseId} />
           </V4ErrorBoundary>

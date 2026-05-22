@@ -20,6 +20,10 @@
 import { useState } from "react";
 
 import { useV4WorkbenchContext } from "../../hooks/useV4WorkbenchContext";
+// DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL · publish V4 face picks to
+// FacePickContext so FacePickUrlSync mirrors patchName → ?focus_patch=
+// and the backend decide() biases rail/cards to the current patch.
+import { useFacePickPublisher } from "../../../step_panel_shell/FacePickContext";
 import {
   geometryGlbUrl,
   useGlbAvailability,
@@ -106,12 +110,25 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
   }
   const sortedRoles = (Object.keys(counts) as PatchRole[]).sort();
 
+  // Codex R0 P1 fix · M3.0 integration: V4 face picks must publish into
+  // FacePickContext so FacePickUrlSync mirrors patchName → URL. Without
+  // this the focus_patch driver is dead on the live V4 route.
+  const publishFacePick = useFacePickPublisher();
+
   function onFacePick(event: V4FacePickEvent) {
     // bc_glb sets primitive.name = patch.id, so patchName === patch.id.
     const hit = patches.find((p) => p.id === event.patchName);
     if (hit) setSelectedPatchId(hit.id);
     setLastPickedFaceId(event.faceId);
     setLastPickedWorld(event.worldPosition);
+    // Publish into FacePickContext. The publisher tolerates the V4
+    // event shape (cellId / faceIds optional) — see useFacePickPublisher.
+    publishFacePick({
+      faceId: event.faceId,
+      patchName: event.patchName,
+      cellId: 0,
+      worldPosition: event.worldPosition,
+    });
   }
 
   const showViewport = activeGlbUrl != null;
