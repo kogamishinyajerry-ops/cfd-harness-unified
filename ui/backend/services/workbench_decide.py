@@ -73,13 +73,20 @@ def decide(state: CaseStateSnapshot) -> WorkbenchFrame:
 
     Frame is deterministic — same state in → same frame out. State SHA
     on the frame lets the frontend skip re-render when nothing changed.
+
+    DEC-V61-202-SUB-M30-CYCLE6: after building the frame, fire a
+    best-effort provenance log line. The log writer is itself
+    no-raise (audit logging never breaks the engineer's flow), and
+    decide() wraps the call in try/except as defense in depth. Gated
+    by WORKBENCH_PROVENANCE_DISABLED=1 (e.g., for unit tests that
+    don't want sidecar files).
     """
 
     rail = _pick_rail_primary(state)
     overlays = _pick_overlays(state)
     cards = _pick_bottom_cards(state)
     topbar = _pick_topbar_cta(state, rail)
-    return WorkbenchFrame(
+    frame = WorkbenchFrame(
         case_id=state.case_id,
         step=state.step,
         rail_primary=rail,
@@ -90,6 +97,13 @@ def decide(state: CaseStateSnapshot) -> WorkbenchFrame:
         manifest_state_sha=_manifest_state_sha(state.case_id, state.manifest),
         decided_at=datetime.now(timezone.utc).isoformat(),
     )
+    try:
+        from ui.backend.services.workbench_decide_provenance import log_decision
+
+        log_decision(state, frame)
+    except Exception:  # noqa: BLE001 — defense in depth
+        pass
+    return frame
 
 
 def _manifest_state_sha(case_id: str, manifest: dict) -> str:

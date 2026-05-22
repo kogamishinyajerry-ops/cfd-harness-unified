@@ -3,8 +3,21 @@
 from __future__ import annotations
 
 import io
+import os
 
+import pytest
 import trimesh
+
+
+# DEC-V61-202-SUB-M30-CYCLE6: disable decide() provenance audit_v2
+# log writes by default in the test suite to keep the working tree
+# clean. Tests that want to exercise the provenance log path explicitly
+# unset this env var via monkeypatch.
+@pytest.fixture(autouse=True)
+def _disable_workbench_provenance_by_default(monkeypatch):
+    if "WORKBENCH_PROVENANCE_DISABLED" not in os.environ:
+        monkeypatch.setenv("WORKBENCH_PROVENANCE_DISABLED", "1")
+    yield
 
 
 def box_stl(size: float = 0.1) -> bytes:
