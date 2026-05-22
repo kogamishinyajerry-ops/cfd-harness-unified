@@ -253,6 +253,13 @@ _FAILURE_SUBLIST_KEYS = frozenset(
         "type_mismatches",
         "mismatches",
         "missing",
+        # Codex R2 P2 fix: BC audit also emits patch-specific FAIL
+        # records under these names. Without them, focus_patch fails
+        # to match value/derived BC failures.
+        "value_missing",
+        "derived_mismatches",
+        "derived_missing",
+        # Generic finding families used across other dimensions.
         "issues",
         "failures",
         "errors",

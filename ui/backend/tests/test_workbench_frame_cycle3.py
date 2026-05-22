@@ -278,6 +278,58 @@ def test_focus_matches_resolved_patch_in_nested_arrays():
     assert "value_match" in frame.rail_primary.title
 
 
+def test_focus_matches_value_missing_and_derived_failure_sublists():
+    """Codex R2 P2 regression: bc_audit emits FAIL records not only via
+    value_mismatches / type_mismatches but also via value_missing,
+    derived_mismatches, and derived_missing. focus_patch must match
+    resolved_patch from all of these so a viewport pick on a concrete
+    patch surfaces the relevant failure regardless of which sub-list
+    the auditor chose."""
+    from ui.backend.services.workbench_decide import (
+        _focus_matches,
+        _iter_problems_from_artifact,
+    )
+
+    for sublist_key in ("value_missing", "derived_mismatches", "derived_missing"):
+        artifact = {
+            "gate_status": "FAIL",
+            "value_match_dimension": {
+                "dimension_status": "FAIL",
+                # Successful records that must NOT contribute.
+                "matched": [
+                    {"field": "U", "resolved_patch": "passing_patch"},
+                ],
+                # FAIL records under the sub-list being tested.
+                sublist_key: [
+                    {"field": "alpha", "resolved_patch": "inlet"},
+                ],
+            },
+        }
+        state = _state(focus_patch="inlet", artifacts={"bc_audit.json": artifact})
+        problems = list(
+            _iter_problems_from_artifact(artifact, "bc_audit.json")
+        )
+        dim_problem = next(
+            (p for p in problems if p.get("rule") == "value_match_dimension"),
+            None,
+        )
+        assert dim_problem is not None, (
+            f"value_match dim should be emitted for sublist {sublist_key}"
+        )
+        assert _focus_matches(state, dim_problem) is True, (
+            f"focus_patch=inlet must match the FAIL in sublist {sublist_key}"
+        )
+
+        # Conversely, focusing the passing_patch (only in `matched`)
+        # must still NOT match.
+        state_pass = _state(
+            focus_patch="passing_patch", artifacts={"bc_audit.json": artifact}
+        )
+        assert _focus_matches(state_pass, dim_problem) is False, (
+            f"focus on passing-only patch must not match FAIL via {sublist_key}"
+        )
+
+
 def test_focus_does_not_match_resolved_patch_in_successful_sublists():
     """Codex R1 P2 regression: bc_audit dimensions can include both
     successful `matched`/`checked` records AND failing
