@@ -10,8 +10,10 @@ PATCHes hit that draft, not the immutable catalog.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import re
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -55,76 +57,119 @@ def apply_field_path_patch(
     """End-to-end manifest mutation. Returns response or raises.
 
     Order matters: validate field_path FIRST (cheap, catches probes
-    before any I/O). Then resolve the case. Then check state_sha.
+    before any I/O). Then take a per-case lock. Then resolve the case.
+    Then check state_sha. Then write — all inside the lock so the
+    check + write pair is atomic (Codex R0 P1-1 fix).
     """
 
     # Path validation (cheap; rejects __class__ probes etc. before disk I/O)
     segments = _parse_field_path(request.field_path)
 
-    manifest, case_kind, storage_path = _load_for_write(case_id)
-    if manifest is None:
-        raise CaseNotFoundError(f"case_id not found: {case_id}")
+    # Codex R0 P1-1 (race condition fix): everything below — load,
+    # SHA-check, write — happens under a per-case fcntl lock. Two
+    # concurrent PATCHes for the same case_id serialize; the second
+    # observes the first's write and gets a 409 on its state_sha check.
+    with _case_lock(case_id):
+        manifest, case_kind, storage_path = _load_for_write(case_id)
+        if manifest is None:
+            raise CaseNotFoundError(f"case_id not found: {case_id}")
 
-    # Optimistic concurrency: compute current state_sha BEFORE applying
-    # the patch, compare to engineer's expected_state_sha.
-    current_sha = _manifest_state_sha(case_id, manifest)
-    if current_sha != request.expected_state_sha:
-        raise PatchConflict(current_state_sha=current_sha)
+        # Optimistic concurrency: compute current state_sha BEFORE
+        # applying the patch, compare to engineer's expected_state_sha.
+        current_sha = _manifest_state_sha(case_id, manifest)
+        if current_sha != request.expected_state_sha:
+            raise PatchConflict(current_state_sha=current_sha)
 
-    # Whitelist-fork: write goes to user_drafts/{case_id}.yaml even
-    # though we loaded from the catalog.
-    if case_kind == "whitelist":
-        storage_path = DRAFTS_DIR / f"{case_id}.yaml"
-        DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-        case_kind_after = "whitelist_forked"
-    else:
-        case_kind_after = case_kind
+        # Whitelist-fork: write goes to user_drafts/{case_id}.yaml even
+        # though we loaded from the catalog.
+        if case_kind == "whitelist":
+            storage_path = DRAFTS_DIR / f"{case_id}.yaml"
+            DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
+            case_kind_after = "whitelist_forked"
+        else:
+            case_kind_after = case_kind
 
-    # Apply the patch (operates on a copy so we don't half-mutate on
-    # validation failure).
-    patched = _deepcopy_dict(manifest)
-    if request.op == "set":
-        _write_at_path(patched, segments, request.value)
-    elif request.op == "unset":
-        _unset_at_path(patched, segments)
+        # Apply the patch (operates on a copy so we don't half-mutate on
+        # validation failure).
+        patched = _deepcopy_dict(manifest)
+        if request.op == "set":
+            _write_at_path(patched, segments, request.value)
+        elif request.op == "unset":
+            _unset_at_path(patched, segments)
 
-    # Validate against case_manifest.schema.json — LENIENT mode: only
-    # surface errors whose path is at or below the field we just wrote.
-    # Workbench-guided edits are partial-by-design; whole-manifest
-    # validation would block progress because in-flight cases fail
-    # global `required` checks. The frame's bottom_cards still surface
-    # global gaps via CaseCompletenessReport — that's the right place
-    # for "your case is incomplete" UX, not PATCH responses.
-    #
-    # `unset` ops skip validation entirely: the engineer is allowed to
-    # clear any field; the next frame will surface the resulting gap
-    # via the missing_field card path.
-    errors: list[str] = []
-    if request.op == "set":
-        errors = _validate_at_or_below_path(patched, segments)
-    if errors:
+        # Codex R0 P1-2 (schema applicability fix): the case_manifest
+        # schema describes the imported_user v2 manifest shape. Whitelist
+        # and flat-draft shapes are different (e.g. `parameters: {Re: ...}`
+        # vs imported's nested `physics:`). Validating non-imported cases
+        # against the wrong schema would (a) accept structural breakage
+        # like `parameters: "oops"` and (b) reject many fields that are
+        # legitimately absent. Skip schema validation for non-imported
+        # cases — frame's completeness path is the right authority.
+        errors: list[str] = []
+        if request.op == "set" and case_kind == "imported_user":
+            errors = _validate_at_or_below_path(patched, segments)
+        if errors:
+            return ManifestPatchResponse(
+                success=False,
+                applied_path="",
+                new_state_sha=current_sha,
+                case_kind=case_kind_after if case_kind != "whitelist" else "whitelist",
+                validation_errors=errors,
+            )
+
+        # Persist
+        _write_yaml(storage_path, patched)
+
+        # Recompute SHA. We re-derive against the new manifest dict so
+        # frontend's next PATCH sends the right expected_state_sha.
+        new_sha = _manifest_state_sha(case_id, patched)
+
         return ManifestPatchResponse(
-            success=False,
-            applied_path="",
-            new_state_sha=current_sha,
-            case_kind=case_kind_after if case_kind != "whitelist" else "whitelist",
-            validation_errors=errors,
+            success=True,
+            applied_path=".".join(segments),
+            new_state_sha=new_sha,
+            case_kind=case_kind_after,
+            validation_errors=[],
         )
 
-    # Persist
-    _write_yaml(storage_path, patched)
 
-    # Recompute SHA. We re-derive against the new manifest dict so
-    # frontend's next PATCH sends the right expected_state_sha.
-    new_sha = _manifest_state_sha(case_id, patched)
+# ────────────────────────── per-case lock ──────────────────────────
 
-    return ManifestPatchResponse(
-        success=True,
-        applied_path=".".join(segments),
-        new_state_sha=new_sha,
-        case_kind=case_kind_after,
-        validation_errors=[],
-    )
+
+_LOCK_DIR = Path("/tmp/cfd-harness-manifest-patch-locks")
+
+
+@contextmanager
+def _case_lock(case_id: str):
+    """fcntl-based exclusive lock on a sidecar lockfile.
+
+    Why a sidecar (not the YAML itself):
+        - YAML write may rename / replace the file (yaml.safe_dump +
+          Path.write_text); locks on inode-replaced files release
+          silently. A sidecar that never moves keeps the lock stable.
+        - Avoids permission interactions with the YAML's mode bits.
+
+    Why fcntl (not threading.Lock):
+        - Works across multi-worker uvicorn deployments (when we get
+          there); threading.Lock is single-process only.
+        - Acquired blockingly — concurrent PATCHes for the same case_id
+          serialize naturally; the second observes the first's write +
+          gets a 409 on its state_sha check.
+
+    Slug case_id to a safe filename (allow only [a-zA-Z0-9_-]+).
+    """
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "_", case_id)
+    _LOCK_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = _LOCK_DIR / f"{safe}.lock"
+    with open(lock_path, "w") as lock_fh:
+        try:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
 
 
 # ────────────────────────── load / save ──────────────────────────
@@ -312,17 +357,16 @@ def _validate_at_or_below_path(
         abs_path = [str(p) for p in err.absolute_path]
         loc = "/".join(abs_path) or "<root>"
 
-        # Always surface type-mismatch errors — these are bad writes,
-        # not "case incomplete" signals.
-        if err.validator == "type":
-            out.append(f"{loc}: {err.message}")
-            continue
-
         # Path-match filter: keep errors whose path starts with the
         # written segments. `written_segments=['vof_contract', 'phases']`
         # matches abs_path=['vof_contract', 'phases'] or
         # abs_path=['vof_contract', 'phases', 0], but NOT
         # abs_path=['bc_contract', ...].
+        #
+        # Codex R0 P2 fix: type errors are also scoped — a pre-existing
+        # type mismatch at `bc_contract.foo` must NOT block a PATCH at
+        # `vof_contract.phases`. Only type errors at-or-below the
+        # written path are surfaced.
         if _path_starts_with(abs_path, written_segments):
             out.append(f"{loc}: {err.message}")
             continue

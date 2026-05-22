@@ -405,6 +405,176 @@ def test_route_patch_returns_400_on_malformed_path(monkeypatch, tmp_path):
     assert r.status_code == 400
 
 
+# ─────────────────── Codex R0 R1 regression tests ───────────────────
+
+
+def test_r1_concurrent_patches_serialize_via_lock(monkeypatch, tmp_path):
+    """Codex R0 P1-1: two concurrent PATCHes with the same expected_sha
+    must NOT both succeed. The per-case fcntl lock serializes them;
+    the second observes the first's write and returns 409.
+
+    Threaded test (single process suffices to expose the race because
+    the fcntl lock is the only thing protecting check+write).
+    """
+    import threading
+    import time
+
+    case_id, _ = _stage_imported_case(
+        monkeypatch,
+        tmp_path,
+        {"case_id": "x", "case_family": "test", "solver_backend": "openfoam"},
+    )
+    sha = manifest_only_state_sha(case_id)
+    # Move the lock dir into tmp_path so tests are hermetic.
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch._LOCK_DIR",
+        tmp_path / "locks",
+    )
+
+    results: list = []
+
+    def _patch_attempt(value: str):
+        try:
+            r = apply_field_path_patch(
+                case_id,
+                ManifestPatchRequest(
+                    field_path="solver",
+                    value=value,
+                    expected_state_sha=sha,
+                ),
+            )
+            results.append(("ok", value, r))
+        except PatchConflict as e:
+            results.append(("conflict", value, e.current_state_sha))
+        except Exception as e:  # noqa: BLE001
+            results.append(("error", value, e))
+
+    t1 = threading.Thread(target=_patch_attempt, args=("simpleFoam",))
+    t2 = threading.Thread(target=_patch_attempt, args=("pimpleFoam",))
+    t1.start()
+    # Tiny stagger so t1 enters the lock first; without it both can
+    # race past the load before either reaches the SHA check, exposing
+    # the race the fix is supposed to prevent.
+    time.sleep(0.005)
+    t2.start()
+    t1.join()
+    t2.join()
+
+    statuses = [r[0] for r in results]
+    # Exactly one ok + one conflict; never two oks.
+    assert statuses.count("ok") == 1, results
+    assert statuses.count("conflict") == 1, results
+
+
+def test_r1_whitelist_case_skips_strict_schema_validation(monkeypatch, tmp_path):
+    """Codex R0 P1-2: whitelist cases have a different shape than
+    imported_user (e.g. `parameters: {Re: 100}` vs nested `physics:`).
+    Validating against case_manifest.schema.json would (a) reject
+    legitimate fields and (b) accept structural breakage. Fix: skip
+    schema validation for non-imported cases.
+
+    Write a non-structural field to the whitelist case; it should
+    succeed (no schema errors blocking it).
+    """
+    # Use the real whitelist (lid_driven_cavity).
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch.IMPORTED_DIR", tmp_path / "x"
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch.DRAFTS_DIR", tmp_path / "drafts"
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch._LOCK_DIR",
+        tmp_path / "locks",
+    )
+    sha = manifest_only_state_sha("lid_driven_cavity")
+    assert sha is not None
+
+    response = apply_field_path_patch(
+        "lid_driven_cavity",
+        ManifestPatchRequest(
+            field_path="parameters.Re_override",
+            value=200,
+            expected_state_sha=sha,
+        ),
+    )
+    # Whitelist auto-forks to draft; non-imported, schema validation skipped.
+    assert response.success is True, response.validation_errors
+    assert response.case_kind == "whitelist_forked"
+
+
+def test_r1_type_error_outside_written_path_is_ignored(monkeypatch, tmp_path):
+    """Codex R0 P2: a pre-existing type mismatch at one path must NOT
+    block a PATCH at another path. The lenient validator is supposed
+    to scope errors to the written path; the original implementation
+    leaked type errors across paths.
+
+    Stage an imported case where `mesh_contract.y_plus_target` is a
+    string (schema expects object). Patching `physics.solver` (a
+    different subtree) must succeed.
+    """
+    case_id, _ = _stage_imported_case(
+        monkeypatch,
+        tmp_path,
+        {
+            "case_id": "x",
+            "case_family": "test",
+            "solver_backend": "openfoam",
+            # Pre-existing type mismatch in a UNRELATED subtree.
+            "mesh_contract": {"y_plus_target": "this should be a dict"},
+            "physics": {"regime": "steady_incompressible_laminar"},
+        },
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch._LOCK_DIR",
+        tmp_path / "locks",
+    )
+    sha = manifest_only_state_sha(case_id)
+    response = apply_field_path_patch(
+        case_id,
+        ManifestPatchRequest(
+            field_path="physics.solver",
+            value="simpleFoam",
+            expected_state_sha=sha,
+        ),
+    )
+    assert response.success is True, response.validation_errors
+
+
+def test_r1_type_error_at_written_path_still_blocks(monkeypatch, tmp_path):
+    """Codex R0 P2: while OUTSIDE-PATH type errors are ignored, type
+    errors AT the written path must still block — that's the engineer
+    writing bad data right now and we should tell them."""
+    case_id, _ = _stage_imported_case(
+        monkeypatch,
+        tmp_path,
+        {
+            "case_id": "x",
+            "case_family": "test",
+            "solver_backend": "openfoam",
+            "physics": {"regime": "steady_incompressible_laminar"},
+        },
+    )
+    monkeypatch.setattr(
+        "ui.backend.services.manifest_patch._LOCK_DIR",
+        tmp_path / "locks",
+    )
+    sha = manifest_only_state_sha(case_id)
+    # vof_contract.phases must be an array; writing a string should
+    # trigger an at-path type error.
+    response = apply_field_path_patch(
+        case_id,
+        ManifestPatchRequest(
+            field_path="vof_contract.phases",
+            value="not-an-array",
+            expected_state_sha=sha,
+        ),
+    )
+    assert response.success is False
+    assert len(response.validation_errors) > 0
+    assert "vof_contract/phases" in response.validation_errors[0]
+
+
 def test_route_patch_then_frame_shows_new_state(monkeypatch, tmp_path):
     """Closed-loop: PATCH a field, then GET workbench_frame reflects new value."""
     case_id, _ = _stage_imported_case(
