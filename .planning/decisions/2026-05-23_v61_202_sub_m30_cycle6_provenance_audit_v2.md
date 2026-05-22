@@ -6,7 +6,7 @@ proposed_date: 2026-05-23
 accepted_date: 2026-05-23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 6 (provenance audit · post-integration)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-23 (https://www.notion.so/368c68942bed81ffbef3c2b6d1fa361a)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -101,7 +101,7 @@ input state + the rail/topbar/card choices made. This unlocks:
 - [x] case_007 dogfood: 4+ checks PASS — **7/7 PASS** (`.planning/dogfood/DOGFOOD_M30_CYCLE6_PROVENANCE.md`)
 - [x] Codex R0 APPROVED or CHANGES_REQUIRED closed ≤ 3 rounds — **R0 = 3 findings (2 P2 + 1 P3, 0 P1)**, R1 = **APPROVE** (2 rounds total, under cap)
 - [x] DEC Proposed → Accepted
-- [ ] Notion sync (session-end)
+- [x] Notion sync (session-end) — https://www.notion.so/368c68942bed81ffbef3c2b6d1fa361a
 
 ## Closure addendum (2026-05-23)
 

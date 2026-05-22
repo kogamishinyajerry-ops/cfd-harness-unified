@@ -6,7 +6,7 @@ proposed_date: 2026-05-23
 accepted_date: 2026-05-23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 7 (litmus surrogate · M3.0 close)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-23 (https://www.notion.so/368c68942bed81b28e30d622864c0ed9)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -87,7 +87,7 @@ proven coherent at cycle 7.
       iteration rounds, under cap**
 - [x] DEC Proposed → Accepted
 - [x] M3.0 milestone retro `.planning/retrospectives/2026-05-23_m30_milestone_close.md`
-- [ ] Notion sync (session-end, Accepted DECs only)
+- [x] Notion sync (session-end, Accepted DECs only) — https://www.notion.so/368c68942bed81b28e30d622864c0ed9
 
 ## Closure addendum (2026-05-23)
 
