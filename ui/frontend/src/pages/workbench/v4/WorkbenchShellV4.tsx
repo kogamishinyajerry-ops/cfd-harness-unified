@@ -174,31 +174,21 @@ export function WorkbenchShellV4() {
                 onClick={() => {
                   const target = dynamicFrame.topbar_cta.target_step;
                   if (target == null) return;
-                  // Codex R0 P1 fix: V4 step ↔ backend step is many-to-one
-                  // (import/geometry both → 1, solver/post/doe all → 5).
-                  // Reverse-mapping the BACKEND target step to a V4 step is
-                  // lossy and can skip ahead in V4 order (e.g., from V4
-                  // `import` a backend target=2 would jump to `mesh` over
-                  // `geometry`). Instead, advance the V4 step in V4 order:
-                  // find the current V4 step's index in V4_PIPELINE_STEPS,
-                  // then walk forward until the next step whose translated
-                  // backend step equals the CTA's target_step. Falls back
-                  // to next-step if no exact match found.
+                  // Codex R1 P1 fix: V4 pipeline is more granular than the
+                  // backend 5-step spine (e.g., V4 import + geometry both
+                  // map to backend step 1). The backend's target_step says
+                  // "advance to the next step", but V4 always advances ONE
+                  // V4 step — never skips intra-spine V4 hops like
+                  // import → geometry. Walking V4_PIPELINE_STEPS forward
+                  // and matching by translated backend step is what made
+                  // import→mesh skip geometry (R0 attempt). Just take the
+                  // next V4 step in pipeline order.
                   const currentIdx = V4_PIPELINE_STEPS.findIndex(
                     (s) => s.id === activeStep,
                   );
-                  let nextV4: V4PipelineStepId | null = null;
-                  for (let i = currentIdx + 1; i < V4_PIPELINE_STEPS.length; i++) {
-                    const candidate = V4_PIPELINE_STEPS[i];
-                    if (v4StepToBackendStep(candidate.id) === target) {
-                      nextV4 = candidate.id;
-                      break;
-                    }
-                  }
-                  if (nextV4 === null && currentIdx + 1 < V4_PIPELINE_STEPS.length) {
-                    nextV4 = V4_PIPELINE_STEPS[currentIdx + 1].id;
-                  }
-                  if (nextV4 !== null) setActiveStep(nextV4);
+                  if (currentIdx < 0) return;
+                  if (currentIdx + 1 >= V4_PIPELINE_STEPS.length) return;
+                  setActiveStep(V4_PIPELINE_STEPS[currentIdx + 1].id);
                 }}
               />
             </div>
@@ -215,10 +205,14 @@ export function WorkbenchShellV4() {
           />
         </V4ErrorBoundary>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          {/* Codex R0 P2 fix: render dynamic viewport overlays so
-              focus_patch / focus_region cues + mesh diagnostics
-              (cell_count_badge, checkmesh_warn) appear over the canvas. */}
+        <main className="relative flex min-w-0 flex-1 flex-col">
+          {/* Codex R0 P2 fix · refined by R1 P2: render dynamic viewport
+              overlays so focus_patch / focus_region cues + mesh
+              diagnostics (cell_count_badge, checkmesh_warn) appear over
+              the canvas. The overlays use position:absolute; the parent
+              <main> carries `relative` so they anchor to the canvas
+              container, not the page/shell — without that fix the
+              badges would float in the window's top-right corner. */}
           {dynamicFrameEnabled && dynamicFrame ? (
             <DynamicViewportOverlays
               overlays={dynamicFrame.viewport_overlays}
