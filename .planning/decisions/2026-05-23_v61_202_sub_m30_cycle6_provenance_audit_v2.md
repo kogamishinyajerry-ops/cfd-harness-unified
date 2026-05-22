@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-202-SUB-M30-CYCLE6-PROVENANCE-AUDIT-V2
 title: M3.0 cycle 6 — decide() provenance audit_v2 log
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-23
+accepted_date: 2026-05-23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 6 (provenance audit · post-integration)
 notion_sync_status: pending_accepted
@@ -94,13 +95,40 @@ input state + the rail/topbar/card choices made. This unlocks:
 
 ## Closure criteria
 
-- [ ] `workbench_decide_provenance.py` log writer + 6+ unit tests
-- [ ] `workbench_decide.py` integration with try/except + env gate
-- [ ] `replay_decisions.py` reader skill
-- [ ] case_007 dogfood: 4+ checks PASS proving the log captures real decisions
-- [ ] Codex R0 APPROVED or CHANGES_REQUIRED closed ≤ 3 rounds
-- [ ] DEC Proposed → Accepted
+- [x] `workbench_decide_provenance.py` log writer + 6+ unit tests (8 tests at R0, 11 at R1)
+- [x] `workbench_decide.py` integration with try/except + env gate
+- [x] `replay_decisions.py` reader skill (self-bootstraps repo root post-R1)
+- [x] case_007 dogfood: 4+ checks PASS — **7/7 PASS** (`.planning/dogfood/DOGFOOD_M30_CYCLE6_PROVENANCE.md`)
+- [x] Codex R0 APPROVED or CHANGES_REQUIRED closed ≤ 3 rounds — **R0 = 3 findings (2 P2 + 1 P3, 0 P1)**, R1 = **APPROVE** (2 rounds total, under cap)
+- [x] DEC Proposed → Accepted
 - [ ] Notion sync (session-end)
+
+## Closure addendum (2026-05-23)
+
+**Round 0** — 3 findings, no P1:
+- **P2 #1**: `replay_decisions.py` not runnable without ambient `PYTHONPATH`.
+  Fix: prepend repo root to `sys.path` inside the script (commit `d26cc67`).
+- **P2 #2**: log row dropped the WARN-vs-FAIL signal because `RailPrimary`
+  has no `severity` field — both severities shared the same `kind`/`title`.
+  Fix: parse `severity=X` token from `RailPrimary.provenance` traces and
+  persist as `rail_primary.severity` in the JSONL record.
+- **P3**: `_safe_case_id` used Python's salted `hash()` for pure-dot fallback,
+  so writer and replay reader could compute different paths across processes.
+  Fix: `hashlib.sha256(case_id)[:12]` deterministic digest.
+
+**Round 1** — APPROVE: "I did not find a correctness issue in the functional
+changes. The import bootstrap for `replay_decisions.py`, the stable case-id
+sanitization, and the added rail severity logging all look consistent with
+the existing code and tests."
+
+Regression tests added:
+- `test_replay_script_runs_without_pythonpath` — proves CLI self-bootstrap
+- `test_rail_severity_extracted_from_provenance` — FAIL → severity=fail
+- `test_dot_only_case_id_uses_stable_digest` — cross-call agreement, hex output
+
+**Bottom line**: provenance plumbing in, audit trail live on every `decide()`
+call. Cycle 7 (junior-engineer beginner test) can now lean on this log to
+audit whether the workbench drove the engineer to the right next decision.
 
 ## Risks + mitigations
 

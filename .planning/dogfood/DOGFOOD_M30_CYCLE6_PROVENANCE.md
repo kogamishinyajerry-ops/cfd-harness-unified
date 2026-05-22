@@ -1,9 +1,10 @@
 # DOGFOOD · M3.0 Cycle 6 · decide() provenance audit_v2 log
 
-**DEC**: `2026-05-23_v61_202_sub_m30_cycle6_provenance_audit_v2.md` (Proposed)
+**DEC**: `2026-05-23_v61_202_sub_m30_cycle6_provenance_audit_v2.md` (Accepted)
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle6_provenance.py`
 **Verdict**: **PASS** (7/7 checks · all-PASS gate)
+**Codex**: R0 = 3 findings (2 P2 + 1 P3, 0 P1) · R1 = APPROVE · 2 rounds, under cap=3
 
 ---
 
@@ -65,7 +66,7 @@ Verdict: PASS
 
 ## Test coverage delta
 
-`ui/backend/tests/test_workbench_decide_provenance.py` — **8 / 8 PASS**:
+`ui/backend/tests/test_workbench_decide_provenance.py` — **11 / 11 PASS** (8 at R0 + 3 R1 regressions):
 1. JSONL line parseable with the schema fields actually used by the writer
 2. Multiple calls append, don't overwrite
 3. `focus_patch` captured when set, `null` when absent
