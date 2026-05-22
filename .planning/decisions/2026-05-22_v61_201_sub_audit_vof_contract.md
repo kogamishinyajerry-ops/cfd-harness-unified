@@ -1,14 +1,25 @@
 ---
 decision_id: DEC-V61-201-SUB-INGEST-VOF-CONTRACT
-title: vof_contract schema + bc_contract.phase_fields slot (TBD-3)
-status: Proposed
+title: vof_contract schema + bc_contract.phase_fields slot + p_rgh + phases-driven derivation (TBD-3)
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
-phase: M2.9 cycle 6 (VOF multiphase regime charter)
-notion_sync_status: pending_accepted
+phase: M2.9 cycle 6 (VOF multiphase regime charter — FINAL audit-engine charter per 2026-05-22 strategic pivot)
+notion_sync_status: pending
 autonomous_governance: true
-counter_status: v6.1 N/A pending accepted
+counter_status: v6.1 telemetry
 charter_class: true
+codex_review:
+  r0_commit: ed393ab
+  r0_verdict: CHANGES_REQUIRED (2 P1 + minor)
+  r0_findings:
+    - "Gap #48 (P1-1): vof_contract.pressure_field_name missing; engine hardcoded 'p' but interFoam ships 0/p_rgh"
+    - "Gap #49 (P1-2): vof_contract.phases not used in derivation; engine ignored multiphase declaration"
+  r1_commit: 2c050d2
+  r1_verdict: APPROVED (verbatim Codex P1 fix per v2.3 verbatim exception)
+final_audit_engine_charter: true
+supersedes_pivot: 2026-05-22 strategic pivot — workbench dynamic guided UX (DEC-V61-202 forthcoming)
 ---
 
 ## Why (VOF multiphase is structurally invisible)
@@ -164,8 +175,18 @@ cat .../case/artifacts/bc_quality.json | jq '.expected_fields'
 
 ## Status
 
-**Proposed** — pending implementation + Codex R0 + verification.
-Becomes **Accepted** when all closure criteria hold.
+**Accepted 2026-05-22.**
+
+Closure criteria all green:
+- Schema additions landed (commit `ed393ab`): `vof_contract` + `bc_contract.phase_fields` + (R1) `vof_contract.pressure_field_name`
+- Engine integration landed (commit `2c050d2`): phases-driven derivation + p_rgh default + override-honored
+- Tests: 8 vof/phase-fields tests passing (4 from R0 + 4 from R1) · full audit suite 472 passed / 1 skipped
+- Codex R0 commit `ed393ab` → CHANGES_REQUIRED with Gap #48 + #49 → R1 commit `2c050d2` is verbatim verbatim Codex P1 fix → APPROVED per v2.3 verbatim exception
+
+**FINAL audit-engine charter.** Per user 2026-05-22 strategic pivot
+(see [feedback_cfd_workbench_dynamic_guided_pivot](../../../../.claude/projects/-Users-Zhuanz/memory/feedback_cfd_workbench_dynamic_guided_pivot.md)),
+no further audit-engine charters will be proposed. Future work shifts
+to workbench guided UX (DEC-V61-202 in flight).
 
 ## Provenance
 
