@@ -1,0 +1,480 @@
+"""DEC-V61-202-SUB-M30-CYCLE1 · `decide(CaseState) -> WorkbenchFrame`.
+
+Pure deterministic function. No LLM call (V130 invariant). No I/O
+inside `decide()` itself — the route handler loads inputs and passes a
+fully-populated `CaseStateSnapshot`. This keeps the function unit-
+testable and reproducible from a state SHA alone.
+
+Priority decision tree (top wins):
+    1. FAIL-severity audit finding on current step
+    2. critical missing manifest field on current step
+    3. WARN-severity audit finding on current step
+    4. warning/info missing manifest field on current step
+    5. step default frame
+
+Step-relevance mapping (which signals belong to which step):
+    Step 1 Geometry  -> geometry_contract.*, geometry_report.json
+    Step 2 Mesh      -> mesh_contract.*, mesh_report.json
+    Step 3 Physics   -> physics.*, *_contract.* (compressible/les/vof),
+                        solver_contract.*
+    Step 4 BCs       -> bc_contract.*, bc_quality.json, bc_audit.json
+    Step 5 Solve+Pp  -> solver_contract.residual_targets.*,
+                        qoi_contract.*, trust_report.json
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+
+from ui.backend.schemas.workbench_frame import (
+    BottomCard,
+    CaseStateSnapshot,
+    RailPrimary,
+    ViewportOverlay,
+    WorkbenchFrame,
+)
+
+# Step → JSON-path prefix mapping. Used to route problems + gaps to the
+# step on which they should surface. A gap with prefix in multiple
+# steps' lists goes to the first matching step.
+_STEP_PATH_PREFIXES: dict[int, tuple[str, ...]] = {
+    1: ("geometry_contract.", "geometry."),
+    2: ("mesh_contract.", "mesh."),
+    3: (
+        "physics.",
+        "compressible_contract.",
+        "les_contract.",
+        "vof_contract.",
+        "solver_contract.",
+        "solver",
+    ),
+    4: ("bc_contract.", "boundary_conditions."),
+    5: (
+        "solver_contract.residual_targets.",
+        "qoi_contract.",
+        "qoi_stability",
+    ),
+}
+
+# Step → audit-artifact filenames that contribute problems to that step.
+_STEP_ARTIFACTS: dict[int, tuple[str, ...]] = {
+    1: ("geometry_report.json",),
+    2: ("mesh_report.json",),
+    3: (),  # Physics step problems come from manifest gaps, not artifacts.
+    4: ("bc_quality.json", "bc_audit.json"),
+    5: ("trust_report.json",),
+}
+
+
+def decide(state: CaseStateSnapshot) -> WorkbenchFrame:
+    """Pure function: state → frame. No I/O, no network.
+
+    Frame is deterministic — same state in → same frame out. State SHA
+    on the frame lets the frontend skip re-render when nothing changed.
+    """
+
+    rail = _pick_rail_primary(state)
+    overlays = _pick_overlays(state)
+    cards = _pick_bottom_cards(state)
+    return WorkbenchFrame(
+        case_id=state.case_id,
+        step=state.step,
+        rail_primary=rail,
+        viewport_overlays=overlays,
+        bottom_cards=cards,
+        state_sha=_state_sha(state),
+        decided_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+# ────────────────────────── rail_primary ──────────────────────────
+
+
+def _pick_rail_primary(state: CaseStateSnapshot) -> RailPrimary:
+    """Priority decision tree for what goes in the rail's top card."""
+
+    fail_problems = _problems_for_step(state, severities=("fail",))
+    if fail_problems:
+        return _rail_from_problem(fail_problems[0], state)
+
+    crit_gaps = _gaps_for_step(state, severities=("critical",))
+    if crit_gaps:
+        return _rail_from_gap(crit_gaps[0], state)
+
+    warn_problems = _problems_for_step(state, severities=("warn",))
+    if warn_problems:
+        return _rail_from_problem(warn_problems[0], state)
+
+    soft_gaps = _gaps_for_step(state, severities=("warning", "info"))
+    if soft_gaps:
+        return _rail_from_gap(soft_gaps[0], state)
+
+    return _rail_default(state)
+
+
+def _rail_from_problem(problem: dict, state: CaseStateSnapshot) -> RailPrimary:
+    severity = str(problem.get("severity", "info"))
+    title = str(problem.get("title") or problem.get("rule") or "Audit finding")
+    body = problem.get("message") or problem.get("body") or None
+    field_path = problem.get("field_path") or None
+    artifact = problem.get("_source_artifact")
+    provenance = [
+        f"step={state.step} · problem_fix · severity={severity}",
+        f"source={artifact or 'unknown'}",
+    ]
+    if field_path:
+        provenance.append(f"field_path={field_path}")
+    return RailPrimary(
+        kind="problem_fix",
+        title=title[:60],
+        body_text=body,
+        field_path=field_path,
+        cta_label="查看 / View",
+        provenance=provenance,
+    )
+
+
+def _rail_from_gap(gap: dict, state: CaseStateSnapshot) -> RailPrimary:
+    severity = str(gap.get("severity", "info"))
+    field_path = gap.get("field_path", "")
+    title = f"补充字段 / Fill: {field_path}" if field_path else "缺字段"
+    body = gap.get("why") or None
+    provenance = [
+        f"step={state.step} · info_gap · severity={severity}",
+        f"field_path={field_path}",
+    ]
+    return RailPrimary(
+        kind="info_gap",
+        title=title[:60],
+        body_text=body,
+        field_path=field_path or None,
+        suggested_default=gap.get("suggested_default"),
+        cta_label="填入 / Apply" if gap.get("suggested_default") is not None else "编辑 / Edit",
+        provenance=provenance,
+    )
+
+
+def _rail_default(state: CaseStateSnapshot) -> RailPrimary:
+    titles = {
+        1: "Step 1 · 几何就绪 / Geometry ready",
+        2: "Step 2 · 网格就绪 / Mesh ready",
+        3: "Step 3 · 物理已设 / Physics set",
+        4: "Step 4 · 边界已设 / BCs set",
+        5: "Step 5 · 准备求解 / Ready to solve",
+    }
+    bodies = {
+        1: "当前步无阻塞 — 可以进入下一步。",
+        2: "当前步无阻塞 — 可以进入下一步。",
+        3: "当前步无阻塞 — 可以进入下一步。",
+        4: "当前步无阻塞 — 可以进入下一步。",
+        5: "当前步无阻塞 — 可以提交求解。",
+    }
+    return RailPrimary(
+        kind="step_default",
+        title=titles.get(state.step, "Step ready"),
+        body_text=bodies.get(state.step),
+        cta_label="下一步 / Next",
+        provenance=[f"step={state.step} · step_default · no blockers"],
+    )
+
+
+# ────────────────────────── viewport_overlays ──────────────────────────
+
+
+def _pick_overlays(state: CaseStateSnapshot) -> list[ViewportOverlay]:
+    overlays: list[ViewportOverlay] = []
+
+    # Focus-driven highlight (driver 4): if engineer focused a patch,
+    # paint it. Visible on all steps where patch focus makes sense.
+    if state.focus_patch:
+        overlays.append(
+            ViewportOverlay(
+                kind="patch_highlight",
+                target=state.focus_patch,
+                severity="info",
+                label=state.focus_patch,
+            )
+        )
+    if state.focus_region:
+        overlays.append(
+            ViewportOverlay(
+                kind="region_highlight",
+                target=state.focus_region,
+                severity="info",
+                label=state.focus_region,
+            )
+        )
+
+    # Step 2: cell count badge + checkmesh warning when present.
+    if state.step == 2:
+        mesh_report = state.artifacts.get("mesh_report.json", {}) or {}
+        n_cells = mesh_report.get("n_cells") or mesh_report.get("nCells")
+        if isinstance(n_cells, int) and n_cells > 0:
+            overlays.append(
+                ViewportOverlay(
+                    kind="cell_count_badge",
+                    label=_format_cell_count(n_cells),
+                    severity="info",
+                )
+            )
+        non_ortho = mesh_report.get("max_non_orthogonality")
+        if isinstance(non_ortho, (int, float)) and non_ortho > 70:
+            overlays.append(
+                ViewportOverlay(
+                    kind="checkmesh_warn",
+                    label=f"non-orthogonality {non_ortho:.0f}°",
+                    severity="warn" if non_ortho < 85 else "fail",
+                )
+            )
+
+    return overlays
+
+
+def _format_cell_count(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M cells"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}k cells"
+    return f"{n} cells"
+
+
+# ────────────────────────── bottom_cards ──────────────────────────
+
+
+def _pick_bottom_cards(state: CaseStateSnapshot) -> list[BottomCard]:
+    """All step-relevant problems + gaps as cards.
+
+    Bottom cards are the full visible list (sorted FAIL > WARN > info),
+    while rail_primary picks just the top one. Cap at 8 cards to keep
+    the panel scannable.
+    """
+
+    cards: list[BottomCard] = []
+
+    problems = _problems_for_step(state, severities=("fail", "warn", "info"))
+    for p in problems:
+        cards.append(
+            BottomCard(
+                kind="audit_finding",
+                title=str(p.get("title") or p.get("rule") or "Audit finding")[:80],
+                body_text=str(p.get("message") or p.get("body") or "")[:400],
+                severity=_normalize_severity(p.get("severity", "info")),
+                source_artifact=p.get("_source_artifact"),
+                field_path=p.get("field_path"),
+            )
+        )
+
+    for g in _gaps_for_step(state, severities=("critical", "warning", "info")):
+        cards.append(
+            BottomCard(
+                kind="missing_field",
+                title=f"缺字段 / Missing: {g.get('field_path', '')}"[:80],
+                body_text=str(g.get("why") or "")[:400],
+                severity=_normalize_severity(g.get("severity", "info")),
+                source_artifact="completeness_report",
+                field_path=g.get("field_path"),
+            )
+        )
+
+    # Step hint cards — surface the "what is this step about" line so
+    # the bottom panel is never empty on a clean case.
+    if not cards:
+        hint = _STEP_HINTS.get(state.step)
+        if hint:
+            cards.append(
+                BottomCard(
+                    kind="step_hint",
+                    title=hint["title"],
+                    body_text=hint["body"],
+                    severity="info",
+                )
+            )
+
+    return cards[:8]
+
+
+_STEP_HINTS: dict[int, dict[str, str]] = {
+    1: {
+        "title": "Step 1 · 几何 / Geometry",
+        "body": "导入 STL/STEP，验证拓扑封闭与单位，命名 patches。",
+    },
+    2: {
+        "title": "Step 2 · 网格 / Mesh",
+        "body": "生成或导入网格，关注 cell 数、非正交度、边界层。",
+    },
+    3: {
+        "title": "Step 3 · 物理 / Physics",
+        "body": "选择求解器、湍流模型、流体属性、稳态/瞬态。",
+    },
+    4: {
+        "title": "Step 4 · 边界条件 / BCs",
+        "body": "为每个面设置 BC 类型 + 数值；engine 会比对 expected_fields。",
+    },
+    5: {
+        "title": "Step 5 · 求解与后处理 / Solve+Postp",
+        "body": "目标残差 / QoI 稳定判据 / 收敛监控 / 提取结果。",
+    },
+}
+
+
+# ────────────────────────── problems extraction ──────────────────────────
+
+
+def _problems_for_step(
+    state: CaseStateSnapshot, *, severities: tuple[str, ...]
+) -> list[dict]:
+    """Extract audit-artifact problems relevant to the current step.
+
+    Source artifacts: per `_STEP_ARTIFACTS`. Each artifact's `findings`
+    or `issues` list is normalized to {severity, title, message,
+    field_path, _source_artifact} dicts.
+    """
+
+    out: list[dict] = []
+    for artifact_name in _STEP_ARTIFACTS.get(state.step, ()):
+        artifact = state.artifacts.get(artifact_name)
+        if not isinstance(artifact, dict):
+            continue
+        for raw in _iter_problems_from_artifact(artifact, artifact_name):
+            sev = _normalize_severity(raw.get("severity", "info"))
+            if sev in severities:
+                out.append(raw)
+    # Stable sort by severity rank (fail > warn > info)
+    out.sort(key=lambda p: _severity_rank(p.get("severity", "info")))
+    return out
+
+
+def _iter_problems_from_artifact(
+    artifact: dict, artifact_name: str
+):
+    """Walk a single artifact looking for finding-shaped entries.
+
+    Handles multiple known shapes — the audit subsystem has accumulated
+    a few conventions over time (findings / issues / problems / verdict
+    + reason). Each shape is normalized into the common dict form.
+    """
+
+    candidates = []
+    for key in ("findings", "issues", "problems"):
+        v = artifact.get(key)
+        if isinstance(v, list):
+            candidates.extend(v)
+
+    for c in candidates:
+        if not isinstance(c, dict):
+            continue
+        yield {
+            "severity": c.get("severity") or c.get("level") or "info",
+            "title": c.get("title") or c.get("rule") or c.get("code"),
+            "rule": c.get("rule") or c.get("code"),
+            "message": c.get("message") or c.get("description") or c.get("body"),
+            "body": c.get("body"),
+            "field_path": c.get("field_path") or c.get("path"),
+            "_source_artifact": artifact_name,
+        }
+
+    # Top-level verdict shape (used by bc_quality.json, mesh_report.json).
+    verdict = artifact.get("verdict")
+    reason = artifact.get("reason") or artifact.get("why")
+    if isinstance(verdict, str) and verdict.lower() in ("fail", "warn"):
+        yield {
+            "severity": verdict.lower(),
+            "title": f"{artifact_name} verdict={verdict}",
+            "rule": artifact.get("rule"),
+            "message": reason,
+            "body": reason,
+            "field_path": None,
+            "_source_artifact": artifact_name,
+        }
+
+
+# ────────────────────────── gaps extraction ──────────────────────────
+
+
+def _gaps_for_step(
+    state: CaseStateSnapshot, *, severities: tuple[str, ...]
+) -> list[dict]:
+    """Extract missing-field gaps relevant to the current step.
+
+    Source: state.completeness.missing[]. Each entry's `field_path` is
+    matched against `_STEP_PATH_PREFIXES[step]`. Severity from the
+    completeness report's vocabulary (critical / warning / info).
+    """
+
+    if not state.completeness:
+        return []
+
+    missing = state.completeness.get("missing", [])
+    if not isinstance(missing, list):
+        return []
+
+    prefixes = _STEP_PATH_PREFIXES.get(state.step, ())
+    out: list[dict] = []
+    for raw in missing:
+        if not isinstance(raw, dict):
+            continue
+        field_path = str(raw.get("field_path", ""))
+        if not field_path:
+            continue
+        if not any(field_path.startswith(p) for p in prefixes):
+            continue
+        sev = str(raw.get("severity", "info"))
+        if sev not in severities:
+            continue
+        out.append(raw)
+    out.sort(key=lambda g: _gap_severity_rank(g.get("severity", "info")))
+    return out
+
+
+# ────────────────────────── severity normalization ──────────────────────────
+
+
+def _normalize_severity(s) -> str:
+    """Map a heterogeneous severity string to {fail, warn, info}.
+
+    Audit artifacts mix `fail` / `FAIL` / `error` / `critical` etc.
+    """
+    s2 = str(s or "info").lower()
+    if s2 in ("fail", "failed", "error", "critical", "blocker"):
+        return "fail"
+    if s2 in ("warn", "warning"):
+        return "warn"
+    return "info"
+
+
+def _severity_rank(s) -> int:
+    return {"fail": 0, "warn": 1, "info": 2}.get(_normalize_severity(s), 3)
+
+
+def _gap_severity_rank(s) -> int:
+    s2 = str(s or "info").lower()
+    return {"critical": 0, "warning": 1, "info": 2}.get(s2, 3)
+
+
+# ────────────────────────── state_sha ──────────────────────────
+
+
+def _state_sha(state: CaseStateSnapshot) -> str:
+    """SHA-256 of canonical state bytes. Stable across same inputs."""
+    payload = {
+        "case_id": state.case_id,
+        "step": state.step,
+        "manifest": _canonical(state.manifest),
+        "artifacts": _canonical(state.artifacts),
+        "completeness": _canonical(state.completeness),
+        "focus_patch": state.focus_patch,
+        "focus_region": state.focus_region,
+        "focus_panel": state.focus_panel,
+    }
+    blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _canonical(obj):
+    """Recursively sort dict keys for stable serialization."""
+    if isinstance(obj, dict):
+        return {k: _canonical(obj[k]) for k in sorted(obj.keys())}
+    if isinstance(obj, list):
+        return [_canonical(x) for x in obj]
+    return obj

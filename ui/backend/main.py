@@ -73,6 +73,7 @@ from ui.backend.routes import (
     validation,
     wizard,
     workbench_basics,
+    workbench_frame,
 )
 
 # M5.0 STL import + M6.0 gmsh meshing both require the [workbench]
@@ -226,6 +227,7 @@ app.include_router(case_export.router,  prefix="/api", tags=["case-export"])
 app.include_router(field_artifacts.router, prefix="/api", tags=["field-artifacts"])
 app.include_router(comparison_report.router, prefix="/api", tags=["comparison-report"])
 app.include_router(workbench_basics.router, prefix="/api", tags=["workbench-basics"])
+app.include_router(workbench_frame.router, prefix="/api", tags=["workbench-frame"])
 app.include_router(mesh_metrics.router, prefix="/api", tags=["mesh-metrics"])
 app.include_router(mesh_quality.router, prefix="/api", tags=["mesh-quality"])
 app.include_router(preflight.router, prefix="/api", tags=["preflight"])
