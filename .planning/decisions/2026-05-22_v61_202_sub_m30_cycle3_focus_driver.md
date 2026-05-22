@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-202-SUB-M30-CYCLE3-FOCUS-DRIVER
 title: M3.0 cycle 3 — focus_patch driver fully wired (URL sync + bottom_cards bias + rail.primary bias)
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 3 (focus driver · 4th SSOT driver fully load-bearing)
 notion_sync_status: pending_accepted
@@ -14,6 +15,24 @@ ssot: .planning/workbench/GUIDED_CASE_CONSTRUCTION_FLOW.md
 predecessors:
   - DEC-V61-202-SUB-M30-CYCLE1-DECIDE-STATE (display)
   - DEC-V61-202-SUB-M30-CYCLE2-MUTATION-TOPBAR (action loop closed)
+codex_review:
+  r0_commit: 9fb3d1a
+  r0_relay: crs (effort=high)
+  r0_verdict: CHANGES_REQUIRED (1 P1 + 2 P2)
+  r0_findings:
+    - "P1: FacePickProvider must be keyed by caseId (cross-case URL bleed)"
+    - "P2-A: focus sort merges audit FAIL with completeness critical; missing_field bubbled above unrelated FAIL"
+    - "P2-B: _collect_resolved_patches misses real bc_audit type_mismatches[].resolved_patch shape"
+  r1_commit: 6151e7f
+  r1_verdict: CHANGES_REQUIRED (1 P2; R0 P1 + P2-A closed)
+  r1_findings:
+    - "P2: _collect_resolved_patches scanned all sublists incl. successful matched/checked → false-positive focus match"
+  r2_commit: db62f8b
+  r2_verdict: CHANGES_REQUIRED (1 P2; R0 P2-B fully closed)
+  r2_findings:
+    - "P2: FAIL sublist whitelist missed value_missing / derived_mismatches / derived_missing"
+  r3_commit: 638fed0
+  r3_verdict: APPROVED (verbatim Codex P2 fix; cycle 3 review chain closed at round cap=3)
 ---
 
 ## Why
@@ -88,14 +107,14 @@ Pre-implementation surface scan (V61-088):
 
 ## Closure criteria
 
-- [ ] Backend `_focus_matches` helper + integration into rail/cards/overlays
-- [ ] Backend tests ≥6 (focus_patch in bottom_cards / focus_patch in rail / focus_patch=null = no bias / overlay+focus + bc_audit / multi-patch scenarios)
-- [ ] Frontend PickedFaceState.patchName + URL sync
-- [ ] Frontend tests ≥3 (publisher includes patchName / URL sync on pick / URL clears on null pick)
-- [ ] case_007 dogfood: 4+ checks PASS proving focus actually changes UI
-- [ ] Codex R0 APPROVED or CHANGES_REQUIRED closed ≤ 3 rounds
-- [ ] DEC Proposed → Accepted
-- [ ] Notion sync (session-end)
+- [x] Backend `_focus_matches` helper + integration into rail/cards/overlays (commit `30827bb`)
+- [x] Backend tests 13 passing (9 R0 + 2 R1 regressions + 1 R2 regression covering 3 newly-supported FAIL sublists + 1 R1 false-positive guard)
+- [x] Frontend PickedFaceState.patchName + URL sync (commit `9fb3d1a`)
+- [x] Frontend tests 6/6 (publisher forwards patchName / URL writes on pick / URL clears on unpick / enabled=false safe / no churn on same patch / empty patchName → URL cleared)
+- [x] case_007 dogfood **8/8 PASS** (`scripts/dogfood/case_007_cycle3_focus.py` + `.planning/dogfood/DOGFOOD_CASE_007_CYCLE3.md`)
+- [x] Codex R0 CHANGES_REQUIRED (1 P1 + 2 P2) → R1 verbatim fix → R1 CHANGES_REQUIRED 1 P2 → R2 verbatim fix → R2 CHANGES_REQUIRED 1 P2 → R3 verbatim fix → **R3 APPROVED** (closed at round cap=3, verbatim chain)
+- [x] DEC Proposed → Accepted (this commit)
+- [ ] Notion sync (session-end batch)
 
 ## Risks + mitigations
 
