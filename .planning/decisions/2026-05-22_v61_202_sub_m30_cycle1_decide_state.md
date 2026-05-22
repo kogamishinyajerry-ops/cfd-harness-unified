@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 1 (first guided-UX implementation cycle)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81e3a5c6d0ccc3a248e2)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
