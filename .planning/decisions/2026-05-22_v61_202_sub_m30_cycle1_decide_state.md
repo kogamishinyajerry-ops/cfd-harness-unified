@@ -1,16 +1,28 @@
 ---
 decision_id: DEC-V61-202-SUB-M30-CYCLE1-DECIDE-STATE
 title: M3.0 cycle 1 — backend decide(CaseState) + WorkbenchFrame schema + additive frontend layer
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 1 (first guided-UX implementation cycle)
-notion_sync_status: pending_accepted
+notion_sync_status: pending
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
 scope_class: sub_dec
 ssot: .planning/workbench/GUIDED_CASE_CONSTRUCTION_FLOW.md
+codex_review:
+  r0_commit: 75210f8
+  r0_relay: crs (effort=high, fallback) — 86gs gpt-5.4 xhigh hung ≥25 min, switched to CRS gpt-5.4 high; DEC frontmatter notes the effort downgrade per v2.3 rule
+  r0_verdict: CHANGES_REQUIRED (3 P1 + 1 P2)
+  r0_findings:
+    - "P1-1: _load_manifest missed whitelist resolver branch — catalog cases would 404"
+    - "P1-2: _STEP_PATH_PREFIXES[4] missed `bc.patches` prefix — imported-user BC gaps invisible on Step 4"
+    - "P1-3: _iter_problems_from_artifact didn't parse real cfdtrust gate_status / *_dimension / gates.* shapes — real audit failures hidden"
+    - "P2: mesh overlays read flat n_cells / max_non_orthogonality but real shape is stats.cells + quality_dimension.metrics.max_non_orthogonality.actual"
+  r1_commit: 4ef8b65
+  r1_verdict: APPROVED (verbatim Codex P1 fix per v2.3 verbatim exception)
 ---
 
 ## Why
@@ -174,15 +186,15 @@ decide(state) -> frame:
 
 ## Closure criteria
 
-- [ ] Backend schema + service + route landed
-- [ ] Backend tests passing (target: ≥6 new tests covering all 5 steps + 3 priority branches + V130 LLM-offline + state_sha determinism)
-- [ ] Frontend components + hook landed
-- [ ] Frontend unit tests passing
-- [ ] Wired into StepPanelShell.tsx behind `?dynamic_frame=1` flag
-- [ ] case_007 dogfood report written, anti-pattern check passes (each step transition mutates ≥1 frame slot)
-- [ ] Gap #48 + Gap #49 surface as bottom_cards on Step 4 + Step 3 respectively
-- [ ] Codex R0 review (1-sync risk-tier: new routes + new pages) APPROVED or CHANGES_REQUIRED closed in ≤ 3 rounds
-- [ ] DEC flipped Proposed → Accepted
+- [x] Backend schema + service + route landed (commits `75210f8`, `4ef8b65`)
+- [x] Backend tests passing — 29/29 (20 from R0 + 9 R1 regression)
+- [x] Frontend components + hook landed (commit `f7ec6c5`)
+- [x] Frontend unit tests passing — 16/16
+- [x] Wired into StepPanelShell.tsx behind `?dynamic_frame=1` flag
+- [x] case_007 dogfood report written (commit `304f0d9`) — anti-pattern check PASS at every transition
+- [x] Gap #48 + Gap #49 surface as bottom_cards on Step 4 + Step 3 respectively (dogfood verified)
+- [x] Codex R0 review APPROVED — R0 CHANGES_REQUIRED (3 P1 + 1 P2) closed in 1 round via verbatim R1 fix
+- [x] DEC flipped Proposed → Accepted (this commit)
 - [ ] Notion sync at session-end batch
 
 ## Risks + mitigations
