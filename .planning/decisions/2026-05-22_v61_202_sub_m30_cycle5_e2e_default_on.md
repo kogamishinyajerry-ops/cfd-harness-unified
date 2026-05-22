@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 5 (discovery + partial landings + integration sub-DEC spawn)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-23 (https://www.notion.so/368c68942bed811d8daed3a92f740c05)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -124,7 +124,7 @@ IMPORTED_DIR the dev backend reads from).
 - [x] Mid-cycle discovery documented: dynamic frame is unmounted on the live `/workbench/case/:caseId` route (routes to `WorkbenchShellV4`, not `StepPanelShell`)
 - [x] Sibling sub-DEC spawned: `DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL` — milestone-critical, between cycles 5 and 6
 - [x] DEC Proposed → Accepted (this commit · honest scope reduction)
-- [ ] Notion sync (session-end batch)
+- [x] Notion sync (https://www.notion.so/368c68942bed811d8daed3a92f740c05)
 
 ## Risks + mitigations
 

@@ -26,7 +26,7 @@ codex_review:
     - "P2: R1 fix advanced one V4 step always but ignored backend target_step contract"
   r3_commit: 1e89f03
   r3_verdict: APPROVED (verbatim CTA upper-bound balance; integration review chain closed at round cap=3)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-23 (https://www.notion.so/368c68942bed815ca951d596aa6497a7)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -134,7 +134,7 @@ the live route.
 - [x] CTA navigation respects backend target_step as upper bound while honoring V4 granularity (Codex R0 P1-1 → R1 P1 → R2 P2 → R3 APPROVED chain)
 - [x] Codex R0→R3 chain closed at v2.3 round cap=3 with verbatim fixes
 - [x] DEC Proposed → Accepted (this commit)
-- [ ] Notion sync (session-end batch)
+- [x] Notion sync (https://www.notion.so/368c68942bed815ca951d596aa6497a7)
 
 ## Risks + mitigations
 
