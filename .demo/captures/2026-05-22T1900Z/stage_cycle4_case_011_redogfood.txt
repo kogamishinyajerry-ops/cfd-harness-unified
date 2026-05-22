@@ -1,0 +1,24 @@
+===== HEAD =====
+f6e9a45219027fbf4bc28a81682f3d2f1cba897a
+
+===== Wall-clock start =====
+2026-05-22T10:43:30Z
+
+===== cfdtrust ingest =====
+[cfdtrust] WARN ingest FAIL: chtMultiRegionSimpleFoam ran 200/300 iters; 3/3 field(s) did not reach residual target.
+[cfdtrust] WARN   Solver gate FAILed on imported residuals — evidence was still ingested. Run `cfdtrust report` to assemble the full trust_report.json.
+[cfdtrust] OK     external_log_source = log_chtMultiRegionSimpleFoam.txt
+[cfdtrust] OK     checkmesh_image     = openfoam/openfoam11-paraview510:latest
+[cfdtrust] WARN Ingested run: harness did NOT witness the solver execution. trust_report will cap overall_status at WARN; validation_status cannot reach `validated`.
+(exit=0, elapsed=250s)
+
+===== cfdtrust report =====
+[cfdtrust] OK   trust_report written: /Users/Zhuanz/Desktop/cfd-harness-unified/_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/trust_report.json
+        overall_status   = FAIL
+        solver_execution = ingested
+        validation_status= not_validated
+[cfdtrust] WARN This trust_report does NOT constitute real CFD validation.
+(exit=1, elapsed=0s)
+
+===== Wall-clock end =====
+2026-05-22T10:47:40Z

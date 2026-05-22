@@ -1328,6 +1328,18 @@ _BOUNDARY_FIELD_OPEN_RE = re.compile(r"\bboundaryField\s*\{")
 # compressible aero benchmark cases (ONERA M6, RAE 2822, ...).
 _GROUPED_PATCH_HEADER_RE = re.compile(r'"?\(\s*([^)]+?)\s*\)"?')
 
+# Gap #44 (case_011 cycle-4 dogfood, exposed by spike B verdict layer):
+# Multi-region CHT cases commonly declare mappedWall patches via
+# QUOTED REGEX SINGLE-NAME form — `"region_hot_fluid_to_.*"` — one
+# block declares one patch whose name matches an arbitrary regex. This
+# is structurally different from the Gap #23 grouped form (no parens
+# inside the quotes). Pre-fix the walker matched `inner[j] == '"'`,
+# tried `_GROUPED_PATCH_HEADER_RE` (which requires literal `(...)`),
+# failed, and silently broke — dropping every subsequent patch in the
+# file. Spike B's verdict layer's dependence on `fields_present`
+# exposed this; cycle-2's pessimistic BLOCKED had masked it.
+_QUOTED_PATCH_HEADER_RE = re.compile(r'"([^"]+)"')
+
 # M7.1: numeric tokens — sign, digits, decimal, scientific notation.
 _NUM_TOKEN = r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?"
 # `value uniform <scalar>;`  e.g. `value uniform 0.293;` or `value uniform 0;`
@@ -1418,7 +1430,36 @@ def _parse_field_boundary_field(text: str) -> Dict[str, Dict[str, Any]]:
         # seen had the case author written N separate single-patch
         # blocks.
         grouped_names: List[str] | None = None
-        if inner[j] in ('"', '('):
+        if inner[j] == '"':
+            # Quoted patch header. Two valid shapes:
+            #   1. `"(name1|name2|...)"` — grouped quoted (Gap #23)
+            #   2. `"single_name_or_regex"` — single-patch via regex
+            #      (Gap #44, case_011 mappedWall pattern)
+            # Match the bare quoted-string first; then route on whether
+            # the inner content is a paren-group or a single regex.
+            qm = _QUOTED_PATCH_HEADER_RE.match(inner, j)
+            if qm is None:
+                # Unterminated quote — stop walking (existing posture).
+                break
+            inner_quoted = qm.group(1).strip()
+            if inner_quoted.startswith("(") and inner_quoted.endswith(")"):
+                # Grouped quoted form. Strip the parens, split on `|`.
+                raw_names = inner_quoted[1:-1].split("|")
+                grouped_names = [s.strip() for s in raw_names if s.strip()]
+            else:
+                # Gap #44: single-name quoted regex. Keep the literal
+                # quoted string as ONE synthetic patch entry. Downstream
+                # consumers (bc_quality persistence, audit gate) see the
+                # patch by its regex-as-name (e.g. `region_hot_fluid_to_.*`).
+                # The regex is NOT expanded against real polyMesh patches
+                # here — that's the geometry_quality realized-patches
+                # path's job (separate concern).
+                grouped_names = [inner_quoted]
+            j = qm.end()
+            name = None
+        elif inner[j] == '(':
+            # Unquoted grouped form: `(name1|name2|...) { ... }`. Rare
+            # but legal (OpenFOAM tutorial cases occasionally use this).
             gm = _GROUPED_PATCH_HEADER_RE.match(inner, j)
             if gm is None:
                 # Malformed grouped header — stop walking to mirror the
@@ -1427,7 +1468,7 @@ def _parse_field_boundary_field(text: str) -> Dict[str, Dict[str, Any]]:
             raw_names = gm.group(1).split("|")
             grouped_names = [s.strip() for s in raw_names if s.strip()]
             j = gm.end()
-            # `grouped_names` may be empty (e.g. `"(|)"`); we still
+            # `grouped_names` may be empty (e.g. `(|)`); we still
             # consume the block below to keep the walker advancing, but
             # write nothing into `patches`. Matches existing posture for
             # untyped / malformed blocks (silent skip).

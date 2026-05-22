@@ -1617,3 +1617,112 @@ def test_multi_region_verdict_honors_turb_model_derivation(tmp_path: Path):
     # wrote (proving the fix used bc_quality.expected_fields, not a
     # re-derivation).
     assert gate["details"]["expected_fluid_fields"] == ["U", "p", "k", "omega", "nut"]
+
+
+# ---------- Gap #44 (cycle-4 dogfood) — quoted-regex single-name patch ----------
+
+
+def test_parse_boundary_field_quoted_regex_single_name():
+    """Gap #44 (case_011 cycle-4 dogfood, exposed by spike B verdict
+    layer): multi-region CHT cases declare mappedWall patches via
+    quoted-regex single-name form (`"region_hot_fluid_to_.*"`) — one
+    block, one patch, regex-quoted. Pre-fix the walker silently
+    dropped EVERY patch in the file (broke at byte 0 of inner block);
+    fix accepts both grouped and single-name quoted forms.
+
+    case_011's 0/region_hot_fluid/U pattern: regex mappedWall + normal
+    inlet/outlet + plain walls. Walker must parse all three forms in
+    the same block."""
+    text = """
+FoamFile { class volVectorField; object U; }
+dimensions [0 1 -1 0 0 0 0];
+internalField uniform (0.5 0 0);
+boundaryField
+{
+    "region_hot_fluid_to_.*"
+    {
+        type            fixedValue;
+        value           uniform (0 0 0);
+    }
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (0.5 0 0);
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+}
+"""
+    patches = ofa._parse_field_boundary_field(text)
+    # Gap #44: pre-fix this was {} (silent drop). Fix: 3 patches.
+    assert len(patches) == 3, (
+        f"Gap #44: expected 3 patches (regex + inlet + outlet); got "
+        f"{list(patches.keys())}"
+    )
+    assert "region_hot_fluid_to_.*" in patches
+    assert "inlet" in patches
+    assert "outlet" in patches
+    # The regex patch carries the parsed BC details same as any other.
+    assert patches["region_hot_fluid_to_.*"]["type"] == "fixedValue"
+    assert patches["region_hot_fluid_to_.*"]["value_vector"] == [0.0, 0.0, 0.0]
+    assert patches["inlet"]["type"] == "fixedValue"
+    assert patches["outlet"]["type"] == "zeroGradient"
+
+
+def test_parse_boundary_field_quoted_regex_first_doesnt_break_walker():
+    """Gap #44 regression: the regex patch appearing FIRST in the block
+    must not break the walker. Pre-fix this was the exact failure mode
+    that broke case_011 — first-patch silent break meant zero patches
+    parsed. case_011 fluid-region U/p files have the regex patch first."""
+    text = """
+boundaryField
+{
+    "region_solid_to_fluid"
+    {
+        type            fixedValue;
+        value           uniform 350;
+    }
+    patch_a { type zeroGradient; }
+    patch_b { type zeroGradient; }
+    patch_c { type fixedValue; value uniform 273; }
+}
+"""
+    patches = ofa._parse_field_boundary_field(text)
+    assert len(patches) == 4, (
+        f"Gap #44 regression: regex-first must not break walker; got "
+        f"{list(patches.keys())}"
+    )
+    assert "region_solid_to_fluid" in patches
+    assert patches["patch_c"]["value_scalar"] == 273.0
+
+
+def test_parse_boundary_field_grouped_still_works(): 
+    """Gap #44 fix must not regress Gap #23 (DEC-V61-201-SUB-INGEST-BC-
+    REGEX-GROUPED-PATCHES) — canonical OpenFOAM grouped-patch syntax
+    `"(name1|name2|...)"` is still expanded into per-name entries."""
+    text = """
+boundaryField
+{
+    "(wing|farfield|symmetry)"
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    outlet
+    {
+        type            zeroGradient;
+    }
+}
+"""
+    patches = ofa._parse_field_boundary_field(text)
+    assert len(patches) == 4, (
+        f"Gap #23 regression check: grouped form must still expand; got "
+        f"{list(patches.keys())}"
+    )
+    for name in ("wing", "farfield", "symmetry"):
+        assert name in patches
+        assert patches[name]["type"] == "fixedValue"
+        assert patches[name]["value_scalar"] == 0.0
+    assert patches["outlet"]["type"] == "zeroGradient"
