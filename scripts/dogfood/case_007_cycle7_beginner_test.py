@@ -241,11 +241,22 @@ def main():
         # synthesize.
         field_path = rail.get("field_path")
         if not field_path:
-            # No field to act on — try to advance anyway if enabled, else
-            # give up to avoid an infinite spin.
-            if topbar.get("enabled") and current_step < 5:
-                current_step += 1
-                continue
+            # Push-review P2 #2 fix: a non-step_default rail with
+            # field_path=None is a REAL backend blocker (e.g.
+            # `_iter_problems_from_artifact` emits problem_fix items
+            # with field_path=None for top-level gate_status /
+            # *_dimension failures). The previous fallback that
+            # advanced the step here silently masked that regression —
+            # the harness could reach step 5 and report PASS even when
+            # the engine surfaced an un-actionable blocker.
+            #
+            # Break with a marker entry in step_transitions so the
+            # well-formed check fails loudly with the offending state.
+            step_transitions.append((current_step, -1))
+            print(
+                f"  [HALT] fieldless {rail['kind']} at step={current_step} "
+                f"(title={rail.get('title')!r}); cannot synthesize a fix"
+            )
             break
 
         # Avoid spinning on the same field twice in a row at one step.

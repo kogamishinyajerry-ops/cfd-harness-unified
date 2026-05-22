@@ -4,7 +4,10 @@
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle6_provenance.py`
 **Verdict**: **PASS** (7/7 checks · all-PASS gate)
-**Codex**: R0 = 3 findings (2 P2 + 1 P3, 0 P1) · R1 = APPROVE · 2 rounds, under cap=3
+**Codex**: R0 = 3 findings (2 P2 + 1 P3, 0 P1) · R1 = APPROVE · 2 rounds.
+**Push-review** (M3.0 close-batch) caught 1 additional P2: passive
+refetch dedup by state_sha (cycle 6 log was overcounting React Query
+revalidations). Fix landed in close-batch commit; 12/12 unit tests PASS.
 
 ---
 

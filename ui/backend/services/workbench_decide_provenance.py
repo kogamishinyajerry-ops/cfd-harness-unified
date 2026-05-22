@@ -40,6 +40,15 @@ AUDIT_V2_DIR: Path = DRAFTS_DIR / "audit_v2"
 # Env-var gate. The string check is case-insensitive on the value.
 _DISABLED_ENV_VAR = "WORKBENCH_PROVENANCE_DISABLED"
 
+# Push-review P2 #1 fix: dedup log writes by (case_id, state_sha).
+# React Query default behaviour (remount, window-focus refetch, stale
+# revalidation) hits GET /workbench_frame multiple times on the same
+# state — without dedup the log becomes a record of UI fetches, not
+# engineer-driven decisions. Cache last state_sha per case in-process;
+# on restart the existing log persists but the cache resets (at most
+# one duplicate first-frame entry — acceptable noise).
+_LAST_STATE_SHA_PER_CASE: dict[str, str] = {}
+
 # Parse `severity=X` out of a RailPrimary.provenance line.
 # decide() builders write traces like
 #     "step=4 · problem_fix · severity=fail"
@@ -102,6 +111,14 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
 
     try:
         safe = _safe_case_id(state.case_id)
+        # Push-review P2 #1 fix: same state_sha as last logged for this
+        # case → passive refetch, skip. Detection is per-process; restart
+        # may add one duplicate, accepted.
+        last = _LAST_STATE_SHA_PER_CASE.get(safe)
+        if last is not None and last == frame.state_sha:
+            return
+        _LAST_STATE_SHA_PER_CASE[safe] = frame.state_sha
+
         case_dir = AUDIT_V2_DIR / safe
         case_dir.mkdir(parents=True, exist_ok=True)
         log_path = case_dir / "decisions.jsonl"

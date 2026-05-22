@@ -31,6 +31,9 @@ def provenance_enabled(monkeypatch, tmp_path):
     import ui.backend.services.workbench_decide_provenance as wp
 
     monkeypatch.setattr(wp, "AUDIT_V2_DIR", tmp_path)
+    # Reset the dedup cache so tests don't share state. Push-review
+    # P2 #1 dedup is per-process; tests want a clean slate.
+    wp._LAST_STATE_SHA_PER_CASE.clear()
     return tmp_path
 
 
@@ -78,13 +81,17 @@ def test_log_decision_writes_parseable_line(provenance_enabled):
 
 
 def test_log_decision_appends_multiple_calls(provenance_enabled):
-    state = _state(case_id="case_multi")
-    decide(state)
-    decide(state)
-    decide(state)
+    """Push-review P2 #1: dedup is by state_sha, so distinct states
+    still each get their own line (the writer appends, doesn't
+    overwrite). Using three *different* states proves the append path."""
+    decide(_state(case_id="case_multi", step=1))
+    decide(_state(case_id="case_multi", step=2))
+    decide(_state(case_id="case_multi", step=3))
     log_path = provenance_enabled / "case_multi" / "decisions.jsonl"
     lines = _read_lines(log_path)
     assert len(lines) == 3
+    # Append order = call order
+    assert [line["step"] for line in lines] == [1, 2, 3]
 
 
 def test_log_decision_captures_focus_patch(provenance_enabled):
@@ -159,6 +166,33 @@ def test_case_id_sanitization_blocks_traversal(provenance_enabled):
     log_files = list(provenance_enabled.rglob("decisions.jsonl"))
     for log_file in log_files:
         assert provenance_enabled in log_file.parents
+
+
+def test_repeated_same_state_sha_dedup(provenance_enabled, monkeypatch):
+    """Push-review P2 #1 regression: passive refetches that return the
+    same state_sha must not append duplicate log lines. React Query
+    refetch on remount / window-focus is the canonical case."""
+    import ui.backend.services.workbench_decide_provenance as wp
+
+    # Clear the in-process dedup cache so this test is hermetic.
+    wp._LAST_STATE_SHA_PER_CASE.clear()
+
+    state = _state(case_id="case_dedup")
+    decide(state)
+    decide(state)  # passive refetch — same state_sha
+    decide(state)  # another passive refetch
+    log_path = provenance_enabled / "case_dedup" / "decisions.jsonl"
+    lines = _read_lines(log_path)
+    assert len(lines) == 1, (
+        f"expected exactly 1 line after 3 same-state calls, got {len(lines)}"
+    )
+
+    # A state change (different step) MUST write a new line.
+    state2 = _state(case_id="case_dedup", step=2)
+    decide(state2)
+    lines = _read_lines(log_path)
+    assert len(lines) == 2
+    assert lines[0]["step"] != lines[1]["step"]
 
 
 def test_replay_script_runs_without_pythonpath(tmp_path, monkeypatch):

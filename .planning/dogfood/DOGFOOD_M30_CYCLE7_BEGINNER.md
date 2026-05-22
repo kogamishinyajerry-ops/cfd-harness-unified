@@ -5,8 +5,12 @@
 **Dogfood script**: `scripts/dogfood/case_007_cycle7_beginner_test.py`
 **Verdict**: **PASS** (8/8 checks · all-PASS gate · post Codex R0+R1 P2 fixes)
 **Codex**: R0 = 2 P2 (severity vacuous, transitions client-side) · R1 = 2 P2
-(step-5 CTA not validated, target_step=0 crashes harness) — all fixed
-verbatim, 2 rounds total under v2.3 cap=3.
+(step-5 CTA not validated, target_step=0 crashes harness) · R2 = APPROVE.
+**Push-review** (M3.0 close-batch) caught 1 additional P2: fieldless
+blocker false-pass — rail with kind != step_default but field_path=None
+used to silently advance, masking real backend gate_status failures.
+Now records `(current_step, -1)` and breaks, making the transitions
+well-formed check fail loudly. Fix landed in close-batch commit.
 
 ---
 
