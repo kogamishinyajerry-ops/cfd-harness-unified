@@ -237,7 +237,49 @@ def _focus_matches(state: CaseStateSnapshot, item: dict) -> bool:
         for missing_list in raw_gaps.values():
             if isinstance(missing_list, list) and needle in missing_list:
                 return True
+    # Codex R0 P2-B fix: bc_audit value_match / type_mismatches forwards
+    # concrete patch names via _resolved_patches. The viewport pick uses
+    # the concrete patch name (e.g. "topWall"), not the manifest key
+    # (e.g. "wall"), so this is the only channel that catches those.
+    resolved = item.get("_resolved_patches")
+    if isinstance(resolved, (list, tuple, set)) and needle in resolved:
+        return True
     return False
+
+
+def _collect_resolved_patches(dim_value: dict) -> list[str]:
+    """Walk a dimension dict's nested arrays for `resolved_patch` entries.
+
+    Real bc_audit shapes (channel_flow_rans_sst.bc_audit.json) carry
+    concrete patch names inside per-finding dicts:
+
+        {
+          "value_mismatches": [
+            {"field": "U", "resolved_patch": "inlet", ...},
+            {"field": "p", "resolved_patch": "outlet", ...},
+          ],
+          "type_mismatches": [
+            {"field": "U", "resolved_patch": "topWall", ...},
+            ...
+          ],
+        }
+
+    We collect distinct ``resolved_patch`` strings across all 1-level-deep
+    list-of-dict values inside the dimension. Order is preserved (insert
+    order); duplicates dropped via dict.fromkeys.
+    """
+    out: list[str] = []
+    for v in dim_value.values():
+        if not isinstance(v, list):
+            continue
+        for entry in v:
+            if not isinstance(entry, dict):
+                continue
+            patch = entry.get("resolved_patch")
+            if isinstance(patch, str) and patch:
+                out.append(patch)
+    # Preserve insertion order, drop dups.
+    return list(dict.fromkeys(out))
 
 
 def _rail_from_problem(problem: dict, state: CaseStateSnapshot) -> RailPrimary:
@@ -455,15 +497,32 @@ def _pick_bottom_cards(state: CaseStateSnapshot) -> list[BottomCard]:
     # Cycle 3: re-sort so focus-matching cards bubble up within their
     # severity bucket. Stable sort preserves the existing severity
     # ordering when no focus is set or no matches exist.
+    #
+    # Codex R0 P2-A fix: focus bias operates WITHIN a (severity, kind)
+    # sub-bucket, not across kinds. Audit FAIL findings must still rank
+    # ahead of completeness critical gaps at the same severity rank —
+    # otherwise a focus-matching critical gap can render above an
+    # unrelated FAIL even though _pick_rail_primary still picks the
+    # FAIL, which is incoherent UX.
+    def _kind_rank(card: BottomCard) -> int:
+        # audit_finding ranks ahead of missing_field at the same severity
+        return 0 if card.kind == "audit_finding" else 1
+
     if state.focus_patch:
         raw_items.sort(
             key=lambda t: (
                 _severity_rank(t[1].severity),
+                _kind_rank(t[1]),
                 0 if _focus_matches(state, t[0]) else 1,
             )
         )
     else:
-        raw_items.sort(key=lambda t: _severity_rank(t[1].severity))
+        raw_items.sort(
+            key=lambda t: (
+                _severity_rank(t[1].severity),
+                _kind_rank(t[1]),
+            )
+        )
 
     cards = [t[1] for t in raw_items]
 
@@ -604,6 +663,12 @@ def _iter_problems_from_artifact(
         # Cycle 3: forward gaps_by_field (real bc_audit patch_coverage
         # shape) so _focus_matches can detect patch-level relevance.
         raw_gaps = value.get("gaps_by_field")
+        # Codex R0 P2-B fix: also walk nested arrays for resolved_patch
+        # (real bc_audit value_match / type_mismatches shape). The
+        # viewport publishes the concrete patch name; without this,
+        # focus_patch="topWall" never matches a FAIL surfaced via
+        # type_mismatches[].resolved_patch="topWall".
+        resolved = _collect_resolved_patches(value)
         yield {
             "severity": sev,
             "title": f"{key.replace('_dimension', '')} {dim_status}",
@@ -613,6 +678,7 @@ def _iter_problems_from_artifact(
             "field_path": None,
             "_source_artifact": artifact_name,
             "_raw_gaps_by_field": raw_gaps if isinstance(raw_gaps, dict) else None,
+            "_resolved_patches": resolved if resolved else None,
         }
 
     # (b) findings / issues / problems list

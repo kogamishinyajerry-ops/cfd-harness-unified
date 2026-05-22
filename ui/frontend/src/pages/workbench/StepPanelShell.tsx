@@ -498,7 +498,13 @@ export function StepPanelShell() {
 
   return (
     <SolveStreamProvider>
-    <FacePickProvider>
+    {/* DEC-V61-202-SUB-M30-CYCLE3 · Codex R0 P1 fix: key FacePickProvider
+     *  by caseId so the picked state resets when the engineer navigates
+     *  between cases. Without this, FacePickUrlSync would carry case A's
+     *  picked.patchName into case B's URL and bias the new case's frame
+     *  with an unrelated patch focus until the next pick fires. Same
+     *  per-case hard-remount pattern used by Step3StateProvider below. */}
+    <FacePickProvider key={caseId}>
     {/* DEC-V61-202-SUB-M30-CYCLE3 · subscribe to FacePickContext and
      *  mirror picked.patchName into ?focus_patch= so the backend's
      *  decide() can bias rail.primary + bottom_cards toward the patch

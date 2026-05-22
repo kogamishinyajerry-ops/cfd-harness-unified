@@ -213,6 +213,71 @@ def test_focus_matches_body_text():
     assert frame.rail_primary.title == "Generic FAIL B"
 
 
+def test_focus_does_not_promote_critical_gap_above_audit_fail():
+    """Codex R0 P2-A regression: focus bias must operate WITHIN a
+    (severity, kind) sub-bucket — a focus-matching missing_field (critical)
+    must NOT be reordered ahead of an unrelated audit_finding FAIL at
+    the same severity rank."""
+    state = _state(
+        focus_patch="inlet",
+        artifacts={
+            "bc_quality.json": {
+                "findings": [
+                    {"severity": "fail", "title": "non-focused FAIL",
+                     "message": "unrelated failure",
+                     "field_path": "bc_contract.outlet"},
+                ],
+            }
+        },
+        completeness={
+            "missing": [
+                {"field_path": "bc.inlet.velocity", "severity": "critical",
+                 "why": "inlet velocity missing"},
+            ]
+        },
+    )
+    frame = decide(state)
+    # First card must be the audit FAIL, not the focus-matching critical gap.
+    assert frame.bottom_cards[0].kind == "audit_finding"
+    assert "non-focused FAIL" in frame.bottom_cards[0].title
+
+
+def test_focus_matches_resolved_patch_in_nested_arrays():
+    """Codex R0 P2-B regression: bc_audit's value_mismatches /
+    type_mismatches arrays carry concrete patch names via
+    resolved_patch. focus_patch must match these so a viewport pick on
+    a concrete patch (e.g. topWall) surfaces the related FAIL even
+    when the manifest key is just `wall`."""
+    state = _state(
+        focus_patch="topWall",
+        artifacts={
+            "bc_audit.json": {
+                "gate_status": "FAIL",
+                "value_match_dimension": {
+                    "dimension_status": "FAIL",
+                    "value_mismatches": [
+                        {"field": "U", "resolved_patch": "inlet"},
+                    ],
+                    "type_mismatches": [
+                        {"field": "U", "resolved_patch": "topWall"},
+                        {"field": "p", "resolved_patch": "bottomWall"},
+                    ],
+                },
+                "patch_coverage_dimension": {
+                    "dimension_status": "FAIL",
+                    "gaps_by_field": {"k": ["inlet"]},
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    # value_match dimension surfaces topWall via type_mismatches; it
+    # should win rail.primary over patch_coverage (which only mentions
+    # inlet/bottomWall, not topWall).
+    assert frame.rail_primary.kind == "problem_fix"
+    assert "value_match" in frame.rail_primary.title
+
+
 def test_focus_unset_does_not_reorder_cards():
     """When focus_patch is None, bottom_cards keep their severity-sort
     order (no focus reorder fires)."""
