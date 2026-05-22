@@ -38,6 +38,15 @@ export interface PickedFaceState {
    *  optionally anchor itself near the picked face (Tier-A: just
    *  metadata, no positioning yet). */
   worldPosition: [number, number, number];
+  /** DEC-V61-202-SUB-M30-CYCLE3 · the patch name the picked face
+   *  belongs to, as resolved by the viewport (e.g., "inlet",
+   *  "outlet", "wall_fixed"). Optional / nullable so existing
+   *  consumers reading faceId/faceIds/worldPosition keep working
+   *  without changes. StepPanelShell subscribes to changes here
+   *  and mirrors the value into URL search param ``focus_patch``
+   *  so the backend's decide() can bias rail.primary +
+   *  bottom_cards to patches the engineer is looking at. */
+  patchName?: string | null;
 }
 
 interface FacePickContextValue {
@@ -114,6 +123,11 @@ export function useFacePickPublisher() {
         faceId: event.faceId,
         faceIds,
         worldPosition: event.worldPosition,
+        // DEC-V61-202-SUB-M30-CYCLE3 · forward the viewport-resolved
+        // patch name so StepPanelShell can mirror it into the
+        // ?focus_patch= URL param. Empty string from STL kernels
+        // means "no patch context" → store null.
+        patchName: event.patchName ? event.patchName : null,
       });
     },
     [setPicked],

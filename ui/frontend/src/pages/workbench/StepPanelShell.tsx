@@ -27,6 +27,7 @@ import { DynamicBottomCards } from "./step_panel_shell/dynamic_frame/DynamicBott
 import { DynamicFramePanel } from "./step_panel_shell/dynamic_frame/DynamicFramePanel";
 import { DynamicTopbarCta } from "./step_panel_shell/dynamic_frame/DynamicTopbarCta";
 import { DynamicViewportOverlays } from "./step_panel_shell/dynamic_frame/DynamicViewportOverlays";
+import { FacePickUrlSync } from "./step_panel_shell/dynamic_frame/FacePickUrlSync";
 import { useWorkbenchFrame } from "./step_panel_shell/dynamic_frame/useWorkbenchFrame";
 import { Step1Import } from "./step_panel_shell/steps/Step1Import";
 import { Step2Mesh } from "./step_panel_shell/steps/Step2Mesh";
@@ -498,6 +499,11 @@ export function StepPanelShell() {
   return (
     <SolveStreamProvider>
     <FacePickProvider>
+    {/* DEC-V61-202-SUB-M30-CYCLE3 · subscribe to FacePickContext and
+     *  mirror picked.patchName into ?focus_patch= so the backend's
+     *  decide() can bias rail.primary + bottom_cards toward the patch
+     *  the engineer is currently looking at. One-way (picked → URL). */}
+    <FacePickUrlSync enabled={dynamicFrameEnabled} />
     {/* Codex round-13 P2 (2026-04-30): keying the provider by caseId
      *  forces React to fully unmount the previous provider (and any
      *  consumers below) when the engineer switches cases. Without
