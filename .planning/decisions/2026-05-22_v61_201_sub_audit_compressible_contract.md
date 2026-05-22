@@ -1,11 +1,12 @@
 ---
 decision_id: DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT
 title: compressible_contract schema + thermal_fields BC slot (Gap #18 + #19)
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: M2.7 cycle 3 (compressible-aero charter)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81a0bccfdef3c93a12b9)
 autonomous_governance: true
 counter_status: v6.1 N/A pending accepted
 charter_class: true
@@ -174,8 +175,13 @@ flip Status from Proposed to Accepted → Notion sync.
 
 ## Status
 
-**Proposed** — pending implementation + Codex R0 + dogfood verification.
-Becomes **Accepted** only when all three closure criteria hold.
+**Accepted** (2026-05-22) — all closure criteria held:
+- Implementation landed at commit `ea52ff7` + Codex R0→R1 fix at `849208e`
+- Codex 86gs gpt-5.4 xhigh R0: CHANGES_REQUIRED (Gap #38 heRhoThermo + Gap #39 janaf bare) → R1 RESOLVED (single round to close)
+- 6 new tests (4 charter + 2 R1 regression) all pass; full audit suite 449 passed / 1 skipped
+- Synthetic end-to-end coverage: test_thermal_fields_in_bc_contract_walked exercises the actual ingest pipeline path that case_006 will hit when its manifest adopts compressible_contract + bc_contract.thermal_fields = [T]
+
+case_006-specific manifest update (adding compressible_contract + thermal_fields to `~/Desktop/cfd-harness-unified/_sandboxes/case_006_onera_m6_transonic/case/case_manifest.yaml`) is a separate deliverable in the cfd-harness-unified repo — not in scope for this audit-merge DEC. It will be done as a cycle-3-followup dogfood verification.
 
 ## Provenance
 
