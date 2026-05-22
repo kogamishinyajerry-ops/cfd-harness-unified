@@ -3,7 +3,9 @@
 **DEC**: `2026-05-23_v61_202_sub_m30_cycle7_beginner_test.md` (Proposed)
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle7_beginner_test.py`
-**Verdict**: **PASS** (6/6 checks · all-PASS gate)
+**Verdict**: **PASS** (7/7 checks · all-PASS gate · post Codex R0 P2 fixes)
+**Codex**: R0 = 2 P2 findings (severity check vacuous · transitions client-side)
+fixed in R1 — see closure addendum.
 
 ---
 
@@ -59,16 +61,30 @@ This is the M3.0 litmus surrogate. It is **necessary but not sufficient**:
 
 ---
 
-## Checks (verbatim from the dogfood)
+## Checks (verbatim from the dogfood · post R1)
 
 ```
   [PASS] ≤20 decide() calls (junior 30-min budget)
   [PASS] Forward-only step arc (no back-edges, no repeats)
+  [PASS] Backend topbar.target_step is well-formed (frm+1, ≤5, never -1)
   [PASS] Reached step 5 (proves engine drives all the way to solveable)
   [PASS] Rail severity monotonically non-increasing within each step
   [PASS] Provenance log exists with one line per decide() call
   [PASS] Log lines record the step the agent was on (1..5)
 ```
+
+### Severity trace (post R1 · severities now exercised for real)
+
+| Step | Severity ranks | Reading |
+|---|---|---|
+| 1 | `[0]` | step_default · nothing to fill, engineer advances |
+| 2 | `[0]` | step_default · same |
+| 3 | `[3, 3, 0]` | **critical** (physics.solver) → **critical** (physics.turbulence_model) → step_default. Rank stays 3 across two different gap fields, then drops to 0 — monotonic non-increasing satisfied. |
+| 4 | `[3, 0]` | **critical** (bc.patches) → step_default after canonical 3-patch fill |
+| 5 | `[0]` | step_default · submit_solve enabled |
+
+Step transitions captured directly from backend `topbar.target_step`:
+`[(1, 2), (2, 3), (3, 4), (4, 5)]` — all strictly forward, all one-step.
 
 ### What each check actually proves
 
@@ -118,6 +134,22 @@ The pattern: physics + boundary are the meaningful gates; geometry +
 solver are step_default given a sparse but consistent manifest.
 
 ---
+
+## Codex R0 closure (2 P2 fixes · verbatim · single round)
+
+- **P2 #1**: severity-monotonic check was reading `rail.severity` (no such
+  field on the wire schema) and `SEVERITY_RANK` missed `critical`/`warning`
+  (the gap vocabulary). Every frame collapsed to rank 0 → check vacuous.
+  Fix: parse severity from `rail.provenance` (mirroring cycle 6 log writer)
+  and extend rank map to cover both vocabularies. Severities now show
+  rank 3 (critical) at the gap-driven frames, dropping to 0 as fills land.
+- **P2 #2**: step advance ignored `topbar.target_step` — a back-edge or
+  skip from the backend would still PASS. Fix: capture every transition
+  in `step_transitions` and assert each is one-step forward (`to == frm+1`,
+  `to ≤ 5`, never -1). New check #3 added.
+
+No R1 review round needed — verbatim fixes, single iteration, well under
+v2.3 cap=3.
 
 ## Bottom line
 

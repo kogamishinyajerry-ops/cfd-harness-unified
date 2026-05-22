@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -29,7 +30,37 @@ from fastapi.testclient import TestClient
 
 CASE_ID = "case_007_cycle7_beginner"
 MAX_DECIDE_CALLS = 20  # 30 min / 1.5 min per UI action
-SEVERITY_RANK = {"fail": 3, "warn": 2, "info": 1, None: 0}
+
+# Codex R0 P2 #1 fix: ranks must cover both severity vocabularies emitted
+# by decide() — `_rail_from_problem` uses fail/warn/info,
+# `_rail_from_gap` uses critical/warning/info. Without `critical` and
+# `warning` in the map, every gap-driven frame falls to rank 0 and the
+# monotonicity check is vacuous.
+SEVERITY_RANK = {
+    "fail": 3,
+    "critical": 3,
+    "warn": 2,
+    "warning": 2,
+    "info": 1,
+    None: 0,
+}
+
+# Severity lives inside RailPrimary.provenance traces like
+# `step=4 · problem_fix · severity=fail`. Match cycle 6's log-writer
+# extraction so test + log agree on what severity each frame surfaced.
+_SEVERITY_TOKEN_RE = re.compile(r"\bseverity=([A-Za-z_]+)\b")
+
+
+def _rail_severity(provenance) -> str | None:
+    """Best-effort parse severity token from a list of provenance lines.
+    Returns None when no token is present (step_default rails)."""
+    if not provenance:
+        return None
+    for line in provenance:
+        match = _SEVERITY_TOKEN_RE.search(str(line))
+        if match:
+            return match.group(1)
+    return None
 
 
 # Sparse starting state: just enough for the case to register.
@@ -109,6 +140,10 @@ def main():
         1: [], 2: [], 3: [], 4: [], 5: [],
     }
     steps_visited_order: list[int] = []
+    # Codex R0 P2 #2 fix: capture every (from, to) backend-driven step
+    # transition so the dogfood validates the topbar.target_step
+    # contract instead of manufacturing the arc client-side.
+    step_transitions: list[tuple[int, int]] = []
     decide_calls = 0
     current_step = 1
     last_field_seen_per_step: dict[int, str | None] = {}
@@ -139,7 +174,10 @@ def main():
         frame = fetch_frame(current_step)
         rail = frame["rail_primary"]
         topbar = frame["topbar_cta"]
-        sev = (rail.get("severity") or "info") if rail.get("severity") else None
+        # Codex R0 P2 #1 fix: parse severity from rail.provenance (where
+        # decide() actually encodes it), not from rail.severity (which
+        # does not exist on the wire schema).
+        sev = _rail_severity(rail.get("provenance"))
         sev_rank = SEVERITY_RANK.get(sev, 0)
         step_traces[current_step].append(
             (decide_calls, sev_rank, rail["kind"], rail.get("field_path"))
@@ -147,14 +185,28 @@ def main():
         print(
             f"  [call {decide_calls}] step={current_step} kind={rail['kind']:<12} "
             f"sev={sev} field={rail.get('field_path')} "
-            f"topbar.kind={topbar['kind']} topbar.enabled={topbar.get('enabled')}"
+            f"topbar.kind={topbar['kind']} topbar.enabled={topbar.get('enabled')} "
+            f"target_step={topbar.get('target_step')}"
         )
 
         if rail["kind"] == "step_default" and topbar.get("enabled"):
             # Engineer clicks next_step / submit_solve.
             if topbar["kind"] == "submit_solve" or current_step == 5:
                 break
-            current_step += 1
+            # Codex R0 P2 #2 fix: trust the backend's target_step rather
+            # than incrementing manually. If decide() ever returns a
+            # wrong target (back-edge, skip, None on next_step), this
+            # harness must surface that — record the transition and
+            # let the forward-only acceptance check catch any regression.
+            target = topbar.get("target_step")
+            if topbar["kind"] == "next_step" and isinstance(target, int):
+                step_transitions.append((current_step, target))
+                current_step = target
+            else:
+                # Malformed next_step — record an obviously-invalid
+                # transition so the forward-only check fails loudly.
+                step_transitions.append((current_step, -1))
+                break
             continue
 
         # Rail says "fix this" or "fill this" — apply suggested or
@@ -187,6 +239,7 @@ def main():
     print("\n=== Cycle 7 junior-engineer beginner test ===\n")
     print(f"Total decide() calls: {decide_calls}")
     print(f"Steps visited: {steps_visited_order}")
+    print(f"Step transitions (backend-driven, from→to): {step_transitions}")
     for s in (1, 2, 3, 4, 5):
         if step_traces[s]:
             print(f"  step {s}: {len(step_traces[s])} frame(s), severities {[t[1] for t in step_traces[s]]}")
@@ -216,11 +269,22 @@ def main():
     forward_only = steps_visited_order == sorted(steps_visited_order) and \
         len(steps_visited_order) == len(set(steps_visited_order))
 
+    # Codex R0 P2 #2 fix: every backend-driven step transition must be
+    # strictly forward (to > from) and one-step (to == from + 1 — the
+    # backend should not skip steps or back-edge). If decide() ever
+    # returns a malformed target_step, this fails loudly.
+    transitions_well_formed = all(
+        (frm > 0 and to > frm and to <= 5 and to == frm + 1)
+        for frm, to in step_transitions
+    )
+
     checks = [
         (f"≤{MAX_DECIDE_CALLS} decide() calls (junior 30-min budget)",
          decide_calls <= MAX_DECIDE_CALLS),
         ("Forward-only step arc (no back-edges, no repeats)",
          forward_only),
+        ("Backend topbar.target_step is well-formed (frm+1, ≤5, never -1)",
+         transitions_well_formed and len(step_transitions) >= 1),
         ("Reached step 5 (proves engine drives all the way to solveable)",
          max(steps_visited_order) >= 5),
         ("Rail severity monotonically non-increasing within each step",
