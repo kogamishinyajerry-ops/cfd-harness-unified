@@ -266,10 +266,14 @@ export function StepPanelShell() {
   const { caseId = "" } = useParams<{ caseId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentStepId = clampStepId(searchParams.get("step"));
-  // DEC-V61-202-SUB-M30-CYCLE1 · dynamic frame feature flag. Cycle 1
-  // is opt-in via ?dynamic_frame=1 so existing user flows are
-  // unaffected. Cycle 2 will flip default-on after dogfood passes.
-  const dynamicFrameEnabled = searchParams.get("dynamic_frame") === "1";
+  // DEC-V61-202-SUB-M30-CYCLE5 · dynamic frame is now DEFAULT-ON.
+  // Cycles 1-4 dogfooded the route/contract; cycle 5 lands the flip.
+  // Engineers can opt back into the pre-M3.0 legacy shell via
+  // ?legacy=1 (kept for an M3.1 deprecation grace window, then
+  // removed in cycle 6 cleanup). The historic ?dynamic_frame=1
+  // opt-in is treated as a no-op (always was on if set; remains on
+  // by default now).
+  const dynamicFrameEnabled = searchParams.get("legacy") !== "1";
   const focusPatch = searchParams.get("focus_patch");
   const focusRegion = searchParams.get("focus_region");
   const focusPanel = searchParams.get("focus_panel");

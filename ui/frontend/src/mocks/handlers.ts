@@ -113,6 +113,80 @@ export const handlers = [
       notes: [],
     });
   }),
+
+  // DEC-V61-202-SUB-M30-CYCLE5 · workbench_frame mock so tests that
+  // mount StepPanelShell post default-on (cycle 5 flag flip) don't
+  // get a network error. Returns a step-aware shape matching the
+  // pydantic WorkbenchFrame schema (ui/backend/schemas/workbench_frame.py).
+  http.get("/api/cases/:caseId/workbench_frame", async ({ request, params }) => {
+    await delay(20);
+    const url = new URL(request.url);
+    const stepParam = url.searchParams.get("step");
+    const step = stepParam ? Number(stepParam) : 1;
+    const focusPatch = url.searchParams.get("focus_patch");
+
+    const railTitleByStep: Record<number, string> = {
+      1: "Step 1 · 几何就绪 / Geometry ready",
+      2: "Step 2 · 网格就绪 / Mesh ready",
+      3: "Step 3 · 物理已设 / Physics set",
+      4: "Step 4 · 边界已设 / BCs set",
+      5: "Step 5 · 准备求解 / Ready to solve",
+    };
+    const topbarByStep: Record<number, { kind: string; label: string; target_step: number | null; enabled: boolean; reason: string | null }> = {
+      1: { kind: "next_step", label: "下一步", target_step: 2, enabled: true, reason: null },
+      2: { kind: "next_step", label: "下一步", target_step: 3, enabled: true, reason: null },
+      3: { kind: "next_step", label: "下一步", target_step: 4, enabled: true, reason: null },
+      4: { kind: "next_step", label: "下一步", target_step: 5, enabled: true, reason: null },
+      5: { kind: "submit_solve", label: "提交求解", target_step: null, enabled: true, reason: null },
+    };
+
+    // Build a tiny focus_patch-aware bottom_cards list so the cycle 3
+    // focus-bias flow is observable from the frontend in dev/test.
+    const bottomCards: Array<Record<string, unknown>> = [];
+    if (focusPatch) {
+      bottomCards.push({
+        kind: "audit_finding",
+        title: `${focusPatch} patch issue`,
+        body_text: `Focus-bias card for patch=${focusPatch} (MSW mock).`,
+        severity: "warn",
+        source_artifact: "bc_audit.json",
+        field_path: `bc.patches.${focusPatch}`,
+      });
+    }
+
+    return HttpResponse.json({
+      case_id: String(params.caseId),
+      step,
+      rail_primary: {
+        kind: "step_default",
+        title: railTitleByStep[step] ?? railTitleByStep[1],
+        body: null,
+        field_path: null,
+        suggested_default: null,
+        severity: "info",
+        cta_label: null,
+        provenance: ["msw-mock"],
+      },
+      viewport_overlays: [],
+      bottom_cards: bottomCards,
+      topbar_cta: topbarByStep[step] ?? topbarByStep[1],
+      state_sha: "msw" + "0".repeat(61),
+      manifest_state_sha: "msw" + "0".repeat(61),
+      generated_at: "2026-05-22T00:00:00Z",
+    });
+  }),
+
+  http.patch("/api/cases/:caseId/manifest", async ({ params }) => {
+    await delay(20);
+    return HttpResponse.json({
+      success: true,
+      new_state_sha: "msw_patched" + "0".repeat(53),
+      applied_path: "vof_contract.phases",
+      validation_errors: [],
+      case_kind: "imported_user",
+      case_id: String(params.caseId),
+    });
+  }),
 ];
 
 export const mockCase = DEMO_CASE;
