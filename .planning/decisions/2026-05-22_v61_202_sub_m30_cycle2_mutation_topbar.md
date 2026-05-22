@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 2 (mutation + 4th slot)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed816b93cacb28df395b45)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
