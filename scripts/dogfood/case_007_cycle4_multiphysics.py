@@ -24,6 +24,7 @@ empty rail_primary), the dogfood FAILs and the regime trace is dumped.
 from __future__ import annotations
 
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -31,6 +32,11 @@ from typing import Iterable
 
 import yaml
 from fastapi.testclient import TestClient
+
+# Codex R0 P3: manifest_state_sha is the optimistic-concurrency token
+# for the PATCH flow. It MUST be a full SHA-256 hex digest (64 chars).
+# Anything shorter / non-hex breaks the contract — guard regression.
+_SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _stage_case(
@@ -50,19 +56,29 @@ def _stage_case(
 
 
 # ── Regime 1: RANS steady incompressible (clean PASS baseline) ─────
+# Codex R0 P2 fix: use the imported-user v2 schema
+# (physics.solver, physics.turbulence_model, bc.patches.<name>) so
+# the regime-specific completeness paths are actually exercised.
 RANS_MANIFEST = {
     "case_id": "case_rans_flatplate_dogfood",
     "case_family": "rans_steady_incompressible",
     "solver_backend": "openfoam",
-    "solver": "simpleFoam",
     "physics": {
-        "regime": "steady_incompressible_turbulent",
+        "solver": "simpleFoam",
         "turbulence_model": "kOmegaSST",
     },
-    "bc_contract": {
-        "inlet": {"velocity": {"type": "fixedValue", "magnitude_m_s": 10.0}},
-        "outlet": {"pressure": {"type": "fixedValue", "value_Pa": 0.0}},
-        "wall": {"velocity": {"type": "noSlip"}},
+    "bc": {
+        "patches": {
+            "inlet": {
+                "patch_type": "fixedValue",
+                "fields": {"U": [10.0, 0.0, 0.0]},
+            },
+            "outlet": {
+                "patch_type": "zeroGradient",
+                "fields": {"p": "zeroGradient"},
+            },
+            "wall": {"patch_type": "noSlip", "fields": {}},
+        }
     },
 }
 RANS_ARTIFACTS = {
@@ -89,16 +105,23 @@ LES_MANIFEST = {
     "case_id": "case_les_channel_dogfood",
     "case_family": "les_transient_incompressible",
     "solver_backend": "openfoam",
-    "solver": "pisoFoam",
     "physics": {
-        "regime": "transient_incompressible_les",
-        # NOTE: sub_grid_model intentionally absent → info_gap expected
+        "solver": "pisoFoam",
+        "turbulence_model": "LES",
     },
-    "bc_contract": {
-        "inlet": {"velocity": {"type": "turbulentInlet"}},
-        "outlet": {"pressure": {"type": "fixedValue", "value_Pa": 0.0}},
-        "topWall": {"velocity": {"type": "noSlip"}},
-        "bottomWall": {"velocity": {"type": "noSlip"}},
+    "bc": {
+        "patches": {
+            "inlet": {
+                "patch_type": "turbulentInlet",
+                "fields": {"U": [5.0, 0.0, 0.0]},
+            },
+            "outlet": {
+                "patch_type": "zeroGradient",
+                "fields": {"p": "zeroGradient"},
+            },
+            "topWall": {"patch_type": "noSlip", "fields": {}},
+            "bottomWall": {"patch_type": "noSlip", "fields": {}},
+        }
     },
 }
 LES_ARTIFACTS = {
@@ -123,19 +146,26 @@ COMP_MANIFEST = {
     "case_id": "case_comp_wedge_dogfood",
     "case_family": "compressible_inviscid",
     "solver_backend": "openfoam",
-    "solver": "rhoCentralFoam",
     "physics": {
-        "regime": "steady_compressible_inviscid",
-        "thermo": {"type": "hePsiThermo", "mixture": "pureMixture"},
+        "solver": "rhoCentralFoam",
+        "turbulence_model": "laminar",
     },
-    "bc_contract": {
-        "inlet": {
-            "velocity": {"type": "fixedValue", "magnitude_m_s": 680.0},
-            "pressure": {"type": "fixedValue", "value_Pa": 101325.0},
-            "T": {"type": "fixedValue", "value_K": 288.15},
-        },
-        "outlet": {"pressure": {"type": "waveTransmissive"}},
-        "wedge_wall": {"velocity": {"type": "slip"}},
+    "bc": {
+        "patches": {
+            "inlet": {
+                "patch_type": "fixedValue",
+                "fields": {
+                    "U": [680.0, 0.0, 0.0],
+                    "p": 101325.0,
+                    "T": 288.15,
+                },
+            },
+            "outlet": {
+                "patch_type": "waveTransmissive",
+                "fields": {},
+            },
+            "wedge_wall": {"patch_type": "slip", "fields": {}},
+        }
     },
 }
 COMP_ARTIFACTS = {
@@ -170,16 +200,27 @@ CHT_MANIFEST = {
     "case_id": "case_cht_multiregion_dogfood",
     "case_family": "conjugate_heat_transfer",
     "solver_backend": "openfoam",
-    "solver": "chtMultiRegionFoam",
     "physics": {
-        "regime": "transient_conjugate_heat_transfer",
-        "regions": ["fluid", "solid"],
+        "solver": "chtMultiRegionFoam",
+        "turbulence_model": "kEpsilon",
     },
-    "bc_contract": {
-        # Real CHT manifests nest per-region; flatten one level for dogfood.
-        "fluid_inlet": {"velocity": {"type": "fixedValue", "magnitude_m_s": 1.0}},
-        "fluid_outlet": {"pressure": {"type": "fixedValue", "value_Pa": 0.0}},
-        "solid_wall": {"T": {"type": "fixedValue", "value_K": 350.0}},
+    "bc": {
+        # Real CHT manifests are per-region nested; flatten one level
+        # for dogfood — completeness checks operate on the flat dict.
+        "patches": {
+            "fluid_inlet": {
+                "patch_type": "fixedValue",
+                "fields": {"U": [1.0, 0.0, 0.0]},
+            },
+            "fluid_outlet": {
+                "patch_type": "zeroGradient",
+                "fields": {"p": "zeroGradient"},
+            },
+            "solid_wall": {
+                "patch_type": "fixedValue",
+                "fields": {"T": 350.0},
+            },
+        }
     },
 }
 CHT_ARTIFACTS = {
@@ -233,8 +274,8 @@ def _check_frame_shape(regime: str, step: int, frame: dict) -> list[tuple[str, b
          isinstance(bc, list)),
         (f"[{regime} step={step}] topbar_cta.kind valid",
          tc.get("kind") in _TOPBAR_KINDS),
-        (f"[{regime} step={step}] manifest_state_sha non-empty hex",
-         isinstance(sha, str) and len(sha) >= 16),
+        (f"[{regime} step={step}] manifest_state_sha is full SHA-256 hex (64 chars)",
+         isinstance(sha, str) and bool(_SHA256_HEX_RE.match(sha))),
     ]
 
 

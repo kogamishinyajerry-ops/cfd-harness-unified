@@ -7,6 +7,9 @@
 > **Method**: programmatic via FastAPI TestClient in
 > `scripts/dogfood/case_007_cycle4_multiphysics.py`
 > **Verdict**: **PASS** · 120/120 shape-coherence checks
+> **Note**: post-Codex R0 verbatim rev2 (R1 below) — fixtures now use
+> v2 imported-user manifest schema; regime-specific audit findings
+> actually flow through to rail.primary.
 
 ## Context
 
@@ -15,52 +18,61 @@ Cycle 4 broadens horizontal coverage: every regime an engineer might
 construct should produce a coherent dynamic frame, never a crash.
 
 Per Anthropic agent canon §6 (real-usage eval > benchmark), each
-regime is treated as a canonical eval case. The script does NOT
-exhaustively cover every physics knob — that's M3.* depth, not M3.0
-horizontal breadth. The bar is shape coherence: every (regime, step)
-must produce HTTP 200 + a populated rail_primary + a valid topbar_cta
-+ a list-typed bottom_cards + a non-empty manifest_state_sha.
+regime is treated as a canonical eval case. The bar is shape coherence:
+every (regime, step) must produce HTTP 200 + a populated rail_primary
++ a valid topbar_cta + a list-typed bottom_cards + a full SHA-256 hex
+`manifest_state_sha` (64 chars, the contract for the PATCH flow).
 
 ## Regimes covered
 
 | # | Regime | Solver | Realistic gaps staged |
 |---|---|---|---|
 | 1 | RANS steady incompressible (flat plate) | `simpleFoam` | none — clean PASS baseline |
-| 2 | LES transient incompressible (channel) | `pisoFoam` | `physics.sub_grid_model` absent + bc.U inlet WARN |
-| 3 | Compressible (supersonic wedge) | `rhoCentralFoam` | mesh non-orthogonality WARN + outlet T type_mismatch FAIL |
-| 4 | Multi-region CHT (conjugate heat) | `chtMultiRegionFoam` | flat bc_audit finding for missing solid-fluid coupling |
+| 2 | LES transient incompressible (channel) | `pisoFoam` | bc.U inlet WARN via patch_coverage gaps |
+| 3 | Compressible (supersonic wedge) | `rhoCentralFoam` | outlet T type_mismatch FAIL + mesh non-orthogonality WARN |
+| 4 | Multi-region CHT (conjugate heat) | `chtMultiRegionFoam` | bc_audit FAIL: missing solid-fluid coupling BC |
 
-## Trace (per-regime, per-step)
+Manifests use v2 imported-user shape (`physics.solver`,
+`physics.turbulence_model`, `bc.patches.<patch>`) so the imported-
+user completeness rules exercise as intended (Codex R0 P2 fix).
+
+## Trace (per-regime, per-step) — post Codex R0 fix
 
 ```
 RANS-flatplate:
-  step=1  rail.kind=step_default     'Step 1 · 几何就绪'        topbar=next_step    cards=1
-  step=2  rail.kind=step_default     'Step 2 · 网格就绪'        topbar=next_step    cards=1
-  step=3  rail.kind=info_gap         'Fill: physics.solver'     topbar=step_default cards=1
-  step=4  rail.kind=info_gap         'Fill: bc.patches'         topbar=step_default cards=1
-  step=5  rail.kind=step_default     'Step 5 · 准备求解'        topbar=submit_solve cards=1
+  step=1  rail=step_default  'Step 1 · 几何就绪'  topbar=next_step    cards=1
+  step=2  rail=step_default  'Step 2 · 网格就绪'  topbar=next_step    cards=1
+  step=3  rail=step_default  'Step 3 · 物理已设'  topbar=next_step    cards=1
+  step=4  rail=step_default  'Step 4 · 边界已设'  topbar=next_step    cards=1
+  step=5  rail=step_default  'Step 5 · 准备求解'  topbar=submit_solve cards=1
 
 LES-channel:
-  step=1  rail.kind=step_default     'Step 1 · 几何就绪'        topbar=next_step    cards=1
-  step=2  rail.kind=step_default     'Step 2 · 网格就绪'        topbar=next_step    cards=1
-  step=3  rail.kind=info_gap         'Fill: physics.solver'     topbar=step_default cards=2
-  step=4  rail.kind=info_gap         'Fill: bc.patches'         topbar=step_default cards=1
-  step=5  rail.kind=step_default     'Step 5 · 准备求解'        topbar=submit_solve cards=1
+  step=1  rail=step_default  'Step 1 · 几何就绪'  topbar=next_step    cards=1
+  step=2  rail=step_default  'Step 2 · 网格就绪'  topbar=next_step    cards=1
+  step=3  rail=step_default  'Step 3 · 物理已设'  topbar=next_step    cards=1
+  step=4  rail=step_default  'Step 4 · 边界已设'  topbar=next_step    cards=1
+  step=5  rail=step_default  'Step 5 · 准备求解'  topbar=submit_solve cards=1
 
 Compressible-wedge:
-  step=1  rail.kind=step_default     'Step 1 · 几何就绪'        topbar=next_step    cards=1
-  step=2  rail.kind=step_default     'Step 2 · 网格就绪'        topbar=next_step    cards=1
-  step=3  rail.kind=info_gap         'Fill: physics.solver'     topbar=step_default cards=2
-  step=4  rail.kind=problem_fix      'bc_audit.json FAIL'       topbar=re_audit     cards=3
-  step=5  rail.kind=step_default     'Step 5 · 准备求解'        topbar=submit_solve cards=1
+  step=1  rail=step_default  'Step 1 · 几何就绪'  topbar=next_step    cards=1
+  step=2  rail=step_default  'Step 2 · 网格就绪'  topbar=next_step    cards=1
+  step=3  rail=step_default  'Step 3 · 物理已设'  topbar=next_step    cards=1
+  step=4  rail=problem_fix   'bc_audit.json FAIL' topbar=re_audit     cards=2
+  step=5  rail=step_default  'Step 5 · 准备求解'  topbar=submit_solve cards=1
 
 CHT-multiregion:
-  step=1  rail.kind=step_default     'Step 1 · 几何就绪'        topbar=next_step    cards=1
-  step=2  rail.kind=step_default     'Step 2 · 网格就绪'        topbar=next_step    cards=1
-  step=3  rail.kind=info_gap         'Fill: physics.solver'     topbar=step_default cards=2
-  step=4  rail.kind=info_gap         'Fill: bc.patches'         topbar=step_default cards=2
-  step=5  rail.kind=step_default     'Step 5 · 准备求解'        topbar=submit_solve cards=1
+  step=1  rail=step_default  'Step 1 · 几何就绪'  topbar=next_step    cards=1
+  step=2  rail=step_default  'Step 2 · 网格就绪'  topbar=next_step    cards=1
+  step=3  rail=step_default  'Step 3 · 物理已设'  topbar=next_step    cards=1
+  step=4  rail=problem_fix   'missing solid-fluid coupling BC'         topbar=re_audit cards=1
+  step=5  rail=step_default  'Step 5 · 准备求解'  topbar=submit_solve cards=1
 ```
+
+Compressible Step 4 surfaces the artifact's type_mismatch FAIL on
+outlet T as the rail.primary. CHT Step 4 surfaces the artifact's
+explicit "missing solid-fluid coupling BC" finding. These are exactly
+the regime-specific audit signals reaching the engineer, not generic
+fall-through.
 
 ## Verdict matrix
 
@@ -74,34 +86,7 @@ CHT-multiregion:
 
 6 checks per (regime, step) tuple: HTTP 200 + rail.kind valid + rail.title
 non-empty + bottom_cards is list + topbar.kind valid + manifest_state_sha
-non-empty hex.
-
-## Observations (for cycle 7 beginner test, NOT cycle 4 fixes)
-
-This dogfood verifies decide() does not crash. It also surfaces a
-real M3.0-level UX observation worth flagging here for cycle 7 to
-empirically test:
-
-**Schema divergence between manifests and case_completeness gaps.**
-
-All four regimes — including the regime where the manifest *correctly*
-declares `solver: simpleFoam` at top level — hit Step 3 with
-`info_gap: 'Fill: physics.solver'`. The case_completeness analyzer
-wants the solver declared at `physics.solver` (nested), not the
-top-level `solver` key the dogfood manifests use. Similarly Step 4
-wants `bc.patches`, while the manifests carry `bc_contract.<patch>`.
-
-This is a real product-side concern for the ≤30-minute litmus test:
-when an engineer copies their existing OpenFOAM manifest into the
-workbench, the workbench may surface gaps the engineer believes are
-already filled, with no clear "this is a schema disagreement, not a
-real gap" signal. Cycle 7 (real-engineer test) will quantify whether
-this confuses beginners or whether the corrective workflow is obvious.
-
-**Cycle 4 explicitly does NOT fix this.** It's not in scope per the
-DEC's "out of scope (cycle 5+): schema alignment between manifest
-keys and completeness gap field_paths". Logging here so cycle 7 has
-the head-start signal.
+matches `^[0-9a-f]{64}$` (full SHA-256 hex, Codex R0 P3 strict guard).
 
 ## Reproduction
 
@@ -112,9 +97,9 @@ PYTHONPATH=. .venv/bin/python scripts/dogfood/case_007_cycle4_multiphysics.py
 
 ## Confidence
 
-`confidence: high` — synthetic but shape-realistic fixtures (cross-
-referenced against `ui/backend/audit/cases/*/artifacts/` real cases).
-The horizontal coverage check is conservative: it asks "does decide()
-crash on this regime?" and "does it return a populated frame?", not
-"is the advice physically optimal?". The latter requires V130 advisor
-work and is M3.2+ depth.
+`confidence: high` — fixtures use the v2 imported-user manifest
+schema so completeness rules engage at full fidelity, and SHA-256
+hex enforcement guards the PATCH-flow contract. The horizontal
+coverage check is conservative ("does decide() crash?", "are
+artifact-emitted findings surfacing?"), not "is the advice physically
+optimal" — the latter requires V130 advisor work and is M3.2+ depth.
