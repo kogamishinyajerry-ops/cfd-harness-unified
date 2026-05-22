@@ -49,7 +49,7 @@ _STEP_PATH_PREFIXES: dict[int, tuple[str, ...]] = {
         "solver_contract.",
         "solver",
     ),
-    4: ("bc_contract.", "boundary_conditions."),
+    4: ("bc_contract.", "boundary_conditions.", "bc.patches", "bc."),
     5: (
         "solver_contract.residual_targets.",
         "qoi_contract.",
@@ -207,9 +207,15 @@ def _pick_overlays(state: CaseStateSnapshot) -> list[ViewportOverlay]:
         )
 
     # Step 2: cell count badge + checkmesh warning when present.
+    #
+    # Codex R0 P2: the real `mesh_report.json` shape (from
+    # cfdtrust/audit/mesh.py) stores cell count at `stats.cells` and
+    # max non-orthogonality at `quality_dimension.metrics.
+    # max_non_orthogonality.actual`. Older test fixtures sometimes use
+    # flat top-level keys; we honor both for backward compat.
     if state.step == 2:
         mesh_report = state.artifacts.get("mesh_report.json", {}) or {}
-        n_cells = mesh_report.get("n_cells") or mesh_report.get("nCells")
+        n_cells = _mesh_cell_count(mesh_report)
         if isinstance(n_cells, int) and n_cells > 0:
             overlays.append(
                 ViewportOverlay(
@@ -218,7 +224,7 @@ def _pick_overlays(state: CaseStateSnapshot) -> list[ViewportOverlay]:
                     severity="info",
                 )
             )
-        non_ortho = mesh_report.get("max_non_orthogonality")
+        non_ortho = _mesh_non_orthogonality(mesh_report)
         if isinstance(non_ortho, (int, float)) and non_ortho > 70:
             overlays.append(
                 ViewportOverlay(
@@ -229,6 +235,46 @@ def _pick_overlays(state: CaseStateSnapshot) -> list[ViewportOverlay]:
             )
 
     return overlays
+
+
+def _mesh_cell_count(mesh_report: dict) -> int | None:
+    """Extract cell count from real cfdtrust/audit/mesh.py shape.
+
+    Real shape: `mesh_report["stats"]["cells"]` (int).
+    Backward-compat: flat `n_cells` / `nCells` keys.
+    """
+    stats = mesh_report.get("stats")
+    if isinstance(stats, dict):
+        c = stats.get("cells")
+        if isinstance(c, int) and c > 0:
+            return c
+    fallback = mesh_report.get("n_cells") or mesh_report.get("nCells")
+    if isinstance(fallback, int) and fallback > 0:
+        return fallback
+    return None
+
+
+def _mesh_non_orthogonality(mesh_report: dict) -> float | None:
+    """Extract max non-orthogonality from real cfdtrust shape.
+
+    Real shape:
+      mesh_report["quality_dimension"]["metrics"]
+        ["max_non_orthogonality"]["actual"]  -> float
+    Backward-compat: flat `max_non_orthogonality` key.
+    """
+    qd = mesh_report.get("quality_dimension")
+    if isinstance(qd, dict):
+        metrics = qd.get("metrics")
+        if isinstance(metrics, dict):
+            entry = metrics.get("max_non_orthogonality")
+            if isinstance(entry, dict):
+                actual = entry.get("actual")
+                if isinstance(actual, (int, float)):
+                    return float(actual)
+    fallback = mesh_report.get("max_non_orthogonality")
+    if isinstance(fallback, (int, float)):
+        return float(fallback)
+    return None
 
 
 def _format_cell_count(n: int) -> str:
@@ -350,11 +396,78 @@ def _iter_problems_from_artifact(
 ):
     """Walk a single artifact looking for finding-shaped entries.
 
-    Handles multiple known shapes — the audit subsystem has accumulated
-    a few conventions over time (findings / issues / problems / verdict
-    + reason). Each shape is normalized into the common dict form.
+    Handles three families of audit-artifact shapes:
+
+    (a) **Real cfdtrust shape** (production) — `gate_status` top-level
+        + per-dimension `<X>_dimension.dimension_status`. trust_report
+        uses `gates.<name>.status`. Emitted by
+        cfdtrust/audit/mesh.py, boundary_conditions.py, geometry.py.
+
+    (b) **Test fixture shape** — top-level `findings` / `issues` /
+        `problems` lists. Used by older tests + dogfood fixtures.
+
+    (c) **Simple verdict shape** — top-level `verdict` + `reason`. Used
+        by minimal test fixtures (e.g. bc_quality.json shorthand).
+
+    All three shapes normalize to a common dict.
     """
 
+    # (a.1) trust_report.json — gates dict pattern
+    gates = artifact.get("gates")
+    if isinstance(gates, dict):
+        for gate_name, gate in gates.items():
+            if not isinstance(gate, dict):
+                continue
+            status = gate.get("status")
+            sev = _gate_status_to_severity(status)
+            if sev is None:
+                continue
+            yield {
+                "severity": sev,
+                "title": f"{gate_name} {status}",
+                "rule": gate_name,
+                "message": gate.get("summary"),
+                "body": gate.get("summary"),
+                "field_path": None,
+                "_source_artifact": artifact_name,
+            }
+
+    # (a.2) Top-level gate_status + per-dimension dimension_status
+    top_gate = artifact.get("gate_status")
+    top_sev = _gate_status_to_severity(top_gate)
+    if top_sev is not None and not gates:
+        # If trust_report's gates list already covered it, don't double-
+        # emit. Otherwise surface the top-level gate.
+        yield {
+            "severity": top_sev,
+            "title": f"{artifact_name} {top_gate}",
+            "rule": None,
+            "message": _first_note(artifact),
+            "body": _first_note(artifact),
+            "field_path": None,
+            "_source_artifact": artifact_name,
+        }
+    # Per-dimension drill-down (any *_dimension key with dimension_status)
+    for key, value in artifact.items():
+        if not (isinstance(key, str) and key.endswith("_dimension")):
+            continue
+        if not isinstance(value, dict):
+            continue
+        dim_status = value.get("dimension_status")
+        sev = _dim_status_to_severity(dim_status)
+        if sev is None:
+            continue
+        yield {
+            "severity": sev,
+            "title": f"{key.replace('_dimension', '')} {dim_status}",
+            "rule": key,
+            "message": _dim_reason(value),
+            "body": _dim_reason(value),
+            "field_path": None,
+            "_source_artifact": artifact_name,
+        }
+
+    # (b) findings / issues / problems list
     candidates = []
     for key in ("findings", "issues", "problems"):
         v = artifact.get(key)
@@ -374,19 +487,88 @@ def _iter_problems_from_artifact(
             "_source_artifact": artifact_name,
         }
 
-    # Top-level verdict shape (used by bc_quality.json, mesh_report.json).
-    verdict = artifact.get("verdict")
-    reason = artifact.get("reason") or artifact.get("why")
-    if isinstance(verdict, str) and verdict.lower() in ("fail", "warn"):
-        yield {
-            "severity": verdict.lower(),
-            "title": f"{artifact_name} verdict={verdict}",
-            "rule": artifact.get("rule"),
-            "message": reason,
-            "body": reason,
-            "field_path": None,
-            "_source_artifact": artifact_name,
-        }
+    # (c) Simple verdict shape (used by test fixtures + bc_quality.json
+    # shorthand). Skip when gate_status already covered it to avoid
+    # double-counting.
+    if top_sev is None:
+        verdict = artifact.get("verdict")
+        reason = artifact.get("reason") or artifact.get("why")
+        if isinstance(verdict, str) and verdict.lower() in ("fail", "warn"):
+            yield {
+                "severity": verdict.lower(),
+                "title": f"{artifact_name} verdict={verdict}",
+                "rule": artifact.get("rule"),
+                "message": reason,
+                "body": reason,
+                "field_path": None,
+                "_source_artifact": artifact_name,
+            }
+
+
+def _gate_status_to_severity(status) -> str | None:
+    """Map cfdtrust gate_status / gates[].status to severity.
+
+    PASS → None (not a problem)
+    FAIL → "fail"
+    INCOMPLETE / MOCKED → "warn"
+    Anything else → None
+    """
+    if not isinstance(status, str):
+        return None
+    s = status.upper()
+    if s == "FAIL":
+        return "fail"
+    if s in ("INCOMPLETE", "MOCKED"):
+        return "warn"
+    return None
+
+
+def _dim_status_to_severity(status) -> str | None:
+    """Map *_dimension.dimension_status to severity.
+
+    PASS → None
+    FAIL → "fail"
+    INCOMPLETE → "warn"
+    """
+    if not isinstance(status, str):
+        return None
+    s = status.upper()
+    if s == "FAIL":
+        return "fail"
+    if s == "INCOMPLETE":
+        return "warn"
+    return None
+
+
+def _first_note(artifact: dict) -> str | None:
+    """Surface the first `notes[]` entry as a problem message when
+    `gate_status` is FAIL/INCOMPLETE/MOCKED. Real cfdtrust artifacts use
+    `notes` as the human-readable explanation channel.
+    """
+    notes = artifact.get("notes")
+    if isinstance(notes, list) and notes:
+        first = notes[0]
+        if isinstance(first, str):
+            return first
+    return None
+
+
+def _dim_reason(dimension: dict) -> str | None:
+    """Extract a useful per-dimension reason string.
+
+    Real cfdtrust dimensions store explanation in `reason` (preferred),
+    `fails` (list of metric names), or `note`.
+    """
+    r = dimension.get("reason")
+    if isinstance(r, str) and r:
+        return r
+    fails = dimension.get("fails")
+    if isinstance(fails, list) and fails:
+        return f"failed: {', '.join(str(f) for f in fails)}"
+    note = dimension.get("note")
+    if isinstance(note, str) and note:
+        return note
+    return None
 
 
 # ────────────────────────── gaps extraction ──────────────────────────

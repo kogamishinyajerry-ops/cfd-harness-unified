@@ -27,6 +27,7 @@ from ui.backend.services.case_completeness import (
 )
 from ui.backend.services.case_scaffold.template_clone import IMPORTED_DIR
 from ui.backend.services.case_drafts import DRAFTS_DIR
+from ui.backend.services.validation_report import _load_whitelist
 from ui.backend.services.workbench_decide import decide
 
 router = APIRouter()
@@ -87,10 +88,14 @@ def get_workbench_frame(
 def _load_manifest(case_id: str) -> tuple[dict[str, Any] | None, Path | None]:
     """Locate the case + return (manifest_dict, case_dir).
 
-    Resolution priority mirrors `case_completeness._resolve_*`:
+    Resolution priority mirrors `case_completeness._resolve_*` + adds a
+    whitelist branch (Codex R0 P1 fix · 2026-05-22): benchmark cases
+    that ship in `knowledge/whitelist.yaml` must be openable in the
+    workbench. Resolution order:
         1. imported_user case (full case_dir with manifest + artifacts)
-        2. flat draft YAML (whitelist-fork) — no case_dir, just the YAML
-        3. neither → (None, None)
+        2. flat draft YAML (whitelist-fork) — no case_dir
+        3. whitelist entry — no case_dir; manifest is the catalog entry
+        4. neither → (None, None)
     """
     imported = IMPORTED_DIR / case_id / "case_manifest.yaml"
     if imported.is_file():
@@ -99,6 +104,16 @@ def _load_manifest(case_id: str) -> tuple[dict[str, Any] | None, Path | None]:
     draft = DRAFTS_DIR / f"{case_id}.yaml"
     if draft.is_file():
         return _read_yaml(draft), None
+
+    # Codex R0 P1: whitelist resolver. The whitelist entry is the
+    # abstract case definition (solver, turbulence_model, parameters,
+    # gold_standard, etc.) — there's no on-disk case_dir, so no audit
+    # artifacts. completeness analysis still works (whitelist path
+    # in case_completeness.analyzer); decide() falls through to gap-
+    # driven rail content.
+    whitelist = _load_whitelist()
+    if case_id in whitelist:
+        return whitelist[case_id], None
 
     return None, None
 

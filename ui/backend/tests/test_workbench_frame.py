@@ -394,3 +394,249 @@ def test_route_step_query_validates_1_through_5(monkeypatch, tmp_path):
     assert r6.status_code == 422
     r3 = _client().get(f"/api/cases/{case_id}/workbench_frame?step=3")
     assert r3.status_code == 200
+
+
+# ─────────────────── Codex R0 R1 regression tests ───────────────────
+
+
+def test_r1_whitelist_case_resolves_to_200_not_404(monkeypatch, tmp_path):
+    """Codex R0 P1-1: whitelist cases (knowledge/whitelist.yaml) must
+    resolve via the workbench_frame endpoint. Pre-fix: 404. Fix:
+    _load_manifest checks _load_whitelist() as third branch."""
+    # Use lid_driven_cavity — confirmed in whitelist.yaml head.
+    monkeypatch.setattr(
+        "ui.backend.routes.workbench_frame.IMPORTED_DIR", tmp_path / "x"
+    )
+    monkeypatch.setattr(
+        "ui.backend.routes.workbench_frame.DRAFTS_DIR", tmp_path / "y"
+    )
+    r = _client().get("/api/cases/lid_driven_cavity/workbench_frame?step=1")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["case_id"] == "lid_driven_cavity"
+
+
+def test_r1_bc_patches_gap_surfaces_on_step4():
+    """Codex R0 P1-2: imported-user BC gaps are reported as `bc.patches`
+    (not `bc_contract.patches`) by analyze_case_completeness. Step 4
+    must include the `bc.` prefix to route them correctly."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=4,
+        manifest={},
+        artifacts={},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "no BC setup yet",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.kind == "info_gap"
+    assert "bc.patches" in frame.rail_primary.title
+
+
+def test_r1_real_mesh_report_gate_status_fail_surfaces_problem():
+    """Codex R0 P1-3: real cfdtrust mesh_report.json uses gate_status
+    (top-level) + quality_dimension.dimension_status — not
+    findings/issues/problems lists."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=2,
+        manifest={},
+        artifacts={
+            "mesh_report.json": {
+                "gate_status": "FAIL",
+                "quality_dimension": {
+                    "dimension_status": "FAIL",
+                    "fails": ["max_non_orthogonality"],
+                    "metrics": {
+                        "max_non_orthogonality": {
+                            "actual": 78.5,
+                            "threshold": 65.0,
+                            "ok": False,
+                        }
+                    },
+                },
+                "stats": {"cells": 1_240_000},
+                "notes": ["non-ortho exceeds threshold"],
+            }
+        },
+    )
+    frame = decide(state)
+    # Should surface as problem_fix (not step_default)
+    assert frame.rail_primary.kind == "problem_fix"
+    # bottom_cards should include at least one audit_finding
+    findings = [c for c in frame.bottom_cards if c.kind == "audit_finding"]
+    assert len(findings) >= 1
+
+
+def test_r1_real_mesh_report_stats_cells_overlay():
+    """Codex R0 P2: cell count is at stats.cells, not n_cells."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=2,
+        manifest={},
+        artifacts={
+            "mesh_report.json": {
+                "gate_status": "PASS",
+                "stats": {"cells": 2_500_000, "points": 2_700_000},
+                "quality_dimension": {
+                    "dimension_status": "PASS",
+                    "metrics": {
+                        "max_non_orthogonality": {
+                            "actual": 45.0,
+                            "threshold": 65.0,
+                            "ok": True,
+                        }
+                    },
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    badges = [
+        o for o in frame.viewport_overlays if o.kind == "cell_count_badge"
+    ]
+    assert len(badges) == 1
+    assert "2.5M" in (badges[0].label or "")
+
+
+def test_r1_real_mesh_report_high_non_ortho_overlay():
+    """Codex R0 P2: max_non_orthogonality is at
+    quality_dimension.metrics.max_non_orthogonality.actual."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=2,
+        manifest={},
+        artifacts={
+            "mesh_report.json": {
+                "stats": {"cells": 100_000},
+                "quality_dimension": {
+                    "dimension_status": "FAIL",
+                    "metrics": {
+                        "max_non_orthogonality": {
+                            "actual": 82.3,
+                            "threshold": 70.0,
+                            "ok": False,
+                        }
+                    },
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    warns = [
+        o for o in frame.viewport_overlays if o.kind == "checkmesh_warn"
+    ]
+    assert len(warns) == 1
+    assert "82" in (warns[0].label or "")
+    assert warns[0].severity == "warn"
+
+
+def test_r1_real_bc_audit_gate_status_surfaces_on_step4():
+    """Codex R0 P1-3: real bc_audit.json uses gate_status +
+    file_presence_dimension etc., not findings list."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=4,
+        manifest={},
+        artifacts={
+            "bc_audit.json": {
+                "gate_status": "FAIL",
+                "file_presence_dimension": {
+                    "dimension_status": "FAIL",
+                    "fails": ["U", "p"],
+                },
+                "patch_coverage_dimension": {
+                    "dimension_status": "PASS",
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.kind == "problem_fix"
+    # Should produce ≥2 audit_finding cards (gate + dimension)
+    findings = [c for c in frame.bottom_cards if c.kind == "audit_finding"]
+    assert len(findings) >= 2
+
+
+def test_r1_real_trust_report_gates_dict_surfaces_on_step5():
+    """Codex R0 P1-3: real trust_report.json uses gates.<name>.status,
+    not top-level findings."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=5,
+        manifest={},
+        artifacts={
+            "trust_report.json": {
+                "case_id": "x",
+                "overall_status": "MOCKED",
+                "gates": {
+                    "solver_execution": {
+                        "status": "MOCKED",
+                        "summary": "Synthetic solver log; no real CFD",
+                    },
+                    "geometry_contract": {
+                        "status": "FAIL",
+                        "summary": "Missing required patches: inlet, outlet",
+                    },
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    # FAIL beats MOCKED severity — rail should be problem_fix
+    assert frame.rail_primary.kind == "problem_fix"
+    # Both gates should show as audit_findings
+    findings = [c for c in frame.bottom_cards if c.kind == "audit_finding"]
+    titles = " ".join(f.title for f in findings)
+    assert "geometry_contract" in titles
+    assert "solver_execution" in titles
+
+
+def test_r1_mocked_gate_status_normalizes_to_warn():
+    """Codex R0 P1-3: gate_status=MOCKED should surface as warn (not
+    silently swallowed and not fail)."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=2,
+        manifest={},
+        artifacts={
+            "mesh_report.json": {
+                "gate_status": "MOCKED",
+                "checkmesh_invoked": False,
+                "notes": ["solver_backend=mocked; checkMesh was not invoked"],
+            }
+        },
+    )
+    frame = decide(state)
+    # No critical gap + only WARN gate → soft path
+    findings = [c for c in frame.bottom_cards if c.kind == "audit_finding"]
+    assert len(findings) >= 1
+    assert findings[0].severity == "warn"
+
+
+def test_r1_pass_gate_status_emits_no_problem():
+    """Codex R0 P1-3: gate_status=PASS must NOT surface as a problem."""
+    state = CaseStateSnapshot(
+        case_id="x",
+        step=2,
+        manifest={},
+        artifacts={
+            "mesh_report.json": {
+                "gate_status": "PASS",
+                "stats": {"cells": 100_000},
+                "quality_dimension": {"dimension_status": "PASS"},
+            }
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.kind == "step_default"
+    # No audit_findings (PASS shouldn't emit)
+    findings = [c for c in frame.bottom_cards if c.kind == "audit_finding"]
+    assert len(findings) == 0
