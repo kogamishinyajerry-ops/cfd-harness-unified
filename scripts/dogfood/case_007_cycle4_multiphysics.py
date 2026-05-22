@@ -234,12 +234,18 @@ CHT_ARTIFACTS = {
         # Multi-region auditors may emit nested per-region or flat
         # findings; cycle 4 dogfood uses flat shape (the production
         # auditor flattens per-region findings into a single list).
+        #
+        # Codex R1 P2 fix: field_path must point at a v2-editable
+        # path. Since the manifests now use v2 schema (bc.patches.*),
+        # the finding's field_path must also live under bc.patches.*
+        # so a CTA wired to navigate-to-field works on the actual
+        # workbench surface.
         "findings": [
             {
                 "severity": "warn",
                 "title": "missing solid-fluid coupling BC",
                 "message": "fluid-solid interface 'solid_interface' has no compressible::turbulentTemperatureCoupledBaffleMixed",
-                "field_path": "bc_contract.solid_interface",
+                "field_path": "bc.patches.solid_interface",
             }
         ],
     },
@@ -277,6 +283,80 @@ def _check_frame_shape(regime: str, step: int, frame: dict) -> list[tuple[str, b
         (f"[{regime} step={step}] manifest_state_sha is full SHA-256 hex (64 chars)",
          isinstance(sha, str) and bool(_SHA256_HEX_RE.match(sha))),
     ]
+
+
+# Codex R1 P1 fix: lock in the schema-alignment behavior the cycle 4
+# DEC is meant to guarantee. Without these semantic assertions, the
+# shape-coherence checks would still PASS if decide() regressed to the
+# pre-v2 behavior of always surfacing "Fill: physics.solver" /
+# "Fill: bc.patches" generic info_gaps for clean manifests.
+#
+# For each regime where the manifest is COMPLETE (RANS / LES — clean
+# fixtures with all required imported-user fields), Steps 3 + 4 must
+# NOT show those two specific generic gaps. They should be step_default.
+#
+# For regimes with audit-surfaced FAILs (Compressible Step 4 outlet T
+# mismatch, CHT Step 4 missing coupling BC), rail.primary must be
+# problem_fix — not the generic gap.
+
+# (regime_name, step, expected_rail_kind, expected_title_substring,
+#  forbidden_title_substring)
+# `forbidden_title_substring` guards against regressions to the
+# pre-Codex-R0 generic-gap surface.
+_SEMANTIC_EXPECTATIONS = [
+    # Clean RANS/LES — full imported-user manifest filled. Step 3+4
+    # must reach step_default, NOT fall back to generic Fill: gaps.
+    ("RANS-flatplate", 3, "step_default", "物理已设", "Fill: physics.solver"),
+    ("RANS-flatplate", 4, "step_default", "边界已设", "Fill: bc.patches"),
+    ("LES-channel", 3, "step_default", "物理已设", "Fill: physics.solver"),
+    ("LES-channel", 4, "step_default", "边界已设", "Fill: bc.patches"),
+    # Regimes whose artifacts explicitly carry FAILs at Step 4 — rail
+    # must surface the audit signal, not a generic gap.
+    ("Compressible-wedge", 4, "problem_fix", None, "Fill: bc.patches"),
+    ("CHT-multiregion", 4, "problem_fix", None, "Fill: bc.patches"),
+]
+
+
+def _check_semantic_expectations(
+    regime_traces: dict,
+) -> list[tuple[str, bool]]:
+    out: list[tuple[str, bool]] = []
+    for regime, step, exp_kind, exp_title_sub, forbidden_sub in (
+        _SEMANTIC_EXPECTATIONS
+    ):
+        trace = regime_traces.get(regime, {}).get(step)
+        if trace is None:
+            out.append(
+                (f"[semantic {regime} step={step}] trace recorded", False)
+            )
+            continue
+        actual_kind = trace["rail_kind"]
+        actual_title = trace["rail_title"] or ""
+        out.append(
+            (
+                f"[semantic {regime} step={step}] rail.kind == {exp_kind} "
+                f"(got {actual_kind})",
+                actual_kind == exp_kind,
+            )
+        )
+        if exp_title_sub:
+            out.append(
+                (
+                    f"[semantic {regime} step={step}] rail.title contains "
+                    f"{exp_title_sub!r} (got {actual_title!r})",
+                    exp_title_sub in actual_title,
+                )
+            )
+        if forbidden_sub:
+            out.append(
+                (
+                    f"[semantic {regime} step={step}] rail.title does NOT "
+                    f"contain {forbidden_sub!r} (regression guard) "
+                    f"(got {actual_title!r})",
+                    forbidden_sub not in actual_title,
+                )
+            )
+    return out
 
 
 def main():
@@ -337,6 +417,10 @@ def main():
                 # Server error → dump for triage.
                 print(f"[{regime_name} step={step}] status={r.status_code}")
                 print(f"  body: {r.text[:400]}")
+
+    # Codex R1 P1: append semantic regression guards after all traces
+    # have been collected (semantic checks depend on per-regime traces).
+    all_checks.extend(_check_semantic_expectations(regime_traces))
 
     print("\n=== Multi-physics dogfood verification ===\n")
 
