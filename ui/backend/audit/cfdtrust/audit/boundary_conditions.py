@@ -754,46 +754,160 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         gate["artifact"] = str(report_path.relative_to(case_dir))
         return gate
 
-    # Multi-region detection (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC,
-    # Gap #11): chtMultiRegionFoam cases place per-region fields under
-    # `0/region_<name>/<field>`. The backend parser produces a
-    # bc_quality.json with `layout: "multi_region"` and per-region
-    # sub-dicts; the current bc_contract.{inlet,outlet,wall} schema is
-    # single-stream-only so we cannot evaluate dimensions against it
-    # here. Per-region schema redesign is charter-class work
-    # (Gap #28) and explicitly out of scope for the sub-DEC.
+    # Multi-region wiring (DEC-V61-201-SUB-INGEST-MULTI-REGION-BC
+    # cycle-4 follow-up): chtMultiRegionFoam cases place per-region
+    # fields under `0/region_<name>/<field>`. The cycle-1 data layer
+    # surfaced this in bc_quality.json with `layout: "multi_region"`
+    # + per-region sub-dicts. The cycle-1 verdict layer BLOCKED with
+    # `multi_region_bc_validation_not_yet_wired` — honest but
+    # pessimistic, since the parser already has enough evidence to
+    # render a verdict that does NOT depend on per-region per-class
+    # expected-field schema (Gap #28 charter, still queued).
     #
-    # Honesty disposition: BLOCKED-with-reason rather than FAIL —
-    # the case carries real BC evidence (parsed per-region fields are
-    # surfaced in the report), the harness simply cannot YET evaluate
-    # it. Falsely PASSing on no-coverage would be the exact dishonesty
-    # the trust harness exists to prevent.
+    # Wiring (this cycle): emit a real verdict using region-shape
+    # classification + manifest fluid-expected-field coverage check.
+    # The verdict does NOT claim per-class accuracy (e.g. solid region
+    # legitimately missing U/p is reported in per-region detail but
+    # does NOT cause top-level FAIL). What it CAN claim:
+    #
+    #   - Every detected region has ≥1 parseable field (no empty regions)
+    #   - At least one fluid region exists (U + p both present)
+    #   - Every manifest-declared fluid expected field is present in
+    #     at least one fluid region
+    #
+    # When all three hold → PASS with `multi_region_per_class_pending`
+    # caveat. Otherwise → WARN or BLOCKED with the specific failed check.
+    # Per-class verdict refinement (solid wants T-only, fluid wants
+    # U/p/turbulence/thermal) is deferred to Gap #28 charter.
     if bc_quality.get("layout") == "multi_region":
         regions_dict = bc_quality.get("regions", {}) or {}
         per_region_summary: Dict[str, Dict[str, List[str]]] = {}
+        empty_regions: List[str] = []
+        fluid_regions: List[str] = []
+        solid_regions: List[str] = []
         for rname, rdata in regions_dict.items():
+            present = list(rdata.get("fields_present", []))
+            missing = list(rdata.get("fields_missing", []))
             per_region_summary[rname] = {
-                "fields_present": list(rdata.get("fields_present", [])),
-                "fields_missing": list(rdata.get("fields_missing", [])),
+                "fields_present": present,
+                "fields_missing": missing,
             }
+            if not present:
+                empty_regions.append(rname)
+            elif "U" in present and "p" in present:
+                fluid_regions.append(rname)
+            else:
+                solid_regions.append(rname)
+
+        # Manifest-declared expected fluid fields (U, p + turbulence_fields
+        # + thermal_fields). Per the cycle-3 charter, turbulence_fields
+        # can be empty for laminar declarations; thermal_fields can be
+        # absent for incompressible. Default expected fluid set is just
+        # U + p when both are empty.
+        bc_contract_manifest = manifest.get("bc_contract", {}) or {}
+        manifest_turb = list(bc_contract_manifest.get("turbulence_fields", []) or [])
+        manifest_thermal = list(bc_contract_manifest.get("thermal_fields", []) or [])
+        # Apply the same sentinel filter the backend uses.
+        manifest_turb = [
+            f for f in manifest_turb
+            if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
+        ]
+        manifest_thermal = [
+            f for f in manifest_thermal
+            if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
+        ]
+        expected_fluid_fields = ["U", "p", *manifest_turb, *manifest_thermal]
+        seen: set = set()
+        expected_fluid_fields = [
+            f for f in expected_fluid_fields if not (f in seen or seen.add(f))
+        ]
+        # Union of fields present across ALL fluid regions — any single
+        # region carrying the field counts (a CHT case might split U/p
+        # across hot/cold fluid regions; both are valid evidence).
+        fluid_fields_union: set = set()
+        for rname in fluid_regions:
+            fluid_fields_union.update(per_region_summary[rname]["fields_present"])
+        missing_in_all_fluid = [
+            f for f in expected_fluid_fields if f not in fluid_fields_union
+        ]
+
+        # Verdict computation.
+        if empty_regions:
+            status = "BLOCKED"
+            reason = "multi_region_empty_region_detected"
+            summary = (
+                f"Multi-region CHT layout detected with {len(empty_regions)} "
+                f"empty region(s) (no parseable field files): "
+                f"{sorted(empty_regions)}."
+            )
+            next_step = (
+                "Verify each detected region directory contains at least "
+                "one OpenFOAM field file (U, p, T, k, omega, etc.). Empty "
+                "regions indicate either case staging error or premature "
+                "ingest before Allrun-Pre."
+            )
+        elif not fluid_regions:
+            status = "BLOCKED"
+            reason = "multi_region_no_fluid_region"
+            summary = (
+                "Multi-region CHT layout detected with zero fluid regions "
+                "(no region carries both U and p). Case cannot run without "
+                "at least one fluid region."
+            )
+            next_step = (
+                "Verify at least one detected region declares U and p (the "
+                "fluid-region signature). chtMultiRegionFoam always requires "
+                "≥1 fluid region by definition."
+            )
+        elif missing_in_all_fluid:
+            status = "WARN"
+            reason = "multi_region_fluid_field_missing"
+            summary = (
+                f"Multi-region CHT layout: {len(fluid_regions)} fluid "
+                f"region(s) detected, but expected fluid fields "
+                f"{missing_in_all_fluid} not present in any fluid region. "
+                f"Solid region count: {len(solid_regions)}. Per-class "
+                f"verdict deferred to Gap #28 charter."
+            )
+            next_step = (
+                f"Either add the missing fluid fields {missing_in_all_fluid} "
+                f"to a fluid region's 0/region_<name>/ directory, OR update "
+                f"manifest bc_contract.turbulence_fields / thermal_fields "
+                f"to reflect the actual physics declared in 0/."
+            )
+        else:
+            status = "PASS"
+            reason = "multi_region_per_class_pending"
+            summary = (
+                f"Multi-region CHT layout: {len(fluid_regions)} fluid "
+                f"region(s) + {len(solid_regions)} solid region(s); all "
+                f"manifest-declared fluid expected fields present. "
+                f"Per-class verdict (solid wants T-only, fluid wants "
+                f"U/p/turbulence/thermal) deferred to Gap #28 charter."
+            )
+            next_step = (
+                "PASS at the fluid-coverage layer. Per-region per-class "
+                "validation (Gap #28) would tighten this to PASS-strict; "
+                "current PASS asserts the case carries all manifest-declared "
+                "BC evidence distributed across regions."
+            )
+
         gate = {
-            "status": "BLOCKED",
-            "summary": (
-                "Multi-region CHT layout detected; bc_contract evaluation "
-                "not yet wired for per-region schemas."
-            ),
+            "status": status,
+            "summary": summary,
             "details": {
-                "reason": "multi_region_bc_validation_not_yet_wired",
+                "reason": reason,
                 "regions_detected": sorted(regions_dict.keys()),
                 "region_count": len(regions_dict),
+                "fluid_region_count": len(fluid_regions),
+                "solid_region_count": len(solid_regions),
+                "empty_region_count": len(empty_regions),
+                "fluid_regions": sorted(fluid_regions),
+                "solid_regions": sorted(solid_regions),
+                "expected_fluid_fields": expected_fluid_fields,
+                "missing_in_all_fluid_regions": missing_in_all_fluid,
                 "per_region_field_summary": per_region_summary,
-                "next_step": (
-                    "Per-region bc_contract schema (charter-class Gap #28) "
-                    "must land before this gate can evaluate multi-region "
-                    "cases. The backend has surfaced per-region BC evidence "
-                    "in artifacts/bc_quality.json under the `regions` key; "
-                    "downstream consumers can inspect it directly."
-                ),
+                "next_step": next_step,
             },
         }
         report = {
@@ -801,9 +915,13 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             "case_id": manifest.get("case_id"),
             "phase": "M6",
             "gate_status": gate["status"],
-            "reason": "multi_region_bc_validation_not_yet_wired",
+            "reason": reason,
             "layout": "multi_region",
             "regions_detected": sorted(regions_dict.keys()),
+            "fluid_region_count": len(fluid_regions),
+            "solid_region_count": len(solid_regions),
+            "expected_fluid_fields": expected_fluid_fields,
+            "missing_in_all_fluid_regions": missing_in_all_fluid,
             "per_region_field_summary": per_region_summary,
         }
         report_path.write_text(json.dumps(report, indent=2))

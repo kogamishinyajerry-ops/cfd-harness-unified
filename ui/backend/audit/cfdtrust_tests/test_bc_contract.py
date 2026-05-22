@@ -1333,3 +1333,222 @@ def test_derived_pass_on_flat_plate_with_realistic_rounding(tmp_path: Path):
     assert gate["status"] == "PASS"
     der = gate["details"]["derived_consistency"]
     assert der["matched_count"] == 2
+
+
+# ---------- Cycle 4 spike B: multi-region bc_contract verdict-layer wiring ----------
+#
+# Cycle 1 (Gap #11) shipped the DATA layer: bc_quality.json now carries
+# layout: multi_region + per-region payloads. Cycle 2 left the VERDICT
+# layer BLOCKED with 'multi_region_bc_validation_not_yet_wired' as an
+# honest deferral. Cycle 4 wires the verdict using region-shape
+# classification (fluid/solid/empty) + manifest fluid-field coverage,
+# without requiring per-class schema (Gap #28 charter still queued).
+
+
+_REGION_FLUID_U = """\
+FoamFile { class volVectorField; object U; }
+dimensions [0 1 -1 0 0 0 0];
+internalField uniform (0.5 0 0);
+boundaryField
+{
+    inlet { type fixedValue; value uniform (0.5 0 0); }
+    outlet { type zeroGradient; }
+    fluid_to_solid { type fixedValue; value uniform (0 0 0); }
+}
+"""
+
+
+_REGION_FLUID_P = """\
+FoamFile { class volScalarField; object p; }
+dimensions [0 2 -2 0 0 0 0];
+internalField uniform 0;
+boundaryField
+{
+    inlet { type zeroGradient; }
+    outlet { type fixedValue; value uniform 0; }
+    fluid_to_solid { type zeroGradient; }
+}
+"""
+
+
+_REGION_SOLID_T = """\
+FoamFile { class volScalarField; object T; }
+dimensions [0 0 0 1 0 0 0];
+internalField uniform 300;
+boundaryField
+{
+    solid_to_fluid { type fixedValue; value uniform 300; }
+    solid_outer_wall { type fixedValue; value uniform 350; }
+}
+"""
+
+
+def _stage_multi_region_bc_quality(
+    case_dir: Path,
+    *,
+    fluid_regions: list[str] = None,
+    solid_regions: list[str] = None,
+    empty_regions: list[str] = None,
+    fluid_has_turb: bool = False,
+) -> None:
+    """Build artifacts/bc_quality.json with the multi_region layout
+    shape. Each fluid region carries U+p (optionally k/omega/nut); each
+    solid region carries T; each empty region has no fields."""
+    fluid_regions = fluid_regions or []
+    solid_regions = solid_regions or []
+    empty_regions = empty_regions or []
+
+    art = case_dir / "artifacts"
+    art.mkdir(parents=True, exist_ok=True)
+
+    expected = ["U", "p"]
+    if fluid_has_turb:
+        expected = ["U", "p", "k", "omega", "nut"]
+
+    regions: dict = {}
+    for rname in fluid_regions:
+        fields_present = ["U", "p"]
+        if fluid_has_turb:
+            fields_present = ["U", "p", "k", "omega", "nut"]
+        regions[rname] = {
+            "expected_fields": expected,
+            "fields_present": fields_present,
+            "fields_missing": [],
+            "fields": {f: {"parsed": True, "patches": {}} for f in fields_present},
+        }
+    for rname in solid_regions:
+        regions[rname] = {
+            "expected_fields": expected,
+            "fields_present": ["T"],
+            "fields_missing": expected,  # honestly notes fluid fields missing
+            "fields": {"T": {"parsed": True, "patches": {}}},
+        }
+    for rname in empty_regions:
+        regions[rname] = {
+            "expected_fields": expected,
+            "fields_present": [],
+            "fields_missing": expected,
+            "fields": {},
+        }
+
+    bc = {
+        "bc_parsing_status": "ok",
+        "layout": "multi_region",
+        "expected_fields": expected,
+        "regions_detected": sorted(regions.keys()),
+        "region_count": len(regions),
+        "regions": regions,
+    }
+    (art / "bc_quality.json").write_text(json.dumps(bc, indent=2))
+
+    # Stage minimal geometry_quality.json so the gate doesn't bail at the
+    # "geometry evidence missing" early-return.
+    (art / "geometry_quality.json").write_text(json.dumps({
+        "status": "ok",
+        "realized_patches": ["inlet", "outlet", "fluid_to_solid",
+                             "solid_to_fluid", "solid_outer_wall"],
+    }))
+
+
+def _multi_region_manifest(
+    *, turbulence_fields: list[str] = None, thermal_fields: list[str] = None,
+) -> dict:
+    """Minimal manifest accepted by bc_gate for a multi-region case."""
+    m = {
+        "case_id": "multi_region_test",
+        "solver_backend": "openfoam",
+        "bc_contract": {
+            "inlet": {"velocity": {"type": "fixedValue"}, "pressure": {"type": "zeroGradient"}},
+            "outlet": {"velocity": {"type": "zeroGradient"}, "pressure": {"type": "fixedValue"}},
+            "wall": {"velocity": {"type": "noSlip"}},
+        },
+    }
+    if turbulence_fields is not None:
+        m["bc_contract"]["turbulence_fields"] = turbulence_fields
+    if thermal_fields is not None:
+        m["bc_contract"]["thermal_fields"] = thermal_fields
+    return m
+
+
+def test_multi_region_verdict_pass_fluid_plus_solid(tmp_path: Path):
+    """Gap #11 cycle-4: 2 fluid regions (each carrying U+p) + 1 solid
+    region (T only) + manifest declares only U/p as expected → PASS
+    with 'multi_region_per_class_pending' reason. Replaces the cycle-2
+    BLOCKED 'multi_region_bc_validation_not_yet_wired'."""
+    _stage_multi_region_bc_quality(
+        tmp_path,
+        fluid_regions=["region_cold_fluid", "region_hot_fluid"],
+        solid_regions=["region_solid"],
+    )
+    m = _multi_region_manifest(turbulence_fields=[])
+
+    gate = bc_gate(tmp_path, m)
+
+    assert gate["status"] == "PASS", (
+        f"Expected PASS; got {gate['status']} with reason "
+        f"{gate.get('details', {}).get('reason')}"
+    )
+    d = gate["details"]
+    assert d["reason"] == "multi_region_per_class_pending"
+    assert d["fluid_region_count"] == 2
+    assert d["solid_region_count"] == 1
+    assert d["empty_region_count"] == 0
+    assert d["missing_in_all_fluid_regions"] == []
+
+
+def test_multi_region_verdict_blocked_empty_region(tmp_path: Path):
+    """Gap #11 cycle-4: any empty region (zero parseable fields) trips
+    BLOCKED with reason 'multi_region_empty_region_detected'. Catches
+    case-staging errors that the cycle-2 dogfood would have missed."""
+    _stage_multi_region_bc_quality(
+        tmp_path,
+        fluid_regions=["region_fluid"],
+        empty_regions=["region_empty"],
+    )
+    m = _multi_region_manifest(turbulence_fields=[])
+
+    gate = bc_gate(tmp_path, m)
+
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "multi_region_empty_region_detected"
+    assert "region_empty" in gate["summary"]
+
+
+def test_multi_region_verdict_warn_missing_turbulence(tmp_path: Path):
+    """Gap #11 cycle-4: manifest declares turbulence_fields = [k, omega]
+    but no fluid region carries them → WARN with reason
+    'multi_region_fluid_field_missing'. Per-class verdict refinement
+    (solid wants only T) still deferred to Gap #28; this catches the
+    case where the case author forgot to populate turbulence ICs."""
+    _stage_multi_region_bc_quality(
+        tmp_path,
+        fluid_regions=["region_fluid"],
+        solid_regions=["region_solid"],
+        fluid_has_turb=False,  # fluid region only has U+p, no k/omega
+    )
+    m = _multi_region_manifest(turbulence_fields=["k", "omega"])
+
+    gate = bc_gate(tmp_path, m)
+
+    assert gate["status"] == "WARN"
+    assert gate["details"]["reason"] == "multi_region_fluid_field_missing"
+    missing = gate["details"]["missing_in_all_fluid_regions"]
+    assert "k" in missing and "omega" in missing
+
+
+def test_multi_region_verdict_blocked_no_fluid_region(tmp_path: Path):
+    """Gap #11 cycle-4: only solid regions detected (no U+p region) →
+    BLOCKED with 'multi_region_no_fluid_region'. chtMultiRegionFoam
+    requires ≥1 fluid region by definition; engine refuses to pass."""
+    _stage_multi_region_bc_quality(
+        tmp_path,
+        solid_regions=["region_solid_a", "region_solid_b"],
+    )
+    m = _multi_region_manifest(turbulence_fields=[])
+
+    gate = bc_gate(tmp_path, m)
+
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "multi_region_no_fluid_region"
+    assert gate["details"]["fluid_region_count"] == 0
+    assert gate["details"]["solid_region_count"] == 2
