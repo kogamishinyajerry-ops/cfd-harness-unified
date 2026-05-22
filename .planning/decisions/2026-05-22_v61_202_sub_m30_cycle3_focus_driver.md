@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 3 (focus driver · 4th SSOT driver fully load-bearing)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81ff9c4edbac25bf0f08)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -114,7 +114,7 @@ Pre-implementation surface scan (V61-088):
 - [x] case_007 dogfood **8/8 PASS** (`scripts/dogfood/case_007_cycle3_focus.py` + `.planning/dogfood/DOGFOOD_CASE_007_CYCLE3.md`)
 - [x] Codex R0 CHANGES_REQUIRED (1 P1 + 2 P2) → R1 verbatim fix → R1 CHANGES_REQUIRED 1 P2 → R2 verbatim fix → R2 CHANGES_REQUIRED 1 P2 → R3 verbatim fix → **R3 APPROVED** (closed at round cap=3, verbatim chain)
 - [x] DEC Proposed → Accepted (this commit)
-- [ ] Notion sync (session-end batch)
+- [x] Notion sync (https://www.notion.so/368c68942bed81ff9c4edbac25bf0f08)
 
 ## Risks + mitigations
 
