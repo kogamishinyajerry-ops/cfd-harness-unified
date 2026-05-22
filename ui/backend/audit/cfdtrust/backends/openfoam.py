@@ -1891,12 +1891,31 @@ def _collect_and_persist_bc(
         if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
     ]
 
-    # Canonical incompressible RANS fields + turbulence + thermal.
-    # Deduplicate while preserving order: U, p first, then turbulence
-    # fields in manifest order, then thermal fields.
+    # TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): bc_contract.phase_fields
+    # is an optional list (mirrors turbulence_fields, thermal_fields)
+    # declaring multiphase alpha field names whose 0/<field> BC files
+    # engine should walk. Defaults to [] for single-phase. interFoam
+    # cases typically declare ['alpha.water']; multiphaseInterFoam ships
+    # ['alpha.water', 'alpha.oil', ...]. When absent + vof_contract
+    # carries alpha_field_name, derive [alpha_field_name] so authors
+    # don't repeat themselves.
+    if "phase_fields" in bc_contract and bc_contract.get("phase_fields") is not None:
+        phase_fields = list(bc_contract.get("phase_fields") or [])
+    else:
+        vof_contract = manifest.get("vof_contract", {}) or {}
+        alpha_name = vof_contract.get("alpha_field_name")
+        phase_fields = [alpha_name] if alpha_name else []
+    phase_fields = [
+        f for f in phase_fields
+        if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
+    ]
+
+    # Canonical incompressible RANS fields + turbulence + thermal +
+    # phase. Deduplicate while preserving order: U, p first, then
+    # turbulence fields, then thermal fields, then phase fields.
     seen: set = set()
     expected: List[str] = []
-    for fname in ["U", "p", *turb_fields, *thermal_fields]:
+    for fname in ["U", "p", *turb_fields, *thermal_fields, *phase_fields]:
         if fname in seen:
             continue
         seen.add(fname)

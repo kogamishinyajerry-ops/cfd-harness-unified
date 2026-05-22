@@ -99,6 +99,58 @@
           "type": "array",
           "items": { "type": "string" },
           "$comment": "Gap #19 (DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT): optional list of thermal/conserved field names whose 0/<field> BC files engine should walk. Defaults to [] for incompressible cases; compressible cases typically declare [T] (sensibleEnthalpy with T solved primary), [T, e] (e also tracked), or [T, e, rho] (density-based). Like turbulence_fields, this is the manifest-author's declaration of what physics the case actually carries — engine doesn't infer."
+        },
+        "phase_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "$comment": "TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): optional list of multiphase alpha field names whose 0/<field> BC files engine should walk. Defaults to [] for single-phase cases; VOF cases typically declare ['alpha.water'] (interFoam) or ['alpha.water', 'alpha.oil'] (multiphaseInterFoam). When absent + vof_contract.alpha_field_name is set, engine derives [alpha_field_name] automatically. Same sentinel-filter as turbulence_fields/thermal_fields."
+        }
+      }
+    },
+    "vof_contract": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["phases"],
+      "$comment": "TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): optional top-level contract for cases carrying real multiphase VOF physics (interFoam, compressibleInterFoam, multiphaseInterFoam, etc.). Absent = single-phase (the default before this DEC). When present, `phases` is REQUIRED so downstream checks know which 0/alpha.<phase> files to walk. Engine cross-check against constant/transportProperties is a separate follow-up.",
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2
+        },
+        "interface_method": {
+          "type": "string",
+          "enum": ["VOF", "level_set", "MULES", "isoAdvector",
+                   "VOF_MULES", "VOF_isoAdvector", "compressibleVOF"]
+        },
+        "alpha_field_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "surface_tension_N_per_m": { "type": "number", "minimum": 0 },
+        "interface_compression_coeff": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "density_pair": {
+          "type": "object",
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[a-zA-Z][a-zA-Z0-9_]*$": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "viscosity_pair": {
+          "type": "object",
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[a-zA-Z][a-zA-Z0-9_]*$": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
+        "mules_correctors": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
         }
       }
     },

@@ -2749,3 +2749,127 @@ def test_les_contract_keqn_les_model_derives_transport(tmp_path: Path):
     )
     assert "k" in bc["expected_fields"]
     assert "nuSgs" in bc["expected_fields"]
+
+
+# ---------- DEC-V61-201-SUB-INGEST-VOF-CONTRACT (TBD-3) ----------
+
+
+def test_vof_contract_optional_absent_no_break(tmp_path: Path):
+    """TBD-3 schema discipline: single-phase cases (no vof_contract) must
+    continue validating + ingest unchanged. Backwards-compat floor."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    assert "vof_contract" not in manifest
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    # No alpha.* fields in expected_fields without vof_contract.
+    assert not any(f.startswith("alpha.") for f in bc["expected_fields"])
+
+
+def test_vof_contract_full_case007_shape(tmp_path: Path):
+    """TBD-3: case_007 KCS ship VOF shape — interFoam water/air with
+    surface tension, density+viscosity pair, MULES correctors —
+    round-trips through validate_manifest cleanly."""
+    import yaml
+    from cfdtrust.manifest import validate_manifest
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["vof_contract"] = {
+        "phases": ["water", "air"],
+        "interface_method": "VOF_MULES",
+        "alpha_field_name": "alpha.water",
+        "surface_tension_N_per_m": 0.072,
+        "interface_compression_coeff": 1.0,
+        "density_pair": {"water": 998.8, "air": 1.225},
+        "viscosity_pair": {"water": 1.05e-06, "air": 1.5e-05},
+        "mules_correctors": 2,
+    }
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    validated = validate_manifest(tmp_path)
+    assert validated["vof_contract"]["phases"] == ["water", "air"]
+    assert validated["vof_contract"]["alpha_field_name"] == "alpha.water"
+    assert validated["vof_contract"]["surface_tension_N_per_m"] == 0.072
+
+
+def test_phase_fields_in_bc_contract_walked(tmp_path: Path):
+    """TBD-3 Gap #19-parallel: bc_contract.phase_fields = [alpha.water]
+    + 0/alpha.water file present → bc_quality.fields_present includes
+    alpha.water. Pre-fix, VOF alpha BCs were silently invisible like
+    case_006 thermal T was."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    # Add 0/alpha.water with interFoam-style BCs.
+    (tmp_path / "0" / "alpha.water").write_text(
+        "FoamFile { class volScalarField; object alpha.water; }\n"
+        "dimensions [0 0 0 0 0 0 0];\n"
+        "internalField uniform 0;\n"
+        "boundaryField\n"
+        "{\n"
+        "    water_inlet { type variableHeightFlowRate; lowerBound 0; "
+        "upperBound 1; value uniform 0; }\n"
+        "    atmosphere { type inletOutlet; inletValue uniform 0; "
+        "value uniform 0; }\n"
+        "}\n"
+    )
+
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["bc_contract"]["phase_fields"] = ["alpha.water"]
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "alpha.water" in bc["expected_fields"], (
+        f"TBD-3: phase_fields must extend expected; got {bc['expected_fields']}"
+    )
+    assert "alpha.water" in bc["fields_present"]
+    assert bc["fields"]["alpha.water"]["parsed"] is True
+    assert "water_inlet" in bc["fields"]["alpha.water"]["patches"]
+
+
+def test_phase_fields_derived_from_vof_contract_alpha_field_name(tmp_path: Path):
+    """TBD-3: when bc_contract.phase_fields is absent BUT vof_contract.
+    alpha_field_name is set, derive phase_fields = [alpha_field_name].
+    Saves authors writing both."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    # No phase_fields in bc_contract.
+    manifest["bc_contract"].pop("phase_fields", None)
+    # But vof_contract carries alpha_field_name.
+    manifest["vof_contract"] = {
+        "phases": ["water", "air"],
+        "alpha_field_name": "alpha.water",
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "alpha.water" in bc["expected_fields"], (
+        f"TBD-3 derivation: alpha_field_name must auto-populate phase_fields; "
+        f"got {bc['expected_fields']}"
+    )
+
+
+def test_alpha_dotted_residual_already_parsed():
+    """Gap #25 regression guard (TBD-3 follow-up): the residual regex
+    `[\\w.()]+` group correctly captures dotted phase-field names like
+    `alpha.water`. Pre-Gap-#25, the regex used `\\w+` which stopped at
+    the `.`, dropping every VOF residual line. The case_007 manifest
+    comment claims this still happens (stale — was fixed in cycle 1)."""
+    log = (
+        "Time = 1\n"
+        "smoothSolver:  Solving for alpha.water, Initial residual = 1.249e-10, "
+        "Final residual = 5e-12, No Iterations 1\n"
+        "DICPCG:  Solving for p_rgh, Initial residual = 9.4e-08, "
+        "Final residual = 1e-10, No Iterations 5\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 3.8e-08, "
+        "Final residual = 1e-10, No Iterations 3\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+    assert parsed["iterations"], "interFoam log must produce >=1 iteration"
+    res = parsed["iterations"][0]["residuals"]
+    assert "alpha.water" in res, (
+        f"Gap #25 regression: alpha.water must parse; got {list(res.keys())}"
+    )
+    assert "p_rgh" in res
+    assert "Ux" in res
