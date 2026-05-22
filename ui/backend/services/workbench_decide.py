@@ -31,6 +31,7 @@ from ui.backend.schemas.workbench_frame import (
     BottomCard,
     CaseStateSnapshot,
     RailPrimary,
+    TopbarCta,
     ViewportOverlay,
     WorkbenchFrame,
 )
@@ -77,14 +78,83 @@ def decide(state: CaseStateSnapshot) -> WorkbenchFrame:
     rail = _pick_rail_primary(state)
     overlays = _pick_overlays(state)
     cards = _pick_bottom_cards(state)
+    topbar = _pick_topbar_cta(state, rail)
     return WorkbenchFrame(
         case_id=state.case_id,
         step=state.step,
         rail_primary=rail,
         viewport_overlays=overlays,
         bottom_cards=cards,
+        topbar_cta=topbar,
         state_sha=_state_sha(state),
+        manifest_state_sha=_manifest_state_sha(state.case_id, state.manifest),
         decided_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+def _manifest_state_sha(case_id: str, manifest: dict) -> str:
+    """SHA-256 of manifest-only canonical bytes (DEC-V61-202 cycle 2).
+
+    Frontend sends this on PATCH; backend recomputes it independently
+    to validate optimistic concurrency. Excludes step / focus /
+    artifacts because a manifest write doesn't depend on those, and
+    including them would cause spurious 409s when an unrelated audit
+    artifact refreshes.
+    """
+    import hashlib
+    import json
+    payload = {"case_id": case_id, "manifest": _canonical(manifest)}
+    blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+# ────────────────────────── topbar_cta (cycle 2) ──────────────────────────
+
+
+def _pick_topbar_cta(state: CaseStateSnapshot, rail: RailPrimary) -> TopbarCta:
+    """The 4th driver slot. Decides what 'next' means in this state.
+
+    Mapping:
+        rail.kind == "problem_fix"  → "复检 / Re-audit"
+        rail.kind == "info_gap"     → CTA disabled + reason
+        rail.kind == "step_default" + step < 5 → "下一步 / Next step"
+        rail.kind == "step_default" + step == 5 → "提交求解 / Submit solve"
+    """
+    if rail.kind == "problem_fix":
+        return TopbarCta(
+            kind="re_audit",
+            label="复检 / Re-audit",
+            target_step=None,
+            enabled=True,
+            reason=None,
+        )
+
+    if rail.kind == "info_gap":
+        gap_path = rail.field_path or "上游字段"
+        return TopbarCta(
+            kind="step_default",
+            label="下一步 / Next step",
+            target_step=state.step + 1 if state.step < 5 else None,
+            enabled=False,
+            reason=f"先补齐 {gap_path} 才能进入下一步 / Fill {gap_path} first",
+        )
+
+    # step_default branch
+    if state.step == 5:
+        return TopbarCta(
+            kind="submit_solve",
+            label="提交求解 / Submit solve",
+            target_step=None,
+            enabled=True,
+            reason=None,
+        )
+
+    return TopbarCta(
+        kind="next_step",
+        label="下一步 / Next step",
+        target_step=state.step + 1,
+        enabled=True,
+        reason=None,
     )
 
 

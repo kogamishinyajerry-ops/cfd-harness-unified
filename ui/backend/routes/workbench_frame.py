@@ -17,6 +17,10 @@ from typing import Any
 import yaml
 from fastapi import APIRouter, HTTPException, Query
 
+from ui.backend.schemas.manifest_patch import (
+    ManifestPatchRequest,
+    ManifestPatchResponse,
+)
 from ui.backend.schemas.workbench_frame import (
     CaseStateSnapshot,
     WorkbenchFrame,
@@ -27,6 +31,11 @@ from ui.backend.services.case_completeness import (
 )
 from ui.backend.services.case_scaffold.template_clone import IMPORTED_DIR
 from ui.backend.services.case_drafts import DRAFTS_DIR
+from ui.backend.services.manifest_patch import (
+    PatchConflict,
+    PatchPathError,
+    apply_field_path_patch,
+)
 from ui.backend.services.validation_report import _load_whitelist
 from ui.backend.services.workbench_decide import decide
 
@@ -170,3 +179,47 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         return loaded if isinstance(loaded, dict) else {}
     except (OSError, yaml.YAMLError):
         return {}
+
+
+# ────────────────────────── PATCH /api/cases/{id}/manifest ──────────────────────────
+
+
+@router.patch(
+    "/cases/{case_id}/manifest",
+    response_model=ManifestPatchResponse,
+    summary="Apply a field-path PATCH to a case's manifest (DEC-V61-202 cycle 2)",
+)
+def patch_manifest_field(
+    case_id: str, request: ManifestPatchRequest
+) -> ManifestPatchResponse:
+    """Apply one field-path write to the manifest.
+
+    Workflow:
+        1. Engineer reads WorkbenchFrame → captures `manifest_state_sha`
+        2. Engineer clicks a rail CTA → frontend PATCHes here
+        3. Backend validates state_sha, applies write, re-validates schema
+        4. On success: returns new state_sha; frontend refetches frame
+        5. On 409: case changed since frame was issued; frontend refetches
+        6. On schema invalid: returns 200 + success=False + errors;
+           engineer can re-edit
+
+    Whitelist cases auto-fork to a draft on first PATCH — the engineer's
+    edit doesn't mutate the immutable catalog.
+    """
+    try:
+        response = apply_field_path_patch(case_id, request)
+    except CaseNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PatchPathError as e:
+        raise HTTPException(status_code=400, detail=f"invalid field_path: {e}")
+    except PatchConflict as e:
+        # 409 + headers expose the current state_sha so the frontend
+        # can update its expected_state_sha without a separate fetch.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(e),
+                "current_state_sha": e.current_state_sha,
+            },
+        )
+    return response

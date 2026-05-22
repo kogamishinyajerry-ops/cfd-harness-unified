@@ -25,6 +25,14 @@ OverlayKind = Literal[
 CardKind = Literal["audit_finding", "missing_field", "step_hint"]
 Severity = Literal["info", "warn", "fail"]
 
+# Cycle 2: the 4th driver slot.
+TopbarCtaKind = Literal[
+    "next_step",
+    "re_audit",
+    "submit_solve",
+    "step_default",
+]
+
 
 class RailPrimary(BaseModel):
     """The Engineer Control Rail's top-of-rail primary action card.
@@ -150,6 +158,40 @@ class BottomCard(BaseModel):
     )
 
 
+class TopbarCta(BaseModel):
+    """The 4th dynamic slot (DEC-V61-202-SUB-M30-CYCLE2).
+
+    Rendered as the rightmost pill in the TopBar. The CTA decides what
+    "next thing to do" is based on (a) what the rail_primary is asking
+    for and (b) which step the engineer is on. Disabled state surfaces
+    a tooltip explaining why progress is blocked.
+    """
+
+    kind: TopbarCtaKind
+    label: str = Field(..., description="Button text shown in the pill.")
+    target_step: int | None = Field(
+        default=None,
+        description=(
+            "Step the engineer transitions to if they click. None when "
+            "the CTA isn't a step transition (re_audit / submit_solve)."
+        ),
+    )
+    enabled: bool = Field(
+        ...,
+        description=(
+            "False when a critical info_gap blocks progress. The pill "
+            "renders gray and the click is a no-op; tooltip shows reason."
+        ),
+    )
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "Why the CTA is disabled (when `enabled=False`). Engineer-"
+            "readable; e.g. '先补齐 vof_contract.phases 才能进入下一步'."
+        ),
+    )
+
+
 class WorkbenchFrame(BaseModel):
     """The frame descriptor returned by `decide(CaseState)`.
 
@@ -165,13 +207,31 @@ class WorkbenchFrame(BaseModel):
     rail_primary: RailPrimary
     viewport_overlays: list[ViewportOverlay] = Field(default_factory=list)
     bottom_cards: list[BottomCard] = Field(default_factory=list)
+    topbar_cta: TopbarCta = Field(
+        ...,
+        description=(
+            "DEC-V61-202-SUB-M30-CYCLE2: the 4th dynamic slot, rendered "
+            "in TopBar. Always present (defaults to step_default kind)."
+        ),
+    )
     state_sha: str = Field(
         ...,
         description=(
-            "SHA-256 hex digest of canonical input bytes "
-            "(case_id + step + sorted-key manifest + audit artifact "
-            "mtimes + focus). Frontend can use this to skip re-render "
-            "when state hasn't changed."
+            "SHA-256 hex digest of full canonical input bytes "
+            "(case_id + step + sorted-key manifest + audit artifacts + "
+            "completeness + focus). Frontend can use this to skip re-"
+            "render when state hasn't changed."
+        ),
+    )
+    manifest_state_sha: str = Field(
+        ...,
+        description=(
+            "DEC-V61-202-SUB-M30-CYCLE2: SHA-256 of manifest-only "
+            "canonical bytes. Frontend sends this as "
+            "`expected_state_sha` on PATCH /api/cases/{id}/manifest. "
+            "Excludes artifacts/step/focus so a single field PATCH "
+            "doesn't cause a state_sha conflict storm whenever an "
+            "unrelated audit artifact refreshes."
         ),
     )
     decided_at: str = Field(
