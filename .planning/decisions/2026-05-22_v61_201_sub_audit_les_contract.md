@@ -1,11 +1,12 @@
 ---
 decision_id: DEC-V61-201-SUB-INGEST-LES-CONTRACT
 title: les_contract schema for SGS + filter + wall-treatment declarations (Gap #28)
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: M2.8 cycle 5 (LES regime charter)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81e7aacffc8296abdde3)
 autonomous_governance: true
 counter_status: v6.1 N/A pending accepted
 charter_class: true
@@ -161,11 +162,11 @@ synthetic + production-case integration.
 
 ## Status
 
-**Proposed** — pending implementation + Codex R0 + verification.
-Becomes **Accepted** when:
-- Implementation lands + Codex APPROVE on the change
-- All 4 new tests pass
-- case_010 synthetic test exercising the new schema path validates
+**Accepted** (2026-05-22) — closure criteria met:
+- Implementation landed at commit `4423ba7` + Codex R0→R1 fix at `5839509`
+- Codex 86gs gpt-5.4 xhigh R0: CHANGES_REQUIRED (Gap #46 transported_fields suppression + Gap #47 SA derivation + simulation_type required) → R1 RESOLVED in 1 round (round cap=3 used 1)
+- 6 tests pass (4 charter + 2 R1 regression + 1 rewritten); full audit suite 463 passed / 1 skipped
+- Synthetic case_010-shape manifest round-trips through validate_manifest cleanly
 
 ## Provenance
 
