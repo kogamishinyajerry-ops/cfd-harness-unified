@@ -247,29 +247,56 @@ def _focus_matches(state: CaseStateSnapshot, item: dict) -> bool:
     return False
 
 
+_FAILURE_SUBLIST_KEYS = frozenset(
+    {
+        "value_mismatches",
+        "type_mismatches",
+        "mismatches",
+        "missing",
+        "issues",
+        "failures",
+        "errors",
+        "findings",
+        "gaps",
+        "violations",
+    }
+)
+
+
 def _collect_resolved_patches(dim_value: dict) -> list[str]:
-    """Walk a dimension dict's nested arrays for `resolved_patch` entries.
+    """Walk a dimension dict's FAIL-class sublists for `resolved_patch`.
 
     Real bc_audit shapes (channel_flow_rans_sst.bc_audit.json) carry
     concrete patch names inside per-finding dicts:
 
         {
+          "matched":   [{"field": "U", "resolved_patch": "inlet", ...}],   # PASS records
+          "checked":   [{"field": "U", "resolved_patch": "topWall", ...}], # passing checks
           "value_mismatches": [
-            {"field": "U", "resolved_patch": "inlet", ...},
+            {"field": "U", "resolved_patch": "inlet", ...},                # FAIL records
             {"field": "p", "resolved_patch": "outlet", ...},
           ],
           "type_mismatches": [
             {"field": "U", "resolved_patch": "topWall", ...},
-            ...
           ],
         }
 
-    We collect distinct ``resolved_patch`` strings across all 1-level-deep
-    list-of-dict values inside the dimension. Order is preserved (insert
-    order); duplicates dropped via dict.fromkeys.
+    Codex R1 P2 fix: only walk FAIL-class sublists (whitelisted by name).
+    Earlier all-list walk over-attributed a failing dimension to patches
+    that only appeared in successful ``matched`` / ``checked`` records,
+    so focusing such a passing patch incorrectly bubbled an unrelated
+    FAIL above the actually related one.
+
+    We collect distinct ``resolved_patch`` strings across all whitelisted
+    1-level-deep list-of-dict values inside the dimension. Order is
+    preserved (insert order); duplicates dropped via dict.fromkeys.
     """
     out: list[str] = []
-    for v in dim_value.values():
+    for key, v in dim_value.items():
+        if not isinstance(key, str):
+            continue
+        if key not in _FAILURE_SUBLIST_KEYS:
+            continue
         if not isinstance(v, list):
             continue
         for entry in v:

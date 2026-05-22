@@ -278,6 +278,67 @@ def test_focus_matches_resolved_patch_in_nested_arrays():
     assert "value_match" in frame.rail_primary.title
 
 
+def test_focus_does_not_match_resolved_patch_in_successful_sublists():
+    """Codex R1 P2 regression: bc_audit dimensions can include both
+    successful `matched`/`checked` records AND failing
+    `value_mismatches`/`type_mismatches` records. Focusing a patch that
+    ONLY appears in the successful records must NOT cause _focus_matches
+    to treat the whole FAIL dimension as patch-relevant."""
+    state = _state(
+        focus_patch="passing_patch",  # only in successful list
+        artifacts={
+            "bc_audit.json": {
+                "gate_status": "FAIL",
+                "value_match_dimension": {
+                    "dimension_status": "FAIL",
+                    # Successful entries — must NOT be scanned for focus.
+                    "matched": [
+                        {"field": "U", "resolved_patch": "passing_patch"},
+                    ],
+                    "checked": [
+                        {"field": "p", "resolved_patch": "passing_patch"},
+                    ],
+                    # FAIL entries — these ARE scanned.
+                    "value_mismatches": [
+                        {"field": "alpha", "resolved_patch": "failing_patch"},
+                    ],
+                },
+            }
+        },
+    )
+    frame = decide(state)
+    # The FAIL dimension surfaces in bottom_cards, but focusing
+    # "passing_patch" must not promote it via successful-record matching.
+    # With no real match, the rail.primary falls through to severity sort.
+    # The load-bearing assertion: _focus_matches() on the value_match card
+    # must return False (no false-positive).
+    from ui.backend.services.workbench_decide import (
+        _focus_matches,
+        _iter_problems_from_artifact,
+    )
+    problems = list(
+        _iter_problems_from_artifact(
+            state.artifacts["bc_audit.json"],
+            "bc_audit.json",
+        )
+    )
+    value_match_problem = next(
+        (p for p in problems if p.get("rule") == "value_match_dimension"),
+        None,
+    )
+    assert value_match_problem is not None, "value_match dim should be emitted"
+    assert _focus_matches(state, value_match_problem) is False, (
+        "Successful-only patch must not match a failing dim"
+    )
+
+    # Conversely, focusing the failing_patch DOES match.
+    state2 = _state(
+        focus_patch="failing_patch",
+        artifacts=state.artifacts,
+    )
+    assert _focus_matches(state2, value_match_problem) is True
+
+
 def test_focus_unset_does_not_reorder_cards():
     """When focus_patch is None, bottom_cards keep their severity-sort
     order (no focus reorder fires)."""
