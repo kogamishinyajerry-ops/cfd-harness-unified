@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-201-SUB-INGEST
 phase: M2.9 cycle 6 (VOF multiphase regime charter — FINAL audit-engine charter per 2026-05-22 strategic pivot)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81eb89c0f6f9463f5663)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: true

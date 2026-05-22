@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: null
 phase: M3.0 (post-audit-engine-deepening phase open)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed8101addfec935a50691a)
 autonomous_governance: false
 counter_status: v6.1 N/A (external gate · user-ratified pivot)
 charter_class: true
