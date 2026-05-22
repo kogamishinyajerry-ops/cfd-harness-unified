@@ -1809,11 +1809,24 @@ def _collect_and_persist_bc(
         if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
     ]
 
-    # Canonical incompressible RANS fields. Deduplicate while preserving
-    # order: U, p first, then turbulence fields in manifest order.
+    # Gap #19 (DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT):
+    # bc_contract.thermal_fields is an optional list (mirrors
+    # turbulence_fields) declaring thermal/conserved field names whose
+    # 0/<field> BC files engine should walk. Defaults to [] for
+    # incompressible cases; compressible cases typically declare [T],
+    # [T, e], or [T, e, rho]. Same sentinel filter applied as turb.
+    thermal_fields = list(bc_contract.get("thermal_fields", []) or [])
+    thermal_fields = [
+        f for f in thermal_fields
+        if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
+    ]
+
+    # Canonical incompressible RANS fields + turbulence + thermal.
+    # Deduplicate while preserving order: U, p first, then turbulence
+    # fields in manifest order, then thermal fields.
     seen: set = set()
     expected: List[str] = []
-    for fname in ["U", "p", *turb_fields]:
+    for fname in ["U", "p", *turb_fields, *thermal_fields]:
         if fname in seen:
             continue
         seen.add(fname)

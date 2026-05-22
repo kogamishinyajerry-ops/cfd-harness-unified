@@ -94,6 +94,65 @@
         "turbulence_fields": {
           "type": "array",
           "items": { "type": "string" }
+        },
+        "thermal_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "$comment": "Gap #19 (DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT): optional list of thermal/conserved field names whose 0/<field> BC files engine should walk. Defaults to [] for incompressible cases; compressible cases typically declare [T] (sensibleEnthalpy with T solved primary), [T, e] (e also tracked), or [T, e, rho] (density-based). Like turbulence_fields, this is the manifest-author's declaration of what physics the case actually carries — engine doesn't infer."
+        }
+      }
+    },
+    "compressible_contract": {
+      "type": "object",
+      "additionalProperties": true,
+      "$comment": "Gap #18 (DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT): optional top-level contract for cases carrying real compressible physics (rhoCentralFoam, rhoPimpleFoam, rhoSimpleFoam, sonicFoam, fireFoam, chemFoam, etc.). Absent = laminar/RANS incompressible (the default before this DEC). When present, downstream audit knows the case declares specific thermophysical models + freestream conditions for cross-checking with constant/thermophysicalProperties (parser is a separate follow-up).",
+      "properties": {
+        "thermophysical_model": {
+          "type": "string",
+          "enum": ["hePsiThermo", "hRhoThermo", "ePsiThermo", "eRhoThermo",
+                   "hConstThermo", "psiThermo", "rhoThermo"]
+        },
+        "mixture_model": {
+          "type": "string",
+          "enum": ["pureMixture", "multiComponentMixture", "reactingMixture",
+                   "singleStepReactingMixture", "homogeneousMixture"]
+        },
+        "transport_model": {
+          "type": "string",
+          "enum": ["const", "sutherland", "polynomial", "logPolynomial",
+                   "icoPolynomial", "WLFTransport"]
+        },
+        "thermo_model": {
+          "type": "string",
+          "enum": ["hConst", "eConst", "hPolynomial", "ePolynomial",
+                   "janafThermo", "hTabulatedThermo"]
+        },
+        "equation_of_state": {
+          "type": "string",
+          "enum": ["perfectGas", "incompressiblePerfectGas", "PengRobinsonGas",
+                   "rhoConst", "perfectFluid", "Boussinesq", "rPolynomial",
+                   "adiabaticPerfectFluid", "linear"]
+        },
+        "energy": {
+          "type": "string",
+          "enum": ["sensibleEnthalpy", "sensibleInternalEnergy",
+                   "absoluteEnthalpy", "absoluteInternalEnergy"]
+        },
+        "freestream": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "p_Pa": { "type": "number", "minimum": 0 },
+            "T_K": { "type": "number", "minimum": 0 },
+            "U_ms": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 3,
+              "maxItems": 3
+            },
+            "Mach": { "type": "number", "minimum": 0 },
+            "Re_chord": { "type": "number", "minimum": 0 }
+          }
         }
       }
     },

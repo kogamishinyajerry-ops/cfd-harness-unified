@@ -2453,3 +2453,111 @@ def test_external_log_step_numbered_in_versioned_subdir(monkeypatch, tmp_path: P
     )
     assert found.name == "02_rhoSimpleFoam.log"
     assert "log_v64_v3" in str(found)
+
+
+# ---------- DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT (Gap #18 + #19) ----------
+
+
+def test_compressible_contract_optional_absent_no_break(tmp_path: Path):
+    """Gap #18 schema discipline: incompressible cases (no compressible_contract
+    key) must continue validating + ingest unchanged. Backwards-compat
+    floor — every existing case_021/027/004/011 case lives here."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    assert "compressible_contract" not in manifest
+    # Should not raise.
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    # Expected fields unchanged from pre-DEC default.
+    assert "T" not in bc["expected_fields"]
+    assert "rho" not in bc["expected_fields"]
+
+
+def test_compressible_contract_full_case006_shape(tmp_path: Path):
+    """Gap #18: case_006 ONERA M6 shape — all 6 model declarations +
+    freestream — round-trips through validate_manifest cleanly."""
+    import yaml
+    from cfdtrust.manifest import validate_manifest
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["compressible_contract"] = {
+        "thermophysical_model": "hePsiThermo",
+        "mixture_model": "pureMixture",
+        "transport_model": "sutherland",
+        "thermo_model": "hConst",
+        "equation_of_state": "perfectGas",
+        "energy": "sensibleEnthalpy",
+        "freestream": {
+            "p_Pa": 93600.0,
+            "T_K": 288.0,
+            "U_ms": [285.193, 0.0, 15.245],
+            "Mach": 0.8395,
+            "Re_chord": 11.72e6,
+        },
+    }
+    # Round-trip via the project's validate_manifest helper. If the
+    # schema rejects the case_006 shape, this raises.
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    validated = validate_manifest(tmp_path)
+    assert validated["compressible_contract"]["thermophysical_model"] == "hePsiThermo"
+    assert validated["compressible_contract"]["freestream"]["Mach"] == 0.8395
+
+
+def test_thermal_fields_in_bc_contract_walked(tmp_path: Path):
+    """Gap #19: bc_contract.thermal_fields lists T → engine walks 0/T
+    same way it walks 0/U, 0/p, 0/k, etc. Pre-fix, T BCs were silently
+    invisible to bc_audit even when 0/T file existed."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    # Add 0/T with a freestream + zeroGradient pattern.
+    (tmp_path / "0" / "T").write_text(
+        "FoamFile { class volScalarField; object T; }\n"
+        "dimensions [0 0 0 1 0 0 0];\n"
+        "internalField uniform 288;\n"
+        "boundaryField\n"
+        "{\n"
+        "    farfield_inlet { type freestream; freestreamValue uniform 288; }\n"
+        "    wing_surface_reference { type zeroGradient; }\n"
+        "}\n"
+    )
+
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"]["turbulence_fields"] = []
+    manifest["bc_contract"]["thermal_fields"] = ["T"]
+
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+
+    assert "T" in bc["expected_fields"], (
+        f"Gap #19: thermal_fields must extend expected; got {bc['expected_fields']}"
+    )
+    assert "T" in bc["fields_present"], (
+        f"Gap #19: 0/T file present must show in fields_present; got {bc['fields_present']}"
+    )
+    assert bc["fields"]["T"]["parsed"] is True
+    # Patches parsed from 0/T (sanity).
+    assert "farfield_inlet" in bc["fields"]["T"]["patches"]
+
+
+def test_diagonal_solver_residuals_already_parsed():
+    """Gap #20 regression guard: _RESIDUAL_LINE_RE already includes
+    `diagonal` in its alternation; verify density-based conserved
+    variables (rho, rhoUx, rhoE) are captured from a synthetic
+    rhoCentralFoam log slice. If this test fails, someone removed
+    `diagonal` from the regex and broke compressible support."""
+    log = (
+        "Time = 1\n"
+        "diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 1\n"
+        "diagonal:  Solving for rhoUx, Initial residual = 1e-08, Final residual = 1e-12, No Iterations 1\n"
+        "diagonal:  Solving for rhoE, Initial residual = 2e-09, Final residual = 2e-13, No Iterations 1\n"
+        "smoothSolver:  Solving for Ux, Initial residual = 3.34e-11, Final residual = 1.2e-13, No Iterations 5\n"
+        "smoothSolver:  Solving for e, Initial residual = 6.94e-13, Final residual = 1e-15, No Iterations 3\n"
+    )
+    parsed = ofa._parse_simplefoam_log(log)
+    assert parsed["iterations"], "rhoCentralFoam log must produce ≥1 iteration"
+    iter1 = parsed["iterations"][0]
+    for field in ("rho", "rhoUx", "rhoE", "Ux", "e"):
+        assert field in iter1["residuals"], (
+            f"Gap #20: {field} must be parsed from rhoCentralFoam log; "
+            f"got {list(iter1['residuals'].keys())}"
+        )
