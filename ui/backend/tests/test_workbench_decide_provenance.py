@@ -168,6 +168,47 @@ def test_case_id_sanitization_blocks_traversal(provenance_enabled):
         assert provenance_enabled in log_file.parents
 
 
+def test_dedup_cache_not_poisoned_by_failed_write(monkeypatch, tmp_path):
+    """Push-review R1 P2 #2 regression: a transient write failure
+    must not poison the dedup cache. After the error, the very next
+    call with the same state_sha must retry and (when conditions are
+    healthy) actually land a log line."""
+    monkeypatch.delenv("WORKBENCH_PROVENANCE_DISABLED", raising=False)
+    import ui.backend.services.workbench_decide_provenance as wp
+
+    wp._LAST_STATE_SHA_PER_CASE.clear()
+    monkeypatch.setattr(wp, "AUDIT_V2_DIR", tmp_path)
+
+    # First call: force the file open to fail.
+    original_open = wp.open if hasattr(wp, "open") else open
+    call_counter = {"n": 0}
+
+    def flaky_open(*args, **kwargs):
+        call_counter["n"] += 1
+        if call_counter["n"] == 1:
+            raise PermissionError("simulated transient permission denied")
+        return original_open(*args, **kwargs)
+
+    # Patch the built-in `open` inside the provenance module's namespace.
+    import builtins as _builtins
+
+    monkeypatch.setattr(_builtins, "open", flaky_open)
+
+    state = _state(case_id="case_poison")
+    decide(state)  # first call: simulated write failure
+    log_path = tmp_path / "case_poison" / "decisions.jsonl"
+    assert not log_path.exists(), "first write should have failed"
+
+    # Second call with the SAME state must retry — not be deduped.
+    decide(state)
+    assert log_path.exists()
+    lines = _read_lines(log_path)
+    assert len(lines) == 1, (
+        "after a failed write, the next same-state call must retry and "
+        f"land 1 line — got {len(lines)}"
+    )
+
+
 def test_repeated_same_state_sha_dedup(provenance_enabled, monkeypatch):
     """Push-review P2 #1 regression: passive refetches that return the
     same state_sha must not append duplicate log lines. React Query

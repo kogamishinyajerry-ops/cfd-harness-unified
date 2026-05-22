@@ -111,13 +111,17 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
 
     try:
         safe = _safe_case_id(state.case_id)
-        # Push-review P2 #1 fix: same state_sha as last logged for this
+        # Push-review R0 P2 #1 fix: same state_sha as last logged for this
         # case → passive refetch, skip. Detection is per-process; restart
         # may add one duplicate, accepted.
+        #
+        # Push-review R1 P2 #2 fix: only update the cache AFTER a
+        # successful write (post-fsync). Updating before would mask
+        # transient mkdir/open/fsync failures — a later refetch of the
+        # same frame would be deduped even though no log line landed.
         last = _LAST_STATE_SHA_PER_CASE.get(safe)
         if last is not None and last == frame.state_sha:
             return
-        _LAST_STATE_SHA_PER_CASE[safe] = frame.state_sha
 
         case_dir = AUDIT_V2_DIR / safe
         case_dir.mkdir(parents=True, exist_ok=True)
@@ -163,6 +167,10 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
             fp.write(line)
             fp.flush()
             os.fsync(fp.fileno())
+        # Push-review R1 P2 #2 fix: cache update AFTER the with-block
+        # closes cleanly. A failed write raises out of the with → cache
+        # is NOT poisoned → next call retries the same state.
+        _LAST_STATE_SHA_PER_CASE[safe] = frame.state_sha
     except Exception as exc:  # noqa: BLE001 — fire-and-forget by contract
         logger.warning(
             "decide() provenance log failed (case=%s): %s",

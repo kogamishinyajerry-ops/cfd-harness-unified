@@ -65,6 +65,13 @@ reports/phase5_reports/
 # Per-user runtime audit trail — intentionally not version-controlled.
 reports/*/runs/
 
+# DEC-V61-202-CYCLE6 workbench decide() provenance audit log
+# (audit_v2/<case_id>/decisions.jsonl). Per-process runtime, write-only
+# from log_decision(); never committed. Push-review R1 P2 #1 fix —
+# without this rule, dev usage dirtied the working tree on every
+# `GET /workbench_frame` call.
+ui/backend/user_drafts/audit_v2/
+
 # ADR-002 plane-guard runtime telemetry (per OPS-2026-04-25-001 §2 ownership;
 # .jsonl files are per-process and should not pollute git).
 # reports/plane_guard/ — runtime telemetry (.jsonl + .log) ignored;
