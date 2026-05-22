@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-202-SUB-M30-CYCLE7-BEGINNER-TEST
 title: M3.0 cycle 7 — junior-engineer beginner test (litmus surrogate)
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-23
+accepted_date: 2026-05-23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 7 (litmus surrogate · M3.0 close)
 notion_sync_status: pending_accepted
@@ -78,13 +79,41 @@ proven coherent at cycle 7.
 
 ## Closure criteria
 
-- [ ] `scripts/dogfood/case_007_cycle7_beginner_test.py` runs ✅ with
-      ≤20 decide() calls, monotonic severity, single-pass step arc
-- [ ] DOGFOOD report `.planning/dogfood/DOGFOOD_M30_CYCLE7_BEGINNER.md`
-- [ ] Codex R0 ≤ 3 rounds (round cap=3 per v2.3)
-- [ ] DEC Proposed → Accepted
-- [ ] M3.0 milestone retro `.planning/retrospectives/2026-05-23_m30_milestone_close.md`
+- [x] `scripts/dogfood/case_007_cycle7_beginner_test.py` runs ✅ with
+      8 decide() calls (≤20 budget), monotonic severity (rank 3→0),
+      single-pass step arc backend-driven via topbar.target_step
+- [x] DOGFOOD report `.planning/dogfood/DOGFOOD_M30_CYCLE7_BEGINNER.md`
+- [x] Codex ≤ 3 rounds — **R0 (2 P2) + R1 (2 P2) + R2 (APPROVE) = 2
+      iteration rounds, under cap**
+- [x] DEC Proposed → Accepted
+- [x] M3.0 milestone retro `.planning/retrospectives/2026-05-23_m30_milestone_close.md`
 - [ ] Notion sync (session-end, Accepted DECs only)
+
+## Closure addendum (2026-05-23)
+
+**R0** — 2 P2 findings, no P1:
+- severity check was vacuous (read `rail.severity` which doesn't exist;
+  rank map missed `critical`/`warning` gap vocabulary). Fix: parse
+  severity from `rail.provenance` strings; extend rank map to cover
+  both vocabularies.
+- step advance ignored backend `topbar.target_step`; back-edge would
+  PASS. Fix: capture every transition; assert `to == frm+1, 1 ≤ to ≤ 5`.
+
+**R1** — 2 more P2 (second-order holes from R0 fixes):
+- step-5 terminal CTA not validated; regression to `kind=next_step` at
+  the terminal frame would slip through. Fix: snapshot the step-5
+  topbar before breaking; validate `submit_solve / target_step=None /
+  enabled=True`.
+- `target_step=0` would crash harness on next GET before the
+  well-formed check could fire. Fix: validate range 1..5 BEFORE
+  assigning; record bad value so check fails loudly with payload visible.
+
+**R2** — APPROVE: "the new step-5 snapshot check and the target-step
+range guard both make malformed backend responses fail explicitly
+instead of slipping through or crashing."
+
+Result: 8/8 checks PASS, 8 decide() calls, step transitions
+`[(1,2),(2,3),(3,4),(4,5)]` verified, step-5 CTA contract confirmed.
 
 ## Risks + mitigations
 
