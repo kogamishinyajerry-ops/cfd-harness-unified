@@ -2644,33 +2644,82 @@ def test_les_contract_full_case010_shape(tmp_path: Path):
     assert validated["les_contract"]["delta"] == "cubeRootVol"
 
 
-def test_les_contract_transported_fields_overrides_derivation(tmp_path: Path):
-    """Gap #28: when manifest carries explicit
-    les_contract.transported_fields, that list wins over the Gap #31
-    _turb_fields_from_model heuristic. Catches cases where the LES
-    author wants to declare unusual transport (e.g. custom SGS with
-    only nuSgs, not nut+nuSgs+k)."""
+def test_les_contract_transported_fields_does_not_replace_expected(tmp_path: Path):
+    """Codex R0 P1 regression: les_contract.transported_fields is
+    INFORMATIONAL ONLY — it describes what the SGS model itself
+    transports. It must NOT replace BC-layer expected_fields. WALE has
+    transported_fields=[] (algebraic SGS) but the solver still writes
+    0/nut as a derived field that the BC audit must check exists.
+    Pre-fix shape made expected_fields = transported_fields, suppressing
+    nut/nuSgs from the audit — a real weakening of LES coverage."""
     _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
     manifest = _ingest_manifest_fixture()
     # No bc_contract.turbulence_fields → derivation path fires.
     manifest["bc_contract"].pop("turbulence_fields", None)
-    # Physics says LES_KEQN which would normally derive [nut, nuSgs, k].
-    manifest["physics"]["turbulence_model"] = "LES_kEqn"
-    # But author explicitly says ONLY nuSgs transported.
+    # Physics says LES_WALE; les_contract.transported_fields=[] (algebraic).
+    manifest["physics"]["turbulence_model"] = "LES_WALE"
     manifest["les_contract"] = {
         "simulation_type": "LES",
-        "les_model": "kEqn",
-        "transported_fields": ["nuSgs"],  # explicit wins
+        "les_model": "WALE",
+        "transported_fields": [],  # WALE: SGS itself transports nothing
     }
     ofa._collect_and_persist_bc(tmp_path, manifest)
     bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
-    assert "nuSgs" in bc["expected_fields"], (
-        f"explicit les_contract.transported_fields must win over Gap #31 "
-        f"derivation; got {bc['expected_fields']}"
+    # Despite transported_fields=[], the BC layer must still expect nut
+    # (Gap #31 derivation: LES_WALE → [nut]). expected_fields = U + p + nut.
+    assert "nut" in bc["expected_fields"], (
+        f"Codex R0 P1: transported_fields=[] must NOT suppress nut; "
+        f"got {bc['expected_fields']}"
     )
-    # Heuristic would have added k + nut as well — explicit list keeps them out.
+    # Same expected_fields the heuristic would have produced WITHOUT
+    # les_contract.transported_fields — proves transported_fields didn't
+    # override.
+    assert bc["expected_fields"] == ["U", "p", "nut"]
+
+
+def test_les_contract_spalart_allmaras_derives_nuTilda(tmp_path: Path):
+    """Codex R0 P2 regression: les_contract.les_model: SpalartAllmaras
+    (and its DES/DDES/IDDES variants) must derive expected fields as
+    [nuTilda, nut] — NOT the conservative RANS default [k, omega, nut].
+    Pre-fix, an SA-based case fell through to the unknown-model branch,
+    auditing as missing k/omega while the case actually solves nuTilda."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"].pop("turbulence_fields", None)
+    manifest["physics"]["turbulence_model"] = ""
+    manifest["les_contract"] = {
+        "simulation_type": "DES",
+        "les_model": "SpalartAllmarasDES",
+        # No transported_fields → derivation fires via les_model name.
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    assert "nuTilda" in bc["expected_fields"], (
+        f"Codex R0 P2: SpalartAllmarasDES must derive nuTilda; got "
+        f"{bc['expected_fields']}"
+    )
+    assert "nut" in bc["expected_fields"]
+    # The fall-through RANS default would have wrongly added these:
     assert "k" not in bc["expected_fields"]
-    assert "nut" not in bc["expected_fields"]
+    assert "omega" not in bc["expected_fields"]
+
+
+def test_les_contract_simulation_type_required(tmp_path: Path):
+    """Codex R0 P3 regression: when les_contract block is present,
+    simulation_type is required. les_contract: {} or {les_model: WALE}
+    without simulation_type must fail validate_manifest. Pre-fix,
+    incomplete LES declarations were silently accepted."""
+    import yaml
+    import pytest
+    from cfdtrust.manifest import validate_manifest, ManifestError
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    # les_contract present but missing simulation_type — must fail.
+    manifest["les_contract"] = {"les_model": "WALE"}
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    with pytest.raises(ManifestError):
+        validate_manifest(tmp_path)
 
 
 def test_les_contract_keqn_les_model_derives_transport(tmp_path: Path):

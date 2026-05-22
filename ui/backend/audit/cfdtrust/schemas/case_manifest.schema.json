@@ -105,7 +105,8 @@
     "les_contract": {
       "type": "object",
       "additionalProperties": true,
-      "$comment": "Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): optional top-level contract for cases carrying real LES / DES / DDES / IDDES turbulence modeling. Absent = laminar or RAS (the default before this DEC). When present, downstream audit knows the case declares specific SGS model + filter + wall-treatment for cross-checking with constant/turbulenceProperties (parser is a separate follow-up). Engine's Gap #31 turb-model derivation in _turb_fields_from_model also consults les_contract.transported_fields when present.",
+      "required": ["simulation_type"],
+      "$comment": "Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): optional top-level contract for cases carrying real LES / DES / DDES / IDDES turbulence modeling. Absent = laminar or RAS (the default before this DEC). When present, simulation_type is REQUIRED (Codex R0 P3) so downstream checks can distinguish LES vs DES vs stray metadata. `transported_fields` is INFORMATIONAL ONLY — it describes what the SGS model itself transports (e.g. WALE → [], kEqn → [k]), NOT a substitute for the BC-side turbulence_fields. Algebraic-SGS cases (WALE) still need 0/nut on disk because the solver writes nut as a derived field — BC expectations come from Gap #31 _turb_fields_from_model regardless of transported_fields (Codex R0 P1). Engine cross-check between SGS model declaration and on-disk constant/turbulenceProperties is a separate follow-up.",
       "properties": {
         "simulation_type": {
           "type": "string",

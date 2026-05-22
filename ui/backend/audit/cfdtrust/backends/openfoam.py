@@ -1711,6 +1711,14 @@ def _turb_fields_from_model(turb_model: str) -> List[str]:
         return ["nut"]
     if "les" in m and ("keqn" in m or "one-eq" in m or "oneeq" in m):
         return ["nut", "nuSgs", "k"]
+    # Codex R0 P2 (Gap #46): Spalart-Allmaras family transports nuTilda
+    # (a single modified eddy viscosity) plus computes nut. Used by SA
+    # itself, SA-DES, SA-DDES, SA-IDDES — all surface here from the
+    # les_contract.les_model enum. Pre-fix this fell through to the
+    # conservative RANS default [k, omega, nut], flagging SA cases as
+    # missing k/omega even though SA solves neither.
+    if "spalartallmaras" in m or "spalart-allmaras" in m:
+        return ["nuTilda", "nut"]
     if "epsilon" in m or "k-eps" in m or "k-epsilon" in m:
         return ["k", "epsilon", "nut"]
     if "omega" in m or "sst" in m or "k-omega" in m:
@@ -1831,31 +1839,30 @@ def _collect_and_persist_bc(
     if "turbulence_fields" in bc_contract and bc_contract.get("turbulence_fields") is not None:
         turb_fields = list(bc_contract.get("turbulence_fields") or [])
     else:
-        # Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): when the
-        # manifest carries an explicit les_contract.transported_fields
-        # list, that's the LES author's declaration of what the
-        # specific SGS model transports — prefer it over the
-        # heuristic Gap #31 derivation. les_model alone (without
-        # transported_fields) still falls through to derivation,
-        # which keeps the WALE/Smagorinsky → [nut], kEqn → [nut,
-        # nuSgs, k] taxonomy authoritative.
+        # Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT):
+        # `les_contract.transported_fields` describes what the SGS model
+        # ITSELF transports (e.g. WALE → [], kEqn → [k]). It is NOT a
+        # substitute for the BC-side `turbulence_fields` — algebraic-SGS
+        # cases like WALE still need `0/nut` on disk because the solver
+        # writes nut as a derived field. So the BC field expectations
+        # come from Gap #31 `_turb_fields_from_model` regardless of
+        # whether transported_fields is set; transported_fields is
+        # informational only (consumable by future SGS-vs-solver
+        # cross-checks). This closes Codex R0 P1: prior shape made
+        # `expected_fields = transported_fields` which suppressed
+        # required nut/nuSgs files from the BC audit on supported LES
+        # cases.
         les_contract = manifest.get("les_contract", {}) or {}
-        if (
-            "transported_fields" in les_contract
-            and les_contract.get("transported_fields") is not None
-        ):
-            turb_fields = list(les_contract.get("transported_fields") or [])
-        else:
-            physics = manifest.get("physics", {}) or {}
-            turb_model = physics.get("turbulence_model", "") or ""
-            # If physics doesn't carry turbulence_model but les_contract
-            # carries les_model, route the LES model name through the
-            # same derivation — saves authors writing the redundant
-            # `physics.turbulence_model: LES_WALE` when les_contract
-            # already says les_model: WALE.
-            if not turb_model and les_contract.get("les_model"):
-                turb_model = f"LES_{les_contract['les_model']}"
-            turb_fields = _turb_fields_from_model(turb_model)
+        physics = manifest.get("physics", {}) or {}
+        turb_model = physics.get("turbulence_model", "") or ""
+        # If physics doesn't carry turbulence_model but les_contract
+        # carries les_model, route the LES model name through the
+        # same derivation — saves authors writing the redundant
+        # `physics.turbulence_model: LES_WALE` when les_contract
+        # already says les_model: WALE.
+        if not turb_model and les_contract.get("les_model"):
+            turb_model = f"LES_{les_contract['les_model']}"
+        turb_fields = _turb_fields_from_model(turb_model)
 
     # Gap #32 (case_011 cycle-2 dogfood): strip `__sentinel__` markers
     # like `__none_laminar__` that some manifest-authoring conventions
