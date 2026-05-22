@@ -162,25 +162,82 @@ def _pick_topbar_cta(state: CaseStateSnapshot, rail: RailPrimary) -> TopbarCta:
 
 
 def _pick_rail_primary(state: CaseStateSnapshot) -> RailPrimary:
-    """Priority decision tree for what goes in the rail's top card."""
+    """Priority decision tree for what goes in the rail's top card.
+
+    Cycle 3: when focus_patch is set, focus-matching problems/gaps
+    win the same-severity tie against non-matching ones (driver 4
+    per SSOT §3).
+    """
 
     fail_problems = _problems_for_step(state, severities=("fail",))
     if fail_problems:
-        return _rail_from_problem(fail_problems[0], state)
+        return _rail_from_problem(
+            _prefer_focus_match(state, fail_problems), state
+        )
 
     crit_gaps = _gaps_for_step(state, severities=("critical",))
     if crit_gaps:
-        return _rail_from_gap(crit_gaps[0], state)
+        return _rail_from_gap(_prefer_focus_match(state, crit_gaps), state)
 
     warn_problems = _problems_for_step(state, severities=("warn",))
     if warn_problems:
-        return _rail_from_problem(warn_problems[0], state)
+        return _rail_from_problem(
+            _prefer_focus_match(state, warn_problems), state
+        )
 
     soft_gaps = _gaps_for_step(state, severities=("warning", "info"))
     if soft_gaps:
-        return _rail_from_gap(soft_gaps[0], state)
+        return _rail_from_gap(_prefer_focus_match(state, soft_gaps), state)
 
     return _rail_default(state)
+
+
+def _prefer_focus_match(state: CaseStateSnapshot, items: list[dict]) -> dict:
+    """Cycle 3: same-severity tie-break by focus_patch relevance.
+
+    When focus_patch is set + at least one item mentions the focused
+    patch, return that item. Otherwise return items[0] (existing
+    severity-sorted behavior).
+    """
+    if not state.focus_patch or not items:
+        return items[0]
+    for item in items:
+        if _focus_matches(state, item):
+            return item
+    return items[0]
+
+
+def _focus_matches(state: CaseStateSnapshot, item: dict) -> bool:
+    """True iff `item` references the focused patch.
+
+    Checks three signal channels:
+        1. item.field_path contains the patch name (e.g.
+           "bc_contract.inlet.velocity.type" when focus_patch="inlet")
+        2. item.body / message text mentions the patch name
+        3. item is a bc_audit dimension that lists the patch in
+           gaps_by_field
+
+    Conservative substring match — false positives (e.g. "inlet" matches
+    "inlet_tunnel") are accepted; the alternative is exact-match which
+    misses obvious patch-relevant findings.
+    """
+    if not state.focus_patch:
+        return False
+    needle = state.focus_patch
+    field_path = item.get("field_path") or ""
+    body = item.get("body") or item.get("message") or ""
+    if needle in str(field_path):
+        return True
+    if needle in str(body):
+        return True
+    # Best-effort: if the item's raw payload has a dimension shape with
+    # gaps_by_field, look there too.
+    raw_gaps = item.get("_raw_gaps_by_field")
+    if isinstance(raw_gaps, dict):
+        for missing_list in raw_gaps.values():
+            if isinstance(missing_list, list) and needle in missing_list:
+                return True
+    return False
 
 
 def _rail_from_problem(problem: dict, state: CaseStateSnapshot) -> RailPrimary:
@@ -364,34 +421,51 @@ def _pick_bottom_cards(state: CaseStateSnapshot) -> list[BottomCard]:
     Bottom cards are the full visible list (sorted FAIL > WARN > info),
     while rail_primary picks just the top one. Cap at 8 cards to keep
     the panel scannable.
+
+    Cycle 3: when focus_patch is set, focus-matching cards bubble to
+    the top within their severity bucket (driver 4 per SSOT §3).
     """
 
     cards: list[BottomCard] = []
+    raw_items: list[tuple[dict, BottomCard]] = []
 
     problems = _problems_for_step(state, severities=("fail", "warn", "info"))
     for p in problems:
-        cards.append(
-            BottomCard(
-                kind="audit_finding",
-                title=str(p.get("title") or p.get("rule") or "Audit finding")[:80],
-                body_text=str(p.get("message") or p.get("body") or "")[:400],
-                severity=_normalize_severity(p.get("severity", "info")),
-                source_artifact=p.get("_source_artifact"),
-                field_path=p.get("field_path"),
-            )
+        card = BottomCard(
+            kind="audit_finding",
+            title=str(p.get("title") or p.get("rule") or "Audit finding")[:80],
+            body_text=str(p.get("message") or p.get("body") or "")[:400],
+            severity=_normalize_severity(p.get("severity", "info")),
+            source_artifact=p.get("_source_artifact"),
+            field_path=p.get("field_path"),
         )
+        raw_items.append((p, card))
 
     for g in _gaps_for_step(state, severities=("critical", "warning", "info")):
-        cards.append(
-            BottomCard(
-                kind="missing_field",
-                title=f"缺字段 / Missing: {g.get('field_path', '')}"[:80],
-                body_text=str(g.get("why") or "")[:400],
-                severity=_normalize_severity(g.get("severity", "info")),
-                source_artifact="completeness_report",
-                field_path=g.get("field_path"),
+        card = BottomCard(
+            kind="missing_field",
+            title=f"缺字段 / Missing: {g.get('field_path', '')}"[:80],
+            body_text=str(g.get("why") or "")[:400],
+            severity=_normalize_severity(g.get("severity", "info")),
+            source_artifact="completeness_report",
+            field_path=g.get("field_path"),
+        )
+        raw_items.append((g, card))
+
+    # Cycle 3: re-sort so focus-matching cards bubble up within their
+    # severity bucket. Stable sort preserves the existing severity
+    # ordering when no focus is set or no matches exist.
+    if state.focus_patch:
+        raw_items.sort(
+            key=lambda t: (
+                _severity_rank(t[1].severity),
+                0 if _focus_matches(state, t[0]) else 1,
             )
         )
+    else:
+        raw_items.sort(key=lambda t: _severity_rank(t[1].severity))
+
+    cards = [t[1] for t in raw_items]
 
     # Step hint cards — surface the "what is this step about" line so
     # the bottom panel is never empty on a clean case.
@@ -527,6 +601,9 @@ def _iter_problems_from_artifact(
         sev = _dim_status_to_severity(dim_status)
         if sev is None:
             continue
+        # Cycle 3: forward gaps_by_field (real bc_audit patch_coverage
+        # shape) so _focus_matches can detect patch-level relevance.
+        raw_gaps = value.get("gaps_by_field")
         yield {
             "severity": sev,
             "title": f"{key.replace('_dimension', '')} {dim_status}",
@@ -535,6 +612,7 @@ def _iter_problems_from_artifact(
             "body": _dim_reason(value),
             "field_path": None,
             "_source_artifact": artifact_name,
+            "_raw_gaps_by_field": raw_gaps if isinstance(raw_gaps, dict) else None,
         }
 
     # (b) findings / issues / problems list
