@@ -36,6 +36,7 @@ import type {
   WizardPreviewResponse,
 } from "@/types/wizard";
 import type { WorkbenchBasics } from "@/types/workbench_basics";
+import type { WorkbenchFrame } from "@/types/workbench_frame";
 import type {
   DemoFixture,
   ImportRejectionDetail,
@@ -189,6 +190,28 @@ export const api = {
     request<CaseCompletenessReport>(
       `/api/cases/${encodeURIComponent(caseId)}/completeness`,
     ),
+
+  // DEC-V61-202-SUB-M30-CYCLE1 — dynamic workbench frame.
+  // decide(CaseState) -> WorkbenchFrame returned per (case_id, step,
+  // focus). LLM-offline by construction (V130). Rendered additively
+  // above existing per-step components in StepPanelShell.
+  getWorkbenchFrame: (
+    caseId: string,
+    step: number,
+    focus?: {
+      patch?: string | null;
+      region?: string | null;
+      panel?: string | null;
+    },
+  ) => {
+    const params = new URLSearchParams({ step: String(step) });
+    if (focus?.patch) params.set("focus_patch", focus.patch);
+    if (focus?.region) params.set("focus_region", focus.region);
+    if (focus?.panel) params.set("focus_panel", focus.panel);
+    return request<WorkbenchFrame>(
+      `/api/cases/${encodeURIComponent(caseId)}/workbench_frame?${params.toString()}`,
+    );
+  },
 
   // V4 R6 (Codex-driven) · structured residual time-series for the
   // Post-mode multi-line chart. Source = "log" | "runs" | "empty".

@@ -23,6 +23,10 @@ const Viewport = lazy(() =>
 );
 
 import { StatusStrip } from "./step_panel_shell/StatusStrip";
+import { DynamicBottomCards } from "./step_panel_shell/dynamic_frame/DynamicBottomCards";
+import { DynamicFramePanel } from "./step_panel_shell/dynamic_frame/DynamicFramePanel";
+import { DynamicViewportOverlays } from "./step_panel_shell/dynamic_frame/DynamicViewportOverlays";
+import { useWorkbenchFrame } from "./step_panel_shell/dynamic_frame/useWorkbenchFrame";
 import { Step1Import } from "./step_panel_shell/steps/Step1Import";
 import { Step2Mesh } from "./step_panel_shell/steps/Step2Mesh";
 import { LiveResidualChart } from "./step_panel_shell/LiveResidualChart";
@@ -260,6 +264,22 @@ export function StepPanelShell() {
   const { caseId = "" } = useParams<{ caseId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentStepId = clampStepId(searchParams.get("step"));
+  // DEC-V61-202-SUB-M30-CYCLE1 · dynamic frame feature flag. Cycle 1
+  // is opt-in via ?dynamic_frame=1 so existing user flows are
+  // unaffected. Cycle 2 will flip default-on after dogfood passes.
+  const dynamicFrameEnabled = searchParams.get("dynamic_frame") === "1";
+  const focusPatch = searchParams.get("focus_patch");
+  const focusRegion = searchParams.get("focus_region");
+  const focusPanel = searchParams.get("focus_panel");
+  const workbenchFrameQuery = useWorkbenchFrame({
+    caseId,
+    step: currentStepId,
+    focusPatch,
+    focusRegion,
+    focusPanel,
+    enabled: dynamicFrameEnabled,
+  });
+  const dynamicFrame = workbenchFrameQuery.data ?? null;
 
   // V68-A.2 · TopBar 4-field wiring · falls back to PENDING/unknown if no
   // backend present (e.g. tests without MSW).
@@ -517,8 +537,13 @@ export function StepPanelShell() {
         </div>
         <main
           data-testid="viewport-pane"
-          className="flex min-h-0 flex-1 items-stretch"
+          className="relative flex min-h-0 flex-1 items-stretch"
         >
+          {dynamicFrameEnabled && dynamicFrame && (
+            <DynamicViewportOverlays
+              overlays={dynamicFrame.viewport_overlays}
+            />
+          )}
           <ViewportModeDispatcher stepId={currentStepId}>
           <div className="flex flex-1 items-center justify-center p-3">
             {viewportProps ? (
@@ -555,7 +580,10 @@ export function StepPanelShell() {
           </div>
           </ViewportModeDispatcher>
         </main>
-        <div className="w-72 shrink-0">
+        <div className="flex w-72 shrink-0 flex-col">
+          {dynamicFrameEnabled && dynamicFrame && (
+            <DynamicFramePanel rail={dynamicFrame.rail_primary} />
+          )}
           <TaskPanel
             step={activeStep}
             caseId={caseId}
@@ -598,6 +626,9 @@ export function StepPanelShell() {
           />
         </div>
       </div>
+      {dynamicFrameEnabled && dynamicFrame && (
+        <DynamicBottomCards cards={dynamicFrame.bottom_cards} />
+      )}
       <StatusStrip lastAction={lastAction} />
     </div>
     </Step3StateProvider>
