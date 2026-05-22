@@ -6,7 +6,7 @@ proposed_date: 2026-05-22
 accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 4 (horizontal validation · physics-regime coverage)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-22 (https://www.notion.so/368c68942bed81708ea3df1b7ab70653)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -123,7 +123,7 @@ with per-regime trace + verdict matrix.
 - [x] Dogfood report records per-regime trace + verdict matrix (`.planning/dogfood/DOGFOOD_M30_CYCLE4_MULTIPHYSICS.md`)
 - [x] Codex R0→R3 chain closed at round cap=3 with verbatim follow-up commit. R3 P3a applied verbatim; R3 P3b (cockpit snapshot file, NOT in any cycle 4 commit) deferred to retro per v2.3.
 - [x] DEC Proposed → Accepted (this commit)
-- [ ] Notion sync (session-end batch)
+- [x] Notion sync (https://www.notion.so/368c68942bed81708ea3df1b7ab70653)
 
 ## Risks + mitigations
 
