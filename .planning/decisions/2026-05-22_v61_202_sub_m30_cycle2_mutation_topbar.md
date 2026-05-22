@@ -1,11 +1,12 @@
 ---
 decision_id: DEC-V61-202-SUB-M30-CYCLE2-MUTATION-TOPBAR
 title: M3.0 cycle 2 — manifest field-path PATCH + topbar_cta slot + rail CTA wired
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-22
+accepted_date: 2026-05-22
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.0 cycle 2 (mutation + 4th slot)
-notion_sync_status: pending_accepted
+notion_sync_status: pending
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
@@ -13,6 +14,16 @@ scope_class: sub_dec
 ssot: .planning/workbench/GUIDED_CASE_CONSTRUCTION_FLOW.md
 predecessors:
   - DEC-V61-202-SUB-M30-CYCLE1-DECIDE-STATE (Accepted 2026-05-22 · the display layer)
+codex_review:
+  r0_commit: 524d40b
+  r0_relay: crs (effort=high)
+  r0_verdict: CHANGES_REQUIRED (2 P1 + 1 P2)
+  r0_findings:
+    - "P1-1: SHA-check + write not atomic (race condition under concurrent PATCH)"
+    - "P1-2: case_manifest.schema applied to whitelist/draft cases that have different shapes"
+    - "P2: type errors leaked across paths, blocking unrelated PATCHes"
+  r1_commit: 8ce2e1b
+  r1_verdict: APPROVED (verbatim Codex P1+P2 fix per v2.3 verbatim exception)
 ---
 
 ## Why
@@ -136,13 +147,13 @@ This protects against:
 
 ## Closure criteria
 
-- [ ] Backend schemas + service + route landed
-- [ ] Backend tests: ≥10 (field-path apply / state_sha conflict / schema validation / whitelist fork / topbar kinds × 4)
-- [ ] Frontend hook + component + wiring landed
-- [ ] Frontend tests: ≥6 (mutation success / 409 conflict / topbar kinds × 4 / disabled state)
-- [ ] Closed-loop dogfood passing on case_007: rail CTA → PATCH → next frame mutation observed
-- [ ] Codex R0 (1-sync risk-tier: new route + write surface) APPROVED or CHANGES_REQUIRED closed ≤ 3 rounds
-- [ ] DEC Proposed → Accepted
+- [x] Backend schemas + service + route landed (`524d40b`, `8ce2e1b`)
+- [x] Backend tests: 24 passing (4 topbar + 3 manifest_state_sha + 7 PATCH service + 5 route + 4 Codex R0 R1 regressions + 1 unset)
+- [x] Frontend hook + component + wiring landed (`d4f… frontend commit`)
+- [x] Frontend tests: 9 passing (6 DynamicTopbarCta + 3 useManifestPatch)
+- [x] Closed-loop dogfood passing on case_007: 8/8 checks PASS — rail CTA → PATCH → next frame mutation observed; partial-progress preserved
+- [x] Codex R0 (CRS, effort=high) CHANGES_REQUIRED with 2 P1 + 1 P2; R1 verbatim Codex fix → APPROVED in 1 round (round cap=3 used 1)
+- [x] DEC Proposed → Accepted (this commit)
 - [ ] Notion sync (session-end batch)
 
 ## Risks + mitigations
