@@ -18,7 +18,15 @@ import json
 import sys
 from pathlib import Path
 
-from ui.backend.services.workbench_decide_provenance import (
+# Bootstrap repo root into sys.path so `ui.backend...` resolves even
+# when this script is invoked as `python3 scripts/audit_v2/replay_decisions.py`
+# from the repo root (Codex R0 P2 #1 fix). The repo root is two parents up
+# from this file: scripts/audit_v2/replay_decisions.py.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from ui.backend.services.workbench_decide_provenance import (  # noqa: E402
     AUDIT_V2_DIR,
     _safe_case_id,
 )

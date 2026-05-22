@@ -69,7 +69,10 @@ def test_log_decision_writes_parseable_line(provenance_enabled):
     assert "timestamp" in rec
     assert rec["rail_primary"]["kind"] == frame.rail_primary.kind
     assert rec["rail_primary"]["title"] == frame.rail_primary.title
-    assert "severity" not in rec["rail_primary"]  # not a RailPrimary field
+    # severity is derived from provenance (Codex R0 P2 #2): present in the
+    # record but may be None for step_default rails that don't have an
+    # underlying finding/gap severity.
+    assert "severity" in rec["rail_primary"]
     assert rec["topbar_cta"]["kind"] == frame.topbar_cta.kind
     assert rec["bottom_card_count"] == len(frame.bottom_cards or [])
 
@@ -156,6 +159,79 @@ def test_case_id_sanitization_blocks_traversal(provenance_enabled):
     log_files = list(provenance_enabled.rglob("decisions.jsonl"))
     for log_file in log_files:
         assert provenance_enabled in log_file.parents
+
+
+def test_replay_script_runs_without_pythonpath(tmp_path, monkeypatch):
+    """Codex R0 P2 #1 regression: invoking the replay helper exactly as
+    documented (`python3 scripts/audit_v2/replay_decisions.py <case>`)
+    must succeed from the repo root without an ambient PYTHONPATH.
+    Verifies the in-script sys.path bootstrap."""
+    import subprocess
+    import sys
+    from pathlib import Path as _P
+
+    repo_root = _P(__file__).resolve().parents[3]
+    script = repo_root / "scripts" / "audit_v2" / "replay_decisions.py"
+    assert script.exists()
+    # No PYTHONPATH in env — proves the script self-bootstraps.
+    env = {
+        k: v for k, v in os.environ.items() if k not in {"PYTHONPATH"}
+    }
+    result = subprocess.run(
+        [sys.executable, str(script), "nonexistent_case",
+         "--audit-dir", str(tmp_path)],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    # Exits 1 (no log) but proves the import + arg parse succeeded
+    # without ModuleNotFoundError.
+    assert "ModuleNotFoundError" not in result.stderr, result.stderr
+    assert "No log at" in result.stderr
+
+
+def test_rail_severity_extracted_from_provenance(provenance_enabled):
+    """Codex R0 P2 #2 regression: when the rail is driven by a FAIL
+    finding, the log row must carry severity='fail' so post-hoc replay
+    can tell WARN-vs-FAIL apart even though kind/title may coincide."""
+    state = _state(
+        case_id="case_sev_fail",
+        artifacts={
+            "bc_audit.json": {
+                "findings": [
+                    {"severity": "fail", "title": "missing inlet U",
+                     "message": "set U on inlet",
+                     "field_path": "bc_contract.inlet.U"},
+                ]
+            }
+        },
+    )
+    decide(state)
+    log_path = provenance_enabled / "case_sev_fail" / "decisions.jsonl"
+    lines = _read_lines(log_path)
+    assert len(lines) == 1
+    rec = lines[0]
+    # The rail was driven by the FAIL finding → severity surfaces.
+    assert rec["rail_primary"].get("severity") == "fail"
+
+
+def test_dot_only_case_id_uses_stable_digest(provenance_enabled, monkeypatch):
+    """Codex R0 P3 regression: pure-dot case IDs must route to a
+    deterministic directory name across processes, not Python's salted
+    hash()."""
+    import ui.backend.services.workbench_decide_provenance as wp
+
+    # Two independent calls (simulating writer + replay reader in
+    # separate processes) must agree on the same safe name.
+    safe_a = wp._safe_case_id("..")
+    safe_b = wp._safe_case_id("..")
+    assert safe_a == safe_b
+    assert safe_a.startswith("_invalid_")
+    # And the suffix must be a stable hex digest, not a Python hash().
+    digest_part = safe_a[len("_invalid_") :]
+    assert all(c in "0123456789abcdef" for c in digest_part)
+    assert len(digest_part) == 12
 
 
 def test_log_includes_bottom_card_severities(provenance_enabled):

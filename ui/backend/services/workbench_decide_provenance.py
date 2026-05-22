@@ -17,6 +17,7 @@ that don't want sidecar files can disable the log entirely.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,25 @@ AUDIT_V2_DIR: Path = DRAFTS_DIR / "audit_v2"
 # Env-var gate. The string check is case-insensitive on the value.
 _DISABLED_ENV_VAR = "WORKBENCH_PROVENANCE_DISABLED"
 
+# Parse `severity=X` out of a RailPrimary.provenance line.
+# decide() builders write traces like
+#     "step=4 · problem_fix · severity=fail"
+# Surfacing severity in the log row preserves the WARN-vs-FAIL signal that
+# rail.kind/title alone collapse (Codex R0 P2 #2 fix).
+_SEVERITY_TOKEN_RE = re.compile(r"\bseverity=([A-Za-z_]+)\b")
+
+
+def _rail_severity(provenance: list[str] | None) -> str | None:
+    """Best-effort extract of severity from RailPrimary.provenance.
+    Returns None when no token is found (e.g., step_default rails)."""
+    if not provenance:
+        return None
+    for line in provenance:
+        match = _SEVERITY_TOKEN_RE.search(str(line))
+        if match:
+            return match.group(1)
+    return None
+
 
 def _safe_case_id(case_id: str) -> str:
     """Allow only filesystem-safe characters; reject anything that
@@ -52,7 +72,13 @@ def _safe_case_id(case_id: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9_\-.]", "_", case_id)
     # Pure dot strings would resolve to ./.. relative segments.
     if safe in {"", ".", ".."} or set(safe) == {"."}:
-        return "_invalid_" + str(hash(case_id))
+        # Codex R0 P3 fix: Python's built-in hash() is salted per process
+        # (PYTHONHASHSEED), so the writer and the replay reader would
+        # compute different paths in separate runs. Use a stable SHA-256
+        # digest of the raw case_id (first 12 hex chars is plenty for
+        # disambiguation; this is a routing key, not a security token).
+        digest = hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:12]
+        return "_invalid_" + digest
     return safe
 
 
@@ -96,6 +122,11 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
                 "kind": frame.rail_primary.kind,
                 "title": frame.rail_primary.title,
                 "field_path": frame.rail_primary.field_path,
+                # severity is parsed out of provenance traces (RailPrimary
+                # itself has no severity field — the upstream finding/gap
+                # severity is only encoded in the provenance strings).
+                # Codex R0 P2 #2 fix: surface WARN-vs-FAIL in the log row.
+                "severity": _rail_severity(frame.rail_primary.provenance),
             },
             "topbar_cta": {
                 "kind": frame.topbar_cta.kind,
