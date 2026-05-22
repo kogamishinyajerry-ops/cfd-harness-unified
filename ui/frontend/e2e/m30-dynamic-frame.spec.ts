@@ -72,22 +72,11 @@ const SEED_MESH_REPORT = {
 };
 
 
-// SKIPPED · DEC-V61-202-SUB-M30-CYCLE5 disclosed mid-cycle that
-// /workbench/case/:caseId routes to WorkbenchShellV4, not
-// StepPanelShell. Until DEC-V61-202-SUB-M30-INTEGRATION wires the
-// dynamic-frame slots into V4's TopBar / RightPanel / BottomBar
-// zones, this spec has no live route to navigate to. Adding a
-// transient `/workbench/dev/m30/:caseId` route was attempted; it
-// works at runtime but breaks `npx playwright test --list` because
-// StepPanelShell's transitive vtk.js stl_loader import lacks a `.js`
-// suffix that Playwright's ESM resolver requires (pre-existing
-// codebase issue separate from cycle 5 scope).
-//
-// The spec is preserved on disk as the template the integration
-// sub-DEC will resurrect once V4 carries the dynamic-frame slots.
-// The `beforeAll` / fs staging + `data-testid` selectors transfer
-// verbatim once the route exists.
-test.describe.skip("M3.0 cycle 5 · dynamic-frame default-on + ?legacy=1 opt-out", () => {
+// DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL · post-integration the
+// dynamic-frame slots mount inside WorkbenchShellV4 on the live
+// `/workbench/case/:caseId` route. Cycle 5 skipped this; integration
+// un-skipped and updated URLs to the live route.
+test.describe("M3.0 cycle 5/integration · dynamic-frame default-on + ?legacy=1 opt-out", () => {
   test.beforeAll(() => {
     // Stage the seed case under IMPORTED_DIR. The dev backend reads
     // this directly via case_completeness's imported-user rule layer.
@@ -123,7 +112,7 @@ test.describe.skip("M3.0 cycle 5 · dynamic-frame default-on + ?legacy=1 opt-out
     page,
   }) => {
     // No ?legacy=1 → dynamicFrameEnabled defaults to true post-cycle-5.
-    await page.goto(`/workbench/dev/m30/${SEED_CASE_ID}?step=4`);
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=boundary`);
 
     // Wait for the workbench_frame query to resolve so the slots
     // populate. Use waitForResponse so we lock to the actual fetch,
@@ -143,12 +132,13 @@ test.describe.skip("M3.0 cycle 5 · dynamic-frame default-on + ?legacy=1 opt-out
   test("?legacy=1 opts out (no dynamic-frame slots visible)", async ({
     page,
   }) => {
-    await page.goto(`/workbench/dev/m30/${SEED_CASE_ID}?step=4&legacy=1`);
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=boundary&legacy=1`);
 
-    // Give the shell a moment to render the legacy view. The legacy
-    // path does NOT fetch workbench_frame, so no response to wait on;
-    // wait for the StepPanelShell root instead.
-    await expect(page.getByTestId("step-panel-shell")).toBeVisible();
+    // The legacy path does NOT fetch workbench_frame; wait for the
+    // V4 shell root instead. (Integration mounted dynamic frame
+    // INSIDE WorkbenchShellV4, so legacy mode = the V4 shell without
+    // the M3.0 slots layered in.)
+    await expect(page.getByTestId("workbench-shell-v4")).toBeVisible();
 
     // Dynamic-frame slots should be absent in legacy mode.
     await expect(page.getByTestId("dynamic-frame-panel")).toHaveCount(0);
@@ -171,7 +161,7 @@ test.describe.skip("M3.0 cycle 5 · dynamic-frame default-on + ?legacy=1 opt-out
         { timeout: 15_000 },
       ),
       page.goto(
-        `/workbench/dev/m30/${SEED_CASE_ID}?step=4&focus_patch=inlet`,
+        `/workbench/case/${SEED_CASE_ID}?step=boundary&focus_patch=inlet`,
       ),
     ]);
 

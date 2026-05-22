@@ -7,7 +7,11 @@
 // polydata / zero triangles). Concrete failure messaging stays inline
 // in the Viewport — this module surfaces the cause + classification.
 
-import vtkSTLReader from "@kitware/vtk.js/IO/Geometry/STLReader";
+// DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL · explicit .js suffix so
+// Playwright's ESM resolver can statically walk this import chain.
+// Vite handles either form; the .js form is the only one that ALSO
+// works under Node's strict ESM resolution.
+import vtkSTLReader from "@kitware/vtk.js/IO/Geometry/STLReader.js";
 
 export type StlLoadFailureKind = "fetch" | "parse";
 

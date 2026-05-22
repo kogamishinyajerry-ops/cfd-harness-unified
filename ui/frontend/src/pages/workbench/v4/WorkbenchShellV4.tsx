@@ -35,6 +35,17 @@ import { V4ErrorBoundary } from "./components/V4ErrorBoundary";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
 
+// DEC-V61-202-SUB-M30-INTEGRATION-V4-SHELL · mount dynamic-frame slots
+// into the live workbench shell. v4StepToBackendStep bridges V4's
+// 8-step pipeline to the M3.0 5-step spine that decide() speaks.
+import { FacePickProvider } from "../step_panel_shell/FacePickContext";
+import { DynamicBottomCards } from "../step_panel_shell/dynamic_frame/DynamicBottomCards";
+import { DynamicFramePanel } from "../step_panel_shell/dynamic_frame/DynamicFramePanel";
+import { DynamicTopbarCta } from "../step_panel_shell/dynamic_frame/DynamicTopbarCta";
+import { FacePickUrlSync } from "../step_panel_shell/dynamic_frame/FacePickUrlSync";
+import { useWorkbenchFrame } from "../step_panel_shell/dynamic_frame/useWorkbenchFrame";
+import { v4StepToBackendStep } from "./step_id_translator";
+
 /** Compact 1-line fallback for fixed-height thin zones (TopBar 32px,
  *  KpiStrip 96px, BottomBar 60px) — the default card-style fallback
  *  would clip or break parent flex sizing. */
@@ -121,7 +132,28 @@ export function WorkbenchShellV4() {
   const toggleCmdk = useCallback(() => setCmdkOpen((v) => !v), []);
   useCmdK(toggleCmdk);
 
+  // DEC-V61-202-SUB-M30-INTEGRATION · M3.0 dynamic-frame wiring.
+  // The dynamic frame opts out via ?legacy=1 (default-on per cycle 5).
+  const dynamicFrameEnabled = searchParams.get("legacy") !== "1";
+  const focusPatch = searchParams.get("focus_patch");
+  const focusRegion = searchParams.get("focus_region");
+  const focusPanel = searchParams.get("focus_panel");
+  const backendStep = v4StepToBackendStep(activeStep);
+  const workbenchFrameQuery = useWorkbenchFrame({
+    caseId: caseId ?? "",
+    step: backendStep,
+    focusPatch,
+    focusRegion,
+    focusPanel,
+    enabled: dynamicFrameEnabled && !!caseId,
+  });
+  const dynamicFrame = workbenchFrameQuery.data ?? null;
+
   return (
+    <FacePickProvider key={caseId ?? "__none__"}>
+      {dynamicFrameEnabled ? (
+        <FacePickUrlSync enabled={dynamicFrameEnabled} />
+      ) : null}
     <div
       className="flex h-screen w-screen flex-col overflow-hidden bg-v4-shell text-v4-textPrimary"
       data-testid="workbench-shell-v4"
@@ -130,7 +162,35 @@ export function WorkbenchShellV4() {
         zone="TopBar"
         renderFallback={thinZoneFallback("TopBar", "h-8")}
       >
-        <TopBarV4 caseId={caseId} activeStep={activeStep} />
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <TopBarV4 caseId={caseId} activeStep={activeStep} />
+          </div>
+          {dynamicFrameEnabled && dynamicFrame ? (
+            <div className="shrink-0 pr-2">
+              <DynamicTopbarCta
+                cta={dynamicFrame.topbar_cta}
+                onClick={() => {
+                  const target = dynamicFrame.topbar_cta.target_step;
+                  if (target == null) return;
+                  // Reverse-map 1..5 backend step → V4 step id (best-effort
+                  // landing: 1→geometry / 2→mesh / 3→physics / 4→boundary / 5→solver).
+                  const targetV4: V4PipelineStepId =
+                    target === 1
+                      ? "geometry"
+                      : target === 2
+                        ? "mesh"
+                        : target === 3
+                          ? "physics"
+                          : target === 4
+                            ? "boundary"
+                            : "solver";
+                  setActiveStep(targetV4);
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
       </V4ErrorBoundary>
 
       <div className="flex min-h-0 flex-1">
@@ -155,9 +215,22 @@ export function WorkbenchShellV4() {
         </main>
 
         <V4ErrorBoundary zone="RightPanel">
-          <RightPanelV4 activeStep={activeStep} caseId={caseId ?? null} />
+          <div className="flex flex-col">
+            {dynamicFrameEnabled && dynamicFrame && caseId ? (
+              <DynamicFramePanel
+                rail={dynamicFrame.rail_primary}
+                caseId={caseId}
+                manifestStateSha={dynamicFrame.manifest_state_sha}
+              />
+            ) : null}
+            <RightPanelV4 activeStep={activeStep} caseId={caseId ?? null} />
+          </div>
         </V4ErrorBoundary>
       </div>
+
+      {dynamicFrameEnabled && dynamicFrame ? (
+        <DynamicBottomCards cards={dynamicFrame.bottom_cards} />
+      ) : null}
 
       <V4ErrorBoundary
         zone="BottomBar"
@@ -177,5 +250,6 @@ export function WorkbenchShellV4() {
         onStepChange={setActiveStep}
       />
     </div>
+    </FacePickProvider>
   );
 }
