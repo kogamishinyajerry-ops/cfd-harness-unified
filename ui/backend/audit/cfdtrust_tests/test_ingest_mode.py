@@ -2561,3 +2561,44 @@ def test_diagonal_solver_residuals_already_parsed():
             f"Gap #20: {field} must be parsed from rhoCentralFoam log; "
             f"got {list(iter1['residuals'].keys())}"
         )
+
+
+def test_compressible_contract_accepts_heRhoThermo(tmp_path: Path):
+    """Codex R0 P1-1: heRhoThermo is the canonical OpenFOAM thermophysical
+    model for liquid/CHT compressible cases. Pre-fix the enum only had
+    hRhoThermo, blocking any case mirroring real `thermoType { type
+    heRhoThermo; }` from adopting the new compressible_contract."""
+    import yaml
+    from cfdtrust.manifest import validate_manifest
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["compressible_contract"] = {
+        "thermophysical_model": "heRhoThermo",
+        "equation_of_state": "perfectGas",
+    }
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    validated = validate_manifest(tmp_path)
+    assert validated["compressible_contract"]["thermophysical_model"] == "heRhoThermo"
+
+
+def test_compressible_contract_accepts_janaf_bare(tmp_path: Path):
+    """Codex R0 P1-2: reacting OpenFOAM cases declare `thermo janaf`
+    (bare, no `Thermo` suffix) in `thermophysicalProperties`. Pre-fix
+    the enum only had `janafThermo`, blocking chemFoam/reacting cases
+    from adopting compressible_contract — exactly the solver family
+    the schema $comment named."""
+    import yaml
+    from cfdtrust.manifest import validate_manifest
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["compressible_contract"] = {
+        "thermophysical_model": "hePsiThermo",
+        "mixture_model": "reactingMixture",
+        "thermo_model": "janaf",
+        "equation_of_state": "perfectGas",
+    }
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    validated = validate_manifest(tmp_path)
+    assert validated["compressible_contract"]["thermo_model"] == "janaf"

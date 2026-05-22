@@ -109,8 +109,9 @@
       "properties": {
         "thermophysical_model": {
           "type": "string",
-          "enum": ["hePsiThermo", "hRhoThermo", "ePsiThermo", "eRhoThermo",
-                   "hConstThermo", "psiThermo", "rhoThermo"]
+          "enum": ["hePsiThermo", "heRhoThermo", "hRhoThermo", "ePsiThermo",
+                   "eRhoThermo", "hConstThermo", "psiThermo", "rhoThermo",
+                   "hPsiThermo"]
         },
         "mixture_model": {
           "type": "string",
@@ -125,7 +126,8 @@
         "thermo_model": {
           "type": "string",
           "enum": ["hConst", "eConst", "hPolynomial", "ePolynomial",
-                   "janafThermo", "hTabulatedThermo"]
+                   "janaf", "janafThermo", "hTabulatedThermo",
+                   "eTabulatedThermo"]
         },
         "equation_of_state": {
           "type": "string",
