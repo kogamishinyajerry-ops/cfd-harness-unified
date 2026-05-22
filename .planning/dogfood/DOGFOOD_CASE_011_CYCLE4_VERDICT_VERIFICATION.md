@@ -82,3 +82,45 @@ No honesty-fence regression. The trust_report does NOT falsely claim BC validati
 But the **expected verdict path was `WARN multi_region_per_class_pending`**, not BLOCKED, because case_011's regions are NOT empty on disk. The deviation is upstream: BC-file parser (`backends/openfoam.py:_parse_field_boundary_field`) silently drops every patch in fluid-region U/p files when the first patch carries a quoted-regex single name (e.g. `"region_hot_fluid_to_.*"`). Spike B's verdict layer is doing exactly what it should given empty `fields_present`; the parser gap that feeds it is Gap #44.
 
 Net-new findings: 1 (Gap #44 · multi-region BC parser quoted-regex-single-name silent drop).
+
+---
+
+## Cycle-4b: post-Gap #44 fix · 2026-05-22
+
+**HEAD**: `915410f` (Gap #44 quoted-regex single-name patch parser fix)
+
+The cycle-4 deviation surfaced above (every region's `fields_present` empty → BLOCKED `multi_region_empty_region_detected`) was traced to `_parse_field_boundary_field` silently dropping every patch when the first patch line carries the quoted-regex single-name form (`"region_hot_fluid_to_.*"`). Gap #44 fix extended the walker to accept this form alongside the Gap #23 grouped form. Three regression tests landed; full audit suite 454 → 457 passed.
+
+### Cycle-4 → cycle-4b verdict transition
+
+| Field | Cycle-4 deviation | Cycle-4b post-fix |
+|---|---|---|
+| `bc_audit.gate_status` | **BLOCKED** | **WARN** ✓ |
+| `bc_audit.reason` | `multi_region_empty_region_detected` | `multi_region_per_class_pending` ✓ |
+| `bc_audit.fluid_region_count` | 0 | **2** (region_cold_fluid, region_hot_fluid) ✓ |
+| `bc_audit.solid_region_count` | 0 | **1** (region_solid) ✓ |
+| `bc_audit.empty_region_count` | 3 | **0** ✓ |
+| `bc_audit.expected_fluid_fields` | `[U, p]` | `[U, p]` (same; sentinel correctly stripped) |
+| `bc_audit.missing_in_all_fluid_regions` | `[U, p]` | `[]` ✓ |
+| `bc_quality.regions[cold_fluid].fields_present` | `[]` | `[U, p]` ✓ |
+| `bc_quality.regions[hot_fluid].fields_present` | `[]` | `[U, p]` ✓ |
+| `bc_quality.regions[solid].fields_present` | `[]` | `[p]` (solid honestly has only p, no U — per-class verdict still deferred to Gap #28 so this is "advisory missing", not failure) |
+
+### Honesty fence status (post-fix)
+
+- `bc_parsing_status`: `ok` (now correctly reflecting parsed evidence, not the pre-fix lie)
+- `bc_contract.status`: `WARN` (the cycle-4 ceiling — PASS unreachable until Gap #28 per-class schema lands)
+- `solver_execution`: `ingested` (unchanged)
+- `validation_status`: `not_validated` (honesty cap held)
+- `layout`: `multi_region` (unchanged)
+- `overall_status`: still driven by solver gate FAIL (residual_targets_not_met), but the BC chain no longer contributes a spurious BLOCKED
+
+### Verdict
+
+✓ **Cycle-4 deviation closed.** Gap #44 fix landed and case_011's bc_contract gate now produces the verdict the cycle-4 spike B was designed to emit: `WARN multi_region_per_class_pending` with full 7-field verdict-layer detail (fluid_region_count=2, solid_region_count=1, empty_region_count=0, both fluid regions enumerated, expected_fluid_fields=[U, p], missing_in_all_fluid_regions=[]).
+
+### The load-bearing trust beat
+
+Spike B (multi-region verdict-layer wiring) shipped → its dependence on `fields_present` exposed a latent BC parser bug (quoted-regex single-name silently dropping all patches) → same arc → Gap #44 fix → re-dogfood verifies clean transition `BLOCKED empty → WARN per_class_pending`. **This is the cycle-4 equivalent of cycle-2's Gap #32 sentinel-leak self-discovery and cycle-1's TBD-17 honesty-fence self-snitch. The engine refused to lie: cycle-2's pessimistic BLOCKED masked the parser bug, cycle-4's wiring exposed it, cycle-4b's same-arc fix closes it.**
+
+Captures: `.demo/captures/2026-05-22T1930Z/stage_cycle4b_case_011_post_gap44_redogfood.txt`
