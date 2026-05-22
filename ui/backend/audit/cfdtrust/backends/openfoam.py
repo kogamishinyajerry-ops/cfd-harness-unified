@@ -1831,9 +1831,31 @@ def _collect_and_persist_bc(
     if "turbulence_fields" in bc_contract and bc_contract.get("turbulence_fields") is not None:
         turb_fields = list(bc_contract.get("turbulence_fields") or [])
     else:
-        physics = manifest.get("physics", {}) or {}
-        turb_model = physics.get("turbulence_model", "") or ""
-        turb_fields = _turb_fields_from_model(turb_model)
+        # Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): when the
+        # manifest carries an explicit les_contract.transported_fields
+        # list, that's the LES author's declaration of what the
+        # specific SGS model transports — prefer it over the
+        # heuristic Gap #31 derivation. les_model alone (without
+        # transported_fields) still falls through to derivation,
+        # which keeps the WALE/Smagorinsky → [nut], kEqn → [nut,
+        # nuSgs, k] taxonomy authoritative.
+        les_contract = manifest.get("les_contract", {}) or {}
+        if (
+            "transported_fields" in les_contract
+            and les_contract.get("transported_fields") is not None
+        ):
+            turb_fields = list(les_contract.get("transported_fields") or [])
+        else:
+            physics = manifest.get("physics", {}) or {}
+            turb_model = physics.get("turbulence_model", "") or ""
+            # If physics doesn't carry turbulence_model but les_contract
+            # carries les_model, route the LES model name through the
+            # same derivation — saves authors writing the redundant
+            # `physics.turbulence_model: LES_WALE` when les_contract
+            # already says les_model: WALE.
+            if not turb_model and les_contract.get("les_model"):
+                turb_model = f"LES_{les_contract['les_model']}"
+            turb_fields = _turb_fields_from_model(turb_model)
 
     # Gap #32 (case_011 cycle-2 dogfood): strip `__sentinel__` markers
     # like `__none_laminar__` that some manifest-authoring conventions

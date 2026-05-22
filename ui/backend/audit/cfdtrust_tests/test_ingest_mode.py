@@ -2602,3 +2602,101 @@ def test_compressible_contract_accepts_janaf_bare(tmp_path: Path):
     (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
     validated = validate_manifest(tmp_path)
     assert validated["compressible_contract"]["thermo_model"] == "janaf"
+
+
+# ---------- DEC-V61-201-SUB-INGEST-LES-CONTRACT (Gap #28) ----------
+
+
+def test_les_contract_optional_absent_no_break(tmp_path: Path):
+    """Gap #28 schema discipline: incompressible RANS cases (no
+    les_contract key) must continue validating + ingest unchanged.
+    Backwards-compat floor for every existing case_021/027/004/011."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    assert "les_contract" not in manifest
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    # Default RANS expected fields unchanged.
+    assert "U" in bc["expected_fields"] and "p" in bc["expected_fields"]
+
+
+def test_les_contract_full_case010_shape(tmp_path: Path):
+    """Gap #28: case_010 DrivAer LES shape — full LES declaration —
+    round-trips through validate_manifest cleanly."""
+    import yaml
+    from cfdtrust.manifest import validate_manifest
+
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["physics"]["turbulence_model"] = "LES_WALE"
+    manifest["les_contract"] = {
+        "simulation_type": "LES",
+        "les_model": "WALE",
+        "delta": "cubeRootVol",
+        "delta_coeff": 1.0,
+        "sgs_wall_function": "nutUSpaldingWallFunction",
+        "transported_fields": [],  # WALE algebraic SGS — no transport eqn
+    }
+    (tmp_path / "case_manifest.yaml").write_text(yaml.safe_dump(manifest))
+    validated = validate_manifest(tmp_path)
+    assert validated["les_contract"]["simulation_type"] == "LES"
+    assert validated["les_contract"]["les_model"] == "WALE"
+    assert validated["les_contract"]["delta"] == "cubeRootVol"
+
+
+def test_les_contract_transported_fields_overrides_derivation(tmp_path: Path):
+    """Gap #28: when manifest carries explicit
+    les_contract.transported_fields, that list wins over the Gap #31
+    _turb_fields_from_model heuristic. Catches cases where the LES
+    author wants to declare unusual transport (e.g. custom SGS with
+    only nuSgs, not nut+nuSgs+k)."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    # No bc_contract.turbulence_fields → derivation path fires.
+    manifest["bc_contract"].pop("turbulence_fields", None)
+    # Physics says LES_KEQN which would normally derive [nut, nuSgs, k].
+    manifest["physics"]["turbulence_model"] = "LES_kEqn"
+    # But author explicitly says ONLY nuSgs transported.
+    manifest["les_contract"] = {
+        "simulation_type": "LES",
+        "les_model": "kEqn",
+        "transported_fields": ["nuSgs"],  # explicit wins
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    assert "nuSgs" in bc["expected_fields"], (
+        f"explicit les_contract.transported_fields must win over Gap #31 "
+        f"derivation; got {bc['expected_fields']}"
+    )
+    # Heuristic would have added k + nut as well — explicit list keeps them out.
+    assert "k" not in bc["expected_fields"]
+    assert "nut" not in bc["expected_fields"]
+
+
+def test_les_contract_keqn_les_model_derives_transport(tmp_path: Path):
+    """Gap #28: when manifest carries les_contract.les_model but NEITHER
+    bc_contract.turbulence_fields NOR les_contract.transported_fields,
+    derive from les_model name via the Gap #31 LES one-eq branch:
+    kEqn → [nut, nuSgs, k]. Saves authors writing the redundant
+    `physics.turbulence_model: LES_kEqn` when les_model already says
+    everything."""
+    _make_ingestable_case(tmp_path, with_log=False, with_time_dir=False)
+    manifest = _ingest_manifest_fixture()
+    manifest["bc_contract"].pop("turbulence_fields", None)
+    # physics carries no turbulence_model — only les_contract knows.
+    manifest["physics"].pop("turbulence_model", None)
+    manifest["physics"]["turbulence_model"] = ""  # explicitly empty
+    manifest["les_contract"] = {
+        "simulation_type": "LES",
+        "les_model": "kEqn",
+        # No transported_fields → engine derives from les_model name.
+    }
+    ofa._collect_and_persist_bc(tmp_path, manifest)
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    # Gap #31 LES one-eq branch: [nut, nuSgs, k].
+    assert "nut" in bc["expected_fields"], (
+        f"Gap #28 + #31 LES one-eq: kEqn must derive nut; got "
+        f"{bc['expected_fields']}"
+    )
+    assert "k" in bc["expected_fields"]
+    assert "nuSgs" in bc["expected_fields"]

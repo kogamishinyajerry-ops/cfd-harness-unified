@@ -102,6 +102,43 @@
         }
       }
     },
+    "les_contract": {
+      "type": "object",
+      "additionalProperties": true,
+      "$comment": "Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): optional top-level contract for cases carrying real LES / DES / DDES / IDDES turbulence modeling. Absent = laminar or RAS (the default before this DEC). When present, downstream audit knows the case declares specific SGS model + filter + wall-treatment for cross-checking with constant/turbulenceProperties (parser is a separate follow-up). Engine's Gap #31 turb-model derivation in _turb_fields_from_model also consults les_contract.transported_fields when present.",
+      "properties": {
+        "simulation_type": {
+          "type": "string",
+          "enum": ["LES", "RAS", "DES", "DDES", "IDDES", "laminar"]
+        },
+        "les_model": {
+          "type": "string",
+          "enum": ["WALE", "Smagorinsky", "dynamicSmagorinsky",
+                   "kEqn", "dynamicKEqn",
+                   "kOmegaSSTDES", "kOmegaSSTDDES", "kOmegaSSTIDDES",
+                   "SpalartAllmaras", "SpalartAllmarasDES",
+                   "SpalartAllmarasDDES", "SpalartAllmarasIDDES",
+                   "deardorffDiffStress"]
+        },
+        "delta": {
+          "type": "string",
+          "enum": ["cubeRootVol", "vanDriest", "smooth", "Prandtl",
+                   "maxDeltaxyz", "IDDESDelta"]
+        },
+        "delta_coeff": { "type": "number", "exclusiveMinimum": 0 },
+        "sgs_wall_function": {
+          "type": "string",
+          "enum": ["nutUSpaldingWallFunction", "nutkWallFunction",
+                   "nutUWallFunction", "nutLowReWallFunction",
+                   "calculated"]
+        },
+        "transported_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "$comment": "Auxiliary: which fields the LES/DES model itself transports. WALE/Smagorinsky → []; kEqn/dynamicKEqn → ['k']; deardorffDiffStress → ['R'] (Reynolds stress tensor); kOmegaSST* hybrid → ['k', 'omega']. Engine's Gap #31 _turb_fields_from_model prefers this explicit list over heuristic derivation when present."
+        }
+      }
+    },
     "compressible_contract": {
       "type": "object",
       "additionalProperties": true,
