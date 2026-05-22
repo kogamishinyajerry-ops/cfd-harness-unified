@@ -1470,11 +1470,15 @@ def _multi_region_manifest(
     return m
 
 
-def test_multi_region_verdict_pass_fluid_plus_solid(tmp_path: Path):
-    """Gap #11 cycle-4: 2 fluid regions (each carrying U+p) + 1 solid
-    region (T only) + manifest declares only U/p as expected → PASS
-    with 'multi_region_per_class_pending' reason. Replaces the cycle-2
-    BLOCKED 'multi_region_bc_validation_not_yet_wired'."""
+def test_multi_region_verdict_warn_ceiling_pending_gap28(tmp_path: Path):
+    """Gap #11 cycle-4 + Codex R0 P1-1 fix: 2 fluid regions + 1 solid
+    region + all declared expected fields present → WARN (NOT PASS)
+    with 'multi_region_per_class_pending'. The verdict CEILING is WARN
+    until Gap #28 charter lands per-region per-class schema enabling
+    the patch/type/value/derived-consistency checks single-region runs.
+    PASS would falsely promote multi-region past contract checks
+    (NEGATIVE_TEST_POLICY: wall-treatment / turbulence-field defects
+    must fail bc_contract)."""
     _stage_multi_region_bc_quality(
         tmp_path,
         fluid_regions=["region_cold_fluid", "region_hot_fluid"],
@@ -1484,9 +1488,9 @@ def test_multi_region_verdict_pass_fluid_plus_solid(tmp_path: Path):
 
     gate = bc_gate(tmp_path, m)
 
-    assert gate["status"] == "PASS", (
-        f"Expected PASS; got {gate['status']} with reason "
-        f"{gate.get('details', {}).get('reason')}"
+    assert gate["status"] == "WARN", (
+        f"Expected WARN (cycle-4 ceiling until Gap #28); got {gate['status']} "
+        f"with reason {gate.get('details', {}).get('reason')}"
     )
     d = gate["details"]
     assert d["reason"] == "multi_region_per_class_pending"
@@ -1494,6 +1498,10 @@ def test_multi_region_verdict_pass_fluid_plus_solid(tmp_path: Path):
     assert d["solid_region_count"] == 1
     assert d["empty_region_count"] == 0
     assert d["missing_in_all_fluid_regions"] == []
+    # Verdict explanation must explicitly mention Gap #28 + the deferred
+    # contract checks so downstream / dogfood readers understand why
+    # PASS is unreachable.
+    assert "Gap #28" in d["next_step"]
 
 
 def test_multi_region_verdict_blocked_empty_region(tmp_path: Path):
@@ -1514,12 +1522,15 @@ def test_multi_region_verdict_blocked_empty_region(tmp_path: Path):
     assert "region_empty" in gate["summary"]
 
 
-def test_multi_region_verdict_warn_missing_turbulence(tmp_path: Path):
-    """Gap #11 cycle-4: manifest declares turbulence_fields = [k, omega]
-    but no fluid region carries them → WARN with reason
-    'multi_region_fluid_field_missing'. Per-class verdict refinement
-    (solid wants only T) still deferred to Gap #28; this catches the
-    case where the case author forgot to populate turbulence ICs."""
+def test_multi_region_verdict_fail_missing_turbulence(tmp_path: Path):
+    """Gap #11 cycle-4 + Codex R0 P1-2 fix: manifest declares
+    turbulence_fields = [k, omega] but no fluid region carries them →
+    FAIL (NOT WARN) with reason 'multi_region_fluid_field_missing'.
+    NEGATIVE_TEST_POLICY requires turbulence-field defects to drive
+    bc_contract.status == FAIL; single-region file_presence treats
+    missing declared files as hard FAIL, multi-region must be
+    consistent — downgrading to WARN would let malformed multi-region
+    BC sets slip through."""
     _stage_multi_region_bc_quality(
         tmp_path,
         fluid_regions=["region_fluid"],
@@ -1527,10 +1538,21 @@ def test_multi_region_verdict_warn_missing_turbulence(tmp_path: Path):
         fluid_has_turb=False,  # fluid region only has U+p, no k/omega
     )
     m = _multi_region_manifest(turbulence_fields=["k", "omega"])
+    # Backend would record expected_fields=[U, p, k, omega] in
+    # bc_quality.json based on this manifest; mirror that in the fixture
+    # so the verdict path uses the same expectation set.
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    bc["expected_fields"] = ["U", "p", "k", "omega"]
+    for r in bc["regions"].values():
+        r["expected_fields"] = ["U", "p", "k", "omega"]
+    (tmp_path / "artifacts" / "bc_quality.json").write_text(json.dumps(bc))
 
     gate = bc_gate(tmp_path, m)
 
-    assert gate["status"] == "WARN"
+    assert gate["status"] == "FAIL", (
+        f"Expected FAIL (NEGATIVE_TEST_POLICY turbulence-field defect); "
+        f"got {gate['status']}"
+    )
     assert gate["details"]["reason"] == "multi_region_fluid_field_missing"
     missing = gate["details"]["missing_in_all_fluid_regions"]
     assert "k" in missing and "omega" in missing
@@ -1552,3 +1574,46 @@ def test_multi_region_verdict_blocked_no_fluid_region(tmp_path: Path):
     assert gate["details"]["reason"] == "multi_region_no_fluid_region"
     assert gate["details"]["fluid_region_count"] == 0
     assert gate["details"]["solid_region_count"] == 2
+
+
+def test_multi_region_verdict_honors_turb_model_derivation(tmp_path: Path):
+    """Codex R0 P2 fix: when manifest omits bc_contract.turbulence_fields
+    and relies on physics.turbulence_model fallback (Gap #31), the
+    backend writes the derived list (e.g. [U, p, k, omega, nut] for
+    k-omega-SST) into bc_quality.json.expected_fields. The verdict
+    branch MUST honor that list — rebuilding from raw manifest would
+    drop k/omega/nut and falsely emit WARN-ceiling instead of FAIL
+    when those derived fields are missing on disk."""
+    _stage_multi_region_bc_quality(
+        tmp_path,
+        fluid_regions=["region_fluid"],
+        fluid_has_turb=False,  # only U+p on disk
+    )
+    # Patch the staged bc_quality.json to reflect the backend's derived
+    # expected_fields list (Gap #31 derivation result for k-omega-SST).
+    bc = json.loads((tmp_path / "artifacts" / "bc_quality.json").read_text())
+    bc["expected_fields"] = ["U", "p", "k", "omega", "nut"]
+    for r in bc["regions"].values():
+        r["expected_fields"] = ["U", "p", "k", "omega", "nut"]
+    (tmp_path / "artifacts" / "bc_quality.json").write_text(json.dumps(bc))
+
+    # Manifest omits turbulence_fields — relies on Gap #31 derivation.
+    m = _multi_region_manifest()  # no turbulence_fields key
+    m["physics"] = {"turbulence_model": "k-omega-SST"}
+
+    gate = bc_gate(tmp_path, m)
+
+    # The derived expected_fields (k/omega/nut) are NOT on disk, so this
+    # must FAIL — NOT WARN. If the verdict rebuilt expected from raw
+    # manifest, it would only check U+p and emit WARN ceiling instead.
+    assert gate["status"] == "FAIL", (
+        f"Codex R0 P2: must honor backend-derived expected_fields; "
+        f"got {gate['status']}"
+    )
+    assert gate["details"]["reason"] == "multi_region_fluid_field_missing"
+    missing = gate["details"]["missing_in_all_fluid_regions"]
+    assert "k" in missing and "omega" in missing and "nut" in missing
+    # The expected list in the gate output must equal what the backend
+    # wrote (proving the fix used bc_quality.expected_fields, not a
+    # re-derivation).
+    assert gate["details"]["expected_fluid_fields"] == ["U", "p", "k", "omega", "nut"]

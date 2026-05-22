@@ -799,28 +799,19 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 solid_regions.append(rname)
 
-        # Manifest-declared expected fluid fields (U, p + turbulence_fields
-        # + thermal_fields). Per the cycle-3 charter, turbulence_fields
-        # can be empty for laminar declarations; thermal_fields can be
-        # absent for incompressible. Default expected fluid set is just
-        # U + p when both are empty.
-        bc_contract_manifest = manifest.get("bc_contract", {}) or {}
-        manifest_turb = list(bc_contract_manifest.get("turbulence_fields", []) or [])
-        manifest_thermal = list(bc_contract_manifest.get("thermal_fields", []) or [])
-        # Apply the same sentinel filter the backend uses.
-        manifest_turb = [
-            f for f in manifest_turb
-            if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
-        ]
-        manifest_thermal = [
-            f for f in manifest_thermal
-            if not (isinstance(f, str) and f.startswith("__") and f.endswith("__"))
-        ]
-        expected_fluid_fields = ["U", "p", *manifest_turb, *manifest_thermal]
-        seen: set = set()
-        expected_fluid_fields = [
-            f for f in expected_fluid_fields if not (f in seen or seen.add(f))
-        ]
+        # Codex R0 P2 fix: use the backend's already-derived
+        # expected_fields from bc_quality.json (which honors Gap #31
+        # turb-model derivation + Gap #19 thermal_fields + Gap #32
+        # sentinel filter). Rebuilding from raw manifest here drops
+        # the derived fields for cases that omit
+        # bc_contract.turbulence_fields and rely on
+        # physics.turbulence_model fallback.
+        expected_fluid_fields = list(bc_quality.get("expected_fields", []) or [])
+        if not expected_fluid_fields:
+            # Defensive fallback only — backend should always emit this
+            # for multi_region layout. If it's missing, default to U+p
+            # so we still surface a verdict.
+            expected_fluid_fields = ["U", "p"]
         # Union of fields present across ALL fluid regions — any single
         # region carrying the field counts (a CHT case might split U/p
         # across hot/cold fluid regions; both are valid evidence).
@@ -860,14 +851,19 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 "≥1 fluid region by definition."
             )
         elif missing_in_all_fluid:
-            status = "WARN"
+            # Codex R0 P1-2 fix: single-region file_presence treats
+            # missing declared BC files as FAIL (NEGATIVE_TEST_POLICY:
+            # "turbulence-field defects → bc_contract.status == FAIL").
+            # Multi-region must be consistent — a case declaring k+omega
+            # turbulence fields that aren't on disk anywhere is a hard
+            # FAIL, not a WARN.
+            status = "FAIL"
             reason = "multi_region_fluid_field_missing"
             summary = (
                 f"Multi-region CHT layout: {len(fluid_regions)} fluid "
-                f"region(s) detected, but expected fluid fields "
+                f"region(s) detected, but declared fluid expected fields "
                 f"{missing_in_all_fluid} not present in any fluid region. "
-                f"Solid region count: {len(solid_regions)}. Per-class "
-                f"verdict deferred to Gap #28 charter."
+                f"Solid region count: {len(solid_regions)}."
             )
             next_step = (
                 f"Either add the missing fluid fields {missing_in_all_fluid} "
@@ -876,20 +872,34 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
                 f"to reflect the actual physics declared in 0/."
             )
         else:
-            status = "PASS"
+            # Codex R0 P1-1 fix: WITHOUT per-region per-class schema
+            # (Gap #28 charter), the multi-region branch CANNOT run the
+            # single-region contract checks (_eval_patch_coverage /
+            # _eval_type_match / _eval_value_match / _eval_derived_
+            # consistency) — the manifest's bc_contract.{inlet,outlet,wall}
+            # is single-stream and doesn't map onto per-region patches.
+            # Therefore the verdict CEILING is WARN, not PASS. PASS
+            # would falsely promote multi-region cases past contract
+            # checks that single-region paths enforce.
+            status = "WARN"
             reason = "multi_region_per_class_pending"
             summary = (
                 f"Multi-region CHT layout: {len(fluid_regions)} fluid "
                 f"region(s) + {len(solid_regions)} solid region(s); all "
-                f"manifest-declared fluid expected fields present. "
-                f"Per-class verdict (solid wants T-only, fluid wants "
-                f"U/p/turbulence/thermal) deferred to Gap #28 charter."
+                f"declared fluid expected fields present in ≥1 fluid "
+                f"region. Per-class verdict (solid T-only, fluid U/p/turb/"
+                f"thermal) AND single-region contract checks "
+                f"(patch_coverage / type_match / value_match / "
+                f"derived_consistency) deferred to Gap #28 charter — "
+                f"verdict cannot reach PASS without it."
             )
             next_step = (
-                "PASS at the fluid-coverage layer. Per-region per-class "
-                "validation (Gap #28) would tighten this to PASS-strict; "
-                "current PASS asserts the case carries all manifest-declared "
-                "BC evidence distributed across regions."
+                "WARN ceiling for multi-region cases until Gap #28 charter "
+                "lands per-region per-class schema. Current verdict asserts "
+                "the case carries all manifest-declared BC evidence "
+                "distributed across regions, but does NOT validate patch "
+                "coverage, type matching, value matching, or "
+                "derived-consistency the single-region path enforces."
             )
 
         gate = {
