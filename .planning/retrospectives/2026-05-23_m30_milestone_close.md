@@ -190,6 +190,25 @@ M3.0 stayed inside v2.3 governance.
    regimes; an M3.1 dogfood should walk each regime through cycle-7-
    style beginner test.
 
+## M3.0 close-batch push-review backlog (cap=3 leftovers → M3.1)
+
+The push-wide Codex review over the 8-commit M3.0 close-batch ran 3
+rounds (R0 + 2 fix iterations) per v2.3 cap. Net: 6 P2 findings, 4
+closed verbatim in-batch, 2 deferred to M3.1 retro queue:
+
+| # | Finding | Disposition | Why deferred |
+|---|---|---|---|
+| 1 | log_decision logs every passive refetch (React Query revalidation overcount) | **fixed in close-batch** | dedup by state_sha |
+| 2 | cycle 7 dogfood silently advances on fieldless backend blockers | **fixed in close-batch** | `(current_step, -1)` marker + HALT message |
+| 3 | audit logs dirty working tree (no .gitignore) | **fixed in close-batch (already covered)** | existing `ui/backend/.gitignore` ignores `user_drafts/` wholesale; added explicit root-level rule for documentation |
+| 4 | dedup cache poisoned by failed writes | **fixed in close-batch** | cache update moved to AFTER fsync succeeds |
+| 5 | provenance import couples to optional geometry stack (trimesh) | **fixed in close-batch (cheap)** | import DRAFTS_DIR from trimesh-free `case_drafts` instead of `case_scaffold.template_clone` |
+| 6 | dedup cache not thread-safe under overlapping requests | **DEFERRED to M3.1** | bounded scope but adds threading.Lock + per-case lock dict; deferring keeps M3.0 close batch lean. Concurrent-request load is currently low (single-user dev sessions); the noise is a quality-of-data issue not a correctness break of the fire-and-forget contract |
+
+Tracker for #6: M3.1 backlog entry: "audit_v2 log dedup race condition
+under concurrent GET /workbench_frame — wrap state-sha read-check-write
+in a per-case threading.Lock."
+
 ## Recommendations for M3.1 charter
 
 - Lead with **real-engineer eval setup** (recruit + protocol) — even if

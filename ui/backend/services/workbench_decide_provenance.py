@@ -29,7 +29,14 @@ from ui.backend.schemas.workbench_frame import (
     CaseStateSnapshot,
     WorkbenchFrame,
 )
-from ui.backend.services.case_scaffold.template_clone import DRAFTS_DIR
+# Push-review R2 P2 #1 fix: import DRAFTS_DIR from the trimesh-free
+# `case_drafts` module instead of `case_scaffold.template_clone` which
+# transitively pulls in trimesh via the geometry stack. The
+# `[ui]`-minimal install (without geometry deps) raised
+# ModuleNotFoundError here, decide()'s try/except swallowed it, and the
+# audit log silently never wrote. Both modules export the identical
+# `REPO_ROOT / "ui" / "backend" / "user_drafts"` path.
+from ui.backend.services.case_drafts import DRAFTS_DIR
 
 logger = logging.getLogger(__name__)
 
