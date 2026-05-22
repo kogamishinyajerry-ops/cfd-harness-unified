@@ -13,9 +13,12 @@
 import { useState } from "react";
 
 import type { RailPrimary } from "@/types/workbench_frame";
+import { useManifestPatch } from "./useManifestPatch";
 
 interface DynamicFramePanelProps {
   rail: RailPrimary;
+  caseId?: string;
+  manifestStateSha?: string;
 }
 
 const KIND_TONE: Record<
@@ -39,9 +42,46 @@ const KIND_TONE: Record<
   },
 };
 
-export function DynamicFramePanel({ rail }: DynamicFramePanelProps) {
+export function DynamicFramePanel({
+  rail,
+  caseId,
+  manifestStateSha,
+}: DynamicFramePanelProps) {
   const [showProvenance, setShowProvenance] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const tone = KIND_TONE[rail.kind] ?? KIND_TONE.step_default;
+
+  // DEC-V61-202-SUB-M30-CYCLE2: wire CTA → PATCH when the rail card
+  // targets a specific field_path AND a suggested_default is available
+  // AND we have caseId + manifest_state_sha context.
+  const patch = useManifestPatch({
+    caseId: caseId ?? "",
+    onSuccess: (response) => {
+      if (!response.success && response.validation_errors.length > 0) {
+        setErrorMsg(response.validation_errors[0]);
+      } else {
+        setErrorMsg(null);
+      }
+    },
+    onError: (err) => {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    },
+  });
+  const canApply =
+    Boolean(caseId) &&
+    Boolean(manifestStateSha) &&
+    Boolean(rail.field_path) &&
+    rail.suggested_default !== null &&
+    rail.suggested_default !== undefined;
+  const onCtaClick = () => {
+    if (!canApply || !rail.field_path || !manifestStateSha) return;
+    setErrorMsg(null);
+    patch.mutate({
+      field_path: rail.field_path,
+      value: rail.suggested_default,
+      expected_state_sha: manifestStateSha,
+    });
+  };
 
   return (
     <section
@@ -77,10 +117,26 @@ export function DynamicFramePanel({ rail }: DynamicFramePanelProps) {
         <button
           type="button"
           data-testid="dynamic-frame-cta"
-          className="mt-3 rounded-sm border border-sky-700/60 bg-sky-900/40 px-2 py-1 text-[11px] text-sky-200 hover:bg-sky-900/60"
+          onClick={canApply ? onCtaClick : undefined}
+          disabled={!canApply || patch.isPending}
+          aria-disabled={!canApply || patch.isPending}
+          className={`mt-3 rounded-sm border px-2 py-1 text-[11px] transition ${
+            canApply && !patch.isPending
+              ? "border-sky-700/60 bg-sky-900/40 text-sky-200 hover:bg-sky-900/60"
+              : "border-surface-700 bg-surface-900/40 text-surface-500 cursor-not-allowed"
+          }`}
         >
-          {rail.cta_label}
+          {patch.isPending ? "应用中…" : rail.cta_label}
         </button>
+      )}
+
+      {errorMsg && (
+        <p
+          data-testid="dynamic-frame-error"
+          className="mt-2 text-[10px] text-rose-300"
+        >
+          {errorMsg}
+        </p>
       )}
 
       {/* Provenance disclosure — dev-mode style; collapsed by default */}

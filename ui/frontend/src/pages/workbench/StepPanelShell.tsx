@@ -25,6 +25,7 @@ const Viewport = lazy(() =>
 import { StatusStrip } from "./step_panel_shell/StatusStrip";
 import { DynamicBottomCards } from "./step_panel_shell/dynamic_frame/DynamicBottomCards";
 import { DynamicFramePanel } from "./step_panel_shell/dynamic_frame/DynamicFramePanel";
+import { DynamicTopbarCta } from "./step_panel_shell/dynamic_frame/DynamicTopbarCta";
 import { DynamicViewportOverlays } from "./step_panel_shell/dynamic_frame/DynamicViewportOverlays";
 import { useWorkbenchFrame } from "./step_panel_shell/dynamic_frame/useWorkbenchFrame";
 import { Step1Import } from "./step_panel_shell/steps/Step1Import";
@@ -511,13 +512,31 @@ export function StepPanelShell() {
       data-current-step-id={currentStepId}
       className="flex h-[calc(100vh-1rem)] flex-col overflow-hidden rounded-md border border-surface-800 bg-surface-950"
     >
-      <TopBar
-        caseId={caseId}
-        truthSource={caseStatus.truthSource}
-        trustGate={caseStatus.trustGate}
-        auditPct={caseStatus.auditPct}
-        llmOffline={caseStatus.llmOffline}
-      />
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <TopBar
+            caseId={caseId}
+            truthSource={caseStatus.truthSource}
+            trustGate={caseStatus.trustGate}
+            auditPct={caseStatus.auditPct}
+            llmOffline={caseStatus.llmOffline}
+          />
+        </div>
+        {dynamicFrameEnabled && dynamicFrame && (
+          <div className="shrink-0 px-3 py-2">
+            <DynamicTopbarCta
+              cta={dynamicFrame.topbar_cta}
+              onClick={() => {
+                const target = dynamicFrame.topbar_cta.target_step;
+                if (target == null) return;
+                const next = new URLSearchParams(searchParams);
+                next.set("step", String(target));
+                setSearchParams(next, { replace: false });
+              }}
+            />
+          </div>
+        )}
+      </div>
       <div className="flex min-h-0 flex-1">
         <div className="w-44 shrink-0 border-r border-surface-800 bg-surface-950/60">
           {/* Codex R5 P2 fix (V61-117): keying StepTree by caseId
@@ -582,7 +601,11 @@ export function StepPanelShell() {
         </main>
         <div className="flex w-72 shrink-0 flex-col">
           {dynamicFrameEnabled && dynamicFrame && (
-            <DynamicFramePanel rail={dynamicFrame.rail_primary} />
+            <DynamicFramePanel
+              rail={dynamicFrame.rail_primary}
+              caseId={caseId}
+              manifestStateSha={dynamicFrame.manifest_state_sha}
+            />
           )}
           <TaskPanel
             step={activeStep}

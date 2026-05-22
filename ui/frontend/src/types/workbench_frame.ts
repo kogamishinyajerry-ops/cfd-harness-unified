@@ -41,12 +41,29 @@ export interface BottomCard {
   field_path: string | null;
 }
 
+// DEC-V61-202-SUB-M30-CYCLE2 · 4th driver slot.
+export type TopbarCtaKind =
+  | "next_step"
+  | "re_audit"
+  | "submit_solve"
+  | "step_default";
+
+export interface TopbarCta {
+  kind: TopbarCtaKind;
+  label: string;
+  target_step: number | null;
+  enabled: boolean;
+  reason: string | null;
+}
+
 export interface WorkbenchFrame {
   case_id: string;
   step: number;
   rail_primary: RailPrimary;
   viewport_overlays: ViewportOverlay[];
   bottom_cards: BottomCard[];
+  topbar_cta: TopbarCta;
   state_sha: string;
+  manifest_state_sha: string;
   decided_at: string;
 }

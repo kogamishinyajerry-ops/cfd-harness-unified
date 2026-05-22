@@ -38,6 +38,10 @@ import type {
 import type { WorkbenchBasics } from "@/types/workbench_basics";
 import type { WorkbenchFrame } from "@/types/workbench_frame";
 import type {
+  ManifestPatchRequest,
+  ManifestPatchResponse,
+} from "@/types/manifest_patch";
+import type {
   DemoFixture,
   ImportRejectionDetail,
   ImportSTLResponse,
@@ -189,6 +193,23 @@ export const api = {
   getCaseCompleteness: (caseId: string) =>
     request<CaseCompletenessReport>(
       `/api/cases/${encodeURIComponent(caseId)}/completeness`,
+    ),
+
+  // DEC-V61-202-SUB-M30-CYCLE2 — manifest field-path PATCH.
+  // Closes the observation → action → state-change loop. Frontend sends
+  // expected_state_sha from the most recent frame.manifest_state_sha;
+  // 409 means another path mutated the case (frontend should refetch
+  // frame, optionally retry).
+  patchCaseManifest: (
+    caseId: string,
+    patch: ManifestPatchRequest,
+  ) =>
+    request<ManifestPatchResponse>(
+      `/api/cases/${encodeURIComponent(caseId)}/manifest`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      },
     ),
 
   // DEC-V61-202-SUB-M30-CYCLE1 — dynamic workbench frame.

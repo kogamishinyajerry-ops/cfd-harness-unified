@@ -6,9 +6,23 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { DynamicFramePanel } from "../DynamicFramePanel";
 import type { RailPrimary } from "@/types/workbench_frame";
+
+// Cycle 2: DynamicFramePanel uses useManifestPatch internally → needs
+// QueryClientProvider context. Wrap render in a fresh client per test.
+function renderPanel(rail: RailPrimary, props?: { caseId?: string; manifestStateSha?: string }) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={qc}>
+      <DynamicFramePanel rail={rail} {...props} />
+    </QueryClientProvider>,
+  );
+}
 
 const PROBLEM_RAIL: RailPrimary = {
   kind: "problem_fix",
@@ -45,7 +59,7 @@ const DEFAULT_RAIL: RailPrimary = {
 
 describe("DynamicFramePanel", () => {
   it("renders problem_fix kind with rose-toned label", () => {
-    render(<DynamicFramePanel rail={PROBLEM_RAIL} />);
+    renderPanel(PROBLEM_RAIL);
     const panel = screen.getByTestId("dynamic-frame-panel");
     expect(panel.dataset.kind).toBe("problem_fix");
     expect(screen.getByText("需修复")).toBeInTheDocument();
@@ -55,7 +69,7 @@ describe("DynamicFramePanel", () => {
   });
 
   it("renders info_gap kind with amber label + CTA", () => {
-    render(<DynamicFramePanel rail={GAP_RAIL} />);
+    renderPanel(GAP_RAIL);
     expect(screen.getByText("待补充")).toBeInTheDocument();
     expect(
       screen.getByText("补充字段 / Fill: vof_contract.phases"),
@@ -66,7 +80,7 @@ describe("DynamicFramePanel", () => {
   });
 
   it("renders step_default kind with emerald label", () => {
-    render(<DynamicFramePanel rail={DEFAULT_RAIL} />);
+    renderPanel(DEFAULT_RAIL);
     expect(screen.getByText("就绪")).toBeInTheDocument();
     expect(
       screen.getByText("Step 3 · 物理已设 / Physics set"),
@@ -74,7 +88,7 @@ describe("DynamicFramePanel", () => {
   });
 
   it("toggles provenance disclosure on click", async () => {
-    render(<DynamicFramePanel rail={PROBLEM_RAIL} />);
+    renderPanel(PROBLEM_RAIL);
     // Collapsed by default.
     expect(
       screen.queryByText("step=4 · problem_fix · severity=fail"),
@@ -87,7 +101,7 @@ describe("DynamicFramePanel", () => {
 
   it("omits body section when body_text is null", () => {
     const noBody: RailPrimary = { ...DEFAULT_RAIL, body_text: null };
-    render(<DynamicFramePanel rail={noBody} />);
+    renderPanel(noBody);
     expect(screen.getByText(DEFAULT_RAIL.title)).toBeInTheDocument();
     expect(
       screen.queryByText("当前步无阻塞 — 可以进入下一步。"),
