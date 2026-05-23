@@ -12,9 +12,10 @@ gating + warning-count totals) → fixed inline. R4 = 1 P1 + 1 P2
 solvers) → P2 closed via demand-driven warning; P1 deferred to cycle 2.
 R5 = 1 P1 + 1 P2 (helper applicability missed flat-draft solver +
 misleading "case-editor" workaround copy) → fixed: solver resolution
-now reads merged manifest+flat-draft (matches existing solver-presence
-parity rule); advisory copy rewritten to name only paths that actually
-unlock the skeleton (API PATCH today, M3.1 cycle 2 UI input).
+now reads merged manifest+flat-draft; advisory copy rewritten to name
+only paths that actually unlock the skeleton. R6 = 1 P1 (manifest-wins
+precedence reintroduced stale-solver problem when files diverge) →
+fixed: precedence reversed, flat-draft (latest editor intent) wins.
 
 ---
 
@@ -100,6 +101,26 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R6** (1 P1 · after R5 fix landed):
+- **P1 · stale manifest hides newer editor intent**: R5's
+  `_effective_imported_solver()` used manifest-wins precedence, but
+  `switch_solver` writes manifest while `PUT /api/cases/{id}/yaml`
+  writes flat-draft only — they diverge in normal workflow. So when
+  an engineer ran `switch_solver simpleFoam` and later edited the
+  flat draft to `interFoam`, the stale manifest value silently
+  suppressed the interFoam case_family advisory. The reverse
+  divergence (manifest=interFoam, flat=simpleFoam after a switch)
+  kept the warning stuck at 80% after the engineer had moved on.
+  **Fix**: precedence reversed in `_effective_imported_solver()` —
+  flat-draft (latest editor intent) wins; manifest is fallback when
+  flat-draft has no solver. Dogfood path unchanged (no flat draft →
+  manifest still resolves).
+
+Regression tests added in R6 fix (user-ratified path: "Apply small
+fix: flat-draft wins"):
+- `test_imported_flat_draft_overrides_stale_manifest_solver_to_interfoam`
+- `test_imported_flat_draft_overrides_stale_manifest_solver_to_simplefoam`
 
 **R5** (1 P1 + 1 P2 · after R4 fix landed):
 - **P1 · helper applicability missed flat-draft solver**: imported

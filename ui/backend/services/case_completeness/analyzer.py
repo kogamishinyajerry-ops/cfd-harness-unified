@@ -475,21 +475,22 @@ def _effective_imported_solver(
     """Resolve the engineer's chosen solver across the merged
     manifest + flat-draft view that `_analyze_imported` operates on.
 
-    Codex R5 P1: imported cases are merged-source. An engineer who has
-    set `solver: interFoam` in `user_drafts/{id}.yaml` but has not run
-    `switch_solver` yet still expresses solver intent — the analyzer
-    must see it (matches the manifest/flat parity rule used elsewhere
-    in this function for solver presence checks).
+    Codex R5 P1 + R6 P1: imported cases are merged-source AND the two
+    files are written by separate endpoints:
+      - `switch_solver` writes `case_manifest.yaml`
+      - `PUT /api/cases/{id}/yaml` writes `user_drafts/{id}.yaml` (flat draft)
+    These diverge whenever the engineer edits the flat draft after a
+    previous switch_solver run. The flat draft is the most recent
+    expression of engineer intent, so it MUST win over manifest;
+    otherwise stale manifest values silently override fresh editor
+    edits (R6 P1).
 
-    Precedence: manifest.physics.solver wins when set; otherwise the
-    flat-draft solver (string or dict-with-name) wins; otherwise None.
+    Precedence (flat-draft first, manifest fallback):
+      1. `user_drafts/{id}.yaml::solver` (string)
+      2. `user_drafts/{id}.yaml::solver.name` (dict shape)
+      3. `case_manifest.yaml::physics.solver` (string)
+      4. None
     """
-    physics = raw_manifest_yaml.get("physics")
-    if isinstance(physics, dict):
-        manifest_solver = physics.get("solver")
-        if isinstance(manifest_solver, str) and manifest_solver:
-            return manifest_solver
-
     flat_solver = raw_flat_yaml.get("solver")
     if isinstance(flat_solver, str) and flat_solver:
         return flat_solver
@@ -497,6 +498,12 @@ def _effective_imported_solver(
         flat_name = flat_solver.get("name")
         if isinstance(flat_name, str) and flat_name:
             return flat_name
+
+    physics = raw_manifest_yaml.get("physics")
+    if isinstance(physics, dict):
+        manifest_solver = physics.get("solver")
+        if isinstance(manifest_solver, str) and manifest_solver:
+            return manifest_solver
 
     return None
 

@@ -304,6 +304,95 @@ def test_imported_flat_draft_solver_dict_with_name_emits_case_family_warning(iso
     ), "case_family warning must surface for flat-draft dict solver shape"
 
 
+def test_imported_flat_draft_overrides_stale_manifest_solver_to_interfoam(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R6 P1 fix: flat-draft wins.
+
+    Scenario: engineer ran `switch_solver simpleFoam` earlier (manifest
+    stamped simpleFoam) then edited `PUT /api/cases/{id}/yaml` to set
+    `solver: interFoam`. Editor intent (interFoam) must drive the
+    case_family advisory, not the stale manifest value.
+
+    Before R6 P1 fix, manifest-wins precedence kept simpleFoam in
+    `_effective_imported_solver()`, so the interFoam case_family
+    warning was suppressed and engineers never saw the Step-1 prompt.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_diverge_to_interfoam"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Stale manifest: simpleFoam, no case_family
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "laminar",
+                },
+                "bc": {
+                    "patches": {"inlet": {"patch_type": "patch", "fields": {}}}
+                },
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Newer editor edit: switch to interFoam
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"solver": "interFoam"}),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert any(
+        m.field_path == "case_family" and m.severity == "warning"
+        for m in r.missing
+    ), "flat-draft interFoam must override stale manifest simpleFoam"
+
+
+def test_imported_flat_draft_overrides_stale_manifest_solver_to_simplefoam(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R6 P1 fix · reverse divergence:
+    engineer ran `switch_solver interFoam` earlier then later edited the
+    flat draft back to simpleFoam. The advisory must clear (no helper
+    candidate for simpleFoam) rather than stay stuck at 80% on a stale
+    interFoam reading.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_diverge_to_simplefoam"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "interFoam",
+                    "turbulence_model": "laminar",
+                },
+                "bc": {
+                    "patches": {"inlet": {"patch_type": "patch", "fields": {}}}
+                },
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"solver": "simpleFoam"}),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert not any(
+        m.field_path == "case_family" for m in r.missing
+    ), "flat-draft simpleFoam must clear the stale interFoam advisory"
+    assert r.percentage == 100.0
+
+
 def test_imported_simplefoam_case_without_case_family_no_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix · demand-driven negative
     regression: simpleFoam has no registered helper candidate, so the
