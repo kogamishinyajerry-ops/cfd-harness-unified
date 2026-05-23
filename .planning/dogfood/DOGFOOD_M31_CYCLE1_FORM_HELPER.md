@@ -6,7 +6,9 @@
 **Verdict**: **PASS** (9/9 checks · post Codex R0/R1/R2 + user-ratified scope expansion)
 **Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = 1 P1 → scope-expansion
 ratified by user (case_family persistence + gap surface + PATCH path
-all pulled into cycle 1). Now production-path-realistic.
+all pulled into cycle 1). R3 = 1 P1 + 1 P2 (severity-aware topbar
+gating + warning-count totals) → fixed inline. Now production-path-
+realistic with internally-consistent totals.
 
 ---
 
@@ -92,6 +94,29 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R3** (1 P1 + 1 P2 · after scope expansion landed):
+- **P1 · case_family warning routed into Step 1 gating**: the new
+  case_family warning gap surfaces on step 1, but `_pick_topbar_cta`
+  blanket-disabled the topbar CTA for ANY `info_gap` rail regardless
+  of severity. The non-blocking advisory therefore became a workflow
+  blocker for every fresh imported case. **Fix**: `_pick_topbar_cta`
+  parses `rail.provenance` for the severity token (`_parse_rail_severity`
+  helper) and only disables the CTA when severity is `critical`.
+  Warning/info severity gaps now keep the rail visible but allow advance.
+- **P2 · case_family warning not counted in totals**: `_analyze_imported`
+  was still building the report with `expected_warning_count=0`, but the
+  case_family slot is now a MissingField with severity=warning. For a
+  fresh otherwise-complete imported case, the report had
+  `present_count=4 / total_count=4 = 100%` while a real warning was
+  listed in `missing` — internally inconsistent. **Fix**: bumped
+  `expected_warning_count=1` so the slot is always counted; present
+  when case_family lands, missing-warning when absent.
+
+Regression tests added in R3 fix:
+- `test_decide_warning_gap_does_not_block_topbar_cta` (P1)
+- `test_decide_critical_gap_still_blocks_topbar_cta` (P1 negative)
+- `test_imported_case_without_case_family_emits_warning_in_totals` (P2)
 
 **User ratification of cap=3** (option A — expand cycle 1 scope):
 The honest fix to satisfy BOTH R0 and R2 is to land case_family

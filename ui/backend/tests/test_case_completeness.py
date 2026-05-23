@@ -166,11 +166,13 @@ def _seed_imported_manifest(
 
 
 def test_imported_case_full_minimal_contract(isolated_drafts):
-    """Imported case with all 3 minimal fields → 4/4, ready_for_archive=True.
+    """Imported case with all minimal fields → 5/5, ready_for_archive=True.
 
-    Total of 4 = 3 base critical (solver, turbulence, bc.patches) + 1
+    Total of 5 = 3 base critical (solver, turbulence, bc.patches) + 1
     manifest_schema_invalid slot (counts as present when manifest passes
-    Pydantic validation).
+    Pydantic validation) + 1 case_family warning slot (counts as present
+    when manifest carries the label — see DEC-V61-202-SUB-M31-CYCLE1
+    Codex R3 P2 fix).
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_test001"
@@ -180,7 +182,36 @@ def test_imported_case_full_minimal_contract(isolated_drafts):
     assert r.ready_for_archive is True
     assert r.blocked_by_critical == 0
     assert r.percentage == 100.0
-    assert r.total_count == 4  # 3 base + manifest schema validity slot
+    assert r.total_count == 5  # 3 base + manifest schema slot + case_family warning slot
+
+
+def test_imported_case_without_case_family_emits_warning_in_totals(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P2 fix: case_family is counted
+    in totals as a warning slot.
+
+    When `case_family` is absent: total_count stays 5, present_count drops
+    to 4 (the 4 critical slots present), percentage = 4/5 = 80%. This
+    proves expected_warning_count=1 is honored and the percentage math
+    stays internally consistent.
+
+    Without this fix, present_count=4 but total_count=4 produced 100%
+    despite a real missing field — the report would mislead engineers.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_no_family"
+    _seed_imported_manifest(imported, case_id, case_family=None)
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 5
+    assert r.present_count == 4
+    assert r.percentage == 80.0
+    # case_family is a warning — does NOT block archive (critical-only)
+    assert r.blocked_by_critical == 0
+    assert r.ready_for_archive is True
+    assert any(
+        m.field_path == "case_family" and m.severity == "warning"
+        for m in r.missing
+    )
 
 
 def test_imported_case_missing_solver_blocks_archive(isolated_drafts):

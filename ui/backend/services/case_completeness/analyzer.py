@@ -742,7 +742,12 @@ def _analyze_imported(
             + (1 if re_value is not None else 0)
             + 1  # manifest_schema_invalid slot
         ),
-        expected_warning_count=0,
+        # DEC-V61-202-SUB-M31-CYCLE1 (Codex R3 P2 fix): the case_family
+        # gap is always counted in the total — present when manifest
+        # carries it, missing-warning when absent. Keeps present_count /
+        # percentage internally consistent with the rule set being
+        # surfaced.
+        expected_warning_count=1,
         expected_info_count=0,
         missing=missing,
         notes=notes,

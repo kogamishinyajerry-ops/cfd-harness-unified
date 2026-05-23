@@ -261,6 +261,64 @@ def test_decide_skeleton_does_not_clobber_existing_suggested_default():
     assert rail.cta_label == "填入 / Apply"  # scalar wins primary CTA
 
 
+def test_decide_warning_gap_does_not_block_topbar_cta():
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P1 fix: warning/info severity
+    gaps surface on the rail but must NOT disable the topbar CTA.
+
+    Concretely: a fresh imported case missing only `case_family` (the
+    new warning-severity gap) hits step 1 with rail.kind=info_gap.
+    Before this fix, _pick_topbar_cta blanket-disabled the CTA for any
+    info_gap rail, turning a non-blocking advisory into a workflow
+    blocker. The fix parses rail.provenance for the severity token
+    and only blocks on critical.
+    """
+    state = _base_state(
+        step=1,
+        manifest={},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "case_family",
+                    "severity": "warning",
+                    "why": "Label the case family ...",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.kind == "info_gap"
+    assert frame.rail_primary.field_path == "case_family"
+    # The rail surfaces the gap — but the engineer can still advance.
+    assert frame.topbar_cta.enabled is True
+    assert frame.topbar_cta.kind == "next_step"
+    assert frame.topbar_cta.target_step == 2
+
+
+def test_decide_critical_gap_still_blocks_topbar_cta():
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P1 fix · negative regression:
+    the severity-aware gating must still block on critical gaps.
+    Removing this would let an engineer advance past Step 4 with empty
+    bc.patches — the core M3.0 promise.
+    """
+    state = _base_state(
+        step=4,
+        manifest={"case_family": "ship_vof"},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "Boundary patches are required.",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.kind == "info_gap"
+    assert frame.topbar_cta.enabled is False
+    assert "bc.patches" in (frame.topbar_cta.reason or "")
+
+
 def test_decide_step_relevance_routes_step4_problem_to_step4():
     """A bc_quality.json problem should NOT surface on Step 1."""
     artifacts = {

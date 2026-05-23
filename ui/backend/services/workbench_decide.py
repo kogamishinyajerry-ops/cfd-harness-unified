@@ -136,9 +136,16 @@ def _pick_topbar_cta(state: CaseStateSnapshot, rail: RailPrimary) -> TopbarCta:
 
     Mapping:
         rail.kind == "problem_fix"  → "复检 / Re-audit"
-        rail.kind == "info_gap"     → CTA disabled + reason
+        rail.kind == "info_gap" + critical severity → CTA disabled + reason
+        rail.kind == "info_gap" + warning/info severity → advance allowed
         rail.kind == "step_default" + step < 5 → "下一步 / Next step"
         rail.kind == "step_default" + step == 5 → "提交求解 / Submit solve"
+
+    DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P1 fix: severity-aware gating.
+    Warning/info severity info_gaps (e.g. the new case_family label gap)
+    are advisory — they surface in the rail so engineers see them, but
+    must not turn into workflow blockers. Only critical gaps block
+    advance.
     """
     if rail.kind == "problem_fix":
         return TopbarCta(
@@ -150,16 +157,20 @@ def _pick_topbar_cta(state: CaseStateSnapshot, rail: RailPrimary) -> TopbarCta:
         )
 
     if rail.kind == "info_gap":
-        gap_path = rail.field_path or "上游字段"
-        return TopbarCta(
-            kind="step_default",
-            label="下一步 / Next step",
-            target_step=state.step + 1 if state.step < 5 else None,
-            enabled=False,
-            reason=f"先补齐 {gap_path} 才能进入下一步 / Fill {gap_path} first",
-        )
+        severity = _parse_rail_severity(rail)
+        if severity == "critical":
+            gap_path = rail.field_path or "上游字段"
+            return TopbarCta(
+                kind="step_default",
+                label="下一步 / Next step",
+                target_step=state.step + 1 if state.step < 5 else None,
+                enabled=False,
+                reason=f"先补齐 {gap_path} 才能进入下一步 / Fill {gap_path} first",
+            )
+        # warning / info → fall through to step_default semantics so the
+        # engineer can advance while the rail keeps the gap visible.
 
-    # step_default branch
+    # step_default branch (also reached by non-blocking info_gaps)
     if state.step == 5:
         return TopbarCta(
             kind="submit_solve",
@@ -176,6 +187,23 @@ def _pick_topbar_cta(state: CaseStateSnapshot, rail: RailPrimary) -> TopbarCta:
         enabled=True,
         reason=None,
     )
+
+
+def _parse_rail_severity(rail: RailPrimary) -> str:
+    """Extract severity token from rail.provenance.
+
+    `_rail_from_gap` writes `severity=<value>` into the first provenance
+    line. Vocabulary is the gap dispatcher's `{critical, warning, info}`.
+    Returns "info" as a safe default when no severity token is found —
+    the conservative side of "advance allowed" matches the new
+    non-blocking-by-default semantics for case_family and other future
+    advisory gaps.
+    """
+    for line in rail.provenance or ():
+        for piece in str(line).split(" · "):
+            if piece.startswith("severity="):
+                return piece.split("=", 1)[1].strip()
+    return "info"
 
 
 # ────────────────────────── rail_primary ──────────────────────────
