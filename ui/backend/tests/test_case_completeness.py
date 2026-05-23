@@ -126,8 +126,15 @@ def _seed_imported_manifest(
     solver: str | None = "simpleFoam",
     turbulence_model: str | None = "laminar",
     has_patches: bool = True,
+    case_family: str | None = "test",
 ) -> None:
-    """Write a minimal v2 case_manifest.yaml under imported_dir/case_id/."""
+    """Write a minimal v2 case_manifest.yaml under imported_dir/case_id/.
+
+    DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): case_family default
+    set to "test" so existing tests still see a 100% complete minimal
+    contract. Tests that need to exercise the case_family-missing path
+    pass case_family=None explicitly.
+    """
     case_dir = imported_dir / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
     manifest: dict = {
@@ -151,6 +158,8 @@ def _seed_imported_manifest(
         "overrides": {},
         "history": [],
     }
+    if case_family is not None:
+        manifest["case_family"] = case_family
     (case_dir / "case_manifest.yaml").write_text(
         yaml.safe_dump(manifest), encoding="utf-8"
     )

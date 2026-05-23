@@ -560,6 +560,29 @@ def _analyze_imported(
     #    without a `name` is metadata-only (family / steady_state /
     #    note) and doesn't satisfy the contract.
 
+    # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): case_family gap.
+    # Without case_family on the manifest, the form-helper skeleton
+    # lookup returns None even for cases that would otherwise match a
+    # registered (field_path, family) skeleton. Surface as a warning so
+    # the rail PATCH affordance prompts engineers to label the case
+    # (step 1, per `_STEP_PATH_PREFIXES` routing). Non-blocking — case
+    # still runs without it; just no domain-aware skeletons.
+    raw_case_family = raw_manifest_yaml.get("case_family")
+    if not isinstance(raw_case_family, str) or not raw_case_family:
+        missing.append(
+            MissingField(
+                field_path="case_family",
+                severity="warning",
+                why=(
+                    "Label the case family (e.g. ship_vof, "
+                    "rans_steady_incompressible) to unlock the form-"
+                    "helper skeleton on Step 4. Non-blocking — case can "
+                    "run without a family, but the canonical BC "
+                    "skeleton won't be offered."
+                ),
+            )
+        )
+
     # Solver: manifest physics.solver, OR flat `solver` (string), OR
     # flat `solver.name` (dict shape). Bare `solver` *dict* without
     # `.name` does NOT count.

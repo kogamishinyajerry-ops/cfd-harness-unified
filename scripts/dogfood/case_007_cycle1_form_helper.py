@@ -1,18 +1,17 @@
-"""DEC-V61-202-SUB-M31-CYCLE1 · ship_vof form-helper skeleton dogfood.
+"""DEC-V61-202-SUB-M31-CYCLE1 · form-helper end-to-end dogfood.
 
-Stages a sparse case_007 manifest (case_family=ship_vof, no patches),
-hits GET /workbench_frame at step 4, asserts the rail surfaces the
-canonical 3-patch skeleton, PATCHes it, and verifies bc.patches lands
-with all 3 entries.
+Production path proof: stage a sparse manifest WITHOUT case_family
+(mirrors what `case_scaffold/manifest_writer.py` writes on real
+imports), then walk the rail-driven labeling-then-skeleton flow:
 
-Acceptance:
-    1. Rail at step 4 carries suggested_skeleton with inlet/outlet/wall
-    2. Rail.cta_label is "应用骨架 / Apply skeleton"
-    3. Provenance line includes skeleton_keys=
-    4. PATCH with skeleton value succeeds (state_sha advances)
-    5. Re-fetched manifest has bc.patches with 3 entries
-    6. Cycle-7-style: post-apply, the rail no longer surfaces bc.patches
-       as a gap (it's now filled)
+  step 1 → rail surfaces case_family as a missing field (warning gap)
+  PATCH case_family = "ship_vof"
+  step 4 → rail surfaces bc.patches gap WITH suggested_skeleton
+  PATCH bc.patches = skeleton dict
+  step 4 (refetch) → rail.kind == step_default (case ready)
+
+This mirrors the cycle-7 surrogate journey but for the form-helper
+specifically, on the production path (no hand-injected case_family).
 """
 from __future__ import annotations
 
@@ -31,19 +30,17 @@ CASE_ID = "case_007_cycle1_form_helper"
 
 STARTING_MANIFEST = {
     "case_id": CASE_ID,
-    # Codex R1 P1: an earlier R0 fix inferred ship_vof from interFoam
-    # solver, but that misclassified non-ship interFoam cases (sloshing,
-    # dam break, etc.) and gave them the wrong skeleton. Cycle 1 now
-    # requires EXPLICIT case_family on the manifest. M3.1 cycle 2 adds
-    # case_family persistence in the scaffold + UI labeling so real
-    # imported cases can opt in.
-    "case_family": "ship_vof",
+    # No case_family — mirrors a real imported case (case_scaffold/
+    # manifest_writer.py historically omitted the field). The dogfood
+    # walks the rail-driven labeling flow: step 1 surfaces case_family
+    # as a missing field, engineer PATCHes it to "ship_vof", then
+    # step 4 offers the skeleton.
     "solver_backend": "openfoam",
     "physics": {
         "solver": "interFoam",
         "turbulence_model": "kOmegaSST",
     },
-    # bc.patches deliberately empty → triggers the form-helper gap
+    # bc.patches deliberately empty → triggers the step-4 form-helper gap
 }
 
 
@@ -68,13 +65,40 @@ def main():
     from ui.backend.main import app
     client = TestClient(app)
 
+    print("\n=== Cycle 1 form-helper dogfood (production path) ===\n")
+
+    # ── Step 1: rail should surface case_family gap ───────────────────
+    r_step1 = client.get(f"/api/cases/{CASE_ID}/workbench_frame?step=1")
+    assert r_step1.status_code == 200, f"GET step 1: {r_step1.status_code}"
+    frame_step1 = r_step1.json()
+    step1_rail = frame_step1["rail_primary"]
+    print(f"  step 1 rail.field_path = {step1_rail.get('field_path')}")
+    print(f"  step 1 rail.kind = {step1_rail['kind']}")
+    print(f"  step 1 rail.title = {step1_rail.get('title')}")
+    if frame_step1.get("completeness"):
+        print(f"  step 1 completeness.missing = "
+              f"{[(m.get('field_path'), m.get('severity')) for m in frame_step1.get('completeness', {}).get('missing', [])]}")
+
+    # ── PATCH case_family ─────────────────────────────────────────────
+    case_family_patch = client.patch(
+        f"/api/cases/{CASE_ID}/manifest",
+        json={
+            "field_path": "case_family",
+            "value": "ship_vof",
+            "op": "set",
+            "expected_state_sha": frame_step1["manifest_state_sha"],
+        },
+    )
+    cf_response = case_family_patch.json() if case_family_patch.status_code == 200 else None
+    print(f"  PATCH case_family status = {case_family_patch.status_code}")
+    if cf_response:
+        print(f"  PATCH case_family success = {cf_response.get('success')}")
+
     # ── Step 4 frame: expect skeleton offered ─────────────────────────
     r = client.get(f"/api/cases/{CASE_ID}/workbench_frame?step=4")
     assert r.status_code == 200, f"GET frame: {r.status_code} / {r.text[:200]}"
     frame = r.json()
     rail = frame["rail_primary"]
-
-    print("\n=== Cycle 1 form-helper dogfood ===\n")
 
     skeleton = rail.get("suggested_skeleton")
     print(f"  rail.kind = {rail['kind']}")
@@ -113,6 +137,11 @@ def main():
 
     # ── Checks ────────────────────────────────────────────────────────
     checks = [
+        ("Step 1 rail surfaces case_family as a missing field",
+         step1_rail.get("field_path") == "case_family"),
+        ("PATCH case_family succeeded",
+         case_family_patch.status_code == 200 and cf_response
+         and cf_response.get("success") is True),
         ("Rail at step 4 surfaces suggested_skeleton",
          isinstance(skeleton, dict)),
         ("Skeleton has canonical inlet/outlet/wall keys",

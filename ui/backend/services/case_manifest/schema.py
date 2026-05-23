@@ -142,6 +142,13 @@ class CaseManifest(BaseModel):
     source: str | None = None
     source_origin: str | None = None
     case_id: str
+    # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): persist case_family
+    # so the form-helper skeleton lookup reaches imported cases.
+    # Pydantic-typed so manifest_writer + PATCH endpoint both round-trip
+    # cleanly. None = unknown family (engineer can PATCH it later via
+    # the case_family gap surfaced by case_completeness on imported
+    # cases that lack the field).
+    case_family: str | None = None
     origin_filename: str | None = None
     ingest_report_summary: dict[str, Any] | None = None
     created_at: datetime | None = None

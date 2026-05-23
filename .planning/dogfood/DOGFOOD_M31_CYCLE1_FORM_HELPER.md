@@ -3,10 +3,10 @@
 **DEC**: `2026-05-23_v61_202_sub_m31_cycle1_form_helper_shipvof.md` (Proposed)
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle1_form_helper.py`
-**Verdict**: **PASS** (7/7 checks · post Codex R0+R1 verbatim fixes)
-**Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = APPROVE (3 reviews,
-under v2.3 cap=3). Closure: explicit case_family required (M3.1
-cycle 2 will persist it); cta_label=null when only skeleton.
+**Verdict**: **PASS** (9/9 checks · post Codex R0/R1/R2 + user-ratified scope expansion)
+**Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = 1 P1 → scope-expansion
+ratified by user (case_family persistence + gap surface + PATCH path
+all pulled into cycle 1). Now production-path-realistic.
 
 ---
 
@@ -52,7 +52,7 @@ applies use — no parallel construction track.
 
 ---
 
-## Codex closure (3 rounds · 2 P1 + 1 P2 · under v2.3 cap=3)
+## Codex closure (3 rounds · 3 P1 + 1 P2 · cap=3 + user-ratified scope expansion)
 
 **R0** (1 P1 + 1 P2):
 - **P1 · case_family not persisted**: M5 `case_scaffold/manifest_writer.py`
@@ -85,7 +85,33 @@ applies use — no parallel construction track.
   activation" defers to M3.1 cycle 2 (case_family persistence + UI
   labeling).
 
-**R2** (CRS APPROVE — no further findings).
+**R2** (CRS · 1 P1):
+- **P1 · feature unreachable on imported cases (same root cause as R0
+  P1)**: the R1 revert removed solver-inference, restoring the
+  original gap — real imported cases still don't carry `case_family`,
+  so `_resolve_case_family` returns None and the skeleton never fires
+  in production. Codex called out that this is exactly the
+  cap=3 paradox: solving one P1 re-opens the other.
+
+**User ratification of cap=3** (option A — expand cycle 1 scope):
+The honest fix to satisfy BOTH R0 and R2 is to land case_family
+persistence in the SAME patch. Cycle 1 now also includes:
+  · `CaseManifest.case_family: str | None = None` (Pydantic schema)
+  · `_analyze_imported` emits `case_family` as a `warning` MissingField
+    when absent
+  · `_STEP_PATH_PREFIXES[1]` routes `case_family` to step 1 so engineers
+    see the gap early
+  · `_seed_imported_manifest` test fixture defaults `case_family="test"`
+    so existing tests still see 100% completeness
+  · Dogfood walks the full production path: stage WITHOUT case_family
+    → step 1 surfaces gap → PATCH "ship_vof" → step 4 offers skeleton
+    → PATCH skeleton → bc.patches lands
+
+Both Codex findings now satisfied simultaneously:
+  · R0 P1 (feature unreachable) — closed via rail PATCH affordance
+    that surfaces case_family as a labelable gap
+  · R1 P1 (misclassification) — closed by removing inference; only
+    explicit user labels trigger the skeleton
 
 Regression tests:
 - `test_decide_attaches_ship_vof_bc_patches_skeleton_on_step4` (R0)
@@ -112,6 +138,8 @@ more (field_path, case_family) entries (RANS / LES / compressible / CHT).
 ## Checks (7/7 PASS)
 
 ```
+  [PASS] Step 1 rail surfaces case_family as a missing field
+  [PASS] PATCH case_family succeeded
   [PASS] Rail at step 4 surfaces suggested_skeleton
   [PASS] Skeleton has canonical inlet/outlet/wall keys
   [PASS] Primary cta_label suppressed (skeleton-only path)
@@ -121,9 +149,11 @@ more (field_path, case_family) entries (RANS / LES / compressible / CHT).
   [PASS] Post-PATCH rail no longer surfaces bc.patches as a gap
 ```
 
-Manifest used in dogfood explicitly declares `case_family: ship_vof`.
-A real imported case (without case_family in its manifest) does NOT
-get the skeleton — that's M3.1 cycle 2 scope.
+The dogfood manifest is staged **without** case_family — mirroring a
+real imported case. The rail-driven flow then prompts the engineer to
+label the case (step 1 gap), PATCHes the label, and the step-4
+skeleton becomes available. This is the **production path**, not a
+hand-injected shortcut.
 
 ---
 

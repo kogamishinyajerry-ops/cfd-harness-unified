@@ -40,7 +40,13 @@ from ui.backend.schemas.workbench_frame import (
 # step on which they should surface. A gap with prefix in multiple
 # steps' lists goes to the first matching step.
 _STEP_PATH_PREFIXES: dict[int, tuple[str, ...]] = {
-    1: ("geometry_contract.", "geometry."),
+    # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): `case_family` is
+    # case-metadata that should be labeled early (step 1, import/
+    # geometry phase). Without it set, the step-4 form-helper skeleton
+    # lookup returns None for the case. Routing case_family to step 1
+    # means the engineer is prompted to label their case before they
+    # ever need the skeleton.
+    1: ("geometry_contract.", "geometry.", "case_family"),
     2: ("mesh_contract.", "mesh."),
     3: (
         "physics.",

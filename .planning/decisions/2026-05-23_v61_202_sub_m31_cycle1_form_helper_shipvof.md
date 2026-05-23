@@ -116,16 +116,32 @@ Scope is **deliberately one case_family + one field** so:
    `rail.suggested_skeleton` is the canonical 3-patch shape, PATCH it,
    verify `bc.patches` lands with 3 entries.
 
+### In scope (expanded post Codex R2 P1 · user-ratified)
+
+- **case_family persistence in CaseManifest Pydantic schema** —
+  `case_family: str | None = None` added as a top-level field. Manifest
+  read/write round-trips it cleanly.
+
+- **case_family gap surfaced by case_completeness** — when
+  `_analyze_imported` encounters a manifest without `case_family`, it
+  emits a `MissingField` with severity `warning`. Routed to step 1 via
+  `_STEP_PATH_PREFIXES[1]` so engineers are prompted early.
+
+- **PATCH-able case_family** — the existing `PATCH /api/cases/{id}/manifest`
+  endpoint accepts `field_path: "case_family"` because (a) the path
+  parser handles top-level fields and (b) the JSON schema already
+  declared case_family (validation passes).
+
 ### Out of scope (M3.1 later cycles)
 
-- **case_family persistence + UI labeling** — Codex R1 P1 showed that
-  the M5 scaffold (`case_scaffold/manifest_writer.py`) doesn't write
-  `case_family` for imported cases. Cycle 1's R2 closure reverts the
-  solver-based inference fallback (it misclassified non-ship interFoam
-  cases). Cycle 1 ships the engine; production activation requires
-  M3.1 cycle 2 to (a) add `case_family` to `manifest_writer.py`,
-  (b) add a UI label form during import, (c) register more
-  `(field_path, case_family)` entries (RANS / LES / compressible / CHT)
+- **UI labeling form during import** — currently engineers PATCH
+  case_family via the rail's "编辑 / Edit" CTA (free-text). M3.1
+  cycle 2 will add a dropdown / enum picker with known families.
+- **Persisting case_family at import time** — `case_scaffold/manifest_writer.py`
+  still doesn't write case_family. M3.1 cycle 2 will add it as an
+  optional param so the ingest path can pre-fill when known.
+- **More (field_path, case_family) registry entries** —
+  RANS / LES / compressible / CHT — cycles 2-5
 - Other structural fields (`physics.fvSolution`, `mesh_contract.regions`)
 - Failure-path: engineer applies skeleton, then wants to override one
   patch — that's a "compose / merge" UX question, scoped to M3.1 cycle X
