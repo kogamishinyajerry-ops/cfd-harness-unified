@@ -1,8 +1,11 @@
 ---
 decision_id: DEC-V61-202-SUB-M31-CYCLE3-RANS-FAMILY-SKELETON
 title: M3.1 cycle 3 — domain-aware form helper · rans_steady_incompressible bc.patches skeleton
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-24
+accepted_date: 2026-05-24
+codex_review_arc: R0 (2 P2) → R1 (1 P2 - same as cycle-1 R7 ratified defeat) → R2 APPROVE
+final_commit: 436d4b8
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 3 (registry extension to RANS family)
 notion_sync_status: pending_accepted
