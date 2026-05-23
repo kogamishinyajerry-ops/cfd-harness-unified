@@ -21,6 +21,16 @@ export interface RailPrimary {
   body_text: string | null;
   field_path: string | null;
   suggested_default: unknown | null;
+  /**
+   * DEC-V61-202-SUB-M31-CYCLE1: domain-aware form helper. Optional
+   * structural dict skeleton for fields too complex for a scalar
+   * `suggested_default` (e.g. `bc.patches` on ship_vof). When non-null,
+   * the rail renders a secondary "Apply skeleton" CTA; clicking it
+   * PATCHes the full dict at `field_path`. Backend may emit both
+   * `suggested_default` (scalar) AND `suggested_skeleton` (dict) on
+   * the same rail — they are independent affordances.
+   */
+  suggested_skeleton: Record<string, unknown> | null;
   cta_label: string | null;
   provenance: string[];
 }

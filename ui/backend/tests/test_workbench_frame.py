@@ -135,6 +135,87 @@ def test_decide_critical_gap_when_no_fail():
     assert "bc_contract.outlet.pressure" in frame.rail_primary.title
 
 
+def test_decide_attaches_ship_vof_bc_patches_skeleton_on_step4():
+    """DEC-V61-202-SUB-M31-CYCLE1: when (field_path=bc.patches,
+    case_family=ship_vof) hits a step-4 gap, the rail must carry the
+    canonical 3-patch skeleton + the 'Apply skeleton' CTA label."""
+    state = _base_state(
+        step=4,
+        manifest={"case_family": "ship_vof"},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "at least one boundary patch required",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    rail = frame.rail_primary
+    assert rail.kind == "info_gap"
+    assert rail.field_path == "bc.patches"
+    assert rail.suggested_skeleton is not None
+    assert set(rail.suggested_skeleton.keys()) == {"inlet", "outlet", "wall"}
+    assert rail.suggested_skeleton["inlet"]["patch_type"] == "fixedValue"
+    assert rail.suggested_skeleton["outlet"]["patch_type"] == "zeroGradient"
+    assert rail.suggested_skeleton["wall"]["patch_type"] == "noSlip"
+    assert rail.cta_label == "应用骨架 / Apply skeleton"
+    # Provenance must record the skeleton presence so audit trail can
+    # tell skeleton-driven from scalar-default-driven rails apart.
+    prov_joined = " · ".join(rail.provenance)
+    assert "skeleton_keys=" in prov_joined
+
+
+def test_decide_no_skeleton_when_case_family_unknown():
+    """Cycle 1 fail-soft: unknown case_family → no skeleton attached;
+    rail falls back to the "Edit" CTA. Cycles 2-5 add more families."""
+    state = _base_state(
+        step=4,
+        manifest={"case_family": "unknown_family_xyz"},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "at least one boundary patch required",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.suggested_skeleton is None
+    assert frame.rail_primary.cta_label == "编辑 / Edit"
+
+
+def test_decide_skeleton_does_not_clobber_existing_suggested_default():
+    """If a gap somehow already carries BOTH a scalar suggested_default
+    AND we'd attach a skeleton, the scalar wins on cta_label (UI shows
+    the scalar Apply primary; the skeleton CTA renders alongside as a
+    secondary affordance). Both fields are forwarded so the frontend
+    sees the full picture."""
+    state = _base_state(
+        step=4,
+        manifest={"case_family": "ship_vof"},
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "...",
+                    "suggested_default": {"inlet": {"patch_type": "fixedValue"}},
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    rail = frame.rail_primary
+    assert rail.suggested_default is not None
+    assert rail.suggested_skeleton is not None
+    assert rail.cta_label == "填入 / Apply"  # scalar wins primary CTA
+
+
 def test_decide_step_relevance_routes_step4_problem_to_step4():
     """A bc_quality.json problem should NOT surface on Step 1."""
     artifacts = {

@@ -78,6 +78,19 @@ class RailPrimary(BaseModel):
             "types manually. Mirrors `MissingField.suggested_default` shape."
         ),
     )
+    suggested_skeleton: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "DEC-V61-202-SUB-M31-CYCLE1 · domain-aware form helper. "
+            "Structural dict skeleton for complex nested fields "
+            "(e.g. `bc.patches` for ship_vof). The frontend renders a "
+            "secondary 'Apply skeleton' CTA when this is non-null; "
+            "clicking it PATCHes the full dict at field_path. Parallel "
+            "to `suggested_default` (scalar) — both can be non-null "
+            "when both a scalar default AND a skeleton make sense, "
+            "though typically only one is offered per gap."
+        ),
+    )
     cta_label: str | None = Field(
         default=None,
         description=(

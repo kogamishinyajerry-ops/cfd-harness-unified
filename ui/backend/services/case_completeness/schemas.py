@@ -50,6 +50,18 @@ class MissingField(BaseModel):
             "yet apply it."
         ),
     )
+    suggested_skeleton: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "DEC-V61-202-SUB-M31-CYCLE1 · domain-aware form helper. "
+            "Optional structural dict skeleton for fields that are too "
+            "complex for a scalar `suggested_default` (e.g. `bc.patches` "
+            "needs a multi-key nested dict). The rail renders a separate "
+            "'Apply skeleton' CTA when this is present; the engineer "
+            "overrides specific values afterwards. None = no skeleton "
+            "offered for this field."
+        ),
+    )
 
 
 class CaseCompletenessReport(BaseModel):

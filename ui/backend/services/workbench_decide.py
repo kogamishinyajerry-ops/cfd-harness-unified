@@ -357,17 +357,35 @@ def _rail_from_gap(gap: dict, state: CaseStateSnapshot) -> RailPrimary:
     field_path = gap.get("field_path", "")
     title = f"补充字段 / Fill: {field_path}" if field_path else "缺字段"
     body = gap.get("why") or None
+    # DEC-V61-202-SUB-M31-CYCLE1: domain-aware form helper. When the
+    # completeness analyzer attached a structural skeleton (e.g. the
+    # canonical 3-patch ship_vof bc.patches dict), forward it onto the
+    # rail. The frontend renders an "Apply skeleton" CTA when this is
+    # non-null. Both `suggested_default` (scalar) and `suggested_skeleton`
+    # (dict) are forwarded independently — the frontend picks which
+    # CTA(s) to render.
+    suggested_default = gap.get("suggested_default")
+    suggested_skeleton = gap.get("suggested_skeleton")
+    if suggested_default is not None:
+        cta_label = "填入 / Apply"
+    elif suggested_skeleton is not None:
+        cta_label = "应用骨架 / Apply skeleton"
+    else:
+        cta_label = "编辑 / Edit"
     provenance = [
         f"step={state.step} · info_gap · severity={severity}",
         f"field_path={field_path}",
     ]
+    if suggested_skeleton is not None:
+        provenance.append(f"skeleton_keys={sorted(suggested_skeleton.keys())}")
     return RailPrimary(
         kind="info_gap",
         title=title[:60],
         body_text=body,
         field_path=field_path or None,
-        suggested_default=gap.get("suggested_default"),
-        cta_label="填入 / Apply" if gap.get("suggested_default") is not None else "编辑 / Edit",
+        suggested_default=suggested_default,
+        suggested_skeleton=suggested_skeleton,
+        cta_label=cta_label,
         provenance=provenance,
     )
 
@@ -836,6 +854,43 @@ def _dim_reason(dimension: dict) -> str | None:
 # ────────────────────────── gaps extraction ──────────────────────────
 
 
+# DEC-V61-202-SUB-M31-CYCLE1: form-helper skeleton registry. Keyed by
+# (field_path, case_family) so the lookup is unambiguous. Cycle 1
+# registers ship_vof bc.patches only; M3.1 cycle 2+ extends to other
+# (family, field) pairs. The skeletons are intentionally placeholder-
+# heavy (e.g. U=[1,0,0] is not the KCS Fr=0.26 velocity) so the engineer
+# must visit the field post-apply — the helper accelerates dict-shape
+# typing, it does not substitute for domain knowledge.
+_FORM_HELPER_SKELETONS: dict[tuple[str, str], dict] = {
+    ("bc.patches", "ship_vof"): {
+        "inlet":  {"patch_type": "fixedValue",   "fields": {"U": [1.0, 0.0, 0.0]}},
+        "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
+        "wall":   {"patch_type": "noSlip",       "fields": {}},
+    },
+}
+
+
+def _skeleton_for_gap(gap: dict, state: CaseStateSnapshot) -> dict | None:
+    """Look up the canonical structural skeleton for this (gap, case_family)
+    pair, if one is registered. Returns None when no skeleton applies —
+    e.g. case_family unknown, or this field_path has no helper yet.
+
+    Cycle 1 lookup is keyed by (field_path, case_family). case_family
+    is read from `state.manifest` (raw dict) because the Pydantic
+    CaseManifest schema doesn't declare it (no `extra="allow"` at top
+    level). M3.1 cycle 2+ will add it as a typed field.
+    """
+    field_path = str(gap.get("field_path", ""))
+    if not field_path:
+        return None
+    if not isinstance(state.manifest, dict):
+        return None
+    case_family = state.manifest.get("case_family")
+    if not isinstance(case_family, str):
+        return None
+    return _FORM_HELPER_SKELETONS.get((field_path, case_family))
+
+
 def _gaps_for_step(
     state: CaseStateSnapshot, *, severities: tuple[str, ...]
 ) -> list[dict]:
@@ -844,6 +899,12 @@ def _gaps_for_step(
     Source: state.completeness.missing[]. Each entry's `field_path` is
     matched against `_STEP_PATH_PREFIXES[step]`. Severity from the
     completeness report's vocabulary (critical / warning / info).
+
+    DEC-V61-202-SUB-M31-CYCLE1: when a (field_path, case_family) match
+    exists in `_FORM_HELPER_SKELETONS`, attach the skeleton to the gap
+    dict before `_rail_from_gap` consumes it. The rail builder stays
+    oblivious to family-specific logic — it only reads
+    `gap.get("suggested_skeleton")`.
     """
 
     if not state.completeness:
@@ -866,7 +927,14 @@ def _gaps_for_step(
         sev = str(raw.get("severity", "info"))
         if sev not in severities:
             continue
-        out.append(raw)
+        # Attach skeleton if registered; do not mutate the source list
+        # entry so completeness report consumers downstream see the
+        # original shape.
+        enriched = dict(raw)
+        skeleton = _skeleton_for_gap(enriched, state)
+        if skeleton is not None and enriched.get("suggested_skeleton") is None:
+            enriched["suggested_skeleton"] = skeleton
+        out.append(enriched)
     out.sort(key=lambda g: _gap_severity_rank(g.get("severity", "info")))
     return out
 

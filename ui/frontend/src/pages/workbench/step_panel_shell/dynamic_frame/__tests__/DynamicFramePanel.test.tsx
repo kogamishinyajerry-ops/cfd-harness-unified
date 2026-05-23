@@ -3,7 +3,7 @@
 // Coverage: tone selection per kind, body_text + field_path rendering,
 // CTA visibility, provenance disclosure toggle, empty-body fallback.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -30,6 +30,7 @@ const PROBLEM_RAIL: RailPrimary = {
   body_text: "interFoam expects 0/p_rgh; not found on disk",
   field_path: "bc_contract.pressure",
   suggested_default: null,
+  suggested_skeleton: null,
   cta_label: "查看 / View",
   provenance: [
     "step=4 · problem_fix · severity=fail",
@@ -43,6 +44,7 @@ const GAP_RAIL: RailPrimary = {
   body_text: "interFoam case requires vof_contract.phases",
   field_path: "vof_contract.phases",
   suggested_default: ["water", "air"],
+  suggested_skeleton: null,
   cta_label: "填入 / Apply",
   provenance: ["step=3 · info_gap · severity=critical"],
 };
@@ -53,8 +55,29 @@ const DEFAULT_RAIL: RailPrimary = {
   body_text: "当前步无阻塞 — 可以进入下一步。",
   field_path: null,
   suggested_default: null,
+  suggested_skeleton: null,
   cta_label: "下一步 / Next",
   provenance: ["step=3 · step_default · no blockers"],
+};
+
+// DEC-V61-202-SUB-M31-CYCLE1: ship_vof bc.patches skeleton rail
+const SKELETON_RAIL: RailPrimary = {
+  kind: "info_gap",
+  title: "补充字段 / Fill: bc.patches",
+  body_text: "at least one boundary patch required for interFoam",
+  field_path: "bc.patches",
+  suggested_default: null,
+  suggested_skeleton: {
+    inlet: { patch_type: "fixedValue", fields: { U: [1.0, 0.0, 0.0] } },
+    outlet: { patch_type: "zeroGradient", fields: { p: "zeroGradient" } },
+    wall: { patch_type: "noSlip", fields: {} },
+  },
+  cta_label: "应用骨架 / Apply skeleton",
+  provenance: [
+    "step=4 · info_gap · severity=critical",
+    "field_path=bc.patches",
+    "skeleton_keys=['inlet', 'outlet', 'wall']",
+  ],
 };
 
 describe("DynamicFramePanel", () => {
@@ -106,5 +129,88 @@ describe("DynamicFramePanel", () => {
     expect(
       screen.queryByText("当前步无阻塞 — 可以进入下一步。"),
     ).not.toBeInTheDocument();
+  });
+
+  // DEC-V61-202-SUB-M31-CYCLE1 · form-helper skeleton CTA tests
+
+  it("renders skeleton CTA when suggested_skeleton is present", () => {
+    renderPanel(SKELETON_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    const skeletonBtn = screen.getByTestId("dynamic-frame-skeleton-cta");
+    expect(skeletonBtn).toBeInTheDocument();
+    expect(skeletonBtn).toHaveTextContent("应用骨架 / Apply skeleton");
+    expect(skeletonBtn).not.toBeDisabled();
+  });
+
+  it("omits skeleton CTA when suggested_skeleton is null", () => {
+    renderPanel(GAP_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.queryByTestId("dynamic-frame-skeleton-cta"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits skeleton CTA when caseId or manifestStateSha missing", () => {
+    // caseId only, no sha → cannot PATCH yet → no skeleton CTA
+    renderPanel(SKELETON_RAIL, { caseId: "case_007" });
+    expect(
+      screen.queryByTestId("dynamic-frame-skeleton-cta"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("scalar and skeleton CTAs can coexist", () => {
+    const both: RailPrimary = {
+      ...SKELETON_RAIL,
+      suggested_default: { inlet: { patch_type: "fixedValue" } },
+      cta_label: "填入 / Apply",
+    };
+    renderPanel(both, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(screen.getByTestId("dynamic-frame-cta")).toHaveTextContent(
+      "填入 / Apply",
+    );
+    expect(
+      screen.getByTestId("dynamic-frame-skeleton-cta"),
+    ).toHaveTextContent("应用骨架 / Apply skeleton");
+  });
+
+  it("clicking skeleton CTA calls the PATCH mutation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          applied_path: "bc.patches",
+          new_state_sha: "b".repeat(64),
+          validation_errors: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      renderPanel(SKELETON_RAIL, {
+        caseId: "case_007",
+        manifestStateSha: "a".repeat(64),
+      });
+      await userEvent.click(screen.getByTestId("dynamic-frame-skeleton-cta"));
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/api/cases/case_007/manifest"),
+        expect.objectContaining({ method: "PATCH" }),
+      );
+      // Payload should carry the full skeleton, not the scalar default.
+      const [, init] = fetchSpy.mock.calls[0]!;
+      const body = JSON.parse((init as RequestInit).body as string);
+      expect(body.field_path).toBe("bc.patches");
+      expect(Object.keys(body.value)).toEqual(
+        expect.arrayContaining(["inlet", "outlet", "wall"]),
+      );
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

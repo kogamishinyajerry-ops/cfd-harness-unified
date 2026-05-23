@@ -83,6 +83,28 @@ export function DynamicFramePanel({
     });
   };
 
+  // DEC-V61-202-SUB-M31-CYCLE1: domain-aware form helper. When the
+  // rail carries a `suggested_skeleton` (structural dict for fields
+  // like `bc.patches` on ship_vof cases), render a secondary CTA
+  // alongside the primary "Apply" / "Edit" button. Clicking PATCHes
+  // the entire skeleton dict at `field_path`. The two CTAs share the
+  // same patch.mutate flow but submit different payloads.
+  const canApplySkeleton =
+    Boolean(caseId) &&
+    Boolean(manifestStateSha) &&
+    Boolean(rail.field_path) &&
+    rail.suggested_skeleton !== null &&
+    rail.suggested_skeleton !== undefined;
+  const onSkeletonCtaClick = () => {
+    if (!canApplySkeleton || !rail.field_path || !manifestStateSha) return;
+    setErrorMsg(null);
+    patch.mutate({
+      field_path: rail.field_path,
+      value: rail.suggested_skeleton,
+      expected_state_sha: manifestStateSha,
+    });
+  };
+
   return (
     <section
       data-testid="dynamic-frame-panel"
@@ -127,6 +149,28 @@ export function DynamicFramePanel({
           }`}
         >
           {patch.isPending ? "应用中…" : rail.cta_label}
+        </button>
+      )}
+
+      {/* DEC-V61-202-SUB-M31-CYCLE1: skeleton CTA. Renders only when a
+          domain-aware skeleton is available. Amber styling marks it as
+          a heavier commit than the scalar Apply (it writes a whole
+          nested dict at field_path). Both buttons can coexist when the
+          backend offers both a scalar default AND a skeleton. */}
+      {canApplySkeleton && (
+        <button
+          type="button"
+          data-testid="dynamic-frame-skeleton-cta"
+          onClick={onSkeletonCtaClick}
+          disabled={patch.isPending}
+          aria-disabled={patch.isPending}
+          className={`mt-2 ml-2 rounded-sm border px-2 py-1 text-[11px] transition ${
+            !patch.isPending
+              ? "border-amber-700/60 bg-amber-900/40 text-amber-200 hover:bg-amber-900/60"
+              : "border-surface-700 bg-surface-900/40 text-surface-500 cursor-not-allowed"
+          }`}
+        >
+          {patch.isPending ? "应用中…" : "应用骨架 / Apply skeleton"}
         </button>
       )}
 
