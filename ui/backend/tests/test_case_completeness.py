@@ -166,15 +166,15 @@ def _seed_imported_manifest(
 
 
 def test_imported_case_full_minimal_contract(isolated_drafts):
-    """Imported case with all minimal fields → 5/5, ready_for_archive=True.
+    """Imported case with all minimal fields → 4/4, ready_for_archive=True.
 
-    Total of 5 = 3 base critical (solver, turbulence, bc.patches) + 1
-    manifest_schema_invalid slot + 1 case_family warning slot
-    (allocated because simpleFoam now has a registered candidate per
-    DEC-V61-202-SUB-M31-CYCLE3).
+    Total of 4 = 3 base critical (solver, turbulence, bc.patches) + 1
+    manifest_schema_invalid slot.
 
-    Default fixture has case_family="test" so the warning is NOT in
-    the missing list (slot present, not missing). Percentage 100%.
+    Default fixture: solver=simpleFoam, turbulence_model=laminar.
+    Per DEC-V61-202-SUB-M31-CYCLE3 R0 P1 fix, the simpleFoam → RANS
+    candidate is gated on turbulence_model != laminar. Laminar runs
+    don't allocate the case_family slot at all → total=4.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_test001"
@@ -184,10 +184,8 @@ def test_imported_case_full_minimal_contract(isolated_drafts):
     assert r.ready_for_archive is True
     assert r.blocked_by_critical == 0
     assert r.percentage == 100.0
-    # Cycle 3: simpleFoam → {rans_steady_incompressible} candidate
-    # allocates the case_family slot. Fixture's case_family="test"
-    # fills the slot, so it's not in missing.
-    assert r.total_count == 5
+    # simpleFoam + laminar → no case_family slot (RANS gate filters out)
+    assert r.total_count == 4
     assert not any(m.field_path == "case_family" for m in r.missing)
 
 
@@ -275,28 +273,31 @@ def test_imported_case_family_helper_reads_manifest_only_not_flat_draft(isolated
     ), "manifest-only contract: flat-draft interFoam must not trigger advisory"
 
 
-def test_imported_simplefoam_case_without_case_family_emits_warning(isolated_drafts):
-    """DEC-V61-202-SUB-M31-CYCLE3: simpleFoam now has a registered
-    candidate (`rans_steady_incompressible`), so the case_family
-    advisory fires for simpleFoam imports lacking the label.
+def test_imported_simplefoam_kOmegaSST_case_without_case_family_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3: simpleFoam + RANS turbulence (e.g.
+    kOmegaSST) gets the case_family advisory when unlabeled.
 
-    Before cycle 3, simpleFoam had no candidate and this case stayed
-    at 100%. Cycle 3 extends the registry so simpleFoam imports get
-    the same demand-driven advisory treatment as interFoam imports.
+    DEC-V61-202-SUB-M31-CYCLE3 Codex R0 P1 fix: turbulence_model gate
+    means simpleFoam imports get the RANS advisory ONLY when running
+    a RANS turbulence model. Laminar runs are tested separately in
+    `test_imported_simplefoam_laminar_case_no_warning` (negative).
     """
     _, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_no_family"
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_rans_no_family"
     _seed_imported_manifest(
-        imported, case_id, solver="simpleFoam", case_family=None
+        imported,
+        case_id,
+        solver="simpleFoam",
+        turbulence_model="kOmegaSST",
+        case_family=None,
     )
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user"
-    assert r.total_count == 5  # case_family warning slot now allocated
+    assert r.total_count == 5  # case_family warning slot allocated
     assert r.present_count == 4
     assert r.percentage == 80.0
     assert r.blocked_by_critical == 0  # advisory does not block
     assert r.ready_for_archive is True
-    # Warning text mentions the simpleFoam candidate, not ship_vof.
     case_family_missing = [
         m for m in r.missing if m.field_path == "case_family"
     ]
@@ -305,20 +306,49 @@ def test_imported_simplefoam_case_without_case_family_emits_warning(isolated_dra
     assert "rans_steady_incompressible" in case_family_missing[0].why
 
 
-def test_imported_simplefoam_case_with_rans_family_no_warning(isolated_drafts):
-    """DEC-V61-202-SUB-M31-CYCLE3 positive cleanup: simpleFoam case
-    that has labeled `case_family: rans_steady_incompressible` clears
-    the advisory and stays at 100%.
+def test_imported_simplefoam_laminar_case_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 Codex R0 P1 fix: simpleFoam + laminar
+    must NOT trigger the RANS advisory.
 
-    Mirrors the cycle-1 happy-path (interFoam + ship_vof = 100%) for
-    the cycle-3 RANS extension.
+    Steady laminar incompressible flow (simpleFoam + laminar) is a
+    legitimate workflow, but the cycle-3 RANS skeleton wouldn't apply.
+    Suggesting `rans_steady_incompressible` to a laminar case would
+    steer engineers toward a non-applicable helper. Per turbulence
+    gate in `_case_family_helper_candidate_applies`, the candidate is
+    suppressed → no warning, no slot allocated → percentage 100%.
     """
     _, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_with_family"
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_laminar"
     _seed_imported_manifest(
         imported,
         case_id,
         solver="simpleFoam",
+        turbulence_model="laminar",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 4  # no case_family slot for laminar
+    assert r.percentage == 100.0
+    assert not any(m.field_path == "case_family" for m in r.missing)
+
+
+def test_imported_simplefoam_kOmegaSST_case_with_rans_family_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 positive cleanup: simpleFoam + RANS
+    turbulence + `case_family: rans_steady_incompressible` clears the
+    advisory and stays at 100%.
+
+    Mirrors the cycle-1 happy-path (interFoam + ship_vof = 100%) for
+    the cycle-3 RANS extension. Uses kOmegaSST so the candidate is
+    enabled (laminar would suppress it entirely).
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_rans_with_family"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="simpleFoam",
+        turbulence_model="kOmegaSST",
         case_family="rans_steady_incompressible",
     )
     r = analyze_case_completeness(case_id)
@@ -327,6 +357,39 @@ def test_imported_simplefoam_case_with_rans_family_no_warning(isolated_drafts):
     assert r.present_count == 5
     assert r.percentage == 100.0
     assert not any(m.field_path == "case_family" for m in r.missing)
+
+
+def test_imported_simplefoam_kOmegaSST_case_with_unknown_family_still_warns(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 Codex R0 P2 fix: labeling
+    `case_family` with a value that doesn't map to any registered
+    helper does NOT clear the advisory.
+
+    Scenario: engineer types `test` or some placeholder on a
+    simpleFoam+RANS case. The label is non-empty (cycle-1's old
+    behavior would suppress the warning), but Step 4 still cannot
+    offer a skeleton because `_FORM_HELPER_SKELETONS` has no
+    `("bc.patches", "test")` entry. The completeness score must NOT
+    claim labeling unlocked it — the warning stays fired.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_rans_bad_label"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="simpleFoam",
+        turbulence_model="kOmegaSST",
+        case_family="test",  # not in _CASE_FAMILIES_WITH_HELPERS
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 5
+    assert r.present_count == 4  # case_family slot stays missing
+    assert r.percentage == 80.0
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+    assert case_family_missing[0].severity == "warning"
 
 
 def test_imported_pimplefoam_case_no_warning(isolated_drafts):

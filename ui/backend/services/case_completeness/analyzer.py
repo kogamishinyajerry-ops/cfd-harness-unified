@@ -470,37 +470,54 @@ _SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
     # but also steady laminar and transitional regimes. The candidate
     # set means "this solver could benefit from a RANS-class skeleton",
     # NOT "this case IS RANS-steady" — engineer still labels explicitly.
-    # Same advisory shape as interFoam → ship_vof.
+    # Codex cycle-3 R0 P1: gated on turbulence_model != laminar (see
+    # `_case_family_helper_candidate_applies`).
     "simpleFoam": frozenset({"rans_steady_incompressible"}),
 }
+
+# Codex cycle-3 R0 P2 fix: case_family must map to a registered
+# skeleton to clear the advisory. Cycle 1 + cycle 3 ship two helpers
+# (ship_vof, rans_steady_incompressible). When an engineer labels
+# their case `test` or some placeholder string, the warning must stay
+# fired — the Step-4 skeleton won't be available, so the completeness
+# score shouldn't claim labeling unlocked it.
+#
+# Duplicating the family names here (the canonical registry lives in
+# `workbench_decide.py::_FORM_HELPER_SKELETONS`) is a stopgap. Per
+# cycle-1 TODO: extract to shared module when registry grows past 3
+# entries (cycle 4+). For 2 entries, the duplication cost < the
+# import-restructure cost.
+_CASE_FAMILIES_WITH_HELPERS: frozenset[str] = frozenset({
+    "ship_vof",
+    "rans_steady_incompressible",
+})
 
 
 def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
     """True iff a registered form-helper exists for some case_family that
-    is plausible for the manifest's solver.
+    is plausible for the manifest's solver + turbulence_model.
 
-    Cycle 1: interFoam → {ship_vof} only. Other solvers (simpleFoam,
-    pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate, so the
-    case_family advisory does not fire — completeness percentage stays at
-    100% for those cases.
+    Cycle 1: interFoam → {ship_vof} only. Cycle 3: simpleFoam → {
+    rans_steady_incompressible} for non-laminar runs. Other solvers
+    (pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate.
 
     Why not infer the family directly: per Codex R1, solver-alone is not
     a sound classifier — interFoam covers ship_vof / sloshing / dam-break
     / multiphase pipes. The candidate set just means "labeling could
     benefit"; the engineer still chooses the actual family.
 
+    Codex cycle-3 R0 P1 fix: simpleFoam + turbulence_model=laminar is
+    a steady laminar incompressible flow — NOT covered by the cycle-3
+    RANS skeleton. Suggesting `rans_steady_incompressible` for those
+    cases would penalize otherwise-complete laminar imports to 80%
+    while steering engineers toward a helper that doesn't apply.
+    Per-solver turbulence-model gate added below.
+
     Codex R7 / user-ratified defeat (2026-05-24): this helper reads
     ONLY `manifest.physics.solver`. Merged manifest+flat-draft
     resolution was attempted in R5+R6 but produced an unresolvable
-    design ambiguity:
-      - scaffold pre-writes `flat.solver.name=simpleFoam` by default
-      - `switch_solver` writes manifest only
-      - `PUT /api/cases/{id}/yaml` writes flat only
-      - either precedence loses fresh edits in the OTHER direction
-    Cycle 1 punts the solver-source authority question to a proper
-    cycle-2 design DEC. Known limitation: engineers who set
-    `solver: interFoam` in the flat draft but haven't run
-    `switch_solver` yet get no case_family advisory until they run it.
+    design ambiguity. Cycle 1 punts the solver-source authority
+    question to a future design DEC.
     """
     physics = raw_manifest_yaml.get("physics")
     if not isinstance(physics, dict):
@@ -508,7 +525,19 @@ def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> 
     solver = physics.get("solver")
     if not isinstance(solver, str) or not solver:
         return False
-    return solver in _SOLVER_TO_CASE_FAMILY_CANDIDATES
+    if solver not in _SOLVER_TO_CASE_FAMILY_CANDIDATES:
+        return False
+
+    # Codex cycle-3 R0 P1 fix: simpleFoam laminar doesn't match a RANS
+    # skeleton; suppress the candidate for that subset. Other solvers
+    # are not yet turbulence-gated (interFoam VOF is geometric, not
+    # turbulent; ship_vof skeleton works regardless of turbulence model).
+    if solver == "simpleFoam":
+        turbulence = physics.get("turbulence_model")
+        if isinstance(turbulence, str) and turbulence.strip().lower() == "laminar":
+            return False
+
+    return True
 
 
 def _analyze_imported(
@@ -635,10 +664,15 @@ def _analyze_imported(
     helper_candidate_applies = _case_family_helper_candidate_applies(
         raw_manifest_yaml
     )
-    if (
-        helper_candidate_applies
-        and (not isinstance(raw_case_family, str) or not raw_case_family)
-    ):
+    # Codex cycle-3 R0 P2: only treat the slot as "filled" when the
+    # labeled case_family actually maps to a registered skeleton. A
+    # placeholder like `test` doesn't unlock anything on Step 4, so
+    # the warning + slot stay missing.
+    case_family_unlocks_skeleton = (
+        isinstance(raw_case_family, str)
+        and raw_case_family in _CASE_FAMILIES_WITH_HELPERS
+    )
+    if helper_candidate_applies and not case_family_unlocks_skeleton:
         # DEC-V61-202-SUB-M31-CYCLE3: solver-aware advisory text.
         # Cycle 1 hardcoded interFoam→ship_vof; cycle 3 adds simpleFoam
         # → rans_steady_incompressible. The text now picks the
