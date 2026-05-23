@@ -234,6 +234,86 @@ def test_decide_no_skeleton_when_case_family_unknown():
     assert frame.rail_primary.cta_label == "编辑 / Edit"
 
 
+def test_decide_attaches_rans_bc_patches_skeleton_on_step4_simplefoam():
+    """DEC-V61-202-SUB-M31-CYCLE3: simpleFoam case with case_family
+    label gets the rans_steady_incompressible bc.patches skeleton at
+    step 4, analog of cycle-1's ship_vof test.
+    """
+    state = _base_state(
+        step=4,
+        manifest={
+            "case_family": "rans_steady_incompressible",
+            "physics": {"solver": "simpleFoam"},
+        },
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "interFoam needs patches",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    rail = frame.rail_primary
+    assert rail.kind == "info_gap"
+    assert rail.field_path == "bc.patches"
+    assert rail.suggested_skeleton is not None
+    # RANS skeleton has same 3-patch structural shape as ship_vof.
+    assert set(rail.suggested_skeleton.keys()) == {"inlet", "outlet", "wall"}
+    # But placeholder velocity differs (RANS: 10 m/s; ship_vof: 1 m/s).
+    assert rail.suggested_skeleton["inlet"]["fields"]["U"] == [10.0, 0.0, 0.0]
+
+
+def test_decide_no_cross_pollination_simplefoam_does_not_get_ship_vof_skeleton():
+    """DEC-V61-202-SUB-M31-CYCLE3 negative regression: a simpleFoam
+    case labeled `ship_vof` (incorrect cross-pollination scenario)
+    should still get the ship_vof skeleton because the registry is
+    keyed by (field_path, case_family) — case_family wins. A
+    simpleFoam case labeled `rans_steady_incompressible` gets RANS;
+    no entry exists for (bc.patches, sloshing), so a sloshing label
+    produces no skeleton.
+
+    Pins the registry contract: case_family is the disambiguator, not
+    the solver. Engineers who mislabel get the skeleton matching
+    their label (consistent with cycle 1's principle).
+    """
+    # simpleFoam + ship_vof label → ship_vof skeleton (label wins)
+    state_ship = _base_state(
+        step=4,
+        manifest={
+            "case_family": "ship_vof",
+            "physics": {"solver": "simpleFoam"},
+        },
+        completeness={
+            "missing": [
+                {"field_path": "bc.patches", "severity": "critical", "why": "..."}
+            ]
+        },
+    )
+    f_ship = decide(state_ship)
+    assert f_ship.rail_primary.suggested_skeleton is not None
+    # Ship_vof skeleton has U=[1.0, 0.0, 0.0] (cycle-1 placeholder).
+    assert f_ship.rail_primary.suggested_skeleton["inlet"]["fields"]["U"] == [1.0, 0.0, 0.0]
+
+    # simpleFoam + sloshing label → no skeleton (no registry entry)
+    state_sloshing = _base_state(
+        step=4,
+        manifest={
+            "case_family": "sloshing",
+            "physics": {"solver": "simpleFoam"},
+        },
+        completeness={
+            "missing": [
+                {"field_path": "bc.patches", "severity": "critical", "why": "..."}
+            ]
+        },
+    )
+    f_sloshing = decide(state_sloshing)
+    assert f_sloshing.rail_primary.suggested_skeleton is None
+
+
 def test_decide_skeleton_does_not_clobber_existing_suggested_default():
     """If a gap somehow already carries BOTH a scalar suggested_default
     AND we'd attach a skeleton, the scalar wins on cta_label (UI shows

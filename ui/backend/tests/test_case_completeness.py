@@ -166,16 +166,15 @@ def _seed_imported_manifest(
 
 
 def test_imported_case_full_minimal_contract(isolated_drafts):
-    """Imported case with all minimal fields → 4/4, ready_for_archive=True.
+    """Imported case with all minimal fields → 5/5, ready_for_archive=True.
 
-    Total of 4 = 3 base critical (solver, turbulence, bc.patches) + 1
-    manifest_schema_invalid slot.
+    Total of 5 = 3 base critical (solver, turbulence, bc.patches) + 1
+    manifest_schema_invalid slot + 1 case_family warning slot
+    (allocated because simpleFoam now has a registered candidate per
+    DEC-V61-202-SUB-M31-CYCLE3).
 
-    DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix: the case_family warning
-    slot is demand-driven — it only allocates when the manifest's solver
-    has a registered helper candidate. The default fixture uses
-    simpleFoam, which has no helper, so no warning slot is allocated.
-    interFoam cases (separate test below) DO allocate the slot.
+    Default fixture has case_family="test" so the warning is NOT in
+    the missing list (slot present, not missing). Percentage 100%.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_test001"
@@ -185,7 +184,11 @@ def test_imported_case_full_minimal_contract(isolated_drafts):
     assert r.ready_for_archive is True
     assert r.blocked_by_critical == 0
     assert r.percentage == 100.0
-    assert r.total_count == 4  # 3 base + manifest schema slot (no case_family slot for simpleFoam)
+    # Cycle 3: simpleFoam → {rans_steady_incompressible} candidate
+    # allocates the case_family slot. Fixture's case_family="test"
+    # fills the slot, so it's not in missing.
+    assert r.total_count == 5
+    assert not any(m.field_path == "case_family" for m in r.missing)
 
 
 def test_imported_interfoam_case_without_case_family_emits_warning(isolated_drafts):
@@ -220,32 +223,34 @@ def test_imported_interfoam_case_without_case_family_emits_warning(isolated_draf
 
 
 def test_imported_case_family_helper_reads_manifest_only_not_flat_draft(isolated_drafts):
-    """DEC-V61-202-SUB-M31-CYCLE1 Codex R7 / user-ratified defeat:
-    `_case_family_helper_candidate_applies` reads MANIFEST ONLY.
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R7 / user-ratified defeat +
+    DEC-V61-202-SUB-M31-CYCLE3 adjustment: `_case_family_helper_candidate_applies`
+    reads MANIFEST ONLY (flat draft solver is invisible).
 
-    Background: R5+R6 attempted merged-source resolution. R6 reversed
-    R5's precedence; R7 then showed the dual problem (scaffold-default
-    `flat.solver.name=simpleFoam` shadows real `switch_solver interFoam`
-    manifest writes). The user ratified defeat-revert: cycle 1 ships
-    with manifest-only solver reading; flat-draft solver-source authority
-    is punted to a proper cycle-2 design DEC.
+    Cycle 1 background: R5+R6 attempted merged-source resolution; R7
+    showed the precedence ambiguity. User ratified defeat-revert.
 
-    This test pins the contract: flat-draft solver MUST NOT influence
-    the case_family helper. Setting interFoam in flat draft alone
-    produces no warning (manifest physics has no solver).
+    Cycle 3 update: simpleFoam now has a candidate, so the original
+    test setup (manifest=simpleFoam, flat=interFoam) DOES fire the
+    warning — but ONLY because the manifest is simpleFoam (matching
+    the simpleFoam→rans_steady_incompressible registry), NOT because
+    the flat-draft says interFoam. To prove the manifest-only contract
+    holds, this test now uses manifest=pimpleFoam (NO candidate) +
+    flat=interFoam (would-be ship_vof). Result: no warning, proving
+    flat-draft is ignored.
     """
     drafts, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_flat_only_interfoam"
     case_dir = imported / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
-    # Manifest has solver=simpleFoam (no helper candidate).
+    # Manifest has solver=pimpleFoam (no helper candidate per cycle 3).
     (case_dir / "case_manifest.yaml").write_text(
         yaml.safe_dump(
             {
                 "schema_version": 2,
                 "case_id": case_id,
                 "physics": {
-                    "solver": "simpleFoam",
+                    "solver": "pimpleFoam",
                     "turbulence_model": "laminar",
                 },
                 "bc": {
@@ -258,8 +263,8 @@ def test_imported_case_family_helper_reads_manifest_only_not_flat_draft(isolated
         ),
         encoding="utf-8",
     )
-    # Flat draft expresses interFoam intent. With manifest-only reading,
-    # this is invisible to the case_family helper (known cycle-1 limitation).
+    # Flat draft expresses interFoam intent (would trigger ship_vof
+    # advisory if read). With manifest-only contract, this is invisible.
     (drafts / f"{case_id}.yaml").write_text(
         yaml.safe_dump({"solver": "interFoam"}),
         encoding="utf-8",
@@ -270,14 +275,14 @@ def test_imported_case_family_helper_reads_manifest_only_not_flat_draft(isolated
     ), "manifest-only contract: flat-draft interFoam must not trigger advisory"
 
 
-def test_imported_simplefoam_case_without_case_family_no_warning(isolated_drafts):
-    """DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix · demand-driven negative
-    regression: simpleFoam has no registered helper candidate, so the
-    case_family warning must NOT fire and percentage stays at 100%
-    regardless of case_family presence.
+def test_imported_simplefoam_case_without_case_family_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3: simpleFoam now has a registered
+    candidate (`rans_steady_incompressible`), so the case_family
+    advisory fires for simpleFoam imports lacking the label.
 
-    Before R4 P2 fix, this case dropped to 80% with a useless warning
-    telling engineers to label a family that would unlock nothing.
+    Before cycle 3, simpleFoam had no candidate and this case stayed
+    at 100%. Cycle 3 extends the registry so simpleFoam imports get
+    the same demand-driven advisory treatment as interFoam imports.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_simplefoam_no_family"
@@ -286,7 +291,62 @@ def test_imported_simplefoam_case_without_case_family_no_warning(isolated_drafts
     )
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user"
-    assert r.total_count == 4  # no case_family warning slot for simpleFoam
+    assert r.total_count == 5  # case_family warning slot now allocated
+    assert r.present_count == 4
+    assert r.percentage == 80.0
+    assert r.blocked_by_critical == 0  # advisory does not block
+    assert r.ready_for_archive is True
+    # Warning text mentions the simpleFoam candidate, not ship_vof.
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+    assert case_family_missing[0].severity == "warning"
+    assert "rans_steady_incompressible" in case_family_missing[0].why
+
+
+def test_imported_simplefoam_case_with_rans_family_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 positive cleanup: simpleFoam case
+    that has labeled `case_family: rans_steady_incompressible` clears
+    the advisory and stays at 100%.
+
+    Mirrors the cycle-1 happy-path (interFoam + ship_vof = 100%) for
+    the cycle-3 RANS extension.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_with_family"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="simpleFoam",
+        case_family="rans_steady_incompressible",
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 5
+    assert r.present_count == 5
+    assert r.percentage == 100.0
+    assert not any(m.field_path == "case_family" for m in r.missing)
+
+
+def test_imported_pimplefoam_case_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 negative regression: pimpleFoam has
+    NO registered candidate (LES / transient incompressible — cycle 4+
+    scope), so the case_family advisory does not fire. Percentage
+    stays at 100% with no slot allocated.
+
+    Pins the demand-driven contract: only solvers IN the candidate map
+    get the case_family slot. Future cycle adding pimpleFoam updates
+    this test to positive.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pimplefoam_no_family"
+    _seed_imported_manifest(
+        imported, case_id, solver="pimpleFoam", case_family=None
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 4  # no case_family slot for pimpleFoam (yet)
     assert r.percentage == 100.0
     assert not any(m.field_path == "case_family" for m in r.missing)
 

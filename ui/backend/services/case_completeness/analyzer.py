@@ -465,6 +465,13 @@ def _build_report(
 # one entry and the cross-module coupling has no value yet.
 _SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
     "interFoam": frozenset({"ship_vof"}),
+    # DEC-V61-202-SUB-M31-CYCLE3: simpleFoam → rans_steady_incompressible.
+    # simpleFoam covers RANS steady incompressible (the dominant case),
+    # but also steady laminar and transitional regimes. The candidate
+    # set means "this solver could benefit from a RANS-class skeleton",
+    # NOT "this case IS RANS-steady" — engineer still labels explicitly.
+    # Same advisory shape as interFoam → ship_vof.
+    "simpleFoam": frozenset({"rans_steady_incompressible"}),
 }
 
 
@@ -632,31 +639,37 @@ def _analyze_imported(
         helper_candidate_applies
         and (not isinstance(raw_case_family, str) or not raw_case_family)
     ):
-        # Codex R1 rationale (NO auto-pre-fill): interFoam is a generic
-        # VOF solver covering ship_vof, sloshing, dam-break, multiphase
-        # pipes — pre-filling ship_vof would mislabel the latter. We
-        # surface the gap as advisory only; the engineer chooses the
-        # family.
+        # DEC-V61-202-SUB-M31-CYCLE3: solver-aware advisory text.
+        # Cycle 1 hardcoded interFoam→ship_vof; cycle 3 adds simpleFoam
+        # → rans_steady_incompressible. The text now picks the
+        # candidate family registered for the case's solver. The
+        # candidate is presented as an EXAMPLE — engineer chooses the
+        # actual family (Codex R1 rationale: solver-alone is not a
+        # sound classifier — interFoam covers ship_vof / sloshing /
+        # dam-break; simpleFoam covers RANS-steady / laminar /
+        # transitional).
         #
         # Codex cycle-2 R1 P3 + R2 P2 fix: renderer-agnostic copy.
-        # The `why` text appears in DynamicFramePanel (rail), but ALSO
-        # in CompletenessCard, DynamicBottomCards, and the legacy
-        # shell (`?legacy=1`). Cycle-2's inline input lives only in
-        # DynamicFramePanel — referencing "the input below" was
-        # accurate there but false on every other renderer. Text now
-        # describes WHAT labeling unlocks without prescribing HOW to
-        # set the field; that's the renderer's responsibility (rail
-        # inline input, completeness card link, etc.).
+        # The `why` text renders in DynamicFramePanel (rail) +
+        # CompletenessCard + DynamicBottomCards + legacy shell — text
+        # describes WHAT labeling unlocks without prescribing HOW.
+        solver = (raw_manifest_yaml.get("physics") or {}).get("solver", "")
+        candidate_families = _SOLVER_TO_CASE_FAMILY_CANDIDATES.get(
+            solver, frozenset()
+        )
+        example_family = (
+            sorted(candidate_families)[0] if candidate_families else "ship_vof"
+        )
         missing.append(
             MissingField(
                 field_path="case_family",
                 severity="warning",
                 why=(
-                    "This interFoam case could be ship_vof, sloshing, "
-                    "dam-break, etc. — labeling `case_family` (e.g. "
-                    "ship_vof) unlocks the Step-4 BC skeleton. "
-                    "Non-blocking — case can run without a family, but "
-                    "the canonical BC skeleton won't be offered."
+                    f"This {solver} case could match `{example_family}` "
+                    f"or a related family — labeling `case_family` "
+                    f"unlocks the Step-4 BC skeleton. Non-blocking — "
+                    f"case can run without a family, but the canonical "
+                    f"BC skeleton won't be offered."
                 ),
             )
         )

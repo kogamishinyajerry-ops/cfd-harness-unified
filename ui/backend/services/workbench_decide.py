@@ -893,16 +893,30 @@ def _dim_reason(dimension: dict) -> str | None:
 # ────────────────────────── gaps extraction ──────────────────────────
 
 
-# DEC-V61-202-SUB-M31-CYCLE1: form-helper skeleton registry. Keyed by
-# (field_path, case_family) so the lookup is unambiguous. Cycle 1
-# registers ship_vof bc.patches only; M3.1 cycle 2+ extends to other
-# (family, field) pairs. The skeletons are intentionally placeholder-
-# heavy (e.g. U=[1,0,0] is not the KCS Fr=0.26 velocity) so the engineer
-# must visit the field post-apply — the helper accelerates dict-shape
-# typing, it does not substitute for domain knowledge.
+# DEC-V61-202-SUB-M31-CYCLE1 + CYCLE3: form-helper skeleton registry.
+# Keyed by (field_path, case_family) so the lookup is unambiguous.
+# Skeletons are intentionally placeholder-heavy (e.g. U=[1,0,0] is not
+# the KCS Fr=0.26 velocity) so the engineer must visit the field
+# post-apply — the helper accelerates dict-shape typing, it does not
+# substitute for domain knowledge.
+#
+# Cycle 1: ship_vof for bc.patches (interFoam baseline).
+# Cycle 3: rans_steady_incompressible for bc.patches (simpleFoam baseline).
+# Cycle 4+: LES / compressible / CHT to follow when their canonical
+# bc.patches shape stabilizes.
 _FORM_HELPER_SKELETONS: dict[tuple[str, str], dict] = {
     ("bc.patches", "ship_vof"): {
         "inlet":  {"patch_type": "fixedValue",   "fields": {"U": [1.0, 0.0, 0.0]}},
+        "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
+        "wall":   {"patch_type": "noSlip",       "fields": {}},
+    },
+    # DEC-V61-202-SUB-M31-CYCLE3: simpleFoam RANS baseline. Structural
+    # shape matches ship_vof (3 patches) — proves the registry pattern
+    # accepts multiple entries without cross-pollination. Placeholder
+    # velocity is 10 m/s (matches the flat_plate_rans_sst fixture
+    # default); engineers override post-apply.
+    ("bc.patches", "rans_steady_incompressible"): {
+        "inlet":  {"patch_type": "fixedValue",   "fields": {"U": [10.0, 0.0, 0.0]}},
         "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
         "wall":   {"patch_type": "noSlip",       "fields": {}},
     },
