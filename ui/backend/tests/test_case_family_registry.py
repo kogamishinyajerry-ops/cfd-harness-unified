@@ -78,7 +78,7 @@ def test_all_skeletons_share_3_patch_inlet_outlet_wall_shape():
         ("simpleFoam", "SpalartAllmaras", True),
         ("simpleFoam", "laminar", False),
         ("simpleFoam", "LAMINAR", False),  # case-insensitive
-        # pisoFoam: gated on LES-class turbulence
+        # pisoFoam: gated on LES-class turbulence (raw + prefixed forms)
         ("pisoFoam", "Smagorinsky", True),
         ("pisoFoam", "dynamicSmagorinsky", True),
         ("pisoFoam", "kEqn", True),
@@ -88,10 +88,24 @@ def test_all_skeletons_share_3_patch_inlet_outlet_wall_shape():
         ("pisoFoam", "laminar", False),    # DNS, not LES
         ("pisoFoam", None, False),
         ("pisoFoam", "", False),
+        # pimpleFoam: same LES gate (Codex cycle-4 R0 P1 — pimpleFoam
+        # is the supported workbench LES solver per derive_solver)
+        ("pimpleFoam", "Smagorinsky", True),
+        ("pimpleFoam", "WALE", True),
+        ("pimpleFoam", "kOmegaSST", False),  # transient RANS, not LES
+        ("pimpleFoam", "laminar", False),    # transient laminar
+        ("pimpleFoam", None, False),
+        # Codex cycle-4 R0 P2: LES_*-prefixed model names also count
+        ("pimpleFoam", "LES_WALE", True),
+        ("pimpleFoam", "LES_kEqn", True),
+        ("pimpleFoam", "LES_TURBULENCE", True),  # generic LES sentinel
+        ("pimpleFoam", "LES_Smagorinsky", True),
+        ("pisoFoam", "LES_WALE", True),
+        ("pisoFoam", "LES_TURBULENCE", True),
         # Unregistered solvers: never fire
-        ("pimpleFoam", "Smagorinsky", False),
         ("rhoSimpleFoam", "kOmegaSST", False),
         ("chtMultiRegionFoam", None, False),
+        ("buoyantPimpleFoam", "LES_WALE", False),  # not in registry yet
         # Edge cases
         (None, "kOmegaSST", False),
         ("", "Smagorinsky", False),

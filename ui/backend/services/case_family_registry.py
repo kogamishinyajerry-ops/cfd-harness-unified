@@ -73,6 +73,11 @@ FORM_HELPER_SKELETONS: dict[tuple[str, str], dict[str, Any]] = {
 SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
     "interFoam": frozenset({"ship_vof"}),
     "simpleFoam": frozenset({"rans_steady_incompressible"}),
+    # Codex cycle-4 R0 P1 fix: `derive_solver(regime=LES-stub)` maps to
+    # `pimpleFoam`, not `pisoFoam`. The supported workbench LES path
+    # goes through pimpleFoam. pisoFoam is kept as an alias for cases
+    # imported from non-workbench LES studies.
+    "pimpleFoam": frozenset({"les_incompressible"}),
     "pisoFoam": frozenset({"les_incompressible"}),
 }
 
@@ -89,16 +94,32 @@ CASE_FAMILIES_WITH_HELPERS: frozenset[str] = frozenset(
 
 # ─────────────────────────── per-solver candidate gate ───────────────────────────
 
-# LES-class turbulence models. pisoFoam imports running these match
-# the les_incompressible skeleton. RANS-class or laminar pisoFoam
-# runs are excluded by the gate. Extend this set as new LES variants
-# show up in production cases.
+# LES-class turbulence models. pisoFoam / pimpleFoam imports running
+# these match the les_incompressible skeleton. RANS-class or laminar
+# transient runs are excluded.
+#
+# Codex cycle-4 R0 P2 fix: this repo's audit / cfdtrust layer uses
+# `LES_`-prefixed model names (LES_WALE, LES_kEqn, LES_TURBULENCE)
+# while test fixtures sometimes carry the raw OpenFOAM names. Both
+# conventions need to match the gate. `LES_TURBULENCE` is a sentinel
+# meaning "LES regime, sub-grid model TBD" (per N3.3 LES-stub
+# convention) — it counts as LES for the advisory purpose because
+# the engineer is committed to LES; choice of sub-grid model is the
+# downstream TODO the workbench surfaces.
 _LES_TURBULENCE_MODELS: frozenset[str] = frozenset({
+    # Raw OpenFOAM model names (test fixtures + future renames)
     "Smagorinsky",
     "dynamicSmagorinsky",
     "kEqn",
     "dynamicKEqn",
     "WALE",
+    # LES_*-prefixed forms (cfdtrust / audit / ingest convention)
+    "LES_Smagorinsky",
+    "LES_dynamicSmagorinsky",
+    "LES_kEqn",
+    "LES_dynamicKEqn",
+    "LES_WALE",
+    "LES_TURBULENCE",  # generic LES sentinel
 })
 
 
@@ -142,9 +163,13 @@ def helper_candidate_applies(
             return False
         return True
 
-    if solver == "pisoFoam":
+    if solver in ("pisoFoam", "pimpleFoam"):
         # LES gate: turbulence_model must be LES-class (exact-match,
-        # case-sensitive, since OpenFOAM keys are case-sensitive).
+        # case-sensitive — OpenFOAM keys are case-sensitive). Both
+        # raw model names (Smagorinsky) and prefixed forms (LES_WALE)
+        # are accepted (Codex cycle-4 R0 P2). pimpleFoam handles the
+        # workbench's `derive_solver(LES-stub)` path; pisoFoam covers
+        # non-workbench imports (Codex cycle-4 R0 P1).
         if not isinstance(turbulence_model, str) or not turbulence_model:
             return False
         return turbulence_model in _LES_TURBULENCE_MODELS

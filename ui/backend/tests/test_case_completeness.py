@@ -514,6 +514,34 @@ def test_imported_pisofoam_kOmegaSST_case_no_warning(isolated_drafts):
     assert not any(m.field_path == "case_family" for m in r.missing)
 
 
+def test_imported_pimplefoam_LES_WALE_case_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4 Codex R0 P1+P2 fix combined:
+    pimpleFoam (the supported workbench LES solver per derive_solver)
+    + LES_WALE (the audit-layer prefixed model name) fires the
+    case_family advisory.
+
+    Before R0 fix: pimpleFoam wasn't in candidates AND LES_WALE
+    wasn't in the LES turbulence set. Either gap alone would block
+    the advisory; together the supported workbench LES workflow
+    couldn't reach the helper at all.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pimplefoam_LES_WALE"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pimpleFoam",
+        turbulence_model="LES_WALE",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+    assert "les_incompressible" in case_family_missing[0].why
+
+
 def test_imported_pisofoam_dynamicSmagorinsky_case_emits_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE4 LES gate variant: dynamicSmagorinsky
     is in the LES turbulence set, so it triggers the advisory just
