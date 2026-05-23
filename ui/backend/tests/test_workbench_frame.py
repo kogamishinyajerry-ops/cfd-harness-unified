@@ -268,14 +268,14 @@ def test_decide_attaches_rans_bc_patches_skeleton_on_step4_simplefoam():
 
 def test_decide_attaches_les_bc_patches_skeleton_on_step4_pisofoam():
     """DEC-V61-202-SUB-M31-CYCLE4: pisoFoam case with LES turbulence
-    + case_family=les_incompressible gets the LES bc.patches skeleton
+    + case_family=les_transient_incompressible gets the LES bc.patches skeleton
     at step 4. Mirrors cycle-1 (ship_vof) + cycle-3 (RANS) tests for
     the LES family.
     """
     state = _base_state(
         step=4,
         manifest={
-            "case_family": "les_incompressible",
+            "case_family": "les_transient_incompressible",
             "physics": {
                 "solver": "pisoFoam",
                 "turbulence_model": "Smagorinsky",
@@ -330,7 +330,7 @@ def test_decide_les_skeleton_distinguishes_from_rans_and_ship_vof():
     # les → 5.0
     state_les = _base_state(
         step=4,
-        manifest={"case_family": "les_incompressible", "physics": {"solver": "pisoFoam"}},
+        manifest={"case_family": "les_transient_incompressible", "physics": {"solver": "pisoFoam"}},
         completeness={
             "missing": [{"field_path": "bc.patches", "severity": "critical", "why": "..."}]
         },

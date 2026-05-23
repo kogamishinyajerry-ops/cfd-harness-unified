@@ -50,10 +50,16 @@ FORM_HELPER_SKELETONS: dict[tuple[str, str], dict[str, Any]] = {
         "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
         "wall":   {"patch_type": "noSlip",       "fields": {}},
     },
-    # Cycle 4: pisoFoam LES baseline (placeholder velocity 5 m/s —
-    # intermediate scale between ship_vof's 1 m/s and RANS's 10 m/s,
-    # signaling a different operating regime).
-    ("bc.patches", "les_incompressible"): {
+    # Cycle 4: pisoFoam/pimpleFoam LES baseline (placeholder velocity
+    # 5 m/s — intermediate scale between ship_vof's 1 m/s and RANS's
+    # 10 m/s, signaling a different operating regime).
+    #
+    # Codex cycle-4 R2 P2 fix: family name aligned with the existing
+    # repo convention `{regime}_{time_mode}_{compressibility}` used
+    # by `scripts/dogfood/case_007_cycle4_multiphysics.py`. Earlier
+    # cycle-4 used shorter `les_incompressible` which broke the
+    # dogfood's already-labeled `les_transient_incompressible` cases.
+    ("bc.patches", "les_transient_incompressible"): {
         "inlet":  {"patch_type": "fixedValue",   "fields": {"U": [5.0, 0.0, 0.0]}},
         "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
         "wall":   {"patch_type": "noSlip",       "fields": {}},
@@ -77,8 +83,8 @@ SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
     # `pimpleFoam`, not `pisoFoam`. The supported workbench LES path
     # goes through pimpleFoam. pisoFoam is kept as an alias for cases
     # imported from non-workbench LES studies.
-    "pimpleFoam": frozenset({"les_incompressible"}),
-    "pisoFoam": frozenset({"les_incompressible"}),
+    "pimpleFoam": frozenset({"les_transient_incompressible"}),
+    "pisoFoam": frozenset({"les_transient_incompressible"}),
 }
 
 
@@ -95,7 +101,7 @@ CASE_FAMILIES_WITH_HELPERS: frozenset[str] = frozenset(
 # ─────────────────────────── per-solver candidate gate ───────────────────────────
 
 # LES-class turbulence models. pisoFoam / pimpleFoam imports running
-# these match the les_incompressible skeleton. RANS-class or laminar
+# these match the les_transient_incompressible skeleton. RANS-class or laminar
 # transient runs are excluded.
 #
 # Codex cycle-4 R0 P2 fix: this repo's audit / cfdtrust layer uses

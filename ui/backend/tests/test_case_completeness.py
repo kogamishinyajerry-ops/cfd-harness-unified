@@ -451,7 +451,7 @@ def test_imported_simplefoam_kOmegaSST_case_with_unknown_family_still_warns(isol
 
 def test_imported_pisofoam_smagorinsky_case_without_case_family_emits_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE4: pisoFoam + Smagorinsky LES gets the
-    case_family advisory when unlabeled. Suggests les_incompressible.
+    case_family advisory when unlabeled. Suggests les_transient_incompressible.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_pisofoam_les_no_family"
@@ -470,7 +470,7 @@ def test_imported_pisofoam_smagorinsky_case_without_case_family_emits_warning(is
         m for m in r.missing if m.field_path == "case_family"
     ]
     assert len(case_family_missing) == 1
-    assert "les_incompressible" in case_family_missing[0].why
+    assert "les_transient_incompressible" in case_family_missing[0].why
 
 
 def test_imported_pisofoam_laminar_case_no_warning(isolated_drafts):
@@ -521,7 +521,7 @@ def test_imported_pimplefoam_bare_LES_case_emits_warning(isolated_drafts):
     Gate now matches it via case-insensitive substring.
 
     Before R1 fix, dogfood-generated LES manifests with
-    `turbulence_model: "LES"` never reached the les_incompressible
+    `turbulence_model: "LES"` never reached the les_transient_incompressible
     advisory.
     """
     _, imported = isolated_drafts
@@ -538,7 +538,7 @@ def test_imported_pimplefoam_bare_LES_case_emits_warning(isolated_drafts):
         m for m in r.missing if m.field_path == "case_family"
     ]
     assert len(case_family_missing) == 1
-    assert "les_incompressible" in case_family_missing[0].why
+    assert "les_transient_incompressible" in case_family_missing[0].why
 
 
 def test_imported_pimplefoam_LES_WALE_case_emits_warning(isolated_drafts):
@@ -566,7 +566,7 @@ def test_imported_pimplefoam_LES_WALE_case_emits_warning(isolated_drafts):
         m for m in r.missing if m.field_path == "case_family"
     ]
     assert len(case_family_missing) == 1
-    assert "les_incompressible" in case_family_missing[0].why
+    assert "les_transient_incompressible" in case_family_missing[0].why
 
 
 def test_imported_pisofoam_dynamicSmagorinsky_case_emits_warning(isolated_drafts):

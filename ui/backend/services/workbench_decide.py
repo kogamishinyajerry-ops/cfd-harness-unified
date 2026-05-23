@@ -904,7 +904,7 @@ def _dim_reason(dimension: dict) -> str | None:
 # `_FORM_HELPER_SKELETONS` constant was imported at module top with
 # the same name (aliased) so the rest of this file is unchanged.
 # Cycle 1-4 entries: ship_vof / rans_steady_incompressible /
-# les_incompressible. Cycle 5+ adds compressible / CHT.
+# les_transient_incompressible. Cycle 5+ adds compressible / CHT.
 
 
 def _resolve_case_family(state: CaseStateSnapshot) -> str | None:

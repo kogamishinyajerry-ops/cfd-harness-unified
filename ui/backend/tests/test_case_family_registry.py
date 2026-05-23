@@ -37,7 +37,7 @@ def test_registered_families_match_cycle_1_3_4_set():
     assert registered_families == {
         "ship_vof",
         "rans_steady_incompressible",
-        "les_incompressible",
+        "les_transient_incompressible",
     }
 
 
