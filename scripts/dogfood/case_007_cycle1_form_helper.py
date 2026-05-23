@@ -31,13 +31,13 @@ CASE_ID = "case_007_cycle1_form_helper"
 
 STARTING_MANIFEST = {
     "case_id": CASE_ID,
-    # Codex R0 P1 fix: do NOT include case_family here — this mirrors a
-    # real imported case (the M5 scaffold manifest_writer.py doesn't
-    # persist case_family). The skeleton must still fire via the
-    # solver-based inference fallback (physics.solver == "interFoam"
-    # → ship_vof skeleton). Pre-fix this dogfood worked because we
-    # hand-injected case_family; now it works on the real production
-    # path.
+    # Codex R1 P1: an earlier R0 fix inferred ship_vof from interFoam
+    # solver, but that misclassified non-ship interFoam cases (sloshing,
+    # dam break, etc.) and gave them the wrong skeleton. Cycle 1 now
+    # requires EXPLICIT case_family on the manifest. M3.1 cycle 2 adds
+    # case_family persistence in the scaffold + UI labeling so real
+    # imported cases can opt in.
+    "case_family": "ship_vof",
     "solver_backend": "openfoam",
     "physics": {
         "solver": "interFoam",

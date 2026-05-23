@@ -878,27 +878,26 @@ _FORM_HELPER_SKELETONS: dict[tuple[str, str], dict] = {
 def _resolve_case_family(state: CaseStateSnapshot) -> str | None:
     """Resolve a case_family label for skeleton lookup.
 
-    Tries (1) explicit `case_family` on the manifest dict, then
-    (2) solver-based inference for imported cases (the M5 scaffold
-    `manifest_writer.py` does NOT persist `case_family`, so production
-    imports never carry it). Cycle 1 fallback: `physics.solver ==
-    "interFoam"` → `ship_vof`. M3.1 cycle 2+ persists case_family
-    properly and removes the inference layer.
+    Cycle 1 reads ONLY the explicit `case_family` field on the manifest
+    dict. The M5 scaffold `manifest_writer.py` does not persist
+    `case_family` for imported cases, so this fires only on cases that
+    explicitly declare a family (whitelist cases, hand-labeled imports,
+    and tests). M3.1 cycle 2 adds case_family persistence + UI labeling
+    so imported cases can opt in.
 
-    Codex R0 P1 fix (DEC-V61-202-SUB-M31-CYCLE1): without this fallback
-    the form-helper CTA appears only in tests/dogfood that hand-inject
-    case_family, never in production imports.
+    Codex R1 P1 fix (DEC-V61-202-SUB-M31-CYCLE1): an earlier R0 fix
+    inferred `ship_vof` from `physics.solver == "interFoam"`, but
+    interFoam is a generic VOF solver (sloshing tanks, dam breaks,
+    multiphase pipes, etc. — not all are ship topology). That
+    inference traded "missing helper" for "wrong helper" on a whole
+    class of non-ship interFoam cases. Honest scope: cycle 1 requires
+    explicit case_family; production activation = M3.1 cycle 2.
     """
     if not isinstance(state.manifest, dict):
         return None
     explicit = state.manifest.get("case_family")
     if isinstance(explicit, str) and explicit:
         return explicit
-    physics = state.manifest.get("physics")
-    if isinstance(physics, dict):
-        solver = physics.get("solver")
-        if solver == "interFoam":
-            return "ship_vof"
     return None
 
 

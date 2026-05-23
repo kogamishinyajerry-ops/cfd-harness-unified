@@ -171,15 +171,23 @@ def test_decide_attaches_ship_vof_bc_patches_skeleton_on_step4():
     assert "skeleton_keys=" in prov_joined
 
 
-def test_decide_skeleton_inferred_from_interFoam_when_case_family_missing():
-    """Codex R0 P1 regression (DEC-V61-202-SUB-M31-CYCLE1): the M5
-    imported-case scaffold (`case_scaffold/manifest_writer.py`) doesn't
-    persist `case_family` on import. Without a fallback, the skeleton
-    never appears in production. Solver-based inference closes the gap:
-    `physics.solver == "interFoam"` → ship_vof skeleton."""
+def test_decide_no_skeleton_inference_from_solver_alone():
+    """Codex R1 P1 regression (DEC-V61-202-SUB-M31-CYCLE1): an earlier
+    R0 fix inferred `ship_vof` from `physics.solver == "interFoam"`,
+    but interFoam is a generic VOF solver — sloshing tanks, dam breaks,
+    and multiphase pipes also use it, with very different BC topology.
+    Inferring ship_vof for all interFoam cases would push the
+    ship-specific inlet/outlet/wall skeleton onto cases that need
+    something else (closed-domain walls only, atmosphere top, etc.).
+
+    Honest scope: cycle 1 only fires the skeleton when case_family is
+    EXPLICITLY declared. interFoam alone does NOT trigger the helper.
+    M3.1 cycle 2 adds case_family persistence + UI labeling so
+    imported cases can declare a family."""
     state = _base_state(
         step=4,
-        # No `case_family` field — mirrors a real imported case.
+        # interFoam solver but NO case_family — mirrors a real imported
+        # multiphase case that could be sloshing, dam break, ship, etc.
         manifest={
             "physics": {"solver": "interFoam"},
         },
@@ -194,10 +202,9 @@ def test_decide_skeleton_inferred_from_interFoam_when_case_family_missing():
         },
     )
     frame = decide(state)
-    assert frame.rail_primary.suggested_skeleton is not None
-    assert set(frame.rail_primary.suggested_skeleton.keys()) == {
-        "inlet", "outlet", "wall"
-    }
+    # No inference → no skeleton → falls back to "Edit" CTA.
+    assert frame.rail_primary.suggested_skeleton is None
+    assert frame.rail_primary.cta_label == "编辑 / Edit"
 
 
 def test_decide_no_skeleton_when_case_family_unknown():

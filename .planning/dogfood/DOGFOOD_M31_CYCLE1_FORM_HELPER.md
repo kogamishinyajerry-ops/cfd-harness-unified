@@ -3,9 +3,10 @@
 **DEC**: `2026-05-23_v61_202_sub_m31_cycle1_form_helper_shipvof.md` (Proposed)
 **Date**: 2026-05-23
 **Dogfood script**: `scripts/dogfood/case_007_cycle1_form_helper.py`
-**Verdict**: **PASS** (7/7 checks · post Codex R0 verbatim fixes)
-**Codex**: R0 = 1 P1 + 1 P2 closed verbatim (case_family solver-inference
-fallback + duplicate-CTA suppression). See closure addendum at DEC bottom.
+**Verdict**: **PASS** (7/7 checks · post Codex R0+R1 verbatim fixes)
+**Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = APPROVE (3 reviews,
+under v2.3 cap=3). Closure: explicit case_family required (M3.1
+cycle 2 will persist it); cta_label=null when only skeleton.
 
 ---
 
@@ -51,35 +52,62 @@ applies use — no parallel construction track.
 
 ---
 
-## Codex R0 closure (1 P1 + 1 P2 · verbatim · 1 round)
+## Codex closure (3 rounds · 2 P1 + 1 P2 · under v2.3 cap=3)
 
-- **P1 · case_family not persisted in imported-case flow**: the M5
-  `case_scaffold/manifest_writer.py` writes `source/origin/created_at`
-  but not `case_family`. Real imported cases never carry it, so the
-  cycle-1 lookup returned None for every ship_vof case in production —
-  the feature only worked in tests/dogfood that hand-injected the
-  field. Fix: added `_resolve_case_family(state)` with two-step
-  resolution: (1) explicit `manifest["case_family"]`, then (2)
-  solver-based inference — `physics.solver == "interFoam"` → ship_vof.
-  The dogfood manifest no longer hand-injects `case_family`, mirroring
-  a real imported case; the skeleton still fires via the inference
-  fallback.
-
+**R0** (1 P1 + 1 P2):
+- **P1 · case_family not persisted**: M5 `case_scaffold/manifest_writer.py`
+  writes source/origin/created_at but not `case_family`. Real imported
+  cases never carry it, so the lookup returned None for every case in
+  production — feature only worked with hand-injected test data.
+  **R0 fix attempted**: added solver-based inference fallback
+  (`physics.solver == "interFoam"` → ship_vof). **R1 caught this fix**:
+  see R1 below.
 - **P2 · duplicate "Apply skeleton" buttons**: when only a skeleton
   was offered, the backend set `cta_label = "应用骨架 / Apply skeleton"`
   on the primary CTA, but the primary's `canApply` evaluator needs
-  `suggested_default` (which is null on a skeleton-only rail), so the
-  primary rendered disabled while the secondary skeleton CTA rendered
-  live — two identical buttons, one dead. Fix: when only the skeleton
-  is the affordance, the backend now sets `cta_label = null`; the
-  frontend renders only the secondary skeleton button.
+  `suggested_default` (null on skeleton-only rail), so the primary
+  rendered disabled while the secondary skeleton CTA rendered live —
+  two identical buttons, one dead. **Fixed** (still holds): backend
+  sets `cta_label = null` when only skeleton; frontend renders only
+  the secondary skeleton button.
 
-Regression tests added:
-- `test_decide_skeleton_inferred_from_interFoam_when_case_family_missing`
-- `test_decide_no_skeleton_when_case_family_unknown` (strengthened to
-  explicitly use a non-interFoam solver so the inference fallback
-  doesn't pollute the assertion)
+**R1** (1 P1):
+- **P1 · solver-inference misclassifies non-ship interFoam cases**:
+  Codex R1 caught that the R0 inference traded "missing helper" for
+  "wrong helper". interFoam is a generic VOF solver — sloshing tanks,
+  dam breaks, multiphase pipes also use it, with very different BC
+  topology (closed-domain walls only, atmosphere top, etc.). Inferring
+  ship_vof from solver alone would let a user PATCH the ship-specific
+  inlet/outlet/wall skeleton onto a sloshing-tank case → wrong manifest.
+  **R2 fix** (verbatim · revert + scope clarification): removed the
+  solver-based inference path. Cycle 1 now requires EXPLICIT
+  `case_family` on the manifest. The scope of "real production
+  activation" defers to M3.1 cycle 2 (case_family persistence + UI
+  labeling).
+
+**R2** (CRS APPROVE — no further findings).
+
+Regression tests:
+- `test_decide_attaches_ship_vof_bc_patches_skeleton_on_step4` (R0)
+- `test_decide_no_skeleton_inference_from_solver_alone` (R1 — pins the
+  no-inference contract: interFoam without explicit case_family
+  produces NO skeleton)
+- `test_decide_no_skeleton_when_case_family_unknown` (R0 strengthened)
+- `test_decide_skeleton_does_not_clobber_existing_suggested_default` (R0)
 - Frontend: `does NOT render primary CTA when only skeleton is offered`
+
+## Cycle 1 honest scope (post R0-R1-R2)
+
+Cycle 1 ships **the engine** for domain-aware form helpers, gated on
+explicit `case_family` declaration. The skeleton fires when:
+- Whitelist cases that declare `case_family: ship_vof` in their YAML
+- Tests / dogfoods that hand-set the field
+
+The skeleton does **NOT** fire for normal imported cases today, because
+the M5 scaffold doesn't persist `case_family`. **M3.1 cycle 2 closes
+that gap** by (a) adding `case_family` to `manifest_writer.py`, (b)
+adding a UI label form during import / case-editor, and (c) registering
+more (field_path, case_family) entries (RANS / LES / compressible / CHT).
 
 ## Checks (7/7 PASS)
 
@@ -93,9 +121,9 @@ Regression tests added:
   [PASS] Post-PATCH rail no longer surfaces bc.patches as a gap
 ```
 
-Manifest used in dogfood has **NO `case_family`** (mirroring a real
-imported case post-R0 fix). The skeleton fires via the solver-based
-inference: `physics.solver: interFoam` → `case_family: ship_vof`.
+Manifest used in dogfood explicitly declares `case_family: ship_vof`.
+A real imported case (without case_family in its manifest) does NOT
+get the skeleton — that's M3.1 cycle 2 scope.
 
 ---
 

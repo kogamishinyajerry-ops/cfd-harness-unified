@@ -118,7 +118,14 @@ Scope is **deliberately one case_family + one field** so:
 
 ### Out of scope (M3.1 later cycles)
 
-- Other case_families (RANS / LES / compressible / CHT) — cycles 2-5
+- **case_family persistence + UI labeling** — Codex R1 P1 showed that
+  the M5 scaffold (`case_scaffold/manifest_writer.py`) doesn't write
+  `case_family` for imported cases. Cycle 1's R2 closure reverts the
+  solver-based inference fallback (it misclassified non-ship interFoam
+  cases). Cycle 1 ships the engine; production activation requires
+  M3.1 cycle 2 to (a) add `case_family` to `manifest_writer.py`,
+  (b) add a UI label form during import, (c) register more
+  `(field_path, case_family)` entries (RANS / LES / compressible / CHT)
 - Other structural fields (`physics.fvSolution`, `mesh_contract.regions`)
 - Failure-path: engineer applies skeleton, then wants to override one
   patch — that's a "compose / merge" UX question, scoped to M3.1 cycle X
