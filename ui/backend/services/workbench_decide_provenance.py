@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +56,30 @@ _DISABLED_ENV_VAR = "WORKBENCH_PROVENANCE_DISABLED"
 # on restart the existing log persists but the cache resets (at most
 # one duplicate first-frame entry — acceptable noise).
 _LAST_STATE_SHA_PER_CASE: dict[str, str] = {}
+
+# M3.1 spike-1: serialize the cache read-check-write under per-case
+# locks so overlapping `GET /workbench_frame` requests (two tabs on the
+# same case, or a fast refetch racing a PATCH-triggered refetch) can't
+# both pass the dedup check before either writes. Bounded scope: lock
+# is per-case (not global) so unrelated cases don't contend; the lock
+# is held only for the file-write critical section, so latency on the
+# fire-and-forget path stays microsecond-class. Closes M3.0 push-review
+# R2 P2 #2 (deferred to retro queue at the time per v2.3 cap=3).
+_LOCK_REGISTRY_LOCK = threading.Lock()
+_PER_CASE_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _lock_for_case(safe: str) -> threading.Lock:
+    """Get-or-create a per-case lock. The registry mutex is held only
+    long enough to insert a missing entry; lock acquisition itself
+    happens outside the mutex so unrelated cases never block each
+    other."""
+    with _LOCK_REGISTRY_LOCK:
+        lock = _PER_CASE_LOCKS.get(safe)
+        if lock is None:
+            lock = threading.Lock()
+            _PER_CASE_LOCKS[safe] = lock
+        return lock
 
 # Parse `severity=X` out of a RailPrimary.provenance line.
 # decide() builders write traces like
@@ -119,65 +144,70 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
     try:
         safe = _safe_case_id(state.case_id)
         # Push-review R0 P2 #1 fix: same state_sha as last logged for this
-        # case → passive refetch, skip. Detection is per-process; restart
-        # may add one duplicate, accepted.
+        # case → passive refetch, skip.
         #
         # Push-review R1 P2 #2 fix: only update the cache AFTER a
-        # successful write (post-fsync). Updating before would mask
-        # transient mkdir/open/fsync failures — a later refetch of the
-        # same frame would be deduped even though no log line landed.
-        last = _LAST_STATE_SHA_PER_CASE.get(safe)
-        if last is not None and last == frame.state_sha:
-            return
+        # successful write (post-fsync).
+        #
+        # M3.1 spike-1: serialize the entire read-check-write under a
+        # per-case lock so overlapping requests can't both pass the
+        # dedup check before either writes. Detection is per-process;
+        # restart may add one duplicate (accepted).
+        with _lock_for_case(safe):
+            last = _LAST_STATE_SHA_PER_CASE.get(safe)
+            if last is not None and last == frame.state_sha:
+                return
 
-        case_dir = AUDIT_V2_DIR / safe
-        case_dir.mkdir(parents=True, exist_ok=True)
-        log_path = case_dir / "decisions.jsonl"
+            case_dir = AUDIT_V2_DIR / safe
+            case_dir.mkdir(parents=True, exist_ok=True)
+            log_path = case_dir / "decisions.jsonl"
 
-        # bottom_card severities for at-a-glance grep
-        bc_severities = [
-            getattr(c, "severity", None) for c in (frame.bottom_cards or [])
-        ]
+            # bottom_card severities for at-a-glance grep
+            bc_severities = [
+                getattr(c, "severity", None) for c in (frame.bottom_cards or [])
+            ]
 
-        record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "case_id": state.case_id,
-            "step": state.step,
-            "focus_patch": state.focus_patch,
-            "state_sha": frame.state_sha,
-            "manifest_state_sha": frame.manifest_state_sha,
-            "rail_primary": {
-                "kind": frame.rail_primary.kind,
-                "title": frame.rail_primary.title,
-                "field_path": frame.rail_primary.field_path,
-                # severity is parsed out of provenance traces (RailPrimary
-                # itself has no severity field — the upstream finding/gap
-                # severity is only encoded in the provenance strings).
-                # Codex R0 P2 #2 fix: surface WARN-vs-FAIL in the log row.
-                "severity": _rail_severity(frame.rail_primary.provenance),
-            },
-            "topbar_cta": {
-                "kind": frame.topbar_cta.kind,
-                "target_step": frame.topbar_cta.target_step,
-                "enabled": frame.topbar_cta.enabled,
-            },
-            "bottom_card_count": len(frame.bottom_cards or []),
-            "bottom_card_severities": bc_severities,
-            "viewport_overlay_count": len(frame.viewport_overlays or []),
-        }
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "case_id": state.case_id,
+                "step": state.step,
+                "focus_patch": state.focus_patch,
+                "state_sha": frame.state_sha,
+                "manifest_state_sha": frame.manifest_state_sha,
+                "rail_primary": {
+                    "kind": frame.rail_primary.kind,
+                    "title": frame.rail_primary.title,
+                    "field_path": frame.rail_primary.field_path,
+                    # severity is parsed out of provenance traces
+                    # (RailPrimary itself has no severity field — the
+                    # upstream finding/gap severity is only encoded in
+                    # the provenance strings). Codex R0 P2 #2 fix:
+                    # surface WARN-vs-FAIL in the log row.
+                    "severity": _rail_severity(frame.rail_primary.provenance),
+                },
+                "topbar_cta": {
+                    "kind": frame.topbar_cta.kind,
+                    "target_step": frame.topbar_cta.target_step,
+                    "enabled": frame.topbar_cta.enabled,
+                },
+                "bottom_card_count": len(frame.bottom_cards or []),
+                "bottom_card_severities": bc_severities,
+                "viewport_overlay_count": len(frame.viewport_overlays or []),
+            }
 
-        # Single-write semantics: serialize, then write the whole line
-        # in one call so partial writes can't corrupt the log under
-        # concurrent decide() invocations.
-        line = json.dumps(record, ensure_ascii=False) + "\n"
-        with open(log_path, "a", encoding="utf-8") as fp:
-            fp.write(line)
-            fp.flush()
-            os.fsync(fp.fileno())
-        # Push-review R1 P2 #2 fix: cache update AFTER the with-block
-        # closes cleanly. A failed write raises out of the with → cache
-        # is NOT poisoned → next call retries the same state.
-        _LAST_STATE_SHA_PER_CASE[safe] = frame.state_sha
+            # Single-write semantics: serialize, then write the whole
+            # line in one call so partial writes can't corrupt the log.
+            line = json.dumps(record, ensure_ascii=False) + "\n"
+            with open(log_path, "a", encoding="utf-8") as fp:
+                fp.write(line)
+                fp.flush()
+                os.fsync(fp.fileno())
+            # Push-review R1 P2 #2 fix: cache update AFTER the file
+            # write closes cleanly. A failed write raises out of the
+            # inner with → cache is NOT poisoned → next call retries
+            # the same state. Update still inside the per-case lock so
+            # an overlapping caller sees the new value before its check.
+            _LAST_STATE_SHA_PER_CASE[safe] = frame.state_sha
     except Exception as exc:  # noqa: BLE001 — fire-and-forget by contract
         logger.warning(
             "decide() provenance log failed (case=%s): %s",

@@ -209,6 +209,47 @@ def test_dedup_cache_not_poisoned_by_failed_write(monkeypatch, tmp_path):
     )
 
 
+def test_concurrent_same_state_dedup(provenance_enabled, monkeypatch):
+    """M3.1 spike-1 regression: overlapping decide() calls on the same
+    case with the same state_sha must produce exactly one log line.
+    Pre-fix, the read-check-write was unsynchronized, so two threads
+    could both pass the dedup gate before either wrote. Post-fix, the
+    per-case lock serializes the critical section."""
+    import threading as _threading
+
+    import ui.backend.services.workbench_decide_provenance as wp
+
+    wp._LAST_STATE_SHA_PER_CASE.clear()
+    wp._PER_CASE_LOCKS.clear()
+
+    state = _state(case_id="case_concurrent")
+
+    N_THREADS = 16
+    barrier = _threading.Barrier(N_THREADS)
+    errors: list[BaseException] = []
+
+    def worker():
+        try:
+            barrier.wait()
+            decide(state)
+        except BaseException as exc:
+            errors.append(exc)
+
+    threads = [_threading.Thread(target=worker) for _ in range(N_THREADS)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"worker threads raised: {errors}"
+    log_path = provenance_enabled / "case_concurrent" / "decisions.jsonl"
+    lines = _read_lines(log_path)
+    assert len(lines) == 1, (
+        f"expected exactly 1 line under {N_THREADS}-way concurrent same-state "
+        f"calls, got {len(lines)}"
+    )
+
+
 def test_repeated_same_state_sha_dedup(provenance_enabled, monkeypatch):
     """Push-review P2 #1 regression: passive refetches that return the
     same state_sha must not append duplicate log lines. React Query
