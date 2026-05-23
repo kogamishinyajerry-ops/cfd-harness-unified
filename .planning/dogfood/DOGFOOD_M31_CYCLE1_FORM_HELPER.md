@@ -15,7 +15,11 @@ misleading "case-editor" workaround copy) → fixed: solver resolution
 now reads merged manifest+flat-draft; advisory copy rewritten to name
 only paths that actually unlock the skeleton. R6 = 1 P1 (manifest-wins
 precedence reintroduced stale-solver problem when files diverge) →
-fixed: precedence reversed, flat-draft (latest editor intent) wins.
+fixed: precedence reversed, flat-draft wins. R7 = 1 P1 (scaffold-default
+flat solver shadows real switch_solver manifest writes) → **defeat-revert
+ratified by user**: R5+R6 merged-source resolution removed entirely;
+analyzer reads manifest-only; flat-draft authority deferred to cycle-2
+design DEC. Cycle 1 closes here with documented known limitation.
 
 ---
 
@@ -101,6 +105,34 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R7 + user-ratified defeat-revert** (2026-05-24):
+- **P1 · scaffold-default `flat.solver.name=simpleFoam` shadows real
+  `switch_solver interFoam` manifest writes**: R6's flat-wins
+  precedence regressed the default scaffold-created workflow.
+  Engineer imports a case → scaffold writes
+  `user_drafts/{id}.yaml::solver.name=simpleFoam` → engineer runs
+  `switch_solver interFoam` (manifest only) → flat-wins still
+  resolves to the scaffolded simpleFoam.
+- **Root cause**: there is no single-source precedence that works
+  for both real workflows. R5 (manifest-wins) lost editor edits; R6
+  (flat-wins) lost switch_solver edits. The same divergence has two
+  opposite "correct" answers depending on which file was written last.
+- **User-ratified resolution**: defeat-revert R5+R6 merged-source
+  resolution entirely. `_case_family_helper_candidate_applies` now
+  reads MANIFEST ONLY. Re-accepts R5 P1 (flat-draft-only solver
+  state gets no warning) as a **documented cycle-1 known limitation**.
+  Solver-source authority is punted to a proper cycle-2 design DEC.
+- **5 fix rounds = clear diminishing-returns signal**. Codex was
+  surfacing legit findings, but each fix opened the dual. Honest
+  scope close > perpetual fix iteration.
+
+Tests reverted in defeat-revert:
+- Deleted: `test_imported_flat_draft_interfoam_solver_emits_case_family_warning` (R5)
+- Deleted: `test_imported_flat_draft_solver_dict_with_name_emits_case_family_warning` (R5)
+- Deleted: `test_imported_flat_draft_overrides_stale_manifest_solver_to_interfoam` (R6)
+- Deleted: `test_imported_flat_draft_overrides_stale_manifest_solver_to_simplefoam` (R6)
+- Added: `test_imported_case_family_helper_reads_manifest_only_not_flat_draft` (pins manifest-only contract)
 
 **R6** (1 P1 · after R5 fix landed):
 - **P1 · stale manifest hides newer editor intent**: R5's

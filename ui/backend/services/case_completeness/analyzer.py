@@ -468,53 +468,9 @@ _SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
 }
 
 
-def _effective_imported_solver(
-    raw_manifest_yaml: dict[str, Any],
-    raw_flat_yaml: dict[str, Any],
-) -> str | None:
-    """Resolve the engineer's chosen solver across the merged
-    manifest + flat-draft view that `_analyze_imported` operates on.
-
-    Codex R5 P1 + R6 P1: imported cases are merged-source AND the two
-    files are written by separate endpoints:
-      - `switch_solver` writes `case_manifest.yaml`
-      - `PUT /api/cases/{id}/yaml` writes `user_drafts/{id}.yaml` (flat draft)
-    These diverge whenever the engineer edits the flat draft after a
-    previous switch_solver run. The flat draft is the most recent
-    expression of engineer intent, so it MUST win over manifest;
-    otherwise stale manifest values silently override fresh editor
-    edits (R6 P1).
-
-    Precedence (flat-draft first, manifest fallback):
-      1. `user_drafts/{id}.yaml::solver` (string)
-      2. `user_drafts/{id}.yaml::solver.name` (dict shape)
-      3. `case_manifest.yaml::physics.solver` (string)
-      4. None
-    """
-    flat_solver = raw_flat_yaml.get("solver")
-    if isinstance(flat_solver, str) and flat_solver:
-        return flat_solver
-    if isinstance(flat_solver, dict):
-        flat_name = flat_solver.get("name")
-        if isinstance(flat_name, str) and flat_name:
-            return flat_name
-
-    physics = raw_manifest_yaml.get("physics")
-    if isinstance(physics, dict):
-        manifest_solver = physics.get("solver")
-        if isinstance(manifest_solver, str) and manifest_solver:
-            return manifest_solver
-
-    return None
-
-
-def _case_family_helper_candidate_applies(
-    raw_manifest_yaml: dict[str, Any],
-    raw_flat_yaml: dict[str, Any],
-) -> bool:
+def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
     """True iff a registered form-helper exists for some case_family that
-    is plausible for the engineer's effective solver (merged manifest +
-    flat-draft view).
+    is plausible for the manifest's solver.
 
     Cycle 1: interFoam → {ship_vof} only. Other solvers (simpleFoam,
     pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate, so the
@@ -525,9 +481,25 @@ def _case_family_helper_candidate_applies(
     a sound classifier — interFoam covers ship_vof / sloshing / dam-break
     / multiphase pipes. The candidate set just means "labeling could
     benefit"; the engineer still chooses the actual family.
+
+    Codex R7 / user-ratified defeat (2026-05-24): this helper reads
+    ONLY `manifest.physics.solver`. Merged manifest+flat-draft
+    resolution was attempted in R5+R6 but produced an unresolvable
+    design ambiguity:
+      - scaffold pre-writes `flat.solver.name=simpleFoam` by default
+      - `switch_solver` writes manifest only
+      - `PUT /api/cases/{id}/yaml` writes flat only
+      - either precedence loses fresh edits in the OTHER direction
+    Cycle 1 punts the solver-source authority question to a proper
+    cycle-2 design DEC. Known limitation: engineers who set
+    `solver: interFoam` in the flat draft but haven't run
+    `switch_solver` yet get no case_family advisory until they run it.
     """
-    solver = _effective_imported_solver(raw_manifest_yaml, raw_flat_yaml)
-    if not solver:
+    physics = raw_manifest_yaml.get("physics")
+    if not isinstance(physics, dict):
+        return False
+    solver = physics.get("solver")
+    if not isinstance(solver, str) or not solver:
         return False
     return solver in _SOLVER_TO_CASE_FAMILY_CANDIDATES
 
@@ -654,7 +626,7 @@ def _analyze_imported(
     # so only interFoam imports see the warning today.
     raw_case_family = raw_manifest_yaml.get("case_family")
     helper_candidate_applies = _case_family_helper_candidate_applies(
-        raw_manifest_yaml, raw_flat_yaml
+        raw_manifest_yaml
     )
     if (
         helper_candidate_applies

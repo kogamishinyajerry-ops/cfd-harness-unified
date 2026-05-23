@@ -134,6 +134,19 @@ Scope is **deliberately one case_family + one field** so:
 
 ### Out of scope (M3.1 later cycles)
 
+- **Solver-source authority** (Codex R5/R6/R7 ratified defeat-revert
+  2026-05-24): merged manifest+flat-draft resolution attempted but
+  abandoned after surfacing fundamental design ambiguity — scaffold
+  pre-writes flat solver default, `switch_solver` writes manifest
+  only, `PUT /yaml` writes flat only. Neither precedence (manifest-
+  wins or flat-wins) works for both real workflows; the same file
+  divergence has opposite "correct" answers depending on which write
+  was most recent. Cycle 1 ships with `_case_family_helper_candidate_applies`
+  reading manifest-only. Cycle 2 owns the design decision (likely
+  candidates: timestamp-based / always-sync via switch_solver writing
+  flat too / explicit "manifest authoritative once written" rule with
+  a sync-warning when divergence detected).
+
 - **UI labeling form for case_family** (Codex R4 P1 honest acknowledgement):
   cycle 1 has no inline edit affordance on the rail for top-level scalar
   string fields. The case_family gap surfaces on the rail with an
