@@ -532,6 +532,22 @@ def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> 
     # skeleton; suppress the candidate for that subset. Other solvers
     # are not yet turbulence-gated (interFoam VOF is geometric, not
     # turbulent; ship_vof skeleton works regardless of turbulence model).
+    #
+    # Codex cycle-3 R1 P2 acknowledgement: this gate reads MANIFEST
+    # ONLY (physics.turbulence_model). The flat draft at
+    # `user_drafts/{id}.yaml` is NOT consulted. This is the SAME
+    # ratified-defeat contract established for solver in cycle 1 R7
+    # (see `_case_family_helper_candidate_applies` docstring above):
+    # the manifest+flat-draft precedence ambiguity has no single-source
+    # solution that works for both `switch_solver` and `PUT /yaml`
+    # workflows. Extending merged-source reading to turbulence_model
+    # would re-open the cycle-1 R5/R6/R7 spiral with the same outcome.
+    #
+    # Known limitation: an engineer who edits `turbulence_model:
+    # kOmegaSST` in the flat draft but hasn't yet committed it back
+    # to the manifest will see the manifest-stamped value win here.
+    # The cycle-2-deferred solver-source-authority design DEC covers
+    # turbulence_model under the same umbrella.
     if solver == "simpleFoam":
         turbulence = physics.get("turbulence_model")
         if isinstance(turbulence, str) and turbulence.strip().lower() == "laminar":

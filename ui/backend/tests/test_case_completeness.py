@@ -306,6 +306,63 @@ def test_imported_simplefoam_kOmegaSST_case_without_case_family_emits_warning(is
     assert "rans_steady_incompressible" in case_family_missing[0].why
 
 
+def test_imported_simplefoam_turbulence_reads_manifest_only_not_flat_draft(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE3 Codex R1 P2 acknowledgement: the
+    turbulence_model gate reads MANIFEST ONLY — same ratified-defeat
+    contract as cycle-1 R7 solver resolution.
+
+    Scenario: manifest stamps `turbulence_model: kOmegaSST` (engineer
+    ran a turbulence-aware switch); flat draft (newer editor edit)
+    sets turbulence_model: laminar. Manifest-only contract: kOmegaSST
+    wins → candidate fires → warning emitted. Pinning this contract
+    prevents future cycles from accidentally re-opening the cycle-1
+    R5/R6/R7 precedence spiral.
+
+    The solver-source-authority design DEC (cycle-2 out-of-scope) will
+    resolve turbulence_model under the same umbrella.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_turb_manifest_only"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Manifest: simpleFoam + kOmegaSST (no case_family).
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {
+                    "solver": "simpleFoam",
+                    "turbulence_model": "kOmegaSST",
+                },
+                "bc": {
+                    "patches": {"inlet": {"patch_type": "patch", "fields": {}}}
+                },
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Flat draft expresses laminar (would suppress the candidate IF read).
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump(
+            {"solver": "simpleFoam", "turbulence_model": "laminar"}
+        ),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    # Manifest's kOmegaSST wins → candidate fires → warning emitted.
+    assert any(
+        m.field_path == "case_family" and m.severity == "warning"
+        for m in r.missing
+    ), (
+        "manifest-only contract: manifest kOmegaSST must drive candidate, "
+        "flat-draft laminar must be invisible"
+    )
+
+
 def test_imported_simplefoam_laminar_case_no_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE3 Codex R0 P1 fix: simpleFoam + laminar
     must NOT trigger the RANS advisory.
