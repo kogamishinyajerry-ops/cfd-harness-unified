@@ -9,10 +9,12 @@ ratified by user (case_family persistence + gap surface + PATCH path
 all pulled into cycle 1). R3 = 1 P1 + 1 P2 (severity-aware topbar
 gating + warning-count totals) → fixed inline. R4 = 1 P1 + 1 P2
 (case_family unreachable from UI + false warning on non-applicable
-solvers) → P2 closed via demand-driven warning (solver→family-candidate
-map: cycle 1 ships interFoam→ship_vof only); P1 partially addressed
-via honest "why" text (cycle-1 advisory; UI labeling form is M3.1
-cycle 2 scope; engineers PATCH via API/YAML in the meantime).
+solvers) → P2 closed via demand-driven warning; P1 deferred to cycle 2.
+R5 = 1 P1 + 1 P2 (helper applicability missed flat-draft solver +
+misleading "case-editor" workaround copy) → fixed: solver resolution
+now reads merged manifest+flat-draft (matches existing solver-presence
+parity rule); advisory copy rewritten to name only paths that actually
+unlock the skeleton (API PATCH today, M3.1 cycle 2 UI input).
 
 ---
 
@@ -98,6 +100,34 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R5** (1 P1 + 1 P2 · after R4 fix landed):
+- **P1 · helper applicability missed flat-draft solver**: imported
+  cases are analyzed as merged manifest + flat-draft state, but
+  `_case_family_helper_candidate_applies()` only inspected
+  `manifest.physics.solver`. An engineer who set
+  `solver: interFoam` in `user_drafts/{id}.yaml` but had not yet
+  run `switch_solver` got no warning at all — the only Step-1 prompt
+  signaling a Step-4 helper would suddenly disappear. **Fix**: new
+  helper `_effective_imported_solver()` resolves solver across the
+  same merged view used elsewhere in `_analyze_imported` (manifest
+  wins; flat-draft string OR `solver.name` dict shape fall through).
+  Both helper applicability and the warning text now honor flat-draft
+  intent.
+- **P2 · misleading "case-editor / YAML edit" workaround copy**: the
+  R4 advisory told engineers to set case_family via case-editor or
+  YAML edit. But the workbench frame loads
+  `user_drafts/imported/{id}/case_manifest.yaml` and
+  `_resolve_case_family()` only reads `state.manifest`. The case
+  editor edits the **flat draft** at `user_drafts/{id}.yaml`, which
+  does NOT feed `_resolve_case_family`. So that path silently
+  wouldn't unlock the skeleton. **Fix**: copy rewritten to name only
+  the paths that actually work today — API PATCH on the manifest
+  endpoint — and explicitly defer the UI input to M3.1 cycle 2.
+
+Regression tests added in R5 fix:
+- `test_imported_flat_draft_interfoam_solver_emits_case_family_warning` (P1 string solver)
+- `test_imported_flat_draft_solver_dict_with_name_emits_case_family_warning` (P1 dict-shape solver)
 
 **R4** (1 P1 + 1 P2 · after R3 fix landed):
 - **P1 · case_family unreachable from the UI**: routing the warning to

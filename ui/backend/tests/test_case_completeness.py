@@ -219,6 +219,91 @@ def test_imported_interfoam_case_without_case_family_emits_warning(isolated_draf
     )
 
 
+def test_imported_flat_draft_interfoam_solver_emits_case_family_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R5 P1 fix: helper applicability
+    must read merged manifest + flat-draft view.
+
+    An engineer who sets `solver: interFoam` in `user_drafts/{id}.yaml`
+    but has not yet run `switch_solver` (manifest physics empty) still
+    expresses interFoam intent — the analyzer already supports this
+    merged-source workflow for solver presence elsewhere, so the
+    case_family advisory must honor it too.
+
+    Before R5 P1 fix, `_case_family_helper_candidate_applies()` only
+    read manifest.physics.solver, so this flat-draft-only state
+    suppressed the warning and the engineer never learned a Step-4
+    helper was available.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_flat_interfoam"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    # Manifest WITHOUT physics.solver, WITHOUT case_family
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {"turbulence_model": "laminar"},
+                "bc": {
+                    "patches": {"inlet": {"patch_type": "patch", "fields": {}}}
+                },
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Flat draft DOES set interFoam
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"solver": "interFoam"}),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert any(
+        m.field_path == "case_family" and m.severity == "warning"
+        for m in r.missing
+    ), "case_family warning must surface when solver is set in flat draft only"
+
+
+def test_imported_flat_draft_solver_dict_with_name_emits_case_family_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R5 P1 fix · dict-shape flat solver:
+    `_effective_imported_solver` must also lift `solver: {name: interFoam}`
+    from the flat draft, matching `_normalize_flat_yaml` behavior already
+    used for solver-presence checks.
+    """
+    drafts, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_flat_interfoam_dict"
+    case_dir = imported / case_id
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "case_manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 2,
+                "case_id": case_id,
+                "physics": {"turbulence_model": "laminar"},
+                "bc": {
+                    "patches": {"inlet": {"patch_type": "patch", "fields": {}}}
+                },
+                "numerics": {},
+                "overrides": {},
+                "history": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (drafts / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"solver": {"name": "interFoam"}}),
+        encoding="utf-8",
+    )
+    r = analyze_case_completeness(case_id)
+    assert any(
+        m.field_path == "case_family" and m.severity == "warning"
+        for m in r.missing
+    ), "case_family warning must surface for flat-draft dict solver shape"
+
+
 def test_imported_simplefoam_case_without_case_family_no_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix · demand-driven negative
     regression: simpleFoam has no registered helper candidate, so the

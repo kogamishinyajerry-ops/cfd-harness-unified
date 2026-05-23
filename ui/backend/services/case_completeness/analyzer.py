@@ -468,9 +468,46 @@ _SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
 }
 
 
-def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
+def _effective_imported_solver(
+    raw_manifest_yaml: dict[str, Any],
+    raw_flat_yaml: dict[str, Any],
+) -> str | None:
+    """Resolve the engineer's chosen solver across the merged
+    manifest + flat-draft view that `_analyze_imported` operates on.
+
+    Codex R5 P1: imported cases are merged-source. An engineer who has
+    set `solver: interFoam` in `user_drafts/{id}.yaml` but has not run
+    `switch_solver` yet still expresses solver intent — the analyzer
+    must see it (matches the manifest/flat parity rule used elsewhere
+    in this function for solver presence checks).
+
+    Precedence: manifest.physics.solver wins when set; otherwise the
+    flat-draft solver (string or dict-with-name) wins; otherwise None.
+    """
+    physics = raw_manifest_yaml.get("physics")
+    if isinstance(physics, dict):
+        manifest_solver = physics.get("solver")
+        if isinstance(manifest_solver, str) and manifest_solver:
+            return manifest_solver
+
+    flat_solver = raw_flat_yaml.get("solver")
+    if isinstance(flat_solver, str) and flat_solver:
+        return flat_solver
+    if isinstance(flat_solver, dict):
+        flat_name = flat_solver.get("name")
+        if isinstance(flat_name, str) and flat_name:
+            return flat_name
+
+    return None
+
+
+def _case_family_helper_candidate_applies(
+    raw_manifest_yaml: dict[str, Any],
+    raw_flat_yaml: dict[str, Any],
+) -> bool:
     """True iff a registered form-helper exists for some case_family that
-    is plausible for this manifest's solver.
+    is plausible for the engineer's effective solver (merged manifest +
+    flat-draft view).
 
     Cycle 1: interFoam → {ship_vof} only. Other solvers (simpleFoam,
     pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate, so the
@@ -482,11 +519,8 @@ def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> 
     / multiphase pipes. The candidate set just means "labeling could
     benefit"; the engineer still chooses the actual family.
     """
-    physics = raw_manifest_yaml.get("physics")
-    if not isinstance(physics, dict):
-        return False
-    solver = physics.get("solver")
-    if not isinstance(solver, str) or not solver:
+    solver = _effective_imported_solver(raw_manifest_yaml, raw_flat_yaml)
+    if not solver:
         return False
     return solver in _SOLVER_TO_CASE_FAMILY_CANDIDATES
 
@@ -613,7 +647,7 @@ def _analyze_imported(
     # so only interFoam imports see the warning today.
     raw_case_family = raw_manifest_yaml.get("case_family")
     helper_candidate_applies = _case_family_helper_candidate_applies(
-        raw_manifest_yaml
+        raw_manifest_yaml, raw_flat_yaml
     )
     if (
         helper_candidate_applies
@@ -623,9 +657,17 @@ def _analyze_imported(
         # VOF solver covering ship_vof, sloshing, dam-break, multiphase
         # pipes — pre-filling ship_vof would mislabel the latter. We
         # surface the gap as advisory only; the engineer chooses the
-        # family. Cycle 1 has no UI labeling form (M3.1 cycle 2 scope),
-        # so today engineers PATCH via the case-editor / YAML edit /
-        # API. The rail text is explicit about this.
+        # family.
+        #
+        # Codex R5 P2 honest path: the only paths that actually unlock
+        # the Step-4 skeleton are (a) the workbench's PATCH endpoint
+        # (`PATCH /api/cases/{id}/manifest` with field_path=case_family —
+        # what tests + dogfood use) and (b) direct edit of the manifest
+        # YAML on disk at `user_drafts/imported/{id}/case_manifest.yaml`.
+        # The case editor edits the flat draft at `user_drafts/{id}.yaml`,
+        # which `_resolve_case_family()` does NOT read — so we no longer
+        # mention case-editor as a workaround. M3.1 cycle 2 will add an
+        # inline workbench UI input.
         missing.append(
             MissingField(
                 field_path="case_family",
@@ -634,8 +676,9 @@ def _analyze_imported(
                     "This interFoam case could be ship_vof, sloshing, "
                     "dam-break, etc. — labeling `case_family` (e.g. "
                     "ship_vof) unlocks the Step-4 BC skeleton. "
-                    "Cycle-1 honest scope: no UI labeler yet; set the "
-                    "field via the case-editor or YAML edit. "
+                    "Cycle-1 honest scope: no inline workbench UI yet; "
+                    "the labeler lands in M3.1 cycle 2. Until then, "
+                    "PATCH manifest directly via the API. "
                     "Non-blocking advisory."
                 ),
             )
