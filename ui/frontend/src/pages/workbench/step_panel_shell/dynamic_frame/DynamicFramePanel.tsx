@@ -105,6 +105,35 @@ export function DynamicFramePanel({
     });
   };
 
+  // DEC-V61-202-SUB-M31-CYCLE2: inline scalar input. When the rail
+  // surfaces a `field_path` with NO `suggested_default` and NO
+  // `suggested_skeleton`, the engineer needs a way to type the value
+  // themselves. Cycle 1 left the primary `编辑 / Edit` button disabled
+  // because no auto-apply payload existed — a non-actionable prompt.
+  // This affordance gives any scalar-typed gap a one-shot inline
+  // input + Apply button. case_family is the first user-visible surface.
+  const showInlineInput =
+    Boolean(caseId) &&
+    Boolean(manifestStateSha) &&
+    Boolean(rail.field_path) &&
+    (rail.suggested_default === null || rail.suggested_default === undefined) &&
+    (rail.suggested_skeleton === null || rail.suggested_skeleton === undefined);
+  const [inlineValue, setInlineValue] = useState("");
+  const inlineApplyEnabled = inlineValue.trim().length > 0 && !patch.isPending;
+  const onInlineApply = () => {
+    if (!showInlineInput || !inlineApplyEnabled || !rail.field_path || !manifestStateSha) return;
+    setErrorMsg(null);
+    patch.mutate({
+      field_path: rail.field_path,
+      value: inlineValue.trim(),
+      expected_state_sha: manifestStateSha,
+    });
+  };
+  // When inline input is shown, suppress the original disabled primary
+  // CTA — same suppression shape as cycle-1's cta_label=null path for
+  // skeleton-only gaps. Avoids two dead/duplicate buttons.
+  const suppressPrimaryCta = showInlineInput;
+
   return (
     <section
       data-testid="dynamic-frame-panel"
@@ -135,7 +164,7 @@ export function DynamicFramePanel({
         </p>
       )}
 
-      {rail.cta_label && (
+      {rail.cta_label && !suppressPrimaryCta && (
         <button
           type="button"
           data-testid="dynamic-frame-cta"
@@ -150,6 +179,42 @@ export function DynamicFramePanel({
         >
           {patch.isPending ? "应用中…" : rail.cta_label}
         </button>
+      )}
+
+      {/* DEC-V61-202-SUB-M31-CYCLE2: inline scalar input. Lets engineers
+          type values for scalar gaps (like case_family) directly on the
+          rail. Active when the gap has field_path + no auto-apply
+          payload + PATCH context. The original "编辑 / Edit" button is
+          suppressed above to avoid two dead/duplicate buttons. */}
+      {showInlineInput && (
+        <div
+          data-testid="dynamic-frame-inline-edit"
+          className="mt-3 flex items-center gap-2"
+        >
+          <input
+            type="text"
+            data-testid="dynamic-frame-inline-input"
+            value={inlineValue}
+            onChange={(e) => setInlineValue(e.target.value)}
+            placeholder={`${rail.field_path}`}
+            disabled={patch.isPending}
+            className="min-w-0 flex-1 rounded-sm border border-surface-700 bg-surface-900/60 px-2 py-1 text-[11px] text-surface-100 placeholder:text-surface-600 focus:border-sky-700/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          />
+          <button
+            type="button"
+            data-testid="dynamic-frame-inline-apply"
+            onClick={onInlineApply}
+            disabled={!inlineApplyEnabled}
+            aria-disabled={!inlineApplyEnabled}
+            className={`rounded-sm border px-2 py-1 text-[11px] transition ${
+              inlineApplyEnabled
+                ? "border-sky-700/60 bg-sky-900/40 text-sky-200 hover:bg-sky-900/60"
+                : "border-surface-700 bg-surface-900/40 text-surface-500 cursor-not-allowed"
+            }`}
+          >
+            {patch.isPending ? "应用中…" : "应用 / Apply"}
+          </button>
+        </div>
       )}
 
       {/* DEC-V61-202-SUB-M31-CYCLE1: skeleton CTA. Renders only when a

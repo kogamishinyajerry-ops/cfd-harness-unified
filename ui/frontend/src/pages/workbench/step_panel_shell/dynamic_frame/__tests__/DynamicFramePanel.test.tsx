@@ -235,4 +235,126 @@ describe("DynamicFramePanel", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  // DEC-V61-202-SUB-M31-CYCLE2: inline scalar input affordance.
+  // Renders when the rail surfaces a field_path with no auto-apply
+  // payload (no suggested_default, no suggested_skeleton) and PATCH
+  // context is available. case_family is the first user-visible surface.
+  const INLINE_EDIT_RAIL: RailPrimary = {
+    kind: "info_gap",
+    title: "补充字段 / Fill: case_family",
+    body_text:
+      "This interFoam case could be ship_vof, sloshing, etc. — label to unlock skeleton.",
+    field_path: "case_family",
+    suggested_default: null,
+    suggested_skeleton: null,
+    cta_label: "编辑 / Edit",
+    provenance: [
+      "step=1 · info_gap · severity=warning",
+      "field_path=case_family",
+    ],
+  };
+
+  it("renders inline edit input + Apply button for scalar gap with no auto-apply payload", () => {
+    renderPanel(INLINE_EDIT_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(screen.getByTestId("dynamic-frame-inline-edit")).toBeInTheDocument();
+    expect(screen.getByTestId("dynamic-frame-inline-input")).toBeInTheDocument();
+    expect(screen.getByTestId("dynamic-frame-inline-apply")).toBeInTheDocument();
+  });
+
+  it("suppresses the original disabled primary CTA when inline edit is shown", () => {
+    renderPanel(INLINE_EDIT_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    // The "编辑 / Edit" disabled button should NOT render alongside the inline input.
+    expect(
+      screen.queryByTestId("dynamic-frame-cta"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits inline edit when caseId or manifestStateSha missing", () => {
+    renderPanel(INLINE_EDIT_RAIL, { caseId: "case_007" });
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Apply button stays disabled for empty / whitespace-only input", async () => {
+    renderPanel(INLINE_EDIT_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    const apply = screen.getByTestId("dynamic-frame-inline-apply");
+    expect(apply).toBeDisabled();
+    // Type whitespace only — Apply should remain disabled.
+    const input = screen.getByTestId("dynamic-frame-inline-input");
+    await userEvent.type(input, "   ");
+    expect(apply).toBeDisabled();
+  });
+
+  it("typing + Apply PATCHes field_path with trimmed value", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          applied_path: "case_family",
+          new_state_sha: "b".repeat(64),
+          validation_errors: [],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      renderPanel(INLINE_EDIT_RAIL, {
+        caseId: "case_007",
+        manifestStateSha: "a".repeat(64),
+      });
+      const input = screen.getByTestId("dynamic-frame-inline-input");
+      // Include leading/trailing whitespace to verify trim().
+      await userEvent.type(input, "  ship_vof  ");
+      const apply = screen.getByTestId("dynamic-frame-inline-apply");
+      expect(apply).not.toBeDisabled();
+      await userEvent.click(apply);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining("/api/cases/case_007/manifest"),
+        expect.objectContaining({ method: "PATCH" }),
+      );
+      const [, init] = fetchSpy.mock.calls[0]!;
+      const body = JSON.parse((init as RequestInit).body as string);
+      expect(body.field_path).toBe("case_family");
+      expect(body.value).toBe("ship_vof"); // trimmed
+      expect(body.expected_state_sha).toBe("a".repeat(64));
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("does NOT render inline edit when suggested_default exists (existing primary CTA still rules)", () => {
+    renderPanel(GAP_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    // Existing scalar Apply CTA renders, inline-edit affordance does not.
+    expect(screen.getByTestId("dynamic-frame-cta")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT render inline edit when suggested_skeleton exists (skeleton CTA still rules)", () => {
+    renderPanel(SKELETON_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.getByTestId("dynamic-frame-skeleton-cta"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
 });
