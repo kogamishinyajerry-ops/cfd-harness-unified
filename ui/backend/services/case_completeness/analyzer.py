@@ -453,6 +453,44 @@ def _build_report(
 # ---------------------------------------------------------------------------
 
 
+# DEC-V61-202-SUB-M31-CYCLE1 (Codex R4 P2 fix): solver → plausible
+# case_family candidates. The case_family warning fires only when the
+# manifest's solver appears here. Cycle 1 ships one helper (ship_vof for
+# bc.patches), so only interFoam manifests get the warning today; other
+# solvers' completeness reports stay clean.
+#
+# TODO(M3.1 cycle 2+): extract this + _FORM_HELPER_SKELETONS into a
+# shared domain registry (e.g. `ui/backend/domain/case_family.py`)
+# once a second helper lands. Cycle 1 inlines because there's exactly
+# one entry and the cross-module coupling has no value yet.
+_SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
+    "interFoam": frozenset({"ship_vof"}),
+}
+
+
+def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
+    """True iff a registered form-helper exists for some case_family that
+    is plausible for this manifest's solver.
+
+    Cycle 1: interFoam → {ship_vof} only. Other solvers (simpleFoam,
+    pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate, so the
+    case_family advisory does not fire — completeness percentage stays at
+    100% for those cases.
+
+    Why not infer the family directly: per Codex R1, solver-alone is not
+    a sound classifier — interFoam covers ship_vof / sloshing / dam-break
+    / multiphase pipes. The candidate set just means "labeling could
+    benefit"; the engineer still chooses the actual family.
+    """
+    physics = raw_manifest_yaml.get("physics")
+    if not isinstance(physics, dict):
+        return False
+    solver = physics.get("solver")
+    if not isinstance(solver, str) or not solver:
+        return False
+    return solver in _SOLVER_TO_CASE_FAMILY_CANDIDATES
+
+
 def _analyze_imported(
     case_id: str,
     case_dir: Path,
@@ -560,25 +598,45 @@ def _analyze_imported(
     #    without a `name` is metadata-only (family / steady_state /
     #    note) and doesn't satisfy the contract.
 
-    # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): case_family gap.
-    # Without case_family on the manifest, the form-helper skeleton
-    # lookup returns None even for cases that would otherwise match a
-    # registered (field_path, family) skeleton. Surface as a warning so
-    # the rail PATCH affordance prompts engineers to label the case
-    # (step 1, per `_STEP_PATH_PREFIXES` routing). Non-blocking — case
-    # still runs without it; just no domain-aware skeletons.
+    # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix + R4 P2 demand-driven
+    # narrowing): case_family gap, surfaced only when a registered
+    # form-helper skeleton plausibly applies to this manifest's solver.
+    #
+    # Without demand-driving, the warning fires for every imported case
+    # (e.g. simpleFoam RANS cases) even though cycle 1 only has the
+    # ship_vof skeleton — penalizing those cases' completeness percentage
+    # to 80% with no possible benefit. Codex R4 P2 flagged this.
+    #
+    # Demand-driven rule: the warning fires only when the manifest's
+    # `physics.solver` matches a candidate solver for at least one
+    # registered helper. Cycle 1 ships one helper (`ship_vof`/interFoam),
+    # so only interFoam imports see the warning today.
     raw_case_family = raw_manifest_yaml.get("case_family")
-    if not isinstance(raw_case_family, str) or not raw_case_family:
+    helper_candidate_applies = _case_family_helper_candidate_applies(
+        raw_manifest_yaml
+    )
+    if (
+        helper_candidate_applies
+        and (not isinstance(raw_case_family, str) or not raw_case_family)
+    ):
+        # Codex R1 rationale (NO auto-pre-fill): interFoam is a generic
+        # VOF solver covering ship_vof, sloshing, dam-break, multiphase
+        # pipes — pre-filling ship_vof would mislabel the latter. We
+        # surface the gap as advisory only; the engineer chooses the
+        # family. Cycle 1 has no UI labeling form (M3.1 cycle 2 scope),
+        # so today engineers PATCH via the case-editor / YAML edit /
+        # API. The rail text is explicit about this.
         missing.append(
             MissingField(
                 field_path="case_family",
                 severity="warning",
                 why=(
-                    "Label the case family (e.g. ship_vof, "
-                    "rans_steady_incompressible) to unlock the form-"
-                    "helper skeleton on Step 4. Non-blocking — case can "
-                    "run without a family, but the canonical BC "
-                    "skeleton won't be offered."
+                    "This interFoam case could be ship_vof, sloshing, "
+                    "dam-break, etc. — labeling `case_family` (e.g. "
+                    "ship_vof) unlocks the Step-4 BC skeleton. "
+                    "Cycle-1 honest scope: no UI labeler yet; set the "
+                    "field via the case-editor or YAML edit. "
+                    "Non-blocking advisory."
                 ),
             )
         )
@@ -742,12 +800,16 @@ def _analyze_imported(
             + (1 if re_value is not None else 0)
             + 1  # manifest_schema_invalid slot
         ),
-        # DEC-V61-202-SUB-M31-CYCLE1 (Codex R3 P2 fix): the case_family
-        # gap is always counted in the total — present when manifest
-        # carries it, missing-warning when absent. Keeps present_count /
-        # percentage internally consistent with the rule set being
-        # surfaced.
-        expected_warning_count=1,
+        # DEC-V61-202-SUB-M31-CYCLE1 (Codex R3 P2 + R4 P2 fixes):
+        # case_family is counted in totals only when the demand-driven
+        # predicate fires (solver matches at least one helper candidate).
+        # For non-applicable solvers, the slot does not exist, so
+        # percentage stays 100% when other required fields are present.
+        # For applicable solvers (interFoam in cycle 1), the slot is
+        # always counted — present when manifest carries case_family,
+        # missing-warning when absent. Keeps totals consistent with the
+        # rule set actually surfaced for the case.
+        expected_warning_count=1 if helper_candidate_applies else 0,
         expected_info_count=0,
         missing=missing,
         notes=notes,

@@ -166,13 +166,16 @@ def _seed_imported_manifest(
 
 
 def test_imported_case_full_minimal_contract(isolated_drafts):
-    """Imported case with all minimal fields → 5/5, ready_for_archive=True.
+    """Imported case with all minimal fields → 4/4, ready_for_archive=True.
 
-    Total of 5 = 3 base critical (solver, turbulence, bc.patches) + 1
-    manifest_schema_invalid slot (counts as present when manifest passes
-    Pydantic validation) + 1 case_family warning slot (counts as present
-    when manifest carries the label — see DEC-V61-202-SUB-M31-CYCLE1
-    Codex R3 P2 fix).
+    Total of 4 = 3 base critical (solver, turbulence, bc.patches) + 1
+    manifest_schema_invalid slot.
+
+    DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix: the case_family warning
+    slot is demand-driven — it only allocates when the manifest's solver
+    has a registered helper candidate. The default fixture uses
+    simpleFoam, which has no helper, so no warning slot is allocated.
+    interFoam cases (separate test below) DO allocate the slot.
     """
     _, imported = isolated_drafts
     case_id = "imported_2026-05-04T00-00-00Z_test001"
@@ -182,24 +185,26 @@ def test_imported_case_full_minimal_contract(isolated_drafts):
     assert r.ready_for_archive is True
     assert r.blocked_by_critical == 0
     assert r.percentage == 100.0
-    assert r.total_count == 5  # 3 base + manifest schema slot + case_family warning slot
+    assert r.total_count == 4  # 3 base + manifest schema slot (no case_family slot for simpleFoam)
 
 
-def test_imported_case_without_case_family_emits_warning_in_totals(isolated_drafts):
-    """DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P2 fix: case_family is counted
-    in totals as a warning slot.
+def test_imported_interfoam_case_without_case_family_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R3 P2 + R4 P2 fix · demand-driven:
+    case_family is counted in totals only when a registered helper
+    candidate exists for the manifest's solver.
 
-    When `case_family` is absent: total_count stays 5, present_count drops
-    to 4 (the 4 critical slots present), percentage = 4/5 = 80%. This
-    proves expected_warning_count=1 is honored and the percentage math
-    stays internally consistent.
+    interFoam → ship_vof candidate exists → warning fires when
+    case_family absent. total_count=5, present=4, percentage=4/5=80%.
 
     Without this fix, present_count=4 but total_count=4 produced 100%
-    despite a real missing field — the report would mislead engineers.
+    despite a real missing field; or the warning fired even for solvers
+    where no helper exists (Codex R4 P2 — simpleFoam falsely penalized).
     """
     _, imported = isolated_drafts
-    case_id = "imported_2026-05-04T00-00-00Z_no_family"
-    _seed_imported_manifest(imported, case_id, case_family=None)
+    case_id = "imported_2026-05-04T00-00-00Z_interfoam_no_family"
+    _seed_imported_manifest(
+        imported, case_id, solver="interFoam", case_family=None
+    )
     r = analyze_case_completeness(case_id)
     assert r.case_kind == "imported_user"
     assert r.total_count == 5
@@ -212,6 +217,27 @@ def test_imported_case_without_case_family_emits_warning_in_totals(isolated_draf
         m.field_path == "case_family" and m.severity == "warning"
         for m in r.missing
     )
+
+
+def test_imported_simplefoam_case_without_case_family_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE1 Codex R4 P2 fix · demand-driven negative
+    regression: simpleFoam has no registered helper candidate, so the
+    case_family warning must NOT fire and percentage stays at 100%
+    regardless of case_family presence.
+
+    Before R4 P2 fix, this case dropped to 80% with a useless warning
+    telling engineers to label a family that would unlock nothing.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_simplefoam_no_family"
+    _seed_imported_manifest(
+        imported, case_id, solver="simpleFoam", case_family=None
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.case_kind == "imported_user"
+    assert r.total_count == 4  # no case_family warning slot for simpleFoam
+    assert r.percentage == 100.0
+    assert not any(m.field_path == "case_family" for m in r.missing)
 
 
 def test_imported_case_missing_solver_blocks_archive(isolated_drafts):

@@ -7,8 +7,12 @@
 **Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = 1 P1 → scope-expansion
 ratified by user (case_family persistence + gap surface + PATCH path
 all pulled into cycle 1). R3 = 1 P1 + 1 P2 (severity-aware topbar
-gating + warning-count totals) → fixed inline. Now production-path-
-realistic with internally-consistent totals.
+gating + warning-count totals) → fixed inline. R4 = 1 P1 + 1 P2
+(case_family unreachable from UI + false warning on non-applicable
+solvers) → P2 closed via demand-driven warning (solver→family-candidate
+map: cycle 1 ships interFoam→ship_vof only); P1 partially addressed
+via honest "why" text (cycle-1 advisory; UI labeling form is M3.1
+cycle 2 scope; engineers PATCH via API/YAML in the meantime).
 
 ---
 
@@ -94,6 +98,34 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R4** (1 P1 + 1 P2 · after R3 fix landed):
+- **P1 · case_family unreachable from the UI**: routing the warning to
+  Step 1 surfaces a rail gap that the current UI cannot resolve — the
+  gap has no `suggested_default` and no `suggested_skeleton`, so
+  `DynamicFramePanel` renders only a disabled `编辑 / Edit` button.
+  No Step-1 form field exists for `case_family` elsewhere in the
+  workbench. **Honest fix (cycle 1 scope discipline)**: updated the
+  "why" text to be explicit — "cycle-1 advisory; set via case-editor
+  or YAML edit; UI labeler is M3.1 cycle 2". The rail still surfaces
+  the prompt so engineers know to act; the UI form is deferred. Tests
+  and dogfoods continue to PATCH via the API directly (unchanged path).
+- **P2 · false case_family warning on non-applicable solvers**: cycle 1
+  ships exactly one helper (`ship_vof`/interFoam), but the R3
+  implementation emitted the warning for every imported case regardless
+  of solver. For simpleFoam/RANS cases the warning was useless noise
+  that dropped completeness from 100% to 80%. **Fix**: introduced
+  `_SOLVER_TO_CASE_FAMILY_CANDIDATES` (cycle-1 inline registry,
+  TODO: extract when 2nd helper lands) + `_case_family_helper_candidate_applies`.
+  Warning + slot allocation only fire when the manifest's solver
+  matches a candidate. simpleFoam imports now stay at 100% with no
+  warning; interFoam imports without `case_family` correctly show the
+  warning at 80%.
+
+Regression tests added in R4 fix:
+- `test_imported_interfoam_case_without_case_family_emits_warning` (P2 positive)
+- `test_imported_simplefoam_case_without_case_family_no_warning` (P2 negative)
+- `test_imported_case_full_minimal_contract` reverted to total=4 (simpleFoam default seed has no candidate)
 
 **R3** (1 P1 + 1 P2 · after scope expansion landed):
 - **P1 · case_family warning routed into Step 1 gating**: the new

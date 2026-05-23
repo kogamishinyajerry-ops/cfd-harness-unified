@@ -134,9 +134,16 @@ Scope is **deliberately one case_family + one field** so:
 
 ### Out of scope (M3.1 later cycles)
 
-- **UI labeling form during import** — currently engineers PATCH
-  case_family via the rail's "编辑 / Edit" CTA (free-text). M3.1
-  cycle 2 will add a dropdown / enum picker with known families.
+- **UI labeling form for case_family** (Codex R4 P1 honest acknowledgement):
+  cycle 1 has no inline edit affordance on the rail for top-level scalar
+  string fields. The case_family gap surfaces on the rail with an
+  "编辑 / Edit" cta_label, but the button is disabled because the gap
+  carries no `suggested_default`. Engineers today PATCH `case_family`
+  via the API directly (what tests + dogfood do) or by YAML edit. **M3.1
+  cycle 2 will add an inline text/enum input** in DynamicFramePanel
+  that activates when the gap has no `suggested_default` + no
+  `suggested_skeleton` — generic affordance for any top-level scalar
+  field, with case_family as the first user-facing surface.
 - **Persisting case_family at import time** — `case_scaffold/manifest_writer.py`
   still doesn't write case_family. M3.1 cycle 2 will add it as an
   optional param so the ingest path can pre-fill when known.
