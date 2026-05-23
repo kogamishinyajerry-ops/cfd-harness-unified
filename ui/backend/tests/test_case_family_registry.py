@@ -102,6 +102,15 @@ def test_all_skeletons_share_3_patch_inlet_outlet_wall_shape():
         ("pimpleFoam", "LES_Smagorinsky", True),
         ("pisoFoam", "LES_WALE", True),
         ("pisoFoam", "LES_TURBULENCE", True),
+        # Codex cycle-4 R1 P2: bare "LES" used in dogfood / frontend
+        # (per usePhysicsState.ts::tm.includes("les") convention)
+        ("pimpleFoam", "LES", True),
+        ("pisoFoam", "LES", True),
+        # Codex cycle-4 R1 P2: case-insensitive "les" substring match
+        # for lowercase variants from external tooling
+        ("pimpleFoam", "les", True),
+        ("pimpleFoam", "les_wale", True),
+        ("pisoFoam", "LesDynamic", True),
         # Unregistered solvers: never fire
         ("rhoSimpleFoam", "kOmegaSST", False),
         ("chtMultiRegionFoam", None, False),

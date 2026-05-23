@@ -514,6 +514,33 @@ def test_imported_pisofoam_kOmegaSST_case_no_warning(isolated_drafts):
     assert not any(m.field_path == "case_family" for m in r.missing)
 
 
+def test_imported_pimplefoam_bare_LES_case_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4 Codex R1 P2 fix: bare `LES` is the
+    convention used by `scripts/dogfood/case_007_cycle4_multiphysics.py`
+    and `usePhysicsState.ts::tm.includes("les")` to mark LES regime.
+    Gate now matches it via case-insensitive substring.
+
+    Before R1 fix, dogfood-generated LES manifests with
+    `turbulence_model: "LES"` never reached the les_incompressible
+    advisory.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pimplefoam_bare_LES"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pimpleFoam",
+        turbulence_model="LES",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+    assert "les_incompressible" in case_family_missing[0].why
+
+
 def test_imported_pimplefoam_LES_WALE_case_emits_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE4 Codex R0 P1+P2 fix combined:
     pimpleFoam (the supported workbench LES solver per derive_solver)

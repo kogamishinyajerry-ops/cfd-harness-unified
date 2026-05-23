@@ -164,14 +164,24 @@ def helper_candidate_applies(
         return True
 
     if solver in ("pisoFoam", "pimpleFoam"):
-        # LES gate: turbulence_model must be LES-class (exact-match,
-        # case-sensitive — OpenFOAM keys are case-sensitive). Both
-        # raw model names (Smagorinsky) and prefixed forms (LES_WALE)
-        # are accepted (Codex cycle-4 R0 P2). pimpleFoam handles the
-        # workbench's `derive_solver(LES-stub)` path; pisoFoam covers
-        # non-workbench imports (Codex cycle-4 R0 P1).
+        # LES gate: turbulence_model must be LES-class. pimpleFoam
+        # handles the workbench's `derive_solver(LES-stub)` path
+        # (Codex cycle-4 R0 P1); pisoFoam covers non-workbench imports.
+        #
+        # Match rule (Codex cycle-4 R0 P2 + R1 P2):
+        #   1. Any name containing "les" (case-insensitive) — matches
+        #      `usePhysicsState.ts::tm.includes("les")` convention:
+        #      bare "LES", "LES_WALE", "LES_kEqn", "LES_TURBULENCE",
+        #      and any future "LES_*" variant the audit layer emits.
+        #      Also catches lowercase / mixed-case variants used by
+        #      external tooling.
+        #   2. Raw OpenFOAM SGS names (Smagorinsky, kEqn, WALE, etc.)
+        #      that don't carry the LES prefix but are LES-class
+        #      models per OpenFOAM convention.
         if not isinstance(turbulence_model, str) or not turbulence_model:
             return False
+        if "les" in turbulence_model.lower():
+            return True
         return turbulence_model in _LES_TURBULENCE_MODELS
 
     # interFoam (or any future ungated solver): no extra gate.
