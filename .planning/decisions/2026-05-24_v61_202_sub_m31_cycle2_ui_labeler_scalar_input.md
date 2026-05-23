@@ -1,8 +1,11 @@
 ---
 decision_id: DEC-V61-202-SUB-M31-CYCLE2-UI-LABELER-SCALAR-INPUT
 title: M3.1 cycle 2 — inline scalar input for case_family + future scalar gaps
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-24
+accepted_date: 2026-05-24
+codex_review_arc: R0 (2 findings) → R1 (2 findings) → R2 (1 finding) → R3 APPROVE
+final_commit: aaade23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 2 (UI labeler form)
 notion_sync_status: pending_accepted
