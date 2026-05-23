@@ -21,6 +21,21 @@ interface DynamicFramePanelProps {
   manifestStateSha?: string;
 }
 
+// DEC-V61-202-SUB-M31-CYCLE2 Codex R0 P2 fix: explicit allow-list of
+// top-level scalar paths that can be edited via the inline text input.
+// Each entry is a manifest field_path that the backend PATCH endpoint
+// accepts as a top-level scalar string. Adding to this list MUST be
+// accompanied by:
+//   1. analyzer emitting a no-payload gap for the path
+//   2. PATCH endpoint validation accepting the string value
+//   3. tests covering the new path
+// Cycle 2 ships only `case_family`. M3.1 cycle 3+ extends as new
+// scalar gaps land (e.g. engineer-named overrides, future scalar
+// metadata fields).
+const INLINE_EDITABLE_SCALAR_PATHS: ReadonlySet<string> = new Set([
+  "case_family",
+]);
+
 const KIND_TONE: Record<
   RailPrimary["kind"],
   { pill: string; dot: string; label: string }
@@ -112,10 +127,25 @@ export function DynamicFramePanel({
   // because no auto-apply payload existed — a non-actionable prompt.
   // This affordance gives any scalar-typed gap a one-shot inline
   // input + Apply button. case_family is the first user-visible surface.
+  //
+  // Codex R0 P1 fix: gate on `rail.kind === "info_gap"` so
+  // `problem_fix` rails (audit findings like `bc_contract.pressure`)
+  // stay as view-only diagnostics. They carry field_path for
+  // navigation but must not become editable text boxes.
+  //
+  // Codex R0 P2 fix: explicit allow-list of top-level scalar paths.
+  // Cycle 2 ships `case_family` only; other no-payload gaps (e.g.
+  // `bc.patches` when no skeleton exists, or bracketed paths like
+  // `physics_contract.physics_precondition[0]`) must NOT render the
+  // text input — they expect non-string types or reject bracket
+  // segments at the PATCH endpoint. Future cycles extend the list as
+  // new scalar gaps land.
   const showInlineInput =
     Boolean(caseId) &&
     Boolean(manifestStateSha) &&
     Boolean(rail.field_path) &&
+    rail.kind === "info_gap" &&
+    INLINE_EDITABLE_SCALAR_PATHS.has(rail.field_path ?? "") &&
     (rail.suggested_default === null || rail.suggested_default === undefined) &&
     (rail.suggested_skeleton === null || rail.suggested_skeleton === undefined);
   const [inlineValue, setInlineValue] = useState("");

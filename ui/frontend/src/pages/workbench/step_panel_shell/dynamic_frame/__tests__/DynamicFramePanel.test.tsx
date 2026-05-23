@@ -357,4 +357,75 @@ describe("DynamicFramePanel", () => {
       screen.queryByTestId("dynamic-frame-inline-edit"),
     ).not.toBeInTheDocument();
   });
+
+  // DEC-V61-202-SUB-M31-CYCLE2 Codex R0 P1 fix: gate on info_gap kind.
+  // Existing problem_fix rails (audit findings) carry field_path for
+  // viewport navigation but must stay as view-only diagnostics. The
+  // inline editor must NOT render for them.
+  it("does NOT render inline edit for problem_fix rails (audit findings stay view-only)", () => {
+    // PROBLEM_RAIL has field_path=bc_contract.pressure, no payloads.
+    // Before R0 P1 fix this would have rendered an editable text box
+    // for an audit-finding card, letting engineers PATCH arbitrary
+    // strings into a structural field path. The kind=problem_fix
+    // guard prevents that regression.
+    renderPanel(PROBLEM_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  // DEC-V61-202-SUB-M31-CYCLE2 Codex R0 P2 fix: explicit allow-list of
+  // scalar field paths. Non-string-typed gaps (like bc.patches when
+  // no skeleton exists) or bracketed paths (which the PATCH endpoint
+  // rejects) must NOT render the text input.
+  it("does NOT render inline edit for non-allowlisted scalar paths (e.g. bc.patches)", () => {
+    // info_gap rail with field_path=bc.patches but no payloads — this
+    // is the "case_family unknown, no helper" state. The field is
+    // structurally a dict, not a string; rendering a text box would
+    // mislead engineers into typing string values for a dict-typed
+    // field that PATCH would reject.
+    const bcPatchesNoPayload: RailPrimary = {
+      kind: "info_gap",
+      title: "补充字段 / Fill: bc.patches",
+      body_text: "Boundary patches required",
+      field_path: "bc.patches",
+      suggested_default: null,
+      suggested_skeleton: null,
+      cta_label: "编辑 / Edit",
+      provenance: ["step=4 · info_gap · severity=critical"],
+    };
+    renderPanel(bcPatchesNoPayload, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT render inline edit for bracketed paths the backend would reject", () => {
+    // The PATCH endpoint's `_parse_field_path` rejects bracket
+    // segments. Even if an info_gap surfaces a bracketed path, the
+    // inline editor must not offer a text box that would 400 on Apply.
+    const bracketedPath: RailPrimary = {
+      kind: "info_gap",
+      title: "补充字段 / Fill: physics_contract.physics_precondition[0]",
+      body_text: "...",
+      field_path: "physics_contract.physics_precondition[0]",
+      suggested_default: null,
+      suggested_skeleton: null,
+      cta_label: "编辑 / Edit",
+      provenance: ["step=3 · info_gap · severity=warning"],
+    };
+    renderPanel(bracketedPath, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+  });
 });
