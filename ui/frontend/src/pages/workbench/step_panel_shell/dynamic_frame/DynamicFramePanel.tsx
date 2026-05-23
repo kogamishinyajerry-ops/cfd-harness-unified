@@ -162,7 +162,30 @@ export function DynamicFramePanel({
   // When inline input is shown, suppress the original disabled primary
   // CTA — same suppression shape as cycle-1's cta_label=null path for
   // skeleton-only gaps. Avoids two dead/duplicate buttons.
-  const suppressPrimaryCta = showInlineInput;
+  //
+  // Codex R1 P2 fix (cycle 2): also suppress when the rail intrinsically
+  // has no action available (no suggested_default, no suggested_skeleton,
+  // and not in the inline-edit allow-list). This catches fallback
+  // states like a `bc.patches` gap with no skeleton (case_family
+  // still unknown) where the rail carries cta_label="编辑 / Edit" but
+  // no payload — the button is permanently dead because no PATCH
+  // context can help. Hide it instead of showing a misleading
+  // disabled affordance.
+  //
+  // Critically: this distinguishes "intrinsically dead" from
+  // "missing PATCH context". A rail with `suggested_default` but no
+  // caseId still shows the disabled CTA (signal: context is missing
+  // but the action IS available). problem_fix rails (audit
+  // diagnostics) keep their button — those are intentionally view-only.
+  const railHasIntrinsicAction =
+    (rail.suggested_default !== null && rail.suggested_default !== undefined) ||
+    (rail.suggested_skeleton !== null && rail.suggested_skeleton !== undefined) ||
+    (rail.field_path !== null &&
+      rail.field_path !== undefined &&
+      INLINE_EDITABLE_SCALAR_PATHS.has(rail.field_path));
+  const suppressPrimaryCta =
+    showInlineInput ||
+    (!railHasIntrinsicAction && rail.kind === "info_gap");
 
   return (
     <section

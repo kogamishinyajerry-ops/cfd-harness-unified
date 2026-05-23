@@ -406,6 +406,53 @@ describe("DynamicFramePanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  // DEC-V61-202-SUB-M31-CYCLE2 Codex R1 P2 fix: bc.patches gap with no
+  // skeleton (case_family still unknown) used to fall back to a
+  // permanently disabled "编辑 / Edit" button. Now suppressed entirely
+  // — no false-action affordance. Problem_fix rails keep their CTA.
+  it("suppresses dead primary CTA on info_gap rails with no action path", () => {
+    const bcPatchesNoActionRail: RailPrimary = {
+      kind: "info_gap",
+      title: "补充字段 / Fill: bc.patches",
+      body_text: "Boundary patches required",
+      field_path: "bc.patches",
+      suggested_default: null,
+      suggested_skeleton: null,
+      cta_label: "编辑 / Edit",
+      provenance: ["step=4 · info_gap · severity=critical"],
+    };
+    renderPanel(bcPatchesNoActionRail, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    // The disabled "编辑 / Edit" button is hidden — no misleading affordance.
+    expect(
+      screen.queryByTestId("dynamic-frame-cta"),
+    ).not.toBeInTheDocument();
+    // Inline editor also not shown (bc.patches not in allow-list).
+    expect(
+      screen.queryByTestId("dynamic-frame-inline-edit"),
+    ).not.toBeInTheDocument();
+    // The rail title + body still render — just no action button.
+    expect(screen.getByText("补充字段 / Fill: bc.patches")).toBeInTheDocument();
+    expect(screen.getByText("Boundary patches required")).toBeInTheDocument();
+  });
+
+  it("preserves problem_fix CTA even when no action path exists (view-only)", () => {
+    // PROBLEM_RAIL has cta_label="查看 / View" + no suggested_default.
+    // Problem_fix rails are diagnostics — the View button stays (even
+    // disabled if no nav target) so engineers know the audit finding
+    // exists.
+    renderPanel(PROBLEM_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(screen.getByTestId("dynamic-frame-cta")).toBeInTheDocument();
+    expect(screen.getByTestId("dynamic-frame-cta")).toHaveTextContent(
+      "查看 / View",
+    );
+  });
+
   it("does NOT render inline edit for bracketed paths the backend would reject", () => {
     // The PATCH endpoint's `_parse_field_path` rejects bracket
     // segments. Even if an info_gap surfaces a bracketed path, the

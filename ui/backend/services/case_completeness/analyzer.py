@@ -638,27 +638,21 @@ def _analyze_imported(
         # surface the gap as advisory only; the engineer chooses the
         # family.
         #
-        # Codex R5 P2 honest path: the only paths that actually unlock
-        # the Step-4 skeleton are (a) the workbench's PATCH endpoint
-        # (`PATCH /api/cases/{id}/manifest` with field_path=case_family —
-        # what tests + dogfood use) and (b) direct edit of the manifest
-        # YAML on disk at `user_drafts/imported/{id}/case_manifest.yaml`.
-        # The case editor edits the flat draft at `user_drafts/{id}.yaml`,
-        # which `_resolve_case_family()` does NOT read — so we no longer
-        # mention case-editor as a workaround. M3.1 cycle 2 will add an
-        # inline workbench UI input.
+        # Codex cycle-2 R1 P3 fix: cycle-2 ships an inline UI input
+        # (DynamicFramePanel.tsx::INLINE_EDITABLE_SCALAR_PATHS). The
+        # text now points engineers to that affordance instead of
+        # cycle-1's "PATCH directly via the API" / "no UI yet" guidance.
         missing.append(
             MissingField(
                 field_path="case_family",
                 severity="warning",
                 why=(
                     "This interFoam case could be ship_vof, sloshing, "
-                    "dam-break, etc. — labeling `case_family` (e.g. "
-                    "ship_vof) unlocks the Step-4 BC skeleton. "
-                    "Cycle-1 honest scope: no inline workbench UI yet; "
-                    "the labeler lands in M3.1 cycle 2. Until then, "
-                    "PATCH manifest directly via the API. "
-                    "Non-blocking advisory."
+                    "dam-break, etc. — label the case family (e.g. "
+                    "ship_vof) in the input below to unlock the Step-4 "
+                    "BC skeleton. Non-blocking — case can run without "
+                    "a family, but the canonical BC skeleton won't be "
+                    "offered."
                 ),
             )
         )
