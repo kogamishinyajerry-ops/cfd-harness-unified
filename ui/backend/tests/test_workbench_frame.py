@@ -161,19 +161,57 @@ def test_decide_attaches_ship_vof_bc_patches_skeleton_on_step4():
     assert rail.suggested_skeleton["inlet"]["patch_type"] == "fixedValue"
     assert rail.suggested_skeleton["outlet"]["patch_type"] == "zeroGradient"
     assert rail.suggested_skeleton["wall"]["patch_type"] == "noSlip"
-    assert rail.cta_label == "应用骨架 / Apply skeleton"
+    # Codex R0 P2 fix: when only skeleton is offered, cta_label is None
+    # so the frontend doesn't render a duplicate disabled primary button.
+    # The secondary skeleton button covers the action.
+    assert rail.cta_label is None
     # Provenance must record the skeleton presence so audit trail can
     # tell skeleton-driven from scalar-default-driven rails apart.
     prov_joined = " · ".join(rail.provenance)
     assert "skeleton_keys=" in prov_joined
 
 
-def test_decide_no_skeleton_when_case_family_unknown():
-    """Cycle 1 fail-soft: unknown case_family → no skeleton attached;
-    rail falls back to the "Edit" CTA. Cycles 2-5 add more families."""
+def test_decide_skeleton_inferred_from_interFoam_when_case_family_missing():
+    """Codex R0 P1 regression (DEC-V61-202-SUB-M31-CYCLE1): the M5
+    imported-case scaffold (`case_scaffold/manifest_writer.py`) doesn't
+    persist `case_family` on import. Without a fallback, the skeleton
+    never appears in production. Solver-based inference closes the gap:
+    `physics.solver == "interFoam"` → ship_vof skeleton."""
     state = _base_state(
         step=4,
-        manifest={"case_family": "unknown_family_xyz"},
+        # No `case_family` field — mirrors a real imported case.
+        manifest={
+            "physics": {"solver": "interFoam"},
+        },
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "...",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    assert frame.rail_primary.suggested_skeleton is not None
+    assert set(frame.rail_primary.suggested_skeleton.keys()) == {
+        "inlet", "outlet", "wall"
+    }
+
+
+def test_decide_no_skeleton_when_case_family_unknown():
+    """Cycle 1 fail-soft: unknown case_family AND non-interFoam solver
+    → no skeleton attached; rail falls back to the "Edit" CTA.
+    Cycles 2-5 add more (family, solver) entries."""
+    state = _base_state(
+        step=4,
+        manifest={
+            "case_family": "unknown_family_xyz",
+            # Explicitly non-interFoam so the Codex R0 P1 fallback
+            # doesn't also fire.
+            "physics": {"solver": "simpleFoam"},
+        },
         completeness={
             "missing": [
                 {

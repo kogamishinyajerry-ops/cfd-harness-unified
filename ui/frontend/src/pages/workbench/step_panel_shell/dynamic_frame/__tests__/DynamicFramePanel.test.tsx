@@ -60,7 +60,12 @@ const DEFAULT_RAIL: RailPrimary = {
   provenance: ["step=3 · step_default · no blockers"],
 };
 
-// DEC-V61-202-SUB-M31-CYCLE1: ship_vof bc.patches skeleton rail
+// DEC-V61-202-SUB-M31-CYCLE1: ship_vof bc.patches skeleton rail.
+// Codex R0 P2 fix: when only a skeleton is offered, the backend sets
+// `cta_label = null` so the frontend doesn't render a duplicate
+// disabled "Apply skeleton" primary button alongside the live secondary
+// skeleton button. Only the secondary `dynamic-frame-skeleton-cta`
+// renders for skeleton-only rails.
 const SKELETON_RAIL: RailPrimary = {
   kind: "info_gap",
   title: "补充字段 / Fill: bc.patches",
@@ -72,7 +77,7 @@ const SKELETON_RAIL: RailPrimary = {
     outlet: { patch_type: "zeroGradient", fields: { p: "zeroGradient" } },
     wall: { patch_type: "noSlip", fields: {} },
   },
-  cta_label: "应用骨架 / Apply skeleton",
+  cta_label: null,
   provenance: [
     "step=4 · info_gap · severity=critical",
     "field_path=bc.patches",
@@ -142,6 +147,23 @@ describe("DynamicFramePanel", () => {
     expect(skeletonBtn).toBeInTheDocument();
     expect(skeletonBtn).toHaveTextContent("应用骨架 / Apply skeleton");
     expect(skeletonBtn).not.toBeDisabled();
+  });
+
+  it("does NOT render primary CTA when only skeleton is offered (Codex R0 P2)", () => {
+    // When the rail has suggested_skeleton but no suggested_default,
+    // backend sets cta_label=null so frontend renders only the
+    // secondary skeleton button. Pre-fix, this would have shown two
+    // identical 'Apply skeleton' buttons (one disabled, one live).
+    renderPanel(SKELETON_RAIL, {
+      caseId: "case_007",
+      manifestStateSha: "a".repeat(64),
+    });
+    expect(
+      screen.queryByTestId("dynamic-frame-cta"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("dynamic-frame-skeleton-cta"),
+    ).toBeInTheDocument();
   });
 
   it("omits skeleton CTA when suggested_skeleton is null", () => {

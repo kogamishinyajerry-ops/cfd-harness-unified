@@ -369,7 +369,12 @@ def _rail_from_gap(gap: dict, state: CaseStateSnapshot) -> RailPrimary:
     if suggested_default is not None:
         cta_label = "填入 / Apply"
     elif suggested_skeleton is not None:
-        cta_label = "应用骨架 / Apply skeleton"
+        # Codex R0 P2 fix (DEC-V61-202-SUB-M31-CYCLE1): when ONLY a
+        # skeleton is offered, suppress the primary CTA — the frontend's
+        # secondary skeleton button is the action. Otherwise we render
+        # two identical "Apply skeleton" buttons (primary disabled
+        # because canApply needs suggested_default, secondary live).
+        cta_label = None
     else:
         cta_label = "编辑 / Edit"
     provenance = [
@@ -870,23 +875,48 @@ _FORM_HELPER_SKELETONS: dict[tuple[str, str], dict] = {
 }
 
 
+def _resolve_case_family(state: CaseStateSnapshot) -> str | None:
+    """Resolve a case_family label for skeleton lookup.
+
+    Tries (1) explicit `case_family` on the manifest dict, then
+    (2) solver-based inference for imported cases (the M5 scaffold
+    `manifest_writer.py` does NOT persist `case_family`, so production
+    imports never carry it). Cycle 1 fallback: `physics.solver ==
+    "interFoam"` → `ship_vof`. M3.1 cycle 2+ persists case_family
+    properly and removes the inference layer.
+
+    Codex R0 P1 fix (DEC-V61-202-SUB-M31-CYCLE1): without this fallback
+    the form-helper CTA appears only in tests/dogfood that hand-inject
+    case_family, never in production imports.
+    """
+    if not isinstance(state.manifest, dict):
+        return None
+    explicit = state.manifest.get("case_family")
+    if isinstance(explicit, str) and explicit:
+        return explicit
+    physics = state.manifest.get("physics")
+    if isinstance(physics, dict):
+        solver = physics.get("solver")
+        if solver == "interFoam":
+            return "ship_vof"
+    return None
+
+
 def _skeleton_for_gap(gap: dict, state: CaseStateSnapshot) -> dict | None:
     """Look up the canonical structural skeleton for this (gap, case_family)
     pair, if one is registered. Returns None when no skeleton applies —
     e.g. case_family unknown, or this field_path has no helper yet.
 
     Cycle 1 lookup is keyed by (field_path, case_family). case_family
-    is read from `state.manifest` (raw dict) because the Pydantic
-    CaseManifest schema doesn't declare it (no `extra="allow"` at top
-    level). M3.1 cycle 2+ will add it as a typed field.
+    is resolved via `_resolve_case_family` (explicit field on the
+    manifest, or solver-based inference when the imported-case scaffold
+    didn't persist a family).
     """
     field_path = str(gap.get("field_path", ""))
     if not field_path:
         return None
-    if not isinstance(state.manifest, dict):
-        return None
-    case_family = state.manifest.get("case_family")
-    if not isinstance(case_family, str):
+    case_family = _resolve_case_family(state)
+    if case_family is None:
         return None
     return _FORM_HELPER_SKELETONS.get((field_path, case_family))
 

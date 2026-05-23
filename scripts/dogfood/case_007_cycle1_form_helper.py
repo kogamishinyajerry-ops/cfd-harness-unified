@@ -31,7 +31,13 @@ CASE_ID = "case_007_cycle1_form_helper"
 
 STARTING_MANIFEST = {
     "case_id": CASE_ID,
-    "case_family": "ship_vof",
+    # Codex R0 P1 fix: do NOT include case_family here — this mirrors a
+    # real imported case (the M5 scaffold manifest_writer.py doesn't
+    # persist case_family). The skeleton must still fire via the
+    # solver-based inference fallback (physics.solver == "interFoam"
+    # → ship_vof skeleton). Pre-fix this dogfood worked because we
+    # hand-injected case_family; now it works on the real production
+    # path.
     "solver_backend": "openfoam",
     "physics": {
         "solver": "interFoam",
@@ -112,8 +118,12 @@ def main():
         ("Skeleton has canonical inlet/outlet/wall keys",
          isinstance(skeleton, dict)
          and set(skeleton.keys()) == {"inlet", "outlet", "wall"}),
-        ('Skeleton CTA label = "应用骨架 / Apply skeleton"',
-         rail.get("cta_label") == "应用骨架 / Apply skeleton"),
+        # Codex R0 P2 fix: when ONLY skeleton is offered, the backend
+        # suppresses the primary cta_label (null) so the frontend doesn't
+        # render a duplicate disabled button. The secondary skeleton
+        # button (frontend side) carries the hardcoded label.
+        ("Primary cta_label suppressed (skeleton-only path)",
+         rail.get("cta_label") is None),
         ("Rail provenance records skeleton_keys",
          any("skeleton_keys=" in p for p in rail.get("provenance", []))),
         ("PATCH with skeleton value returns 200 + success=True",
