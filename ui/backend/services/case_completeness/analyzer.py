@@ -453,107 +453,43 @@ def _build_report(
 # ---------------------------------------------------------------------------
 
 
-# DEC-V61-202-SUB-M31-CYCLE1 (Codex R4 P2 fix): solver → plausible
-# case_family candidates. The case_family warning fires only when the
-# manifest's solver appears here. Cycle 1 ships one helper (ship_vof for
-# bc.patches), so only interFoam manifests get the warning today; other
-# solvers' completeness reports stay clean.
-#
-# TODO(M3.1 cycle 2+): extract this + _FORM_HELPER_SKELETONS into a
-# shared domain registry (e.g. `ui/backend/domain/case_family.py`)
-# once a second helper lands. Cycle 1 inlines because there's exactly
-# one entry and the cross-module coupling has no value yet.
-_SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
-    "interFoam": frozenset({"ship_vof"}),
-    # DEC-V61-202-SUB-M31-CYCLE3: simpleFoam → rans_steady_incompressible.
-    # simpleFoam covers RANS steady incompressible (the dominant case),
-    # but also steady laminar and transitional regimes. The candidate
-    # set means "this solver could benefit from a RANS-class skeleton",
-    # NOT "this case IS RANS-steady" — engineer still labels explicitly.
-    # Codex cycle-3 R0 P1: gated on turbulence_model != laminar (see
-    # `_case_family_helper_candidate_applies`).
-    "simpleFoam": frozenset({"rans_steady_incompressible"}),
-}
-
-# Codex cycle-3 R0 P2 fix: case_family must map to a registered
-# skeleton to clear the advisory. Cycle 1 + cycle 3 ship two helpers
-# (ship_vof, rans_steady_incompressible). When an engineer labels
-# their case `test` or some placeholder string, the warning must stay
-# fired — the Step-4 skeleton won't be available, so the completeness
-# score shouldn't claim labeling unlocked it.
-#
-# Duplicating the family names here (the canonical registry lives in
-# `workbench_decide.py::_FORM_HELPER_SKELETONS`) is a stopgap. Per
-# cycle-1 TODO: extract to shared module when registry grows past 3
-# entries (cycle 4+). For 2 entries, the duplication cost < the
-# import-restructure cost.
-_CASE_FAMILIES_WITH_HELPERS: frozenset[str] = frozenset({
-    "ship_vof",
-    "rans_steady_incompressible",
-})
+# DEC-V61-202-SUB-M31-CYCLE4: registry extracted to shared module.
+# Cycle 1-3 had separate `_SOLVER_TO_CASE_FAMILY_CANDIDATES` +
+# `_CASE_FAMILIES_WITH_HELPERS` constants inline; cycle 4 moves both
+# to `case_family_registry.py` where they live alongside the
+# canonical skeleton dict. Eliminates the cycle-3 R0 P2 duplication
+# (`_CASE_FAMILIES_WITH_HELPERS` was a stopgap mirror of
+# FORM_HELPER_SKELETONS keys).
+from ui.backend.services.case_family_registry import (
+    SOLVER_TO_CASE_FAMILY_CANDIDATES as _SOLVER_TO_CASE_FAMILY_CANDIDATES,
+    CASE_FAMILIES_WITH_HELPERS as _CASE_FAMILIES_WITH_HELPERS,
+    helper_candidate_applies as _shared_helper_candidate_applies,
+)
 
 
 def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
     """True iff a registered form-helper exists for some case_family that
     is plausible for the manifest's solver + turbulence_model.
 
-    Cycle 1: interFoam → {ship_vof} only. Cycle 3: simpleFoam → {
-    rans_steady_incompressible} for non-laminar runs. Other solvers
-    (pimpleFoam, rhoSimpleFoam, etc.) currently have no candidate.
+    Cycle 4: this is a thin manifest-reading wrapper around
+    `case_family_registry.helper_candidate_applies()`, which holds the
+    canonical per-solver gating logic (interFoam: any turbulence /
+    simpleFoam: RANS turbulence / pisoFoam: LES turbulence / others:
+    no candidate).
 
-    Why not infer the family directly: per Codex R1, solver-alone is not
-    a sound classifier — interFoam covers ship_vof / sloshing / dam-break
-    / multiphase pipes. The candidate set just means "labeling could
-    benefit"; the engineer still chooses the actual family.
-
-    Codex cycle-3 R0 P1 fix: simpleFoam + turbulence_model=laminar is
-    a steady laminar incompressible flow — NOT covered by the cycle-3
-    RANS skeleton. Suggesting `rans_steady_incompressible` for those
-    cases would penalize otherwise-complete laminar imports to 80%
-    while steering engineers toward a helper that doesn't apply.
-    Per-solver turbulence-model gate added below.
-
-    Codex R7 / user-ratified defeat (2026-05-24): this helper reads
-    ONLY `manifest.physics.solver`. Merged manifest+flat-draft
-    resolution was attempted in R5+R6 but produced an unresolvable
-    design ambiguity. Cycle 1 punts the solver-source authority
-    question to a future design DEC.
+    Codex R7 / user-ratified defeat (cycle 1) inherited contract: this
+    helper reads ONLY the manifest. The flat draft at
+    `user_drafts/{id}.yaml` is NOT consulted for either solver or
+    turbulence_model. Extending merged-source reading would re-open
+    the cycle-1 R5/R6/R7 precedence spiral. Cycle-2-deferred
+    solver-source-authority design DEC covers both fields together.
     """
     physics = raw_manifest_yaml.get("physics")
     if not isinstance(physics, dict):
         return False
     solver = physics.get("solver")
-    if not isinstance(solver, str) or not solver:
-        return False
-    if solver not in _SOLVER_TO_CASE_FAMILY_CANDIDATES:
-        return False
-
-    # Codex cycle-3 R0 P1 fix: simpleFoam laminar doesn't match a RANS
-    # skeleton; suppress the candidate for that subset. Other solvers
-    # are not yet turbulence-gated (interFoam VOF is geometric, not
-    # turbulent; ship_vof skeleton works regardless of turbulence model).
-    #
-    # Codex cycle-3 R1 P2 acknowledgement: this gate reads MANIFEST
-    # ONLY (physics.turbulence_model). The flat draft at
-    # `user_drafts/{id}.yaml` is NOT consulted. This is the SAME
-    # ratified-defeat contract established for solver in cycle 1 R7
-    # (see `_case_family_helper_candidate_applies` docstring above):
-    # the manifest+flat-draft precedence ambiguity has no single-source
-    # solution that works for both `switch_solver` and `PUT /yaml`
-    # workflows. Extending merged-source reading to turbulence_model
-    # would re-open the cycle-1 R5/R6/R7 spiral with the same outcome.
-    #
-    # Known limitation: an engineer who edits `turbulence_model:
-    # kOmegaSST` in the flat draft but hasn't yet committed it back
-    # to the manifest will see the manifest-stamped value win here.
-    # The cycle-2-deferred solver-source-authority design DEC covers
-    # turbulence_model under the same umbrella.
-    if solver == "simpleFoam":
-        turbulence = physics.get("turbulence_model")
-        if isinstance(turbulence, str) and turbulence.strip().lower() == "laminar":
-            return False
-
-    return True
+    turbulence_model = physics.get("turbulence_model")
+    return _shared_helper_candidate_applies(solver, turbulence_model)
 
 
 def _analyze_imported(

@@ -449,6 +449,92 @@ def test_imported_simplefoam_kOmegaSST_case_with_unknown_family_still_warns(isol
     assert case_family_missing[0].severity == "warning"
 
 
+def test_imported_pisofoam_smagorinsky_case_without_case_family_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4: pisoFoam + Smagorinsky LES gets the
+    case_family advisory when unlabeled. Suggests les_incompressible.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pisofoam_les_no_family"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pisoFoam",
+        turbulence_model="Smagorinsky",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.total_count == 5
+    assert r.present_count == 4
+    assert r.percentage == 80.0
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+    assert "les_incompressible" in case_family_missing[0].why
+
+
+def test_imported_pisofoam_laminar_case_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4 LES gate negative: pisoFoam + laminar
+    (DNS-style) doesn't match LES skeleton — no candidate, no slot,
+    no warning. Percentage stays 100%.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pisofoam_laminar"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pisoFoam",
+        turbulence_model="laminar",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.total_count == 4
+    assert r.percentage == 100.0
+    assert not any(m.field_path == "case_family" for m in r.missing)
+
+
+def test_imported_pisofoam_kOmegaSST_case_no_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4 LES gate negative: pisoFoam + RANS
+    turbulence (transient RANS) doesn't match LES skeleton either —
+    the gate only fires for LES-class models (Smagorinsky, dynamicSmagorinsky,
+    kEqn, dynamicKEqn, WALE).
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pisofoam_rans"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pisoFoam",
+        turbulence_model="kOmegaSST",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    assert r.total_count == 4
+    assert r.percentage == 100.0
+    assert not any(m.field_path == "case_family" for m in r.missing)
+
+
+def test_imported_pisofoam_dynamicSmagorinsky_case_emits_warning(isolated_drafts):
+    """DEC-V61-202-SUB-M31-CYCLE4 LES gate variant: dynamicSmagorinsky
+    is in the LES turbulence set, so it triggers the advisory just
+    like Smagorinsky.
+    """
+    _, imported = isolated_drafts
+    case_id = "imported_2026-05-04T00-00-00Z_pisofoam_dyn_les"
+    _seed_imported_manifest(
+        imported,
+        case_id,
+        solver="pisoFoam",
+        turbulence_model="dynamicSmagorinsky",
+        case_family=None,
+    )
+    r = analyze_case_completeness(case_id)
+    case_family_missing = [
+        m for m in r.missing if m.field_path == "case_family"
+    ]
+    assert len(case_family_missing) == 1
+
+
 def test_imported_pimplefoam_case_no_warning(isolated_drafts):
     """DEC-V61-202-SUB-M31-CYCLE3 negative regression: pimpleFoam has
     NO registered candidate (LES / transient incompressible — cycle 4+

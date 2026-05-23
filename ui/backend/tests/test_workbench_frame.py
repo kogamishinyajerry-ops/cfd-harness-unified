@@ -266,6 +266,79 @@ def test_decide_attaches_rans_bc_patches_skeleton_on_step4_simplefoam():
     assert rail.suggested_skeleton["inlet"]["fields"]["U"] == [10.0, 0.0, 0.0]
 
 
+def test_decide_attaches_les_bc_patches_skeleton_on_step4_pisofoam():
+    """DEC-V61-202-SUB-M31-CYCLE4: pisoFoam case with LES turbulence
+    + case_family=les_incompressible gets the LES bc.patches skeleton
+    at step 4. Mirrors cycle-1 (ship_vof) + cycle-3 (RANS) tests for
+    the LES family.
+    """
+    state = _base_state(
+        step=4,
+        manifest={
+            "case_family": "les_incompressible",
+            "physics": {
+                "solver": "pisoFoam",
+                "turbulence_model": "Smagorinsky",
+            },
+        },
+        completeness={
+            "missing": [
+                {
+                    "field_path": "bc.patches",
+                    "severity": "critical",
+                    "why": "...",
+                }
+            ]
+        },
+    )
+    frame = decide(state)
+    rail = frame.rail_primary
+    assert rail.suggested_skeleton is not None
+    assert set(rail.suggested_skeleton.keys()) == {"inlet", "outlet", "wall"}
+    # LES placeholder velocity 5 m/s (intermediate between ship_vof's
+    # 1 m/s and RANS's 10 m/s).
+    assert rail.suggested_skeleton["inlet"]["fields"]["U"] == [5.0, 0.0, 0.0]
+
+
+def test_decide_les_skeleton_distinguishes_from_rans_and_ship_vof():
+    """DEC-V61-202-SUB-M31-CYCLE4: registry contract — three families
+    coexist with distinct placeholder velocities (1 / 10 / 5 m/s),
+    proving no skeleton clobbers another.
+    """
+    # ship_vof → 1.0
+    state_ship = _base_state(
+        step=4,
+        manifest={"case_family": "ship_vof", "physics": {"solver": "interFoam"}},
+        completeness={
+            "missing": [{"field_path": "bc.patches", "severity": "critical", "why": "..."}]
+        },
+    )
+    f_ship = decide(state_ship)
+    assert f_ship.rail_primary.suggested_skeleton["inlet"]["fields"]["U"] == [1.0, 0.0, 0.0]
+
+    # rans → 10.0
+    state_rans = _base_state(
+        step=4,
+        manifest={"case_family": "rans_steady_incompressible", "physics": {"solver": "simpleFoam"}},
+        completeness={
+            "missing": [{"field_path": "bc.patches", "severity": "critical", "why": "..."}]
+        },
+    )
+    f_rans = decide(state_rans)
+    assert f_rans.rail_primary.suggested_skeleton["inlet"]["fields"]["U"] == [10.0, 0.0, 0.0]
+
+    # les → 5.0
+    state_les = _base_state(
+        step=4,
+        manifest={"case_family": "les_incompressible", "physics": {"solver": "pisoFoam"}},
+        completeness={
+            "missing": [{"field_path": "bc.patches", "severity": "critical", "why": "..."}]
+        },
+    )
+    f_les = decide(state_les)
+    assert f_les.rail_primary.suggested_skeleton["inlet"]["fields"]["U"] == [5.0, 0.0, 0.0]
+
+
 def test_decide_no_cross_pollination_simplefoam_does_not_get_ship_vof_skeleton():
     """DEC-V61-202-SUB-M31-CYCLE3 negative regression: a simpleFoam
     case labeled `ship_vof` (incorrect cross-pollination scenario)
