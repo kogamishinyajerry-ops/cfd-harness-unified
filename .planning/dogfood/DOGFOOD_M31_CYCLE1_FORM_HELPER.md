@@ -1,9 +1,10 @@
 # DOGFOOD · M3.1 Cycle 1 · ship_vof form-helper skeleton
 
 **DEC**: `2026-05-23_v61_202_sub_m31_cycle1_form_helper_shipvof.md` (Proposed)
-**Date**: 2026-05-23
+**Date**: 2026-05-23 → 2026-05-24 (closure)
 **Dogfood script**: `scripts/dogfood/case_007_cycle1_form_helper.py`
-**Verdict**: **PASS** (9/9 checks · post Codex R0/R1/R2 + user-ratified scope expansion)
+**Verdict**: **PASS** (9/9 checks · 8 Codex rounds + 2 user ratifications)
+**Cycle 1 Status**: **CLOSED** — DEC Accepted 2026-05-24
 **Codex**: R0 = 1 P1 + 1 P2 → R1 = 1 P1 → R2 = 1 P1 → scope-expansion
 ratified by user (case_family persistence + gap surface + PATCH path
 all pulled into cycle 1). R3 = 1 P1 + 1 P2 (severity-aware topbar
@@ -105,6 +106,21 @@ applies use — no parallel construction track.
   so `_resolve_case_family` returns None and the skeleton never fires
   in production. Codex called out that this is exactly the
   cap=3 paradox: solving one P1 re-opens the other.
+
+**R8 = loop floor confirmation** (2026-05-24):
+- **P1 (= R5 P1 re-emitted)**: "flat-draft solver state ignored by
+  case_family helper". Codex has no round-cap awareness — it correctly
+  identifies the same regression the user ratified accepting in the
+  R7 defeat-revert decision. This is not a new finding; it is the
+  documented cycle-1 limitation Codex cannot recognize as already-accepted.
+- **Cycle 1 closes here**. The arc has reached its floor: any further
+  iteration cycles between R5/R6/R7's mutually-exclusive trade-offs.
+  The proper resolution is a cycle-2 solver-source authority design
+  DEC, not another cycle-1 fix.
+- **Final state**: DEC Status=Accepted; engine + skeleton + rail
+  surface + demand-driven advisory ship; UI labeler + solver-source
+  authority deferred to cycle 2 with concrete design candidates
+  enumerated in the DEC out-of-scope section.
 
 **R7 + user-ratified defeat-revert** (2026-05-24):
 - **P1 · scaffold-default `flat.solver.name=simpleFoam` shadows real

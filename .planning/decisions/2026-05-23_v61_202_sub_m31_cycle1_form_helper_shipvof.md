@@ -1,8 +1,9 @@
 ---
 decision_id: DEC-V61-202-SUB-M31-CYCLE1-FORM-HELPER-SHIPVOF
 title: M3.1 cycle 1 — domain-aware form helper · ship_vof bc.patches skeleton
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-23
+accepted_date: 2026-05-24
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 1 (form helpers, ship_vof entry)
 notion_sync_status: pending_accepted
