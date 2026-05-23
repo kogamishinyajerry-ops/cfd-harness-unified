@@ -638,21 +638,25 @@ def _analyze_imported(
         # surface the gap as advisory only; the engineer chooses the
         # family.
         #
-        # Codex cycle-2 R1 P3 fix: cycle-2 ships an inline UI input
-        # (DynamicFramePanel.tsx::INLINE_EDITABLE_SCALAR_PATHS). The
-        # text now points engineers to that affordance instead of
-        # cycle-1's "PATCH directly via the API" / "no UI yet" guidance.
+        # Codex cycle-2 R1 P3 + R2 P2 fix: renderer-agnostic copy.
+        # The `why` text appears in DynamicFramePanel (rail), but ALSO
+        # in CompletenessCard, DynamicBottomCards, and the legacy
+        # shell (`?legacy=1`). Cycle-2's inline input lives only in
+        # DynamicFramePanel — referencing "the input below" was
+        # accurate there but false on every other renderer. Text now
+        # describes WHAT labeling unlocks without prescribing HOW to
+        # set the field; that's the renderer's responsibility (rail
+        # inline input, completeness card link, etc.).
         missing.append(
             MissingField(
                 field_path="case_family",
                 severity="warning",
                 why=(
                     "This interFoam case could be ship_vof, sloshing, "
-                    "dam-break, etc. — label the case family (e.g. "
-                    "ship_vof) in the input below to unlock the Step-4 "
-                    "BC skeleton. Non-blocking — case can run without "
-                    "a family, but the canonical BC skeleton won't be "
-                    "offered."
+                    "dam-break, etc. — labeling `case_family` (e.g. "
+                    "ship_vof) unlocks the Step-4 BC skeleton. "
+                    "Non-blocking — case can run without a family, but "
+                    "the canonical BC skeleton won't be offered."
                 ),
             )
         )
