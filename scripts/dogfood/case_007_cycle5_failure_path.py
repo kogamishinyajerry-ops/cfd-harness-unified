@@ -64,11 +64,23 @@ def _is_rejection_with_named_reason(response_body: dict | None) -> bool:
             return True
     elif isinstance(detail, list):
         # Pydantic v2 returns [{"type":..., "loc":..., "msg":..., ...}, ...]
+        # Codex cycle-5 R3 P2 fix: scan ONLY the human-readable `msg`
+        # field, not all values. Pydantic's `loc: ["body", "value"]`
+        # and `type: "dict_type"` happen to match the keyword set
+        # accidentally — but those represent unrelated request-body
+        # validation errors (route-contract regressions), not the
+        # manifest-validation rejection cycle-5 is trying to document.
+        # Restricting to `msg` keeps the false-PASS-against-route-
+        # regression risk closed.
         for entry in detail:
-            for v in (entry.values() if isinstance(entry, dict) else ()):
-                txt = str(v).lower()
-                if any(k in txt for k in _NAMED_REASON_KEYWORDS):
-                    return True
+            if not isinstance(entry, dict):
+                continue
+            msg = entry.get("msg")
+            if not isinstance(msg, str):
+                continue
+            txt = msg.lower()
+            if any(k in txt for k in _NAMED_REASON_KEYWORDS):
+                return True
 
     return False
 

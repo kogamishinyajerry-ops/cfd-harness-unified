@@ -1,8 +1,12 @@
 ---
 decision_id: DEC-V61-202-SUB-M31-CYCLE5-FAILURE-PATH-DOGFOOD
 title: M3.1 cycle 5 — failure-path ergonomics dogfood (wrong-fix → revert → proceed)
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-24
+accepted_date: 2026-05-24
+codex_review_arc: R0 (1 P2 + 1 P3) → R1 (1 P3) → R2 (1 P3) → R3 (1 P2, user-ratified small fix)
+final_commit: <next-commit>
+user_ratification: 2026-05-24 AskUserQuestion — "Apply small msg-only scan fix, close cycle 5 (Recommended)"
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 5 (engineer mistake-recovery validation)
 notion_sync_status: pending_accepted
