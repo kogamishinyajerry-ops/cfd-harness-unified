@@ -29,13 +29,10 @@
 
 ### B2 · Number collision at bottom-center: "17 2 2.0 18 76" overlap
 
-**Severity**: P2 (visual chaos · suggests multiple absolute-positioned stat widgets bleeding into the same area)
-**Track**: DOE / design exploration dashboard layer OR layout governance
-**Status**: Open
-**Evidence**: Around bottom-center of the workbench (between the rail panel and the step-rail), there are 5+ numeric labels (17, 2, 2.0, 18, 76, "76" very large) overlapping each other from different components. Some are partially obscured.
-**Hypothesis**: Multiple components use position:absolute with overlapping z-index. Possibly a particle estimator + cell count + DOE confidence label all rendering on the same coordinates.
-**Repro**: same URL as B1.
-**Action**: identify the components (grep for the numeric values in src/pages/workbench/), then propose a layout consolidation.
+**Severity**: P2
+**Track**: V4 shell layout (was misclassified as DOE / dashboard layer)
+**Status**: **CLOSED · CASCADE-CLEARED by M3.4 cycle 5 (B6 fix) · 2026-05-25**. The numbers were not absolute-positioned widgets — they were the legitimate bottom KpiStrip stats (零件总数 / 待修补 / 包裹尺寸 / 流体域体积) being squished onto the same 148px column when `<main>` collapsed due to B6's content-overflow leak. With the W4 ShellV4 wrapper gaining `w-[300px] shrink-0` (cycle 5), main returns to ~860px and the KpiStrip lays out cleanly as 4 columns.
+**Verification**: post-cycle-5 screenshot `/tmp/cfd_workbench_screenshots/m33_ux_demo_seed_idle.png` shows bottom row clean: "17 零件总数 · 2 待修补 · 2.0 包裹尺寸 · 18.76 流体域体积".
 
 ### B3 · Bottom horizontal banner duplicates the rail's gap content
 
@@ -58,23 +55,20 @@
 
 ### B6 · ModeRendererGeometry rendered in narrow 148px column at step=geometry
 
-**Severity**: P1 (severely limits empty-state UX visibility · main viewport area is occupied by other-component dark void)
-**Track**: V4 shell layout / step-geometry workbench composition
-**Status**: Open · surfaced 2026-05-25 M3.4 cycle 3 (DOM inspection during empty-state polish)
-**Evidence**: At /workbench/case/m33_ux_demo_seed?step=geometry, DOM check shows `[data-testid="v4-mode-geometry-empty-scene"]` bbox = x=242, y=144, width=148, height=489. ModeRendererGeometry's root has `flex h-full w-full flex-col` (line 124) but ITS parent only allocates 148px width. Mesh/Physics/Boundary mode renderers visibly fill ~860px of the right viewport area (per cross-step screenshots at /tmp/cfd_workbench_screenshots/step_*) — so the V4 shell layout differs by step.
-**Hypothesis**: V4 shell uses a different layout for step=geometry (likely splits the right area into multiple columns reflecting the "辅助几何准备 / 自动识别零件 / 缝隙检查 / 包裹建议 / 包裹尺寸 / 流体域提取" cards visible in screenshots) — and ModeRendererGeometry is bound to ONE of those columns, not the full-width viewport area. The right ~70% (where mesh/physics/boundary show their viewport) is occupied by something other than ModeRendererGeometry at step=geometry.
-**Repro**: same URL · check with playwright DOM query for testid bboxes.
-**Action**: investigate what component owns the right ~70% at step=geometry · is it intentional multi-column layout or layout bug · if intentional, the empty-state CTA (cycle 3 work) should be hoisted to that primary column · if bug, V4 shell should give ModeRendererGeometry the same full-viewport allocation as other modes.
+**Severity**: P1
+**Track**: V4 shell layout
+**Status**: **CLOSED 2026-05-25 M3.4 cycle 5** — 2-LOC fix at `WorkbenchShellV4.tsx:255`. Was a CSS content-overflow leak (NOT a per-step layout switch as initially hypothesized).
+**Root cause (per M3.4 cycle 4 subagent investigation)**: `<V4ErrorBoundary zone="RightPanel">`'s wrapper `<div className="flex flex-col">` (no width, no shrink-0) hosted `DynamicFramePanel` whose `<p>` body_text had no `max-w-*`. At step=geometry the seed case's long `case_family` info_gap body_text gave the wrapper huge intrinsic width. Flex resolution: LeftRail held 242px, `<main>` (`min-w-0 flex-1`) collapsed to ~148px, wrapper took ~1050px. Mesh/Physics/Boundary worked silently because their `rail_primary.body_text` was short and stayed under `RightPanelV4`'s internal `w-[300px]`. The "different layout per step" hypothesis was wrong — the shell is identical at every step; only body_text length differed.
+**Fix applied**: `<div className="flex w-[300px] shrink-0 flex-col">` — makes the implicit contract (the wrapper should be 300px) explicit and content-pressure-proof.
+**Cascade effect**: closing B6 also closed B2 + B5 (both were downstream of the layout collapse, not independent defects).
+**Verification**: post-fix DOM check would show empty-scene bbox width ≈ 860 (vs. 148 pre-fix). Screenshot at /tmp/cfd_workbench_screenshots/m33_ux_demo_seed_idle.png shows polished GeometryEmptyState + Upload CAD CTA centered in main viewport area.
 
 ### B5 · Step rail (01-07 indicators) overlaps the B3 bottom banner
 
-**Severity**: P2 (visual overlap · the step rail and the bottom-cards banner sit on the same y-range, fighting for space)
+**Severity**: P2
 **Track**: V4 shell layout
-**Status**: Open
-**Evidence**: At bottom of screenshot, the step indicators "01 导入 完成 / 02 几何 进行中 / 03 网格 待处理 / 04 物理 待处理 / 05 边界 待处理 / 06 求解 待处理 / 07 后处理 待处理" are partially obscured by the B3 banner.
-**Hypothesis**: Step rail and BottomCards both render absolutely at bottom of viewport without z-index coordination.
-**Repro**: same URL as B1.
-**Action**: tied to B3 — once B3 disposition is decided, B5 likely resolves by repositioning or removing the duplicate banner.
+**Status**: **CLOSED · CASCADE-CLEARED by M3.4 cycle 5 (B6 fix) · 2026-05-25**. Same root cause as B2 — the visual overlap was a downstream of `<main>` getting squished to 148px (which collapsed vertical layout and pushed step-rail rendering on top of bottom-card banner). With cycle 5's wrapper width fix, both elements have proper vertical space and lay out cleanly.
+**Verification**: post-cycle-5 screenshot shows step rail (01-07 indicators) cleanly below the bottom-card banner, no overlap.
 
 ## Process change request
 

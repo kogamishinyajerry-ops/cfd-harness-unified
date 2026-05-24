@@ -244,7 +244,15 @@ export function WorkbenchShellV4() {
         </main>
 
         <V4ErrorBoundary zone="RightPanel">
-          <div className="flex flex-col">
+          {/* DEC-V61-202 M3.4 cycle 5 (B6 fix · 2026-05-25): explicit
+              w-[300px] shrink-0 on this RightPanel wrapper. Was a bare
+              `flex flex-col` with no width, so DynamicFramePanel's
+              unconstrained body_text could blow out the wrapper's
+              intrinsic width (long info_gap copy at step=geometry
+              squished main viewport to 148px). RightPanelV4 internally
+              declares w-[246/300px] per step; this wrapper now enforces
+              a fixed 300px budget that won't grow under content pressure. */}
+          <div className="flex w-[300px] shrink-0 flex-col">
             {dynamicFrameEnabled && dynamicFrame && caseId ? (
               <DynamicFramePanel
                 rail={dynamicFrame.rail_primary}
