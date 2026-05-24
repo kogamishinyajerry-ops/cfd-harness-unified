@@ -98,6 +98,19 @@ class RailPrimary(BaseModel):
             "None = no CTA button on this card."
         ),
     )
+    severity: Severity = Field(
+        default="info",
+        description=(
+            "DEC-V61-202-SUB-M32-CYCLE1: rail urgency surface. Frontend "
+            "picks tone (rose/amber/sky) by (kind, severity) — lets "
+            "engineers visually distinguish a critical info_gap "
+            "(corrupted manifest from M3.1 cycle 7) from a soft info "
+            "info_gap (unknown patch_type from M3.1 cycle 8) without "
+            "parsing the provenance string. Source severities map via "
+            "`_normalize_severity` (critical→fail, warning→warn). "
+            "Default `info` preserves step_default + legacy fixtures."
+        ),
+    )
     provenance: list[str] = Field(
         default_factory=list,
         description=(

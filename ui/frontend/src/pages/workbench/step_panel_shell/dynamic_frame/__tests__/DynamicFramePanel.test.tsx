@@ -32,6 +32,7 @@ const PROBLEM_RAIL: RailPrimary = {
   suggested_default: null,
   suggested_skeleton: null,
   cta_label: "查看 / View",
+  severity: "fail",
   provenance: [
     "step=4 · problem_fix · severity=fail",
     "source=bc_quality.json",
@@ -46,7 +47,8 @@ const GAP_RAIL: RailPrimary = {
   suggested_default: ["water", "air"],
   suggested_skeleton: null,
   cta_label: "填入 / Apply",
-  provenance: ["step=3 · info_gap · severity=critical"],
+  severity: "warn",
+  provenance: ["step=3 · info_gap · severity=warning"],
 };
 
 const DEFAULT_RAIL: RailPrimary = {
@@ -57,6 +59,7 @@ const DEFAULT_RAIL: RailPrimary = {
   suggested_default: null,
   suggested_skeleton: null,
   cta_label: "下一步 / Next",
+  severity: "info",
   provenance: ["step=3 · step_default · no blockers"],
 };
 
@@ -78,8 +81,9 @@ const SKELETON_RAIL: RailPrimary = {
     wall: { patch_type: "noSlip", fields: {} },
   },
   cta_label: null,
+  severity: "warn",
   provenance: [
-    "step=4 · info_gap · severity=critical",
+    "step=4 · info_gap · severity=warning",
     "field_path=bc.patches",
     "skeleton_keys=['inlet', 'outlet', 'wall']",
   ],
@@ -105,6 +109,64 @@ describe("DynamicFramePanel", () => {
     expect(screen.getByTestId("dynamic-frame-cta")).toHaveTextContent(
       "填入 / Apply",
     );
+  });
+
+  // DEC-V61-202-SUB-M32-CYCLE1: severity-aware info_gap tone.
+  // critical → rose 需修复 (M3.1 cycle 7 corrupted-manifest);
+  // warn    → amber 待补充 (existing case_family-missing path);
+  // info    → sky 建议 (M3.1 cycle 8 typo'd patch_type).
+
+  it("renders critical info_gap (severity=fail) with rose 需修复 label", () => {
+    const criticalRail: RailPrimary = {
+      ...GAP_RAIL,
+      severity: "fail",
+      title: "补充字段 / Fill: case_manifest.yaml",
+      body_text:
+        "Imported case_manifest.yaml is parseable YAML but fails schema validation.",
+      field_path: "case_manifest.yaml",
+    };
+    renderPanel(criticalRail);
+    expect(screen.getByText("需修复")).toBeInTheDocument();
+    // Should NOT show the amber "待补充" label
+    expect(screen.queryByText("待补充")).not.toBeInTheDocument();
+    // Pill carries the rose tone classes
+    const panel = screen.getByTestId("dynamic-frame-panel");
+    expect(panel.dataset.kind).toBe("info_gap");
+  });
+
+  it("renders info-tier info_gap (severity=info) with sky 建议 label", () => {
+    const advisoryRail: RailPrimary = {
+      ...GAP_RAIL,
+      severity: "info",
+      title: "补充字段 / Fill: bc.patches.inlet.patch_type",
+      body_text:
+        "Patch 'inlet' has patch_type='fixedValue_typo', not in workbench vocabulary.",
+      field_path: "bc.patches.inlet.patch_type",
+    };
+    renderPanel(advisoryRail);
+    expect(screen.getByText("建议")).toBeInTheDocument();
+    expect(screen.queryByText("待补充")).not.toBeInTheDocument();
+    expect(screen.queryByText("需修复")).not.toBeInTheDocument();
+  });
+
+  it("renders warn-tier info_gap (severity=warn) with amber 待补充 label (existing default)", () => {
+    // GAP_RAIL has severity="warn" by default fixture; this test pins
+    // the existing behavior so cycle-1 doesn't accidentally re-tone it.
+    renderPanel(GAP_RAIL);
+    expect(screen.getByText("待补充")).toBeInTheDocument();
+    expect(screen.queryByText("需修复")).not.toBeInTheDocument();
+    expect(screen.queryByText("建议")).not.toBeInTheDocument();
+  });
+
+  it("renders problem_fix with rose label regardless of severity field (kind wins)", () => {
+    // Even if backend somehow emits problem_fix + severity=info, the
+    // kind-specific tone wins (problem_fix is always urgent).
+    const oddProblem: RailPrimary = {
+      ...PROBLEM_RAIL,
+      severity: "info",  // shouldn't happen in practice but defensible
+    };
+    renderPanel(oddProblem);
+    expect(screen.getByText("需修复")).toBeInTheDocument();
   });
 
   it("renders step_default kind with emerald label", () => {
@@ -249,6 +311,7 @@ describe("DynamicFramePanel", () => {
     suggested_default: null,
     suggested_skeleton: null,
     cta_label: "编辑 / Edit",
+    severity: "warn",
     provenance: [
       "step=1 · info_gap · severity=warning",
       "field_path=case_family",
@@ -395,7 +458,8 @@ describe("DynamicFramePanel", () => {
       suggested_default: null,
       suggested_skeleton: null,
       cta_label: "编辑 / Edit",
-      provenance: ["step=4 · info_gap · severity=critical"],
+      severity: "warn",
+      provenance: ["step=4 · info_gap · severity=warning"],
     };
     renderPanel(bcPatchesNoPayload, {
       caseId: "case_007",
@@ -419,7 +483,8 @@ describe("DynamicFramePanel", () => {
       suggested_default: null,
       suggested_skeleton: null,
       cta_label: "编辑 / Edit",
-      provenance: ["step=4 · info_gap · severity=critical"],
+      severity: "warn",
+      provenance: ["step=4 · info_gap · severity=warning"],
     };
     renderPanel(bcPatchesNoActionRail, {
       caseId: "case_007",
@@ -465,6 +530,7 @@ describe("DynamicFramePanel", () => {
       suggested_default: null,
       suggested_skeleton: null,
       cta_label: "编辑 / Edit",
+      severity: "warn",
       provenance: ["step=3 · info_gap · severity=warning"],
     };
     renderPanel(bracketedPath, {

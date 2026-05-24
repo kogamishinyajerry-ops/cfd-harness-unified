@@ -398,6 +398,10 @@ def _rail_from_problem(problem: dict, state: CaseStateSnapshot) -> RailPrimary:
         body_text=body,
         field_path=field_path,
         cta_label="查看 / View",
+        # DEC-V61-202-SUB-M32-CYCLE1: surface severity to frontend.
+        # `_normalize_severity` already maps audit-vocabulary
+        # ("fail"/"error"/"critical") → frame-vocabulary ("fail").
+        severity=_normalize_severity(severity),
         provenance=provenance,
     )
 
@@ -441,6 +445,12 @@ def _rail_from_gap(gap: dict, state: CaseStateSnapshot) -> RailPrimary:
         suggested_default=suggested_default,
         suggested_skeleton=suggested_skeleton,
         cta_label=cta_label,
+        # DEC-V61-202-SUB-M32-CYCLE1: surface severity to frontend.
+        # Gap severity vocabulary ("critical"/"warning"/"info") maps
+        # via `_normalize_severity` → frame Severity ("fail"/"warn"/
+        # "info"). Lets the frontend pick rose-tone for cycle-7
+        # corruption rails vs sky-tone for cycle-8 typo rails.
+        severity=_normalize_severity(severity),
         provenance=provenance,
     )
 

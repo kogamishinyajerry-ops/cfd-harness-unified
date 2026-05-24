@@ -36,26 +36,47 @@ const INLINE_EDITABLE_SCALAR_PATHS: ReadonlySet<string> = new Set([
   "case_family",
 ]);
 
-const KIND_TONE: Record<
-  RailPrimary["kind"],
-  { pill: string; dot: string; label: string }
-> = {
-  problem_fix: {
-    pill: "bg-rose-900/40 border-rose-700/60 text-rose-200",
-    dot: "bg-rose-400",
-    label: "需修复",
-  },
-  info_gap: {
-    pill: "bg-amber-900/40 border-amber-700/60 text-amber-200",
-    dot: "bg-amber-400",
-    label: "待补充",
-  },
-  step_default: {
-    pill: "bg-emerald-900/40 border-emerald-700/60 text-emerald-200",
-    dot: "bg-emerald-400",
-    label: "就绪",
-  },
+// DEC-V61-202-SUB-M32-CYCLE1: severity-aware tone for info_gap.
+// `problem_fix` is always rose (fail-severity by construction).
+// `step_default` is always emerald (no blocker = no severity signal).
+// `info_gap` splits on severity:
+//   - fail   → rose (M3.1 cycle 7 corrupted-manifest critical;
+//              must-fix; CTA expected disabled)
+//   - warn   → amber (existing M3.1 cycle 1 case_family-missing;
+//              recommended-to-fill; CTA usually enabled)
+//   - info   → sky (M3.1 cycle 8 typo'd patch_type; advisory;
+//              engineer can ignore and proceed)
+type Tone = { pill: string; dot: string; label: string };
+
+const TONE_ROSE: Tone = {
+  pill: "bg-rose-900/40 border-rose-700/60 text-rose-200",
+  dot: "bg-rose-400",
+  label: "需修复",
 };
+const TONE_AMBER: Tone = {
+  pill: "bg-amber-900/40 border-amber-700/60 text-amber-200",
+  dot: "bg-amber-400",
+  label: "待补充",
+};
+const TONE_SKY: Tone = {
+  pill: "bg-sky-900/40 border-sky-700/60 text-sky-200",
+  dot: "bg-sky-400",
+  label: "建议",
+};
+const TONE_EMERALD: Tone = {
+  pill: "bg-emerald-900/40 border-emerald-700/60 text-emerald-200",
+  dot: "bg-emerald-400",
+  label: "就绪",
+};
+
+function toneFor(rail: RailPrimary): Tone {
+  if (rail.kind === "problem_fix") return TONE_ROSE;
+  if (rail.kind === "step_default") return TONE_EMERALD;
+  // info_gap: split on severity
+  if (rail.severity === "fail") return TONE_ROSE;
+  if (rail.severity === "info") return TONE_SKY;
+  return TONE_AMBER; // warn (and any unknown severity)
+}
 
 export function DynamicFramePanel({
   rail,
@@ -64,7 +85,7 @@ export function DynamicFramePanel({
 }: DynamicFramePanelProps) {
   const [showProvenance, setShowProvenance] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const tone = KIND_TONE[rail.kind] ?? KIND_TONE.step_default;
+  const tone = toneFor(rail);
 
   // DEC-V61-202-SUB-M30-CYCLE2: wire CTA → PATCH when the rail card
   // targets a specific field_path AND a suggested_default is available

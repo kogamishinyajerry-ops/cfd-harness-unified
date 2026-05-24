@@ -32,6 +32,15 @@ export interface RailPrimary {
    */
   suggested_skeleton: Record<string, unknown> | null;
   cta_label: string | null;
+  /**
+   * DEC-V61-202-SUB-M32-CYCLE1: severity surfaces the rail's urgency
+   * so the frontend can pick a tone (rose / amber / sky) by
+   * (kind × severity). Specifically distinguishes a critical info_gap
+   * (M3.1 cycle 7: corrupted manifest, fix-required) from a soft info
+   * info_gap (M3.1 cycle 8: unknown patch_type, advisory). Default
+   * "info" preserves step_default + legacy fixtures.
+   */
+  severity: FrameSeverity;
   provenance: string[];
 }
 
