@@ -4,8 +4,8 @@ title: M3.2 cycle 3 — clipboard button for rail field_path
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: pending
-final_commit: TBD
+codex_review_arc: R0 (1 P2 clipboard optional-chaining false-success) → R1 APPROVE ("clipboard availability guard fixes prior false-success path without introducing regression")
+final_commit: 28951f1
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.2 cycle 3 (workbench frontend · engineer actionability)
 notion_sync_status: pending_accepted
