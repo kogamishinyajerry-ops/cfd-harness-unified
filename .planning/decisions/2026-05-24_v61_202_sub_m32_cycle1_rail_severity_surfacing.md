@@ -4,8 +4,8 @@ title: M3.2 cycle 1 — surface rail severity to frontend (critical vs warning v
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: R0 pending (post-commit)
-final_commit: TBD (set post-commit)
+codex_review_arc: R0 (1 P2 audit_v2 provenance log scrapes severity string instead of new field) → R1 APPROVE ("I did not identify an actionable correctness issue")
+final_commit: c91ae09
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.2 cycle 1 (workbench frontend · severity surfacing)
 notion_sync_status: pending_accepted
