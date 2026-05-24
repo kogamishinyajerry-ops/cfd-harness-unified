@@ -98,8 +98,14 @@ export function ModeRendererGeometry({ caseId, cameraPreset }: Props) {
   const authoredCadParts = hasAuthoredCadParts(patches.length);
   const useCaseGlb = authoredCadParts && caseProbe.available === true;
   const waitForCaseGlb = authoredCadParts && caseProbe.isLoading;
+  // DEC-V61-202 M3.4 cycle 2 (spike-class · 2026-05-25 · root cause from
+  // M3.4 cycle 1 subagent S4): cases with no authored CAD parts must NOT
+  // fall back to the static APU blueprint — that path mounts ViewportV4
+  // → vtkGenericRenderWindow → unguarded new Proxy(nullContext) → B1
+  // "Cannot create proxy" popup. Gate on authoredCadParts so empty-CAD
+  // cases route to the existing <GeometryEmptyState/> branch instead.
   const useAssemblyGlb =
-    !useCaseGlb && !waitForCaseGlb && assemblyProbe.available === true;
+    !useCaseGlb && !waitForCaseGlb && assemblyProbe.available === true && authoredCadParts;
   const viewportGlbUrl = useCaseGlb
     ? caseGlbUrl
     : GEOMETRY_REAL_CAD_ASSEMBLY.glbUrl;

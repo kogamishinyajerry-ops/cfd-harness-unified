@@ -21,12 +21,11 @@
 ### B1 · MainCanvas viewport renders 0% of the right ~70% of workbench
 
 **Severity**: P1 (workbench is unusable for visual CFD work — the actual 3D model is the core artifact)
-**Track**: M-VIZ / VtkCanvasV3 / WebGL pipeline
-**Status**: Open
-**Evidence**: At /workbench/case/m33_ux_demo_seed?step=geometry on a 1440×900 viewport, the right 70% of the main canvas area is solid black with a visible error popup: "MainCanvas 区域渲染失败 / Cannot create proxy with a non-object as target". Error appears at top-left of the would-be canvas area.
-**Hypothesis**: Proxy creation in VtkCanvas state setup is called with undefined/null target — may be a regression after a recent vtk.js or React refactor.
-**Repro**: bash scripts/dogfood/stage_m33_ux_demo.py · http://localhost:5173/workbench/case/m33_ux_demo_seed?step=geometry
-**Action**: hand to M-VIZ / VtkCanvas owner; do NOT close without root-cause + fix.
+**Track**: M-VIZ / VtkCanvasV3 / WebGL pipeline (M3.4 charter scope)
+**Status**: **CLOSED 2026-05-25 M3.4 cycle 2** — 1-LOC fix landed at `ModeRendererGeometry.tsx:107` (gate `useAssemblyGlb` on `authoredCadParts`). Verified: post-fix screenshot shows no error popup; empty area routes to existing `<GeometryEmptyState/>` branch (line 287). Cycle 3+ will polish the empty-state visual (currently low-contrast small text — needs CTA + Upload affordance).
+**Root cause (per M3.4 cycle 1 subagent S4)**: `ModeRendererGeometry` unconditionally falls back to `/blueprints/v4/apu-cad-assembly.glb` (15 MB static APU blueprint) when case has no CAD. `assemblyProbe.available` always returns true → ViewportV4 mounts → `vtkGenericRenderWindow.newInstance()` allocates a WebGL context → context allocation fails (browser context limit) → `vtk.js Rendering/OpenGL/RenderWindow.js:243` unconditionally wraps null context in `new Proxy(null, ...)` → V8 throws "Cannot create proxy with a non-object as target". The V4 ErrorBoundary catches and shows the popup.
+**Cross-step proof**: Mesh / Physics / Boundary modes have `probe.available === true` gates on per-case artifacts (no static fallback). They never hit the proxy creation path.
+**Fix applied**: `useAssemblyGlb = !useCaseGlb && !waitForCaseGlb && assemblyProbe.available === true && authoredCadParts` (added `&& authoredCadParts` clause). Cases without CAD parts now route to GeometryEmptyState.
 
 ### B2 · Number collision at bottom-center: "17 2 2.0 18 76" overlap
 
@@ -41,12 +40,11 @@
 ### B3 · Bottom horizontal banner duplicates the rail's gap content
 
 **Severity**: P2 (visual redundancy · "缺字段 / Missing: case_family" + same body_text + small action icon appear AGAIN at the bottom while already displayed in DynamicFramePanel)
-**Track**: M3.0 (DynamicBottomCards) OR a deliberate layered display that needs visual differentiation
-**Status**: Open
-**Evidence**: A horizontal banner at y≈760-790 in the screenshot shows "缺字段 / Missing: case_family" with the same body_text "This simpleFoam case could match..." that's already in the DynamicFramePanel at top. The bottom banner has a small icon at far right edge (similar to the cycle-4 📝 copy button but possibly pre-existing in BottomCards).
-**Hypothesis**: DynamicBottomCards (M3.0 era) and DynamicFramePanel (M3.0 era too) both render the same rail's content. This may have been intentional (different visual layers for different scenarios), but for the "single info_gap" case it shows visual duplication.
-**Repro**: same URL as B1.
-**Action**: read .planning/decisions/2026-05-22_v61_202_workbench_dynamic_guided.md + .planning/decisions/2026-05-22_v61_202_sub_m30_cycle1_decide_state.md to confirm whether dual-display is by design. If yes → propose differentiation rule (e.g., bottom cards only render secondary/non-primary problems). If no → file as bug.
+**Track**: M3.0 (DynamicBottomCards) layered display
+**Status**: **CLOSED · BY DESIGN 2026-05-25 M3.4 cycle 1 subagent S3**.
+**Investigation result** (per M3.4 cycle 1 subagent S3): rail vs bottom-cards is intentional dual-driver UX per M3.0 charter. `_pick_rail_primary` (workbench_decide.py:228) applies a strict priority cascade (FAIL → critical gap → WARN → soft gap → default) and picks ONE winning item. `_pick_bottom_cards` (workbench_decide.py:591-596) surfaces ALL step-relevant problems + gaps (8-card cap, severity-sorted). With the m33 demo seed having only ONE info_gap (`case_family`), both layers necessarily show the same single content → looks duplicated. Multi-gap cases would show 1 in rail + N in cards.
+**File evidence**: `.planning/decisions/2026-05-22_v61_202_workbench_dynamic_guided.md:34-35` · `ui/backend/services/workbench_decide.py:228, 591-596` · `DynamicFramePanel.tsx:1-6` + `DynamicBottomCards.tsx:1-6`.
+**No action needed**. Kept open in this backlog for archive only.
 
 ### B4 · Left sidebar (~265px wide) has dead vertical space below tree
 
