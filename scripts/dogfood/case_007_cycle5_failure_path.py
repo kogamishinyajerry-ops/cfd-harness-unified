@@ -124,7 +124,16 @@ def main() -> int:
             "expected_state_sha": sha_after_step3,
         },
     )
-    typo_response = typo_patch.json() if typo_patch.status_code == 200 else None
+    # Codex cycle-5 R1 P3 fix: parse response body on 4xx too so the
+    # "rejected with validation_errors" branch of the predicate below
+    # is actually reachable. FastAPI returns JSON for 400/422, and
+    # the cycle-5 contract treats rejection-with-named-errors as a
+    # valid PASS outcome — but only if the response body is parsed.
+    typo_response = (
+        typo_patch.json()
+        if typo_patch.status_code in (200, 400, 422)
+        else None
+    )
     typo_accepted = (
         typo_patch.status_code == 200
         and typo_response
