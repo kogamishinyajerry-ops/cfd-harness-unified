@@ -171,6 +171,12 @@ export function WorkbenchShellV4() {
             <div className="shrink-0 pr-2">
               <DynamicTopbarCta
                 cta={dynamicFrame.topbar_cta}
+                // DEC-V61-202-SUB-M32-CYCLE2 R0 P1 fix: live V4 mount
+                // also threads rail severity so disabled CTAs on the
+                // shipped /workbench and /workbench/case/:caseId routes
+                // pick up the rose/amber tone instead of falling through
+                // to the sky-info default.
+                railSeverity={dynamicFrame.rail_primary.severity}
                 onClick={() => {
                   const target = dynamicFrame.topbar_cta.target_step;
                   if (target == null) return;

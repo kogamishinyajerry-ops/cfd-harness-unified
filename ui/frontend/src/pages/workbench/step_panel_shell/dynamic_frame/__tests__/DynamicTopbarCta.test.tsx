@@ -146,6 +146,32 @@ describe("DynamicTopbarCta", () => {
     expect(btn.className).toContain("sky");
   });
 
+  // DEC-V61-202-SUB-M32-CYCLE2 R0 P1 regression: every production
+  // mount must thread railSeverity. The default-to-"info" fallback is
+  // for legacy callers / test fixtures only — letting a live route
+  // skip the prop would silently show the wrong tone for warn/fail
+  // rails on shipped UI.
+  it("all production DynamicTopbarCta mounts pass railSeverity prop", async () => {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const sites = [
+      path.resolve(__dirname, "../../../StepPanelShell.tsx"),
+      path.resolve(__dirname, "../../../v4/WorkbenchShellV4.tsx"),
+    ];
+    for (const site of sites) {
+      const src = await fs.readFile(site, "utf-8");
+      if (!src.includes("DynamicTopbarCta")) continue;
+      // Match opening JSX tag through the next `>` so we can inspect
+      // the props in one chunk (handles multiline JSX).
+      const openTagMatches = src.match(/<DynamicTopbarCta\b[\s\S]*?\/?>/g) ?? [];
+      for (const tag of openTagMatches) {
+        expect(tag).toMatch(
+          /railSeverity=\{/,
+        );
+      }
+    }
+  });
+
   it("enabled CTA tone follows kind, not railSeverity (severity only affects disabled)", () => {
     render(
       <DynamicTopbarCta
