@@ -363,13 +363,23 @@ export function DynamicFramePanel({
 function CopyFieldPathButton({ fieldPath }: { fieldPath: string }) {
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
+    // Cycle-3 R0 P2 fix: optional chaining (`navigator.clipboard?.
+    // writeText`) used to silently return `undefined` when the API was
+    // absent (older browsers, non-secure contexts) — `await undefined`
+    // resolves successfully, so the button falsely flipped to ✓ even
+    // though nothing was copied. Explicit availability check before
+    // entering the success path closes that contradiction with the
+    // intended silent-degrade behavior.
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      return;
+    }
     try {
-      await navigator.clipboard?.writeText(fieldPath);
+      await navigator.clipboard.writeText(fieldPath);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Permission denied / no API. Silent no-op — engineer can fall
-      // back to manual selection.
+      // Permission denied. Silent no-op — engineer can fall back to
+      // manual selection.
     }
   };
   return (

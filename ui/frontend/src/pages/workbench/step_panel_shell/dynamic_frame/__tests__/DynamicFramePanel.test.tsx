@@ -190,6 +190,24 @@ describe("DynamicFramePanel", () => {
     expect(btn.textContent).toBe("✓");
   });
 
+  it("silently degrades when navigator.clipboard is undefined (R0 P2 fix)", async () => {
+    // Cycle-3 R0 P2 regression: when the Clipboard API isn't available
+    // (older browsers, non-secure contexts), the button used to falsely
+    // flip to ✓ because `navigator.clipboard?.writeText(...)` evaluates
+    // to `undefined` and `await undefined` resolves. Explicit
+    // availability check now keeps the button in 📋 state.
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: undefined,
+    });
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-field-path");
+    await userEvent.click(btn);
+    // No false-success — button stays in default state
+    expect(btn.dataset.copied).toBe("false");
+    expect(btn.textContent).toBe("📋");
+  });
+
   it("silently degrades when clipboard write rejects (permission denied)", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("permission denied"));
     Object.defineProperty(navigator, "clipboard", {
