@@ -7,12 +7,25 @@
 // Cycle 2 wires the CTA presentation; actual step-transition behavior
 // (clicking "Next step" → navigate URL to ?step=N+1) is wired by the
 // parent that owns search-params state.
+//
+// DEC-V61-202-SUB-M32-CYCLE2: when the CTA is disabled, the visual
+// cue picks up the rail's severity so engineers can tell why they're
+// blocked at a glance: rose-grey (critical / must-fix), amber-grey
+// (missing field), sky-grey (advisory / optional). Without this,
+// disabled CTA was uniform grey regardless of urgency — losing the
+// criticality info cycle-1 surfaced on the rail.
 
-import type { TopbarCta } from "@/types/workbench_frame";
+import type { FrameSeverity, TopbarCta } from "@/types/workbench_frame";
 
 interface DynamicTopbarCtaProps {
   cta: TopbarCta;
   onClick?: () => void;
+  /**
+   * DEC-V61-202-SUB-M32-CYCLE2: rail severity drives the disabled
+   * CTA's tone. Default "info" (sky-grey) preserves existing visual
+   * for legacy mounts that don't pass this prop.
+   */
+  railSeverity?: FrameSeverity;
 }
 
 const KIND_TONE: Record<
@@ -39,11 +52,30 @@ const KIND_TONE: Record<
   },
 };
 
-export function DynamicTopbarCta({ cta, onClick }: DynamicTopbarCtaProps) {
+// DEC-V61-202-SUB-M32-CYCLE2: per-severity disabled-state classes.
+// Pattern: muted version of the rail tone — same hue family,
+// reduced saturation, cursor-not-allowed. cycle-1's DynamicFramePanel
+// uses the saturated version of the same hues, so the disabled CTA
+// reads as "same severity, but blocked".
+const DISABLED_CLASS_BY_SEVERITY: Record<FrameSeverity, string> = {
+  fail: "border-rose-800/60 bg-rose-950/40 text-rose-500/70 cursor-not-allowed",
+  warn: "border-amber-800/60 bg-amber-950/40 text-amber-500/70 cursor-not-allowed",
+  info: "border-sky-800/60 bg-sky-950/40 text-sky-500/70 cursor-not-allowed",
+};
+
+export function DynamicTopbarCta({
+  cta,
+  onClick,
+  railSeverity,
+}: DynamicTopbarCtaProps) {
   const tone = KIND_TONE[cta.kind] ?? KIND_TONE.step_default;
-  const className = cta.enabled
-    ? tone.enabled
-    : "border-surface-700 bg-surface-900/40 text-surface-500 cursor-not-allowed";
+  // Severity defaults to "info" when caller doesn't pass one — preserves
+  // legacy sky-tone visual for mounts that predate this prop.
+  const effectiveSeverity: FrameSeverity = railSeverity ?? "info";
+  const disabledClass =
+    DISABLED_CLASS_BY_SEVERITY[effectiveSeverity] ??
+    DISABLED_CLASS_BY_SEVERITY.info;
+  const className = cta.enabled ? tone.enabled : disabledClass;
 
   return (
     <button
@@ -51,6 +83,7 @@ export function DynamicTopbarCta({ cta, onClick }: DynamicTopbarCtaProps) {
       data-testid="dynamic-topbar-cta"
       data-kind={cta.kind}
       data-enabled={cta.enabled}
+      data-rail-severity={effectiveSeverity}
       disabled={!cta.enabled}
       onClick={cta.enabled ? onClick : undefined}
       title={cta.reason ?? undefined}

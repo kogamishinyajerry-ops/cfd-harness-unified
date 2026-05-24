@@ -542,6 +542,9 @@ export function StepPanelShell() {
           <div className="shrink-0 px-3 py-2">
             <DynamicTopbarCta
               cta={dynamicFrame.topbar_cta}
+              // DEC-V61-202-SUB-M32-CYCLE2: pass rail severity so
+              // disabled state tones match the rail's urgency.
+              railSeverity={dynamicFrame.rail_primary.severity}
               onClick={() => {
                 const target = dynamicFrame.topbar_cta.target_step;
                 if (target == null) return;
