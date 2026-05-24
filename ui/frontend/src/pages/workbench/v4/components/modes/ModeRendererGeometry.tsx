@@ -14,6 +14,7 @@
  * with getActorByPatchName + getNumCells and is deferred to R3.
  */
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useV4WorkbenchContext } from "../../hooks/useV4WorkbenchContext";
 import {
@@ -61,21 +62,37 @@ function roleLabel(role: PatchRole): string {
   return ROLE_LABEL_ZH[role] ?? role;
 }
 
+// DEC-V61-202 M3.4 cycle 3 (spike-class · 2026-05-25): polish empty-state.
+// Was a small 12px title + text-only box; first-time engineers couldn't
+// find the upload affordance. Now: prominent 56px wireframe icon + bilingual
+// title + bilingual description + primary "上传 CAD / Upload CAD" CTA
+// routing to /workbench/import (reuses PostEmptyViewport icon pattern +
+// Step1Import Link pattern per M3.4 cycle 1 subagent S5 findings).
 function GeometryEmptyState() {
   return (
     <div
-      className="flex h-full w-full items-center justify-center px-6 text-center"
+      className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"
       data-testid="v4-mode-geometry-empty-scene"
     >
-      <div className="max-w-sm border border-v4-border bg-v4-surface/80 px-5 py-4">
-        <div className="text-[12px] font-medium text-v4-textPrimary">
-          未找到可渲染几何
-        </div>
-        <div className="mt-2 text-[11px] leading-5 text-v4-textSecondary">
-          当前算例没有可用的 GLB 资产或 CAD 分件语义。Geometry 页不再用示意 SVG
-          代替真实几何。
-        </div>
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.3" className="text-v4-textTertiary opacity-50" aria-hidden>
+        <path d="M12 2L2 7v10l10 5 10-5V7L12 2z" />
+        <path d="M2 7l10 5 10-5" />
+        <path d="M12 22V12" />
+      </svg>
+      <div className="text-sm font-medium text-v4-textPrimary">
+        未找到可渲染几何 / No CAD geometry yet
       </div>
+      <div className="max-w-md text-[12px] leading-relaxed text-v4-textSecondary">
+        当前算例还没有上传 CAD。物理、网格、边界等步骤需要从 CAD 开始。
+      </div>
+      <Link
+        to="/workbench/import"
+        data-testid="v4-mode-geometry-upload-cta"
+        className="mt-1 inline-flex items-center gap-2 rounded border border-v4-border bg-v4-surfaceRaised px-4 py-2 text-sm font-medium text-v4-textPrimary transition hover:border-v4-borderActive"
+      >
+        <span aria-hidden>↑</span>
+        <span>上传 CAD / Upload CAD</span>
+      </Link>
     </div>
   );
 }

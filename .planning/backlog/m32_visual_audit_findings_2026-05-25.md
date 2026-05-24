@@ -56,6 +56,16 @@
 **Repro**: same URL as B1.
 **Action**: defer until M3.4+ unless V4 shell owner picks it up. Not blocking.
 
+### B6 · ModeRendererGeometry rendered in narrow 148px column at step=geometry
+
+**Severity**: P1 (severely limits empty-state UX visibility · main viewport area is occupied by other-component dark void)
+**Track**: V4 shell layout / step-geometry workbench composition
+**Status**: Open · surfaced 2026-05-25 M3.4 cycle 3 (DOM inspection during empty-state polish)
+**Evidence**: At /workbench/case/m33_ux_demo_seed?step=geometry, DOM check shows `[data-testid="v4-mode-geometry-empty-scene"]` bbox = x=242, y=144, width=148, height=489. ModeRendererGeometry's root has `flex h-full w-full flex-col` (line 124) but ITS parent only allocates 148px width. Mesh/Physics/Boundary mode renderers visibly fill ~860px of the right viewport area (per cross-step screenshots at /tmp/cfd_workbench_screenshots/step_*) — so the V4 shell layout differs by step.
+**Hypothesis**: V4 shell uses a different layout for step=geometry (likely splits the right area into multiple columns reflecting the "辅助几何准备 / 自动识别零件 / 缝隙检查 / 包裹建议 / 包裹尺寸 / 流体域提取" cards visible in screenshots) — and ModeRendererGeometry is bound to ONE of those columns, not the full-width viewport area. The right ~70% (where mesh/physics/boundary show their viewport) is occupied by something other than ModeRendererGeometry at step=geometry.
+**Repro**: same URL · check with playwright DOM query for testid bboxes.
+**Action**: investigate what component owns the right ~70% at step=geometry · is it intentional multi-column layout or layout bug · if intentional, the empty-state CTA (cycle 3 work) should be hoisted to that primary column · if bug, V4 shell should give ModeRendererGeometry the same full-viewport allocation as other modes.
+
 ### B5 · Step rail (01-07 indicators) overlaps the B3 bottom banner
 
 **Severity**: P2 (visual overlap · the step rail and the bottom-cards banner sit on the same y-range, fighting for space)
