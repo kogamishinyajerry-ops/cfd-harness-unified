@@ -2,14 +2,16 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-25T01:35 — **M3.2 CLOSED + M3.3 CLOSED + M3.4 OPENED**.
-> M3.3 (real-user UX validation arc) shipped in 3 cycles:
-> - cycle 1 (`11ce392`): demo seed + dev servers + backend verification
-> - cycle 2 (`26fafbc`): A1-A4 visual fix (user-triggered) + cross-track backlog + spot-check tool + methodology doc · multi-agent crew (Sonnet S1+S2 parallel)
-> - cycle 3 (`f2eddd9`): cross-step audit reframed B1-B5 as step=geometry empty-state cluster
-> - phase-close retro: `.planning/retrospectives/2026-05-25_m33_milestone_close.md`
-> Zero counter delta · zero Codex rounds · v2.3 round-1 loosen at its lightest. Multi-agent crew architecture activated mid-cycle 2 (user-mandated).
-> **Session arc**: M3.2 cycles 4-7 + M3.2 retro + M3.3 cycles 1-3 + M3.3 retro + M3.4 charter
+> **Updated**: 2026-05-25T02:10 — **M3.2 + M3.3 + M3.4 ALL CLOSED**. Three milestones in one session.
+> **M3.4 (geometry empty-state) shipped in 5 cycles**:
+> - cycle 1 (research-only): 3 parallel investigation subagents (S3 charter intent · S4 root cause · S5 reuse candidates)
+> - cycle 2 (`e398397`): 1-LOC fix at ModeRendererGeometry — closes B1 MainCanvas proxy error
+> - cycle 3 (`bf3d41d`): polished GeometryEmptyState + Upload CAD CTA (reuses PostEmptyViewport + Step1Import patterns)
+> - cycle 4 (research-only): B6 root cause subagent — found CSS content-overflow leak
+> - cycle 5 (`0a122d3`): 2-LOC fix at WorkbenchShellV4 — closes B6 + cascade-clears B2 + B5
+> - phase-close retro: `.planning/retrospectives/2026-05-25_m34_milestone_close.md`
+> Cascade-clear pattern: cycle 5 closed 3 findings with 2 LOC. Multi-agent crew at full deployment (4 subagents across cycles 1 + 4).
+> **Session arc**: M3.2 cycles 4-7 + M3.2 retro + M3.3 cycles 1-3 + M3.3 retro + M3.4 cycles 1-5 + M3.4 retro
 
 ---
 
@@ -49,7 +51,25 @@ Parent charter: `DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED`.
 
 Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
-## M3.4 charter (draft · proposed at M3.3 close 2026-05-25)
+## M3.5 entry candidates (M3.4 closed 2026-05-25)
+
+### Outstanding from M3.4 backlog
+- **B4** (P3 · sidebar dead vertical space) — lowest priority · may be moot post-cycle-5 layout recovery · defer unless re-screenshot confirms still relevant
+- Re-screenshot all 4 steps (geometry / mesh / physics / boundary) to confirm cascade-clear didn't break other steps
+
+### Carry-overs from earlier retros
+- **Open in IDE via `vscode://`** — workbench → editor jump (M3.2 retro)
+- **Raw YAML viewer modal** — backend YAML route + modal (M3.2 retro)
+- **"Replace whole node" UI recovery** — M3.1 cycle 6 deferred
+- **Backend `gap.why` enrichment** across all gap families (M3.3 retro)
+- **Real-user click-through validation** of M3.4 fixes (cycles 2 + 3 + 5)
+
+### Suggested M3.5 theme
+**Real-user re-validation arc + B4 cosmetic** — light milestone closing the loop on M3.2-M3.4 work: user clicks through fixed UI with real CAD upload OR uses an existing case with real CAD; verifies UX is clean across all 4 steps; B4 fix included if relevant. Charter-light (≤3 cycles).
+
+---
+
+## M3.4 charter (CLOSED 2026-05-25)
 
 ### Theme
 **Geometry step graceful empty-state** — close the B1-B5 step=geometry empty-state cluster surfaced by M3.3 cycle 3 cross-step audit. When a case has no CAD upload, step=1 currently cascades into broken widgets (MainCanvas proxy error + stat number collision + duplicate banner + sidebar dead-space + step rail overlap). Replace this with a clean empty-state UX so a fresh engineer landing on the workbench sees a usable, on-ramp-friendly screen instead of error popups.
