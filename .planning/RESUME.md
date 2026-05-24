@@ -2,12 +2,14 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-25T00:30 — M3.2 cycles 4+5+6 landed:
+> **Updated**: 2026-05-25T00:55 — **M3.2 CLOSED**. Cycles 4-7 landed this session:
 > - cycle 4 (`f09bc9d`): copy body_text button (📝) · spike-class
 > - cycle 5 (`0c8a99e`): aria-live toast ("已复制 / Copied") · spike-class
-> - cycle 6 (`aeee160`): Playwright E2E dogfood · 3/3 PASS happy-path (11.6s)
-> Cycles 4-5 spike-class (no DEC/Codex/Notion); cycle 6 single-functionality sub-DEC (commit + tests, no DEC file per v2.3 round-1 loosen, no risk-tier so no Codex). 34/34 panel + 65/65 dynamic_frame + 3/3 e2e tests green.
-> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs Notion-synced) + M3.2 cycles 4-6 (git-log archive)
+> - cycle 6 (`aeee160`): Playwright E2E happy-path dogfood · 3/3 PASS (11.6s)
+> - cycle 7 (`c1d4d4a`): Playwright failure-path dogfood · 4/4 PASS (18.5s total 7/7)
+> - phase-close retro: `.planning/retrospectives/2026-05-25_m32_milestone_close.md`
+> Zero M3.2-scope bugs · zero post-R3 defects · zero Codex cap=3 hits. 34/34 panel + 65/65 dynamic_frame + 7/7 e2e tests green.
+> **Session arc**: M3.2 cycles 4-7 + phase-close retro
 
 ---
 
@@ -47,38 +49,32 @@ Parent charter: `DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED`.
 
 Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
-## Open M3.2 work (decision point)
+## M3.2 closed · M3.3 entry candidates
 
-### Cycle 6 dogfood outcome (2026-05-25)
+### M3.2 close outcome (2026-05-25)
 
-Playwright spec `ui/frontend/e2e/m32-dogfood.spec.ts` (185 LOC, 3 tests):
-- **cycles 1+2** · rail severity surfaces + topbar CTA carries `data-rail-severity` ✓
-- **cycles 3+4** · both copy buttons (`dynamic-frame-copy-field-path` + `-copy-body-text`) render + click works ✓
-- **cycle 5** · aria-live toast (`role=status` · `aria-live=polite` · "已复制") appears on click ✓
+7 cycles · 0 post-R3 defects · 0 cycles at Codex cap=3 · 0% user-ratification (cycles 1-3 only; 4-7 N/A per process-class). Retro at `.planning/retrospectives/2026-05-25_m32_milestone_close.md` (full counter telemetry · Codex round economy · four-question gate audit · backlog F-M32-1/F-M32-2 disposition · M3.3 charter recommendations).
 
-**No failure-path backlog from happy path.** Body_text was rendered (cycle-7-backlog annotation did not fire), so analyzer is emitting `gap.why` for the case_family info_gap.
+**Process-class diversification empirically validated** on a 4-cycle stretch (4-5 spike-class · 6-7 single-functionality sub-DEC) with zero process-pollution and zero defects.
 
-### M3.2 close vs cycle 7 — user decision point
+### Backlog findings carried over (not blocking M3.2 close)
 
-M3.2 = "workbench frontend severity + actionability". Cycles 1-6 cover the foundation. Two paths from here:
+- **F-M32-1** · rapid-double-click timer no-extend (P3 · UX research-gated). Fix only if engineer confusion surfaces; sketch in retro.
+- **F-M32-2** · step=boundary navigation 404/422 console noise (P2 · backend triage). Out of M3.2 scope; assign to backend track.
 
-**A. Close M3.2 now**:
-- Foundation is complete (severity routing + 3 copy affordances + happy-path E2E PASS)
-- Mandatory phase-close retro per v2.3 (collect: counter, Codex economy, user-ratification rate, post-R3 defects, methodology lessons)
-- Next milestone = M3.3 (theme TBD)
+### M3.3 charter — propose a 1-paragraph scope at cycle 1
 
-**B. Cycle 7 = failure-path dogfood**:
-- Mirrors M3.1's close-via-dogfood-pattern (cycle 5 found 4 P1/P2/P3 bugs → cycles 6-8 closed them, then retro)
-- Tests to add: rapid double-click state · step navigation rail refresh · clipboard-denied silent degrade · multi-button sequential clicks
-- Estimate: ~50 LOC additional Playwright tests
-- If failure-path is clean → close M3.2 after; if it finds bugs → cycles 8+ to fix
+Per retro §Recommendations #1: open M3.3 with theme + in-scope + out-of-scope + expected cycle count + close criterion. Candidate themes (user picks):
 
-### Other cycle 7+ candidates (if A or B not chosen)
+1. **Backend `gap.why` enrichment** — verify analyzer emits rich why across ALL gap families (not just case_family). Adjacent to F-M32-2 backend triage but distinct.
+2. **Open in IDE via `vscode://`** — workbench → editor jump. Cross-cutting; sub-DEC with backend surface-area for case_dir absolute path + manifest line numbers.
+3. **Raw YAML viewer modal** — fetch + render manifest YAML inside workbench panel. Backend YAML route + modal component.
+4. **"Replace whole node" UI recovery** — for legacy-corrupted manifests (M3.1 cycle 6 deferred). Tied to specific corruption patterns from M3.1 cycle 7.
+5. **Real-user UX validation arc** — close the "no real engineer used the toast" gap from M3.2 retro §What went poorly #4. Lighter than other candidates; could be the bridge milestone.
 
-1. **Backend body_text enrichment** — confirm analyzer `gap.why` quality across all gap families (current cycle 6 only verified case_family path)
-2. **Open in IDE via `vscode://`** — requires backend to surface case_dir absolute path. Sub-DEC.
-3. **Raw YAML viewer modal** — backend YAML fetch route + modal. Sub-DEC.
-4. **"Replace whole node" UI recovery** — M3.1 cycle 6 deferred; sub-DEC.
+### Notion sync queue (session-end)
+
+Cycles 4-7 are NOT synced to Notion (spike-class + single-functionality sub-DEC = Notion bypassed per v2.3). Cycles 1-3 already synced (per prior session). No action needed.
 
 ### M3.2 charter open questions (from retro §"Open questions for M3.2 charter")
 
