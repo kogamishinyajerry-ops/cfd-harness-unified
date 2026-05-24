@@ -2,11 +2,12 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-24T23:55 — M3.2 cycle 4+5 landed as spike-class:
-> - cycle 4 (commit `f09bc9d`): copy body_text button (📝)
-> - cycle 5 (commit `0c8a99e`): aria-live toast on copy ("已复制 / Copied")
-> Both spike-class per v2.3 round-1 loosen (≤30 LOC + 1 test + confidence:high · no DEC · no Codex · no Notion). 34/34 panel tests + 65/65 dynamic_frame tests green.
-> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs accepted; all Notion-synced) + M3.2 cycles 4-5 (spike-class · git-log-only archive)
+> **Updated**: 2026-05-25T00:30 — M3.2 cycles 4+5+6 landed:
+> - cycle 4 (`f09bc9d`): copy body_text button (📝) · spike-class
+> - cycle 5 (`0c8a99e`): aria-live toast ("已复制 / Copied") · spike-class
+> - cycle 6 (`aeee160`): Playwright E2E dogfood · 3/3 PASS happy-path (11.6s)
+> Cycles 4-5 spike-class (no DEC/Codex/Notion); cycle 6 single-functionality sub-DEC (commit + tests, no DEC file per v2.3 round-1 loosen, no risk-tier so no Codex). 34/34 panel + 65/65 dynamic_frame + 3/3 e2e tests green.
+> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs Notion-synced) + M3.2 cycles 4-6 (git-log archive)
 
 ---
 
@@ -46,31 +47,38 @@ Parent charter: `DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED`.
 
 Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
-## Open M3.2 work (start here next session)
+## Open M3.2 work (decision point)
 
-### Cycle 6+ candidates (cycles 4-5 LANDED 2026-05-24)
+### Cycle 6 dogfood outcome (2026-05-25)
 
-**Severity + clipboard foundation (cycles 1-5) is shipped.** Remaining work is either backend-coordinated or dogfood-driven. Pick by ROI:
+Playwright spec `ui/frontend/e2e/m32-dogfood.spec.ts` (185 LOC, 3 tests):
+- **cycles 1+2** · rail severity surfaces + topbar CTA carries `data-rail-severity` ✓
+- **cycles 3+4** · both copy buttons (`dynamic-frame-copy-field-path` + `-copy-body-text`) render + click works ✓
+- **cycle 5** · aria-live toast (`role=status` · `aria-live=polite` · "已复制") appears on click ✓
 
-1. **M3.2 E2E dogfood** — Playwright script exercising cycles 1-5 end-to-end (severity tone changes when manifest mutates · two copy buttons both work · toast aria-live announces). Likely sub-DEC; produces a failure-path backlog like M3.1 cycle 5 did. **Top recommendation for cycle 6**: most aligned with v2.3 "real-usage eval > benchmark" principle.
+**No failure-path backlog from happy path.** Body_text was rendered (cycle-7-backlog annotation did not fire), so analyzer is emitting `gap.why` for the case_family info_gap.
 
-2. **Copy validation error reason from analyzer** — analyzer-side surfacing of the WHY-failed text. Requires backend route to expose richer reason than current `body_text`. Sub-DEC.
+### M3.2 close vs cycle 7 — user decision point
 
-3. **Open in IDE via `vscode://`** — Would require backend to surface case_dir absolute path + manifest YAML file location + (ideally) line number for `field_path`. Sub-DEC due to backend touch.
+M3.2 = "workbench frontend severity + actionability". Cycles 1-6 cover the foundation. Two paths from here:
 
-4. **Raw YAML viewer modal** — Backend YAML fetch route + modal component. Sub-DEC.
+**A. Close M3.2 now**:
+- Foundation is complete (severity routing + 3 copy affordances + happy-path E2E PASS)
+- Mandatory phase-close retro per v2.3 (collect: counter, Codex economy, user-ratification rate, post-R3 defects, methodology lessons)
+- Next milestone = M3.3 (theme TBD)
 
-5. **"Replace whole node" UI recovery affordance** — For legacy-corrupted manifests (M3.1 cycle 6 deferred). Sub-DEC; tied to specific corruption patterns from cycle 7.
+**B. Cycle 7 = failure-path dogfood**:
+- Mirrors M3.1's close-via-dogfood-pattern (cycle 5 found 4 P1/P2/P3 bugs → cycles 6-8 closed them, then retro)
+- Tests to add: rapid double-click state · step navigation rail refresh · clipboard-denied silent degrade · multi-button sequential clicks
+- Estimate: ~50 LOC additional Playwright tests
+- If failure-path is clean → close M3.2 after; if it finds bugs → cycles 8+ to fix
 
-6. **Body_text long-message folding** (▾ expand) — Only if real analyzer messages prove too long. Need data first (could be triggered by M3.2 dogfood discovering long messages).
+### Other cycle 7+ candidates (if A or B not chosen)
 
-### M3.2 close criteria (suggested)
-
-M3.2 = "workbench frontend severity + actionability". Cycles 1-5 cover:
-- severity surfacing (rail + topbar CTA) ✓ cycles 1-2
-- actionability via clipboard (field_path + body_text + toast) ✓ cycles 3-5
-
-**Suggested M3.2 close**: after E2E dogfood (cycle 6) drains any failure-path backlog. Mirrors M3.1's close-via-dogfood-pattern. Phase-close retro mandatory per v2.3.
+1. **Backend body_text enrichment** — confirm analyzer `gap.why` quality across all gap families (current cycle 6 only verified case_family path)
+2. **Open in IDE via `vscode://`** — requires backend to surface case_dir absolute path. Sub-DEC.
+3. **Raw YAML viewer modal** — backend YAML fetch route + modal. Sub-DEC.
+4. **"Replace whole node" UI recovery** — M3.1 cycle 6 deferred; sub-DEC.
 
 ### M3.2 charter open questions (from retro §"Open questions for M3.2 charter")
 
