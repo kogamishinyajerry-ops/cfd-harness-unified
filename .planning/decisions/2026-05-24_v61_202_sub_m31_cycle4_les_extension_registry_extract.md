@@ -1,8 +1,12 @@
 ---
 decision_id: DEC-V61-202-SUB-M31-CYCLE4-LES-EXTENSION-REGISTRY-EXTRACT
 title: M3.1 cycle 4 — LES family skeleton extension + registry extraction to shared module
-status: Proposed
+status: Accepted
 proposed_date: 2026-05-24
+accepted_date: 2026-05-24
+codex_review_arc: R0 (2 P2: pimpleFoam path + LES_*-prefixed) → R1 (1 P2: bare LES) → R2 (1 P2: les_transient rename) → R3 (1 P1: backward-compat shim — user-ratified non-issue, same-day rename had zero production exposure)
+final_commit: a7d300b
+user_ratification: 2026-05-24 AskUserQuestion — "Accept R3 P1 as non-issue, close cycle 4 (Recommended)"
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 4 (3rd skeleton entry + module extraction trigger)
 notion_sync_status: pending_accepted
