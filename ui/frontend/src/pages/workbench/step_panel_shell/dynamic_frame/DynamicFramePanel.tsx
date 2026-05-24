@@ -223,15 +223,12 @@ export function DynamicFramePanel({
         </span>
         {rail.field_path && (
           <>
-            <code className="truncate font-mono text-[10px] text-surface-500">
+            <code className="truncate font-mono text-xs text-surface-300">
               {rail.field_path}
             </code>
-            {/* DEC-V61-202-SUB-M32-CYCLE3: clipboard affordance so the
-                engineer can copy the field_path into their text editor
-                or terminal without selecting + Ctrl-C. Tiny button,
-                degrades silently if navigator.clipboard is unavailable
-                or denied (no UI feedback either way — Cycle 4+ may
-                add a transient "已复制" toast). */}
+            {/* DEC-V61-202-SUB-M32-CYCLE3 + M33-CYCLE2 visual fix:
+                clipboard affordance bumped to text-sm icon + inline
+                aria-live toast (was 9-10px tiny + edge-clipped popover). */}
             <CopyFieldPathButton fieldPath={rail.field_path} />
           </>
         )}
@@ -242,12 +239,10 @@ export function DynamicFramePanel({
       </h3>
 
       {rail.body_text && (
-        <div className="mt-1 flex items-start justify-between gap-2">
-          <p className="text-[12px] leading-snug text-surface-300">
-            {rail.body_text}
-          </p>
+        <p className="mt-1 text-[12px] leading-snug text-surface-300">
+          {rail.body_text}{" "}
           <CopyBodyTextButton bodyText={rail.body_text} />
-        </div>
+        </p>
       )}
 
       {rail.cta_label && !suppressPrimaryCta && (
@@ -393,12 +388,13 @@ function CopyFieldPathButton({ fieldPath }: { fieldPath: string }) {
       onClick={onCopy}
       aria-label={`复制字段路径 / Copy field path: ${fieldPath}`}
       title={copied ? "已复制 / Copied" : "复制路径 / Copy path"}
-      className="relative shrink-0 rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+      className="shrink-0 inline-flex items-center gap-1 rounded-sm border border-surface-600 px-1.5 py-0.5 font-mono text-sm text-surface-300 hover:bg-surface-800 hover:text-surface-100 transition"
     >
       {copied ? "✓" : "📋"}
-      {/* DEC-V61-202-SUB-M32-CYCLE5 (spike-class): aria-live toast. */}
+      {/* DEC-V61-202-SUB-M32-CYCLE5 + M33-CYCLE2 visual fix: inline
+          aria-live toast (was absolute -bottom-5 edge-clipped popover). */}
       {copied && (
-        <span role="status" aria-live="polite" className="absolute -bottom-5 right-0 z-10 whitespace-nowrap rounded-sm bg-surface-800 px-1.5 py-0.5 text-[9px] text-surface-200 shadow">已复制 / Copied</span>
+        <span role="status" aria-live="polite" className="text-xs text-emerald-300">已复制</span>
       )}
     </button>
   );
@@ -424,12 +420,13 @@ function CopyBodyTextButton({ bodyText }: { bodyText: string }) {
       onClick={onCopy}
       aria-label="复制完整说明 / Copy why message"
       title={copied ? "已复制 / Copied" : "复制说明 / Copy why"}
-      className="relative shrink-0 self-start rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+      className="inline-flex items-baseline gap-1 rounded-sm border border-surface-600 px-1.5 py-0.5 align-baseline font-mono text-sm text-surface-300 hover:bg-surface-800 hover:text-surface-100 transition"
     >
       {copied ? "✓" : "📝"}
-      {/* DEC-V61-202-SUB-M32-CYCLE5 (spike-class): aria-live toast. */}
+      {/* DEC-V61-202-SUB-M32-CYCLE5 + M33-CYCLE2 visual fix: inline
+          aria-live toast (was absolute -bottom-5 edge-clipped popover). */}
       {copied && (
-        <span role="status" aria-live="polite" className="absolute -bottom-5 right-0 z-10 whitespace-nowrap rounded-sm bg-surface-800 px-1.5 py-0.5 text-[9px] text-surface-200 shadow">已复制 / Copied</span>
+        <span role="status" aria-live="polite" className="text-xs text-emerald-300">已复制</span>
       )}
     </button>
   );
