@@ -4,8 +4,11 @@ title: M3.1 cycle 6 — PATCH type preservation (fix BUG-CYCLE5-1 + BUG-CYCLE5-2
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: pending (will land in cycle-6 close commit)
-final_commit: TBD (set post-commit)
+codex_review_arc: R0 (1 P1 container-PATCH loophole + 1 P3 cockpit) → R1 (0 P1 / 0 P2 / 1 P3 cockpit SHA lag · user-ratified close)
+final_commit: d64551c
+user_ratification: 2026-05-24 AskUserQuestion — "Accept R1, close cycle 6 (Recommended)"
+deferred_findings:
+  - R1 P3 — cockpit project_status.json git.head lags HEAD by one commit. Structural (cockpit cannot embed its own SHA); deferred to a future cockpit-pipeline DEC (not cycle-6 scope). Retro queue note.
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 6 (engineer mistake-recovery fix)
 notion_sync_status: pending_accepted
