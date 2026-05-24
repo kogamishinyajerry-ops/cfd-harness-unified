@@ -186,8 +186,10 @@ describe("DynamicFramePanel", () => {
     await userEvent.click(btn);
     expect(writeText).toHaveBeenCalledWith("vof_contract.phases");
     // After click, copied state flips → button text becomes "✓"
+    // (cycle-5 toast lives inside the same <button> so textContent
+    //  aggregates icon + toast — use .toContain to stay tolerant)
     expect(btn.dataset.copied).toBe("true");
-    expect(btn.textContent).toBe("✓");
+    expect(btn.textContent).toContain("✓");
   });
 
   it("silently degrades when navigator.clipboard is undefined (R0 P2 fix)", async () => {
@@ -237,7 +239,24 @@ describe("DynamicFramePanel", () => {
     await userEvent.click(btn);
     expect(writeText).toHaveBeenCalledWith(GAP_RAIL.body_text);
     expect(btn.dataset.copied).toBe("true");
-    expect(btn.textContent).toBe("✓");
+    expect(btn.textContent).toContain("✓");
+  });
+
+  // DEC-V61-202-SUB-M32-CYCLE5 (spike-class): aria-live toast on copy.
+  it("renders 已复制 aria-live toast after copy click + absent before click", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-field-path");
+    expect(btn.querySelector("[role='status']")).toBeNull();
+    await userEvent.click(btn);
+    const toast = btn.querySelector("[role='status']");
+    expect(toast).not.toBeNull();
+    expect(toast!.getAttribute("aria-live")).toBe("polite");
+    expect(toast!.textContent).toContain("已复制");
   });
 
   it("renders problem_fix with rose label regardless of severity field (kind wins)", () => {

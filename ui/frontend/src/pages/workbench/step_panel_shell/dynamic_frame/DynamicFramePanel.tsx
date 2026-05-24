@@ -393,9 +393,13 @@ function CopyFieldPathButton({ fieldPath }: { fieldPath: string }) {
       onClick={onCopy}
       aria-label={`复制字段路径 / Copy field path: ${fieldPath}`}
       title={copied ? "已复制 / Copied" : "复制路径 / Copy path"}
-      className="shrink-0 rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+      className="relative shrink-0 rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
     >
       {copied ? "✓" : "📋"}
+      {/* DEC-V61-202-SUB-M32-CYCLE5 (spike-class): aria-live toast. */}
+      {copied && (
+        <span role="status" aria-live="polite" className="absolute -bottom-5 right-0 z-10 whitespace-nowrap rounded-sm bg-surface-800 px-1.5 py-0.5 text-[9px] text-surface-200 shadow">已复制 / Copied</span>
+      )}
     </button>
   );
 }
@@ -420,9 +424,13 @@ function CopyBodyTextButton({ bodyText }: { bodyText: string }) {
       onClick={onCopy}
       aria-label="复制完整说明 / Copy why message"
       title={copied ? "已复制 / Copied" : "复制说明 / Copy why"}
-      className="shrink-0 self-start rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+      className="relative shrink-0 self-start rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
     >
       {copied ? "✓" : "📝"}
+      {/* DEC-V61-202-SUB-M32-CYCLE5 (spike-class): aria-live toast. */}
+      {copied && (
+        <span role="status" aria-live="polite" className="absolute -bottom-5 right-0 z-10 whitespace-nowrap rounded-sm bg-surface-800 px-1.5 py-0.5 text-[9px] text-surface-200 shadow">已复制 / Copied</span>
+      )}
     </button>
   );
 }
