@@ -32,6 +32,46 @@ from fastapi.testclient import TestClient
 
 CASE_ID = "case_007_cycle5_failure_path"
 
+# Codex cycle-5 R2 P3: FastAPI returns 4xx errors as
+# `{"detail": str | [...]}`. Our 200 envelope is
+# `{"success": bool, "validation_errors": [...]}`. The cycle-5
+# contract treats "rejection with the reason named" as PASS — both
+# envelopes need to be recognized.
+_NAMED_REASON_KEYWORDS = ("type", "value", "dict", "schema", "expected", "patch_type")
+
+
+def _is_rejection_with_named_reason(response_body: dict | None) -> bool:
+    """True iff the response body documents a type/schema/value
+    rejection — either via the 200 envelope's `validation_errors`
+    list (each string item checked) OR via FastAPI's 4xx `detail`
+    field (string OR list of pydantic error dicts).
+    """
+    if not isinstance(response_body, dict):
+        return False
+
+    # Path A: 200-envelope rejection (success=false + validation_errors)
+    if response_body.get("success") is False:
+        for err in response_body.get("validation_errors") or []:
+            txt = str(err).lower()
+            if any(k in txt for k in _NAMED_REASON_KEYWORDS):
+                return True
+
+    # Path B: FastAPI 4xx envelope (detail string OR pydantic error list)
+    detail = response_body.get("detail")
+    if isinstance(detail, str):
+        txt = detail.lower()
+        if any(k in txt for k in _NAMED_REASON_KEYWORDS):
+            return True
+    elif isinstance(detail, list):
+        # Pydantic v2 returns [{"type":..., "loc":..., "msg":..., ...}, ...]
+        for entry in detail:
+            for v in (entry.values() if isinstance(entry, dict) else ()):
+                txt = str(v).lower()
+                if any(k in txt for k in _NAMED_REASON_KEYWORDS):
+                    return True
+
+    return False
+
 # Start sparse — engineer has imported but hasn't labeled yet.
 STARTING_MANIFEST = {
     "case_id": CASE_ID,
@@ -171,25 +211,14 @@ def main() -> int:
         if struct_patch.status_code in (200, 422, 400)
         else None
     )
-    # Codex cycle-5 R0 P2 fix: distinguish "real type-validation
-    # rejection" from "unrelated 4xx" (state-SHA mismatch, route
-    # contract regression). The cycle-5 contract is specifically
-    # that PATCH must REJECT a wrong-typed value at a structural
-    # node, with validation_errors naming the type problem. Generic
-    # 409s or 400s that happen for unrelated reasons would mask
-    # BUG-CYCLE5-1 as fixed when it isn't.
-    expected_rejection_envelope = (
-        struct_response is not None
-        and struct_response.get("success") is False
-        and any(
-            "type" in str(err).lower() or "dict" in str(err).lower()
-            or "schema" in str(err).lower() or "expected" in str(err).lower()
-            for err in (struct_response.get("validation_errors") or [])
-        )
-    )
-    struct_rejected = expected_rejection_envelope
+    # Codex cycle-5 R0 P2 + R2 P3 fix: distinguish "real type-
+    # validation rejection" from "unrelated 4xx" (state-SHA mismatch,
+    # route contract regression), AND support both response envelopes
+    # (200-success-false vs FastAPI 4xx-detail). Generic 4xx without
+    # naming the type/schema reason would mask BUG-CYCLE5-1 as fixed.
+    struct_rejected = _is_rejection_with_named_reason(struct_response)
     print(f"  [5] PATCH struct-wrong 'not_a_dict': status={struct_patch.status_code} rejected={struct_rejected}")
-    if struct_response and not expected_rejection_envelope and struct_response.get("success") is False:
+    if struct_response and not struct_rejected and struct_response.get("success") is False:
         print(f"      (rejected but NOT with type-validation envelope — possible unrelated 4xx)")
     if struct_response and struct_response.get("validation_errors"):
         print(f"      validation_errors = {struct_response['validation_errors'][:200]}")
@@ -248,26 +277,20 @@ def main() -> int:
          cf_success),
         ("Step 3: skeleton PATCH succeeded + landed",
          sk_success and inlet_type_good == "fixedValue"),
-        # Codex cycle-5 R0 P3 fix: tighten typo predicate. Cycle-5
-        # contract: if the backend accepts (200 + success=true), the
-        # manifest must actually contain the typo'd value (proves the
-        # PATCH wrote). If it rejects (4xx OR 200 + success=false),
-        # validation_errors must name the type/value problem (proves
-        # the validation engine fired for the right reason). A 400
-        # for unrelated reasons (state-SHA mismatch, route regression)
-        # with no relevant validation_errors does NOT count as the
-        # "coherent handling" the dogfood is meant to document.
+        # Codex cycle-5 R0 P3 + R2 P3 fix: tighten typo predicate +
+        # support both response envelopes:
+        #   - 200 envelope: {"success": bool, "validation_errors": [...]}
+        #   - FastAPI 4xx envelope: {"detail": str | [...]}
+        # Cycle-5 contract: if accepted (200 + success=true), manifest
+        # must contain the typo'd value. If rejected (200 +
+        # success=false OR 4xx), the response must NAME the
+        # type/value/schema/patch_type reason via either top-level
+        # validation_errors OR FastAPI's detail string. A 4xx for
+        # unrelated reasons (state-SHA mismatch, route regression)
+        # with no relevant naming does NOT count as PASS.
         ("Step 4: typo PATCH was handled coherently (accepted-and-wrote, OR rejected-with-named-reason)",
          (typo_accepted and inlet_type_after_typo == "fixedValue_typo")
-         or (
-             typo_response is not None
-             and typo_response.get("success") is False
-             and any(
-                 "type" in str(err).lower() or "value" in str(err).lower()
-                 or "schema" in str(err).lower() or "patch_type" in str(err).lower()
-                 for err in (typo_response.get("validation_errors") or [])
-             )
-         )),
+         or _is_rejection_with_named_reason(typo_response)),
         # Struct-wrong (5) MUST be rejected — that's a type contract.
         ("Step 5: struct-wrong PATCH was rejected",
          struct_rejected),
