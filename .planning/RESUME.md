@@ -2,14 +2,14 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-25T00:55 — **M3.2 CLOSED**. Cycles 4-7 landed this session:
-> - cycle 4 (`f09bc9d`): copy body_text button (📝) · spike-class
-> - cycle 5 (`0c8a99e`): aria-live toast ("已复制 / Copied") · spike-class
-> - cycle 6 (`aeee160`): Playwright E2E happy-path dogfood · 3/3 PASS (11.6s)
-> - cycle 7 (`c1d4d4a`): Playwright failure-path dogfood · 4/4 PASS (18.5s total 7/7)
-> - phase-close retro: `.planning/retrospectives/2026-05-25_m32_milestone_close.md`
-> Zero M3.2-scope bugs · zero post-R3 defects · zero Codex cap=3 hits. 34/34 panel + 65/65 dynamic_frame + 7/7 e2e tests green.
-> **Session arc**: M3.2 cycles 4-7 + phase-close retro
+> **Updated**: 2026-05-25T01:35 — **M3.2 CLOSED + M3.3 CLOSED + M3.4 OPENED**.
+> M3.3 (real-user UX validation arc) shipped in 3 cycles:
+> - cycle 1 (`11ce392`): demo seed + dev servers + backend verification
+> - cycle 2 (`26fafbc`): A1-A4 visual fix (user-triggered) + cross-track backlog + spot-check tool + methodology doc · multi-agent crew (Sonnet S1+S2 parallel)
+> - cycle 3 (`f2eddd9`): cross-step audit reframed B1-B5 as step=geometry empty-state cluster
+> - phase-close retro: `.planning/retrospectives/2026-05-25_m33_milestone_close.md`
+> Zero counter delta · zero Codex rounds · v2.3 round-1 loosen at its lightest. Multi-agent crew architecture activated mid-cycle 2 (user-mandated).
+> **Session arc**: M3.2 cycles 4-7 + M3.2 retro + M3.3 cycles 1-3 + M3.3 retro + M3.4 charter
 
 ---
 
@@ -49,7 +49,47 @@ Parent charter: `DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED`.
 
 Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
-## M3.2 closed · M3.3 entry candidates
+## M3.4 charter (draft · proposed at M3.3 close 2026-05-25)
+
+### Theme
+**Geometry step graceful empty-state** — close the B1-B5 step=geometry empty-state cluster surfaced by M3.3 cycle 3 cross-step audit. When a case has no CAD upload, step=1 currently cascades into broken widgets (MainCanvas proxy error + stat number collision + duplicate banner + sidebar dead-space + step rail overlap). Replace this with a clean empty-state UX so a fresh engineer landing on the workbench sees a usable, on-ramp-friendly screen instead of error popups.
+
+### In scope
+- `MainCanvas` / `VtkCanvasV3` empty-state fallback when no geometry artifact present (B1)
+- Bottom-center stat area: render placeholder OR collapse layout when stats are 0 (B2)
+- `DynamicBottomCards` rendering policy at step=geometry when only one rail-equivalent gap exists (B3 — investigate M3.0 charter intent first)
+- Step rail z-index / positioning to not overlap bottom banner (B5)
+- Optional: left sidebar fill (e.g., recently-viewed cases, minimap) at step=geometry only (B4 — lowest priority)
+- **CTA**: an "Upload CAD here" prominent action in the empty viewport (high-value engineer on-ramp)
+
+### Out of scope
+- V4 shell layout broad refactor (defer to dedicated V4 milestone)
+- Audit-engine changes (v2.3 charter freeze in DEC-V61-202 still holds)
+- M-VIZ / vtk.js pipeline rework (only the empty-state guard, not the renderer itself)
+- B1-B5 fixes for OTHER steps (cycle 3 audit proved they only manifest at geometry)
+
+### Expected cycles
+3-5, depending on root-cause investigation depth. Provisional:
+- Cycle 1: charter + investigate each B finding's actual root cause (read VtkCanvas / DynamicBottomCards / step rail / sidebar source · grep for absolute-positioning bleed)
+- Cycle 2: empty-state component for viewport (B1 + B2)
+- Cycle 3: bottom banner rendering policy + step rail (B3 + B5)
+- Cycle 4 (optional): sidebar fill (B4) OR defer to M3.5
+- Cycle N: phase-close retro
+
+### Close criterion
+Stage `m33_ux_demo_seed` (no CAD) → navigate to `?step=geometry` → page renders cleanly with empty-state placeholder + "Upload CAD" CTA · no error popup · no number collision · no duplicate banner · no step rail overlap. Visual spot-check screenshot saved as part of phase-close retro.
+
+### Open questions before cycle 1
+1. Is `DynamicBottomCards` duplicating the same rail at step=geometry **by design** (per M3.0 charter)? Need to read `.planning/decisions/2026-05-22_v61_202_sub_m30_cycle1_decide_state.md` before changing rendering policy.
+2. Does `MainCanvas` have an existing empty-state code path, or is the proxy error from an unguarded null-target call?
+3. Is the "Upload CAD here" CTA already implemented elsewhere (some other onboarding flow)? Grep before building.
+
+### Process integration
+Per M3.3 cycle 2 methodology doc: every M3.4 cycle touching workbench frontend MUST reference at least one screenshot from `workbench_visual_spot_check.mjs` in its closing commit. Phase-close retro must include side-by-side before/after PNGs.
+
+---
+
+## M3.2 closed · M3.3 closed · M3.4 entry candidates
 
 ### M3.2 close outcome (2026-05-25)
 
