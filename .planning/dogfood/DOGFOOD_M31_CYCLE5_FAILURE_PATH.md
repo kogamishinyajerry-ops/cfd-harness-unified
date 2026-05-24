@@ -9,6 +9,17 @@ fix bugs in this cycle. M3.0 retro Open Question #3 closure: the
 workbench's failure-path behavior is now inventoried, not just
 hypothesized.
 
+**Codex R0 P2+P3 hardening (cycle-5 in-cycle fix, NOT a bug-fix)**:
+the dogfood's negative-path predicates were tightened so that future
+unrelated 4xx responses (state-SHA mismatch, route contract
+regression) cannot false-PASS the cycle-5 contract. Step-5's
+`struct_rejected` now requires the response to carry a
+type/dict/schema-named validation_errors entry. Step-4's typo
+predicate now requires either (a) accepted AND manifest contains the
+typo'd value, OR (b) rejected with validation_errors naming
+type/value/schema/patch_type. This keeps the cycle-5 regression
+signal honest as the codebase evolves.
+
 ---
 
 ## What the dogfood walked

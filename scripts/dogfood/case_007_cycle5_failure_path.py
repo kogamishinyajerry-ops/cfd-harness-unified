@@ -162,11 +162,26 @@ def main() -> int:
         if struct_patch.status_code in (200, 422, 400)
         else None
     )
-    struct_rejected = (
-        struct_patch.status_code != 200
-        or (struct_response and struct_response.get("success") is False)
+    # Codex cycle-5 R0 P2 fix: distinguish "real type-validation
+    # rejection" from "unrelated 4xx" (state-SHA mismatch, route
+    # contract regression). The cycle-5 contract is specifically
+    # that PATCH must REJECT a wrong-typed value at a structural
+    # node, with validation_errors naming the type problem. Generic
+    # 409s or 400s that happen for unrelated reasons would mask
+    # BUG-CYCLE5-1 as fixed when it isn't.
+    expected_rejection_envelope = (
+        struct_response is not None
+        and struct_response.get("success") is False
+        and any(
+            "type" in str(err).lower() or "dict" in str(err).lower()
+            or "schema" in str(err).lower() or "expected" in str(err).lower()
+            for err in (struct_response.get("validation_errors") or [])
+        )
     )
+    struct_rejected = expected_rejection_envelope
     print(f"  [5] PATCH struct-wrong 'not_a_dict': status={struct_patch.status_code} rejected={struct_rejected}")
+    if struct_response and not expected_rejection_envelope and struct_response.get("success") is False:
+        print(f"      (rejected but NOT with type-validation envelope — possible unrelated 4xx)")
     if struct_response and struct_response.get("validation_errors"):
         print(f"      validation_errors = {struct_response['validation_errors'][:200]}")
 
@@ -224,10 +239,26 @@ def main() -> int:
          cf_success),
         ("Step 3: skeleton PATCH succeeded + landed",
          sk_success and inlet_type_good == "fixedValue"),
-        # We document either way for typo (4) — system might silently
-        # accept (no semantic validation at patch_type level) or reject.
-        ("Step 4: typo PATCH was handled coherently (accept-or-reject, not crash)",
-         typo_patch.status_code in (200, 400, 422)),
+        # Codex cycle-5 R0 P3 fix: tighten typo predicate. Cycle-5
+        # contract: if the backend accepts (200 + success=true), the
+        # manifest must actually contain the typo'd value (proves the
+        # PATCH wrote). If it rejects (4xx OR 200 + success=false),
+        # validation_errors must name the type/value problem (proves
+        # the validation engine fired for the right reason). A 400
+        # for unrelated reasons (state-SHA mismatch, route regression)
+        # with no relevant validation_errors does NOT count as the
+        # "coherent handling" the dogfood is meant to document.
+        ("Step 4: typo PATCH was handled coherently (accepted-and-wrote, OR rejected-with-named-reason)",
+         (typo_accepted and inlet_type_after_typo == "fixedValue_typo")
+         or (
+             typo_response is not None
+             and typo_response.get("success") is False
+             and any(
+                 "type" in str(err).lower() or "value" in str(err).lower()
+                 or "schema" in str(err).lower() or "patch_type" in str(err).lower()
+                 for err in (typo_response.get("validation_errors") or [])
+             )
+         )),
         # Struct-wrong (5) MUST be rejected — that's a type contract.
         ("Step 5: struct-wrong PATCH was rejected",
          struct_rejected),
