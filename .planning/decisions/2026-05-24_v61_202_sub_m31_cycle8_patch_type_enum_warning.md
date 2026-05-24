@@ -4,8 +4,8 @@ title: M3.1 cycle 8 — info warning for unknown OpenFOAM patch_type (closes BUG
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: pending
-final_commit: TBD
+codex_review_arc: R0 (1 P2 catalog-reuse + 1 P2 bc non-dict crash) → R1 (1 P1 import-tree leak + 1 P2 groovyBC regression) → R2 (1 P2 swak4Foam not a real type · fixed inline · cap=3 close)
+final_commit: TBD-r2-close
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 8 (final cycle-5 backlog drain)
 notion_sync_status: pending_accepted

@@ -592,8 +592,13 @@ _CODED_USER_BCS: frozenset[str] = frozenset({
     # Coded BCs the V63-A audit catalog excludes (it audits typos +
     # foam-extend-vs-ESI mismatch, not enum closure); legitimate
     # patch_type values for the typo-detector's purpose.
-    "groovyBC",     # swak4Foam-provided coded BC
-    "swak4Foam",    # base swak4Foam BC family
+    #
+    # Cycle-8 R2 P2 fix (per Codex review): NOT `swak4Foam` — that's
+    # the plugin/package name, not a concrete patch-field `type`.
+    # Including it would suppress the typo warning for a value that
+    # remains runtime-invalid. The actual BC type within swak4Foam is
+    # `groovyBC`.
+    "groovyBC",     # swak4Foam-provided coded BC (real type name)
 })
 
 _KNOWN_OPENFOAM_PATCH_TYPES: frozenset[str] = (

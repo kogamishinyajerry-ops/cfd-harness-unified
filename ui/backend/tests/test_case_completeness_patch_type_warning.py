@@ -213,10 +213,13 @@ def test_non_dict_patch_entry_silently_skipped(isolated_imported_root):
 
 
 def test_groovy_and_coded_bcs_are_known(isolated_imported_root):
-    """Cycle-8 R1 P2 regression: groovyBC + swak4Foam are coded BCs
+    """Cycle-8 R1 P2 regression: groovyBC is a real coded BC type
     that the V63-A catalog intentionally excludes (it audits typos,
-    not enum closure). The cycle-8 typo-detector includes them so
+    not enum closure). The cycle-8 typo-detector includes it so
     cases legitimately using groovyBC don't info-warn.
+
+    Cycle-8 R2 P2 fix: `swak4Foam` is the plugin/package name,
+    NOT a real patch-field type — it remains correctly flagged.
     """
     _write_case(
         isolated_imported_root,
@@ -224,15 +227,40 @@ def test_groovy_and_coded_bcs_are_known(isolated_imported_root):
         _base_manifest(
             "case_coded",
             {
-                "inlet": {"patch_type": "groovyBC"},
-                "outlet": {"patch_type": "swak4Foam"},
-                "wall": {"patch_type": "codedFixedValue"},
+                "inlet": {"patch_type": "groovyBC"},  # real BC, known
+                "outlet": {"patch_type": "codedFixedValue"},  # in V63-A
+                "wall": {"patch_type": "codedMixed"},  # in V63-A
             },
         ),
     )
     report = analyze_case_completeness("case_coded")
     info_gaps = [m for m in report.missing if m.severity == "info"]
     assert info_gaps == []
+
+
+def test_swak4foam_package_name_flagged_as_unknown(isolated_imported_root):
+    """Cycle-8 R2 P2: `swak4Foam` is the plugin/package umbrella, not
+    a real patch-field type. Including it in the known set would
+    suppress the typo warning for a runtime-invalid value — defeats
+    the cycle-8 purpose. Test pins this contract.
+    """
+    _write_case(
+        isolated_imported_root,
+        "case_swak_typo",
+        _base_manifest(
+            "case_swak_typo",
+            {
+                "inlet": {"patch_type": "swak4Foam"},  # NOT a real type
+                "outlet": {"patch_type": "zeroGradient"},
+                "wall": {"patch_type": "noSlip"},
+            },
+        ),
+    )
+    report = analyze_case_completeness("case_swak_typo")
+    info_gaps = [m for m in report.missing if m.severity == "info"]
+    assert len(info_gaps) == 1
+    assert info_gaps[0].field_path == "bc.patches.inlet.patch_type"
+    assert "swak4Foam" in info_gaps[0].why
 
 
 def test_case_completeness_does_not_import_geometry_ingest():
@@ -259,8 +287,11 @@ def test_case_completeness_does_not_import_geometry_ingest():
     bad_imports = [
         line for line in src.splitlines()
         if "geometry_ingest" in line
-        and ("import" in line or "from" in line)
+        and ("import" in line or "from " in line)
         and not line.lstrip().startswith("#")
+        # The drift-detection unit test re-imports for asserting
+        # subset; that's a docstring reference, not a module-level
+        # dependency. (Test lives in a sibling file anyway.)
     ]
     assert not bad_imports, (
         "case_completeness/analyzer.py imports from geometry_ingest, "
