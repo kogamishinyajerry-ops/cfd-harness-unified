@@ -89,6 +89,27 @@ def apply_field_path_patch(
         else:
             case_kind_after = case_kind
 
+        # BUG-CYCLE5-1+2 fix (DEC-V61-202-SUB-M31-CYCLE6): structural
+        # type preservation. Runs BEFORE the deepcopy so it reads the
+        # live manifest's existing type at the target path. If the new
+        # value would replace a dict/list with a scalar (or scalar with
+        # dict/list), reject with success=false + validation_errors
+        # naming the type mismatch. The schema-validation pass below
+        # is silent on `bc.patches.*` (the dynamic-guided UX subtree
+        # lives outside `case_manifest.schema.json`'s surface), so we
+        # type-compare against the live manifest instead — works for
+        # any path, in-schema or not.
+        if request.op == "set":
+            type_err = _check_type_preservation(manifest, segments, request.value)
+            if type_err:
+                return ManifestPatchResponse(
+                    success=False,
+                    applied_path="",
+                    new_state_sha=current_sha,
+                    case_kind=case_kind_after if case_kind != "whitelist" else "whitelist",
+                    validation_errors=[type_err],
+                )
+
         # Apply the patch (operates on a copy so we don't half-mutate on
         # validation failure).
         patched = _deepcopy_dict(manifest)
@@ -265,6 +286,75 @@ def _write_at_path(obj: dict, segments: list[str], value: Any) -> None:
             )
         cur = cur[seg]
     cur[segments[-1]] = value
+
+
+def _check_type_preservation(
+    manifest: dict, segments: list[str], new_value: Any
+) -> str | None:
+    """Return an error message if `new_value` breaks the existing
+    value's structural-type contract at `segments`, else None.
+
+    Rules (DEC-V61-202-SUB-M31-CYCLE6):
+        - existing dict   → new MUST be dict
+        - existing list   → new MUST be list
+        - existing scalar (str/int/float/bool/None) → new MUST be scalar
+        - path doesn't exist → any type allowed (engineer is creating)
+
+    Why this matters: PATCH like `bc.patches.inlet = "not_a_dict"`
+    silently corrupted the manifest pre-cycle-6 because the schema
+    (`case_manifest.schema.json`) doesn't describe the `bc.patches.*`
+    subtree — jsonschema validation passes vacuously. Structural type
+    preservation closes that gap by comparing against the live
+    manifest, not a schema.
+
+    Engineer escape hatch: to legitimately change a path's shape
+    (e.g. dict → scalar), `op=unset` first (no type check), then
+    `op=set` the new shape. Two explicit PATCHes = explicit intent.
+    """
+    if not segments:
+        return None
+    cur: Any = manifest
+    for seg in segments[:-1]:
+        if not isinstance(cur, dict) or seg not in cur:
+            return None  # path doesn't reach the leaf; no existing type
+        cur = cur[seg]
+    if not isinstance(cur, dict):
+        # Parent isn't a dict — _write_at_path's intermediate check will
+        # raise PatchPathError; don't pre-empt with a different error.
+        return None
+    leaf = segments[-1]
+    if leaf not in cur:
+        return None
+    existing = cur[leaf]
+    path_str = ".".join(segments)
+    new_type = type(new_value).__name__
+    if isinstance(existing, dict) and not isinstance(new_value, dict):
+        return (
+            f"{path_str}: type mismatch — existing value is dict, got "
+            f"{new_type}; PATCH cannot replace a structural (dict) node "
+            "with a scalar/list value. To change the shape: unset first, "
+            "then set the new value."
+        )
+    if isinstance(existing, list) and not isinstance(new_value, list):
+        return (
+            f"{path_str}: type mismatch — existing value is list, got "
+            f"{new_type}; PATCH cannot replace a list with a non-list "
+            "value. To change the shape: unset first, then set the new value."
+        )
+    # Scalar slot: bool is an int subclass in Python, so we lump all
+    # scalars together. Engineer typo-correctness at the leaf level
+    # (e.g. enum membership) is the analyzer's job, not the PATCH
+    # endpoint's job — see BUG-CYCLE5-4 backlog.
+    if isinstance(existing, (str, int, float, bool)) or existing is None:
+        if isinstance(new_value, (dict, list)):
+            existing_type = type(existing).__name__ if existing is not None else "None"
+            return (
+                f"{path_str}: type mismatch — existing value is scalar "
+                f"({existing_type}), got {new_type}; PATCH cannot replace "
+                "a scalar with a structural (dict/list) value. To change "
+                "the shape: unset first, then set the new value."
+            )
+    return None
 
 
 def _unset_at_path(obj: dict, segments: list[str]) -> None:
