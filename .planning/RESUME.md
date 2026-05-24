@@ -2,8 +2,11 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-24T23:45 — M3.2 cycle 4 landed as spike-class (commit `f09bc9d`, copy body_text button); no DEC; no Notion entry per v2.3 spike-class rules
-> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs accepted; all Notion-synced) + M3.2 cycle 4 spike-class
+> **Updated**: 2026-05-24T23:55 — M3.2 cycle 4+5 landed as spike-class:
+> - cycle 4 (commit `f09bc9d`): copy body_text button (📝)
+> - cycle 5 (commit `0c8a99e`): aria-live toast on copy ("已复制 / Copied")
+> Both spike-class per v2.3 round-1 loosen (≤30 LOC + 1 test + confidence:high · no DEC · no Codex · no Notion). 34/34 panel tests + 65/65 dynamic_frame tests green.
+> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs accepted; all Notion-synced) + M3.2 cycles 4-5 (spike-class · git-log-only archive)
 
 ---
 
@@ -45,13 +48,29 @@ Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
 ## Open M3.2 work (start here next session)
 
-### Cycle 5+ candidates (cycle 4 = copy body_text · LANDED 2026-05-24 commit `f09bc9d` spike-class)
+### Cycle 6+ candidates (cycles 4-5 LANDED 2026-05-24)
 
-1. **Toast notification** ("已复制 / Copied" floating message) — **TOP candidate for cycle 5**: now compounds value across cycle-3 field_path button + cycle-4 body_text button; sub-DEC (touches shared paths · ≥50 LOC expected · NOT spike-class)
-2. **Copy validation error reason from analyzer** — analyzer-side surfacing (backend touch)
-3. **Open in IDE / "Reveal in Finder"** — OS integration via `vscode://` URL scheme (could be spike-class if URL-only)
-4. **Raw YAML viewer modal** — requires backend YAML fetch route
-5. **"Replace whole node" UI recovery affordance** — for legacy-corrupted manifests (M3.1 cycle 6 deferred)
+**Severity + clipboard foundation (cycles 1-5) is shipped.** Remaining work is either backend-coordinated or dogfood-driven. Pick by ROI:
+
+1. **M3.2 E2E dogfood** — Playwright script exercising cycles 1-5 end-to-end (severity tone changes when manifest mutates · two copy buttons both work · toast aria-live announces). Likely sub-DEC; produces a failure-path backlog like M3.1 cycle 5 did. **Top recommendation for cycle 6**: most aligned with v2.3 "real-usage eval > benchmark" principle.
+
+2. **Copy validation error reason from analyzer** — analyzer-side surfacing of the WHY-failed text. Requires backend route to expose richer reason than current `body_text`. Sub-DEC.
+
+3. **Open in IDE via `vscode://`** — Would require backend to surface case_dir absolute path + manifest YAML file location + (ideally) line number for `field_path`. Sub-DEC due to backend touch.
+
+4. **Raw YAML viewer modal** — Backend YAML fetch route + modal component. Sub-DEC.
+
+5. **"Replace whole node" UI recovery affordance** — For legacy-corrupted manifests (M3.1 cycle 6 deferred). Sub-DEC; tied to specific corruption patterns from cycle 7.
+
+6. **Body_text long-message folding** (▾ expand) — Only if real analyzer messages prove too long. Need data first (could be triggered by M3.2 dogfood discovering long messages).
+
+### M3.2 close criteria (suggested)
+
+M3.2 = "workbench frontend severity + actionability". Cycles 1-5 cover:
+- severity surfacing (rail + topbar CTA) ✓ cycles 1-2
+- actionability via clipboard (field_path + body_text + toast) ✓ cycles 3-5
+
+**Suggested M3.2 close**: after E2E dogfood (cycle 6) drains any failure-path backlog. Mirrors M3.1's close-via-dogfood-pattern. Phase-close retro mandatory per v2.3.
 
 ### M3.2 charter open questions (from retro §"Open questions for M3.2 charter")
 
