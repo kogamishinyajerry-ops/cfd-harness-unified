@@ -212,6 +212,87 @@ def test_non_dict_patch_entry_silently_skipped(isolated_imported_root):
     assert info_gaps_about_inlet == []
 
 
+def test_compressible_les_patch_types_are_known(isolated_imported_root):
+    """Cycle-8 R0 P2-B regression: types like waveTransmissive /
+    turbulentInlet / mixed / timeVaryingMappedFixedValue are
+    legitimate per V63-A catalog. Must NOT info-warn.
+    """
+    _write_case(
+        isolated_imported_root,
+        "case_compressible",
+        _base_manifest(
+            "case_compressible",
+            {
+                "inlet": {"patch_type": "turbulentInlet"},  # ESI mainline derived
+                "outlet": {"patch_type": "waveTransmissive"},  # ESI compressible
+                "interface": {"patch_type": "mixed"},  # fvPatchField/basic
+                "mapped_inlet": {"patch_type": "timeVaryingMappedFixedValue"},
+            },
+        ),
+    )
+    report = analyze_case_completeness("case_compressible")
+    info_gaps = [m for m in report.missing if m.severity == "info"]
+    assert info_gaps == [], (
+        f"compressible/LES types should not info-warn: "
+        f"{[(g.field_path, g.why[:60]) for g in info_gaps]}"
+    )
+
+
+def test_bc_section_non_dict_does_not_crash(isolated_imported_root):
+    """Cycle-8 R0 P2-A regression: a schema-invalid manifest where `bc`
+    itself is not a mapping (e.g. `bc: 1`, `bc: null`) must NOT crash
+    the analyzer. Cycle-7 still surfaces the structural-meta critical
+    via _check_imported_manifest; cycle-8 just must not pre-empt that
+    with AttributeError.
+    """
+    manifest = {
+        "case_id": "case_bc_corrupted",
+        "solver_backend": "openfoam",
+        "physics": {"solver": "interFoam", "turbulence_model": "kOmegaSST"},
+        "case_family": "ship_vof",
+        "bc": 1,  # NOT a dict — schema-invalid in the worst way
+    }
+    _write_case(isolated_imported_root, "case_bc_corrupted", manifest)
+    # Must complete without raising AttributeError
+    report = analyze_case_completeness("case_bc_corrupted")
+    # Cycle-7 should surface a critical (manifest schema invalid)
+    crits = [m for m in report.missing if m.severity == "critical"]
+    assert crits, "cycle-7 critical should still fire"
+
+
+def test_bc_patches_non_dict_does_not_crash(isolated_imported_root):
+    """`bc: {patches: "broken"}` — bc.patches not a dict. Cycle 8
+    skips silently; doesn't crash.
+    """
+    manifest = {
+        "case_id": "case_patches_corrupted",
+        "solver_backend": "openfoam",
+        "physics": {"solver": "interFoam", "turbulence_model": "kOmegaSST"},
+        "case_family": "ship_vof",
+        "bc": {"patches": "broken"},
+    }
+    _write_case(isolated_imported_root, "case_patches_corrupted", manifest)
+    # No crash; info gaps are empty (nothing iterable to scan)
+    report = analyze_case_completeness("case_patches_corrupted")
+    info_gaps = [m for m in report.missing if m.severity == "info"]
+    assert info_gaps == []
+
+
+def test_bc_null_does_not_crash(isolated_imported_root):
+    """`bc: null` — most common YAML-edit accident."""
+    manifest = {
+        "case_id": "case_bc_null",
+        "solver_backend": "openfoam",
+        "physics": {"solver": "interFoam", "turbulence_model": "kOmegaSST"},
+        "case_family": "ship_vof",
+        "bc": None,
+    }
+    _write_case(isolated_imported_root, "case_bc_null", manifest)
+    report = analyze_case_completeness("case_bc_null")
+    info_gaps = [m for m in report.missing if m.severity == "info"]
+    assert info_gaps == []
+
+
 def test_patch_with_no_patch_type_field_skipped(isolated_imported_root):
     """If the patch dict exists but has no patch_type key, cycle 8
     skips it (other rule layers may flag the missing field; cycle 8's

@@ -471,31 +471,35 @@ from ui.backend.services.case_family_registry import (
 # patch's `patch_type` isn't in OpenFOAM's common vocabulary. OpenFOAM
 # accepts arbitrary strings here and only validates at solver-startup
 # time, so a typo (e.g. "fixedValue_typo") manifests as a cryptic
-# runtime error rather than a workbench-time gap. This list is the
-# 80% common case — a typo'd value will mismatch and surface an info
-# warning at step 4; non-common but legitimate types (e.g.
-# `pressureInletOutletVelocity`, `cyclicAMI` variants, custom user
-# types) also surface a warning but engineers can ignore. The bar is
-# "did you mean to type this?" not "this is forbidden".
-_KNOWN_OPENFOAM_PATCH_TYPES: frozenset[str] = frozenset({
-    # Constraint types
-    "empty", "wedge", "symmetry", "symmetryPlane", "cyclic", "cyclicAMI",
-    "processor", "patch", "wall",
-    # Common field-level BC types
-    "fixedValue", "zeroGradient", "noSlip", "slip",
-    "inletOutlet", "outletInlet", "fixedFluxPressure",
-    "pressureInletOutletVelocity", "totalPressure", "totalTemperature",
-    "movingWallVelocity", "rotatingWallVelocity",
-    "calculated", "uniformFixedValue", "codedFixedValue",
-    "freestream", "freestreamPressure", "freestreamVelocity",
-    "groovyBC", "uniformInletOutlet",
-    # VOF / multiphase
-    "alphaContactAngle", "dynamicAlphaContactAngle",
-    "variableHeightFlowRate", "variableHeightFlowRateInletVelocity",
-    # Pressure-velocity coupling for low-Mach / compressible
-    "fixedFluxExtrapolatedPressure", "prghPressure",
-    "prghTotalPressure", "prghTotalHydrostaticPressure",
+# runtime error rather than a workbench-time gap.
+#
+# Cycle-8 R0 P2 fix (per Codex review): reuse the existing V63-A
+# Tier-1-audited catalog (`STANDARD_OPENFOAM_BCS`, ~138 entries from
+# case-evidence + ESI v2412 mainline) for field-level BC vocabulary.
+# Catches typos against the same vocabulary the geometry-ingest
+# advisor uses — single source of truth. Includes patch types like
+# `waveTransmissive`, `turbulentInlet`, `mixed`, `timeVaryingMappedFixedValue`
+# that compressible/LES manifests legitimately use.
+#
+# Augment with polyMesh boundary base-types — `bc.patches.<name>.patch_type`
+# in the manifest is overloaded: it carries either a field-level BC
+# (e.g. "fixedValue") OR a polyMesh boundary base-type
+# (e.g. "patch", "mappedPatch"). `STANDARD_OPENFOAM_BCS` covers the
+# former (and the wall constraint), so we extend with the remaining
+# common base-types. Skipped: "wall" already in the catalog.
+from ui.backend.services.geometry_ingest.bc_type_name_validity_advisor import (
+    STANDARD_OPENFOAM_BCS as _FIELD_LEVEL_BC_TYPES,
+)
+
+_POLYMESH_BASE_PATCH_TYPES: frozenset[str] = frozenset({
+    "patch",            # default base-type (gmshToFoam, fluentMeshToFoam, …)
+    "mappedPatch",      # field-mapping base-type
+    "directMappedPatch",  # foam-extend / legacy direct-mapped
 })
+
+_KNOWN_OPENFOAM_PATCH_TYPES: frozenset[str] = (
+    _FIELD_LEVEL_BC_TYPES | _POLYMESH_BASE_PATCH_TYPES
+)
 
 
 def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
@@ -816,9 +820,19 @@ def _analyze_imported(
     # acknowledge (legitimate custom type) or correct (typo). Skipped
     # when bc.patches is absent or wasn't yet authored (the critical
     # check above handles that case).
+    #
+    # Cycle-8 R0 P2 fix (per Codex review): defensively type-check
+    # `bc` and `bc.patches` at each step — a schema-invalid manifest
+    # might have `bc: 1` or `bc: null`, and the original chained
+    # `.get("bc", {}).get("patches", {})` would crash with
+    # AttributeError before cycle-7's structural-meta critical could
+    # surface. _safe_completeness in workbench_frame swallows the
+    # exception, dropping the corruption hint entirely.
     unknown_patch_type_count = 0
-    raw_bc_patches = raw_manifest_yaml.get("bc", {}).get("patches", {}) \
-        if isinstance(raw_manifest_yaml, dict) else {}
+    raw_bc = (
+        raw_manifest_yaml.get("bc") if isinstance(raw_manifest_yaml, dict) else None
+    )
+    raw_bc_patches = raw_bc.get("patches") if isinstance(raw_bc, dict) else None
     if isinstance(raw_bc_patches, dict):
         for patch_name, patch_cfg in sorted(raw_bc_patches.items()):
             if not isinstance(patch_cfg, dict):
