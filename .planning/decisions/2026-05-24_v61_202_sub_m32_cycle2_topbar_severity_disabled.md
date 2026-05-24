@@ -4,8 +4,8 @@ title: M3.2 cycle 2 — severity-aware TopbarCta disabled state
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: pending
-final_commit: TBD
+codex_review_arc: R0 (1 P1 V4 live mount missing railSeverity prop) → R1 APPROVE ("correctly threads railSeverity into the V4 mount, regression test covers known production call sites")
+final_commit: 7a6737e
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.2 cycle 2 (workbench frontend · CTA severity)
 notion_sync_status: pending_accepted
