@@ -242,9 +242,12 @@ export function DynamicFramePanel({
       </h3>
 
       {rail.body_text && (
-        <p className="mt-1 text-[12px] leading-snug text-surface-300">
-          {rail.body_text}
-        </p>
+        <div className="mt-1 flex items-start justify-between gap-2">
+          <p className="text-[12px] leading-snug text-surface-300">
+            {rail.body_text}
+          </p>
+          <CopyBodyTextButton bodyText={rail.body_text} />
+        </div>
       )}
 
       {rail.cta_label && !suppressPrimaryCta && (
@@ -393,6 +396,33 @@ function CopyFieldPathButton({ fieldPath }: { fieldPath: string }) {
       className="shrink-0 rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
     >
       {copied ? "✓" : "📋"}
+    </button>
+  );
+}
+
+// DEC-V61-202-SUB-M32-CYCLE4 (spike-class): copy body_text · mirrors
+// CopyFieldPathButton (silent-degrade · 1.5s ✓) · inline next to body.
+function CopyBodyTextButton({ bodyText }: { bodyText: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(bodyText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch { /* silent */ }
+  };
+  return (
+    <button
+      type="button"
+      data-testid="dynamic-frame-copy-body-text"
+      data-copied={copied}
+      onClick={onCopy}
+      aria-label="复制完整说明 / Copy why message"
+      title={copied ? "已复制 / Copied" : "复制说明 / Copy why"}
+      className="shrink-0 self-start rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+    >
+      {copied ? "✓" : "📝"}
     </button>
   );
 }

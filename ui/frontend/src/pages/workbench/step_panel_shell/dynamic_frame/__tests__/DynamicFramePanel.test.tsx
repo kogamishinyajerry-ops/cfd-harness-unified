@@ -223,6 +223,23 @@ describe("DynamicFramePanel", () => {
     expect(btn.textContent).toBe("📋");
   });
 
+  // DEC-V61-202-SUB-M32-CYCLE4 (spike-class): copy-body-text affordance.
+  it("renders copy-body-text button + click writes body_text to clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-body-text");
+    expect(btn).toBeInTheDocument();
+    expect(btn.textContent).toBe("📝");
+    await userEvent.click(btn);
+    expect(writeText).toHaveBeenCalledWith(GAP_RAIL.body_text);
+    expect(btn.dataset.copied).toBe("true");
+    expect(btn.textContent).toBe("✓");
+  });
+
   it("renders problem_fix with rose label regardless of severity field (kind wins)", () => {
     // Even if backend somehow emits problem_fix + severity=info, the
     // kind-specific tone wins (problem_fix is always urgent).
