@@ -158,6 +158,53 @@ describe("DynamicFramePanel", () => {
     expect(screen.queryByText("建议")).not.toBeInTheDocument();
   });
 
+  // DEC-V61-202-SUB-M32-CYCLE3: clipboard affordance for field_path.
+
+  it("renders copy-field-path button when rail has field_path", () => {
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-field-path");
+    expect(btn).toBeInTheDocument();
+    expect(btn.getAttribute("aria-label")).toContain("vof_contract.phases");
+  });
+
+  it("omits copy button when field_path is null (step_default rails)", () => {
+    renderPanel(DEFAULT_RAIL);
+    expect(
+      screen.queryByTestId("dynamic-frame-copy-field-path"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("clicking copy button writes field_path to clipboard + shows ✓ briefly", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-field-path");
+    expect(btn.textContent).toBe("📋");
+    await userEvent.click(btn);
+    expect(writeText).toHaveBeenCalledWith("vof_contract.phases");
+    // After click, copied state flips → button text becomes "✓"
+    expect(btn.dataset.copied).toBe("true");
+    expect(btn.textContent).toBe("✓");
+  });
+
+  it("silently degrades when clipboard write rejects (permission denied)", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("permission denied"));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderPanel(GAP_RAIL);
+    const btn = screen.getByTestId("dynamic-frame-copy-field-path");
+    await userEvent.click(btn);
+    // No crash; state stays in original (not copied) — engineer can
+    // fall back to manual selection.
+    expect(btn.dataset.copied).toBe("false");
+    expect(btn.textContent).toBe("📋");
+  });
+
   it("renders problem_fix with rose label regardless of severity field (kind wins)", () => {
     // Even if backend somehow emits problem_fix + severity=info, the
     // kind-specific tone wins (problem_fix is always urgent).

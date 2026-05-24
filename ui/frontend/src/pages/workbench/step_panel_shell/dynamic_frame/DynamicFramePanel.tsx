@@ -222,9 +222,18 @@ export function DynamicFramePanel({
           {tone.label}
         </span>
         {rail.field_path && (
-          <code className="truncate font-mono text-[10px] text-surface-500">
-            {rail.field_path}
-          </code>
+          <>
+            <code className="truncate font-mono text-[10px] text-surface-500">
+              {rail.field_path}
+            </code>
+            {/* DEC-V61-202-SUB-M32-CYCLE3: clipboard affordance so the
+                engineer can copy the field_path into their text editor
+                or terminal without selecting + Ctrl-C. Tiny button,
+                degrades silently if navigator.clipboard is unavailable
+                or denied (no UI feedback either way — Cycle 4+ may
+                add a transient "已复制" toast). */}
+            <CopyFieldPathButton fieldPath={rail.field_path} />
+          </>
         )}
       </header>
 
@@ -341,5 +350,39 @@ export function DynamicFramePanel({
         </ul>
       )}
     </section>
+  );
+}
+
+
+// DEC-V61-202-SUB-M32-CYCLE3: small in-header clipboard button.
+// Uses navigator.clipboard.writeText; degrades silently when the
+// API is unavailable (older browsers, no HTTPS, permission denied).
+// Tracks `copied` state for ~1.5s so the button briefly shows a
+// "✓" check — first visible affordance for the engineer-action
+// layer of M3.2.
+function CopyFieldPathButton({ fieldPath }: { fieldPath: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard?.writeText(fieldPath);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Permission denied / no API. Silent no-op — engineer can fall
+      // back to manual selection.
+    }
+  };
+  return (
+    <button
+      type="button"
+      data-testid="dynamic-frame-copy-field-path"
+      data-copied={copied}
+      onClick={onCopy}
+      aria-label={`复制字段路径 / Copy field path: ${fieldPath}`}
+      title={copied ? "已复制 / Copied" : "复制路径 / Copy path"}
+      className="shrink-0 rounded-sm border border-surface-700/60 px-1 py-0 font-mono text-[10px] text-surface-500 hover:bg-surface-800/40 hover:text-surface-300 transition"
+    >
+      {copied ? "✓" : "📋"}
+    </button>
   );
 }
