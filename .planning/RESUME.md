@@ -1,8 +1,9 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
-> **Last commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs accepted; all Notion-synced)
+> **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
+> **Updated**: 2026-05-24T23:45 — M3.2 cycle 4 landed as spike-class (commit `f09bc9d`, copy body_text button); no DEC; no Notion entry per v2.3 spike-class rules
+> **Session arc**: M3.1 milestone close + M3.2 cycles 1-3 (11 sub-DECs accepted; all Notion-synced) + M3.2 cycle 4 spike-class
 
 ---
 
@@ -44,14 +45,13 @@ Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
 ## Open M3.2 work (start here next session)
 
-### Cycle 4+ candidates (from M3.2 cycle 3 out-of-scope)
+### Cycle 5+ candidates (cycle 4 = copy body_text · LANDED 2026-05-24 commit `f09bc9d` spike-class)
 
-1. **Toast notification** ("已复制 / Copied" floating message) — if icon-only feedback is insufficient
-2. **Copy `body_text` (full why message)** — same copy-action layer, different content
-3. **Copy validation error reason from analyzer** — analyzer-side surfacing
-4. **Open in IDE / "Reveal in Finder"** — OS integration (cycle 5+)
-5. **Raw YAML viewer modal** — requires backend YAML fetch route (cycle 5+)
-6. **"Replace whole node" UI recovery affordance** — for legacy-corrupted manifests (M3.1 cycle 6 deferred)
+1. **Toast notification** ("已复制 / Copied" floating message) — **TOP candidate for cycle 5**: now compounds value across cycle-3 field_path button + cycle-4 body_text button; sub-DEC (touches shared paths · ≥50 LOC expected · NOT spike-class)
+2. **Copy validation error reason from analyzer** — analyzer-side surfacing (backend touch)
+3. **Open in IDE / "Reveal in Finder"** — OS integration via `vscode://` URL scheme (could be spike-class if URL-only)
+4. **Raw YAML viewer modal** — requires backend YAML fetch route
+5. **"Replace whole node" UI recovery affordance** — for legacy-corrupted manifests (M3.1 cycle 6 deferred)
 
 ### M3.2 charter open questions (from retro §"Open questions for M3.2 charter")
 
