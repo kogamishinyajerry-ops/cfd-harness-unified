@@ -5,11 +5,11 @@ status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
 codex_review_arc: R0 (1 P2 + 1 P3) → R1 (1 P3) → R2 (1 P3) → R3 (1 P2, user-ratified small fix)
-final_commit: <next-commit>
+final_commit: 46880cc
 user_ratification: 2026-05-24 AskUserQuestion — "Apply small msg-only scan fix, close cycle 5 (Recommended)"
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 5 (engineer mistake-recovery validation)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed8187ba36f2b3134dd547)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

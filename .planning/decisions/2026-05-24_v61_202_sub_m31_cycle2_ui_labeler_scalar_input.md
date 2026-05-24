@@ -8,7 +8,7 @@ codex_review_arc: R0 (2 findings) → R1 (2 findings) → R2 (1 finding) → R3 
 final_commit: aaade23
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 2 (UI labeler form)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed812e8561fff43161124f)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

@@ -11,7 +11,7 @@ deferred_findings:
   - R1 P3 — cockpit project_status.json git.head lags HEAD by one commit. Structural (cockpit cannot embed its own SHA); deferred to a future cockpit-pipeline DEC (not cycle-6 scope). Retro queue note.
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 6 (engineer mistake-recovery fix)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed81679d0af4274afb0daf)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

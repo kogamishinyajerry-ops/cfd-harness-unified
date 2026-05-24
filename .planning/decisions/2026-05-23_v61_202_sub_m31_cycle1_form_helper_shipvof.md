@@ -6,7 +6,7 @@ proposed_date: 2026-05-23
 accepted_date: 2026-05-24
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 1 (form helpers, ship_vof entry)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed819d9ea7e7833f474657)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

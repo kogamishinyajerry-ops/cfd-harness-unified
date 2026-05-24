@@ -8,7 +8,7 @@ codex_review_arc: R0 (1 P1 V4 live mount missing railSeverity prop) → R1 APPRO
 final_commit: 7a6737e
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.2 cycle 2 (workbench frontend · CTA severity)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed81f4883adf9ffcc64f50)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

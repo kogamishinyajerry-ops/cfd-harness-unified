@@ -8,7 +8,7 @@ codex_review_arc: R0 (2 P2) â†’ R1 (1 P2 - same as cycle-1 R7 ratified defeat) â
 final_commit: 436d4b8
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 3 (registry extension to RANS family)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed819395b9d018fbc4ac8f)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false

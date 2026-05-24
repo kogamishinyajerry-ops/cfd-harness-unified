@@ -8,7 +8,7 @@ codex_review_arc: R0 (1 P2 audit_v2 provenance log scrapes severity string inste
 final_commit: c91ae09
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.2 cycle 1 (workbench frontend · severity surfacing)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-24 (https://www.notion.so/36ac68942bed8162a7eee92e87d95ba8)
 autonomous_governance: true
 counter_status: v6.1 telemetry
 charter_class: false
