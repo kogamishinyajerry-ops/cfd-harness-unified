@@ -3,7 +3,7 @@
 **DEC**: `2026-05-24_v61_202_sub_m31_cycle5_failure_path_dogfood.md` (Proposed)
 **Date**: 2026-05-24
 **Dogfood script**: `scripts/dogfood/case_007_cycle5_failure_path.py`
-**Verdict**: **FAIL on initial run (cycle-5 close) · PASS after cycle-6 fix lands** (BUG-1, BUG-2 closed by `DEC-V61-202-SUB-M31-CYCLE6-PATCH-TYPE-PRESERVATION`)
+**Verdict**: **FAIL on initial run (cycle-5 close) · PASS post-cycle-6 (BUG-1+2) · still PASS post-cycle-7 (BUG-3) · still PASS post-cycle-8 (BUG-4)** — full cycle-5 backlog drained.
 **Cycle 5 scope**: document the failure path, file backlog. Do NOT
 fix bugs in this cycle. M3.0 retro Open Question #3 closure: the
 workbench's failure-path behavior is now inventoried, not just
@@ -110,7 +110,7 @@ declaring completeness.
 
 **Cycle-6 / cycle-7 sub-DEC candidate.** → Fixed in cycle 7 by `DEC-V61-202-SUB-M31-CYCLE7-CORRUPTED-MANIFEST-RAIL`. Root cause was `workbench_decide._gaps_for_step` filtering critical gaps by step-prefix — the analyzer's `field_path="case_manifest.yaml"` meta-path didn't match any step's prefix tuple. Fix: narrow allow-list `_STRUCTURAL_META_PATHS = {"case_manifest.yaml"}` bypasses the filter for corruption-class criticals.
 
-### BUG-CYCLE5-4 [P3] · Silent acceptance of typo'd `patch_type` values
+### BUG-CYCLE5-4 [P3] · Silent acceptance of typo'd `patch_type` values — **FIXED in cycle 8 (user-ratified)**
 
 **Symptom**: PATCH `bc.patches.inlet.patch_type = "fixedValue_typo"`
 succeeds with no validation warning. `fixedValue_typo` is not a real
@@ -129,7 +129,7 @@ errors instead of at the workbench's BC step.
 warning in case_completeness for known patch_type values. Optional —
 weigh ergonomics vs free-text flexibility.
 
-**Cycle-7+ sub-DEC candidate (low priority).**
+**Cycle-7+ sub-DEC candidate (low priority).** → User ratified cycle 8 polish (DEC-V61-202-SUB-M31-CYCLE8): added `_KNOWN_OPENFOAM_PATCH_TYPES` (~30 entries) + info-severity warning on the rail. Doesn't block CTA (preserves the dogfood's "weigh ergonomics vs free-text flexibility" trade-off). Engineer can ignore (legitimate custom type) or correct (typo).
 
 ## What this dogfood proves
 
@@ -169,7 +169,7 @@ happy-path surrogate cannot.**
 | BUG-CYCLE5-1 (PATCH no type validation) | P1 | cycle 6 | **FIXED** (DEC-V61-202-SUB-M31-CYCLE6) |
 | BUG-CYCLE5-2 (cascade blocks revert) | P1 | cycle 6 (bundled with -1) | **FIXED** (same root) |
 | BUG-CYCLE5-3 (analyzer misses corruption) | P2 | cycle 7 | **FIXED** (DEC-V61-202-SUB-M31-CYCLE7 · `_STRUCTURAL_META_PATHS` allow-list in `workbench_decide._gaps_for_step`) |
-| BUG-CYCLE5-4 (typo'd patch_type) | P3 | cycle 7+ | OPEN — ergonomics layer |
+| BUG-CYCLE5-4 (typo'd patch_type) | P3 | cycle 8 | **FIXED** (DEC-V61-202-SUB-M31-CYCLE8 · `_KNOWN_OPENFOAM_PATCH_TYPES` + info-severity gap) |
 
 ## Bottom line
 

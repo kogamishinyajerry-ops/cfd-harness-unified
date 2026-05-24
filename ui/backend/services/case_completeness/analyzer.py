@@ -467,6 +467,37 @@ from ui.backend.services.case_family_registry import (
 )
 
 
+# DEC-V61-202-SUB-M31-CYCLE8 (BUG-CYCLE5-4): info-level warning when a
+# patch's `patch_type` isn't in OpenFOAM's common vocabulary. OpenFOAM
+# accepts arbitrary strings here and only validates at solver-startup
+# time, so a typo (e.g. "fixedValue_typo") manifests as a cryptic
+# runtime error rather than a workbench-time gap. This list is the
+# 80% common case — a typo'd value will mismatch and surface an info
+# warning at step 4; non-common but legitimate types (e.g.
+# `pressureInletOutletVelocity`, `cyclicAMI` variants, custom user
+# types) also surface a warning but engineers can ignore. The bar is
+# "did you mean to type this?" not "this is forbidden".
+_KNOWN_OPENFOAM_PATCH_TYPES: frozenset[str] = frozenset({
+    # Constraint types
+    "empty", "wedge", "symmetry", "symmetryPlane", "cyclic", "cyclicAMI",
+    "processor", "patch", "wall",
+    # Common field-level BC types
+    "fixedValue", "zeroGradient", "noSlip", "slip",
+    "inletOutlet", "outletInlet", "fixedFluxPressure",
+    "pressureInletOutletVelocity", "totalPressure", "totalTemperature",
+    "movingWallVelocity", "rotatingWallVelocity",
+    "calculated", "uniformFixedValue", "codedFixedValue",
+    "freestream", "freestreamPressure", "freestreamVelocity",
+    "groovyBC", "uniformInletOutlet",
+    # VOF / multiphase
+    "alphaContactAngle", "dynamicAlphaContactAngle",
+    "variableHeightFlowRate", "variableHeightFlowRateInletVelocity",
+    # Pressure-velocity coupling for low-Mach / compressible
+    "fixedFluxExtrapolatedPressure", "prghPressure",
+    "prghTotalPressure", "prghTotalHydrostaticPressure",
+})
+
+
 def _case_family_helper_candidate_applies(raw_manifest_yaml: dict[str, Any]) -> bool:
     """True iff a registered form-helper exists for some case_family that
     is plausible for the manifest's solver + turbulence_model.
@@ -778,6 +809,44 @@ def _analyze_imported(
                 )
             )
 
+    # DEC-V61-202-SUB-M31-CYCLE8 (BUG-CYCLE5-4): scan bc.patches for
+    # patch_type values outside the known OpenFOAM vocabulary. Each
+    # unknown value gets an info-level MissingField — surfaces on the
+    # rail (soft-gaps tier) without blocking workflow. Engineer can
+    # acknowledge (legitimate custom type) or correct (typo). Skipped
+    # when bc.patches is absent or wasn't yet authored (the critical
+    # check above handles that case).
+    unknown_patch_type_count = 0
+    raw_bc_patches = raw_manifest_yaml.get("bc", {}).get("patches", {}) \
+        if isinstance(raw_manifest_yaml, dict) else {}
+    if isinstance(raw_bc_patches, dict):
+        for patch_name, patch_cfg in sorted(raw_bc_patches.items()):
+            if not isinstance(patch_cfg, dict):
+                continue
+            pt = patch_cfg.get("patch_type")
+            if not isinstance(pt, str) or not pt:
+                continue
+            if pt in _KNOWN_OPENFOAM_PATCH_TYPES:
+                continue
+            unknown_patch_type_count += 1
+            missing.append(
+                MissingField(
+                    field_path=f"bc.patches.{patch_name}.patch_type",
+                    severity="info",
+                    why=(
+                        f"Patch '{patch_name}' has patch_type='{pt}', which "
+                        "is not in the workbench's known OpenFOAM vocabulary "
+                        "(fixedValue, zeroGradient, noSlip, slip, symmetry, "
+                        "empty, cyclic, inletOutlet, etc). OpenFOAM accepts "
+                        "arbitrary strings here and validates at solver-"
+                        "startup — a typo will surface as a runtime FATAL "
+                        "IO ERROR. Verify spelling, or ignore this warning "
+                        "if you intentionally specified a custom or less-"
+                        "common type."
+                    ),
+                )
+            )
+
     # Re-appropriate turbulence (only counted in total when Re actually
     # present; no Re in the v2 imported-manifest schema today, so this
     # layer is effectively dormant for imported cases. Kept for parity
@@ -829,7 +898,11 @@ def _analyze_imported(
         # missing-warning when absent. Keeps totals consistent with the
         # rule set actually surfaced for the case.
         expected_warning_count=1 if helper_candidate_applies else 0,
-        expected_info_count=0,
+        # DEC-V61-202-SUB-M31-CYCLE8: unknown-patch_type info gaps are
+        # counted in the total so the readiness percentage stays balanced
+        # (each unknown adds one to BOTH total and missing → present
+        # unchanged). info severity doesn't block ready_for_archive.
+        expected_info_count=unknown_patch_type_count,
         missing=missing,
         notes=notes,
     )
