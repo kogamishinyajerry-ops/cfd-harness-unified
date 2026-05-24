@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-21T08:47:51Z",
+  "generated_at": "2026-05-24T06:06:17Z",
   "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
   "git": {
-    "branch": "feature/audit-cfdtrust-merge",
-    "head": "3a9904d11bfd06a3ca7a7cf60e7ca111ff350700",
+    "branch": "main",
+    "head": "22b29084b55f34fb10d57cfd723ddf20db689819",
     "dirty": true
   },
   "overall_status": "AMBER",
@@ -431,7 +431,7 @@
   ],
   "metrics": {
     "schema_version": 1,
-    "generated_at": "2026-05-21T08:47:51Z",
+    "generated_at": "2026-05-24T06:06:17Z",
     "total_tasks": 10,
     "completed_tasks": 10,
     "blocked_tasks": 3,

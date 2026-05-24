@@ -292,13 +292,19 @@ def _check_type_preservation(
     manifest: dict, segments: list[str], new_value: Any
 ) -> str | None:
     """Return an error message if `new_value` breaks the existing
-    value's structural-type contract at `segments`, else None.
+    value's structural-type contract at `segments` (or anywhere below
+    it for container PATCHes), else None.
 
     Rules (DEC-V61-202-SUB-M31-CYCLE6):
         - existing dict   → new MUST be dict
         - existing list   → new MUST be list
         - existing scalar (str/int/float/bool/None) → new MUST be scalar
         - path doesn't exist → any type allowed (engineer is creating)
+        - **container PATCH**: when the target is an existing dict/list
+          and new_value is the same kind, recurse into overlapping
+          descendants. Catches the cycle-6 R0 P1 loophole where
+          `PATCH bc.patches = {"inlet": "not_a_dict"}` would otherwise
+          pass top-level (dict→dict) and re-corrupt `bc.patches.inlet`.
 
     Why this matters: PATCH like `bc.patches.inlet = "not_a_dict"`
     silently corrupted the manifest pre-cycle-6 because the schema
@@ -326,8 +332,31 @@ def _check_type_preservation(
     if leaf not in cur:
         return None
     existing = cur[leaf]
-    path_str = ".".join(segments)
+    return _compare_subtree_types(existing, new_value, segments)
+
+
+def _compare_subtree_types(
+    existing: Any, new_value: Any, path_segments: list[str]
+) -> str | None:
+    """Compare types between `existing` and `new_value` at `path_segments`,
+    recursing into overlapping keys when both are dicts. Returns the first
+    type-mismatch error encountered, or None.
+
+    Recursing into dict descendants closes the cycle-6 R0 P1 loophole:
+    a container PATCH that preserves the top-level type (dict→dict) but
+    embeds a scalar where a descendant dict used to live would otherwise
+    re-corrupt the manifest the same way BUG-CYCLE5-1 did.
+
+    List elements are NOT recursed — manifest lists in this codebase
+    are typically scalar arrays (`required_artifacts: [str, str]`,
+    `qoi: [{...}]`); when they're list-of-dict, replacing wholesale is
+    the intended pattern (PATCH the parent dict, not list indices). If
+    a future use case needs per-list-element type preservation, add
+    that surgically here.
+    """
+    path_str = ".".join(path_segments)
     new_type = type(new_value).__name__
+
     if isinstance(existing, dict) and not isinstance(new_value, dict):
         return (
             f"{path_str}: type mismatch — existing value is dict, got "
@@ -354,6 +383,20 @@ def _check_type_preservation(
                 "a scalar with a structural (dict/list) value. To change "
                 "the shape: unset first, then set the new value."
             )
+
+    # Both are dicts: recurse into overlapping keys. New keys in
+    # `new_value` (not in `existing`) are fresh-path additions —
+    # allowed (engineer is creating). Missing keys in `new_value`
+    # (in `existing` but not `new_value`) are deletions — allowed
+    # (skeleton replacement legitimately removes old keys).
+    if isinstance(existing, dict) and isinstance(new_value, dict):
+        for key in existing.keys() & new_value.keys():
+            err = _compare_subtree_types(
+                existing[key], new_value[key], path_segments + [str(key)]
+            )
+            if err:
+                return err
+
     return None
 
 

@@ -1,6 +1,6 @@
 # AI-CFD-V2 — Project Cockpit
 
-> Generated: `2026-05-21T08:47:51Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+> Generated: `2026-05-24T06:06:17Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
 > All sections below are derived from repo state. No hand-written narrative lives here.
 
 ## Overall Status: 🟡 AMBER

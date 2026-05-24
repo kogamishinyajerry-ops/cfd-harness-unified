@@ -161,6 +161,134 @@ def test_error_message_includes_engineer_recovery_hint():
     assert "unset" in err.lower()  # mentions the unset → set workaround
 
 
+# ─── container-PATCH recursion (cycle-6 R0 P1 loophole closure) ────────
+
+
+def test_container_patch_with_corrupt_descendant_is_rejected():
+    """R0 P1: PATCH bc.patches = {"inlet": "not_a_dict"} preserves
+    top-level dict→dict but corrupts bc.patches.inlet. Must be rejected
+    by recursing into descendants.
+    """
+    manifest = {
+        "bc": {
+            "patches": {
+                "inlet": {"patch_type": "fixedValue"},
+                "outlet": {"patch_type": "zeroGradient"},
+                "wall": {"patch_type": "noSlip"},
+            }
+        }
+    }
+    err = _check_type_preservation(
+        manifest,
+        ["bc", "patches"],
+        {
+            "inlet": "not_a_dict",  # corruption hidden one level down
+            "outlet": {"patch_type": "zeroGradient"},
+            "wall": {"patch_type": "noSlip"},
+        },
+    )
+    assert err is not None
+    assert "bc.patches.inlet" in err
+    assert "dict" in err.lower()
+
+
+def test_container_patch_with_corrupt_grandchild_is_rejected():
+    """Loophole closure must work multiple levels deep."""
+    manifest = {
+        "bc": {
+            "patches": {
+                "inlet": {"patch_type": "fixedValue", "value": "uniform 1"},
+            }
+        }
+    }
+    # Replace bc — top-level dict→dict — but bc.patches.inlet.value is
+    # corrupted from scalar to list.
+    err = _check_type_preservation(
+        manifest,
+        ["bc"],
+        {
+            "patches": {
+                "inlet": {
+                    "patch_type": "fixedValue",
+                    "value": ["a", "b"],  # was scalar, now list
+                }
+            }
+        },
+    )
+    assert err is not None
+    assert "bc.patches.inlet.value" in err
+
+
+def test_container_patch_preserving_descendant_types_is_ok():
+    """Skeleton-replacement happy path: new container has same shapes."""
+    manifest = {
+        "bc": {
+            "patches": {
+                "inlet": {"patch_type": "fixedValue"},
+                "outlet": {"patch_type": "zeroGradient"},
+            }
+        }
+    }
+    err = _check_type_preservation(
+        manifest,
+        ["bc", "patches"],
+        {
+            "inlet": {"patch_type": "noSlip"},  # different value, same shape
+            "outlet": {"patch_type": "slip"},
+            "wall": {"patch_type": "noSlip"},  # new key — addition allowed
+        },
+    )
+    assert err is None
+
+
+def test_container_patch_with_missing_keys_is_ok():
+    """Engineer may legitimately drop keys via container replacement
+    (e.g. removing an obsolete patch). Only OVERLAPPING keys are checked.
+    """
+    manifest = {
+        "bc": {
+            "patches": {
+                "inlet": {"patch_type": "fixedValue"},
+                "old_patch": {"patch_type": "zeroGradient"},
+            }
+        }
+    }
+    err = _check_type_preservation(
+        manifest,
+        ["bc", "patches"],
+        {"inlet": {"patch_type": "fixedValue"}},  # old_patch dropped
+    )
+    assert err is None
+
+
+def test_container_patch_adding_new_keys_with_any_type_is_ok():
+    """Brand-new descendant keys (not in existing) can be any type."""
+    manifest = {"physics": {"solver": "interFoam"}}
+    err = _check_type_preservation(
+        manifest,
+        ["physics"],
+        {
+            "solver": "pisoFoam",  # str→str OK
+            "new_flag": True,  # didn't exist, now bool — OK
+            "new_subdict": {"a": 1},  # didn't exist, now dict — OK
+        },
+    )
+    assert err is None
+
+
+def test_root_manifest_patch_recurses():
+    """PATCH at the root with whole-manifest payload still recurses."""
+    manifest = {"bc": {"patches": {"inlet": {"patch_type": "fixedValue"}}}}
+    # Synthetic: imagine PATCH ".bc" with whole dict — corrupting deep
+    err = _check_type_preservation(
+        manifest,
+        ["bc"],
+        {"patches": "not_a_dict"},  # bc.patches was dict, now string
+    )
+    assert err is not None
+    assert "bc.patches" in err
+
+
 def test_dogfood_reason_keyword_match():
     """The cycle-5 dogfood's `_is_rejection_with_named_reason()` predicate
     scans for ('type', 'value', 'dict', 'schema', 'expected', 'patch_type').
