@@ -3,6 +3,9 @@
 > Surfaced during M3.3 cycle 1 visual spot-check (first real screenshot of live workbench after M3.2 close).
 > Source screenshots: /tmp/m33_idle.png, /tmp/m33_toast.png, /tmp/m33_body_toast.png, /tmp/m33_full.png
 > SSOT entry: this file is THE backlog tracker for these 5 findings until each one is closed via DEC/PR/dispatch.
+>
+> **CRITICAL UPDATE 2026-05-25 M3.3 cycle 3** — cross-step spot-check at `--step mesh / physics / boundary` confirms ALL 5 findings are **uniquely localized to step=geometry** when the case has no actual CAD upload. At mesh / physics / boundary the workbench renders correctly: 3D viewport works (where applicable), no number collision, no dual-display banner, rich right-side rails, no sidebar dead-space. **Reframe**: B1-B5 are NOT workbench-wide defects; they are **graceful-degradation failures at step=geometry when geometry artifacts are absent**. Likely root: multiple widgets at step 1 assume CAD is imported and bail out / mis-position when it isn't, instead of falling back to an empty-state placeholder. Investigations should focus on "what does the geometry step render when the case has no CAD?" — a common state at the START of a workflow.
+> Cross-step proof screenshots: `/tmp/cfd_workbench_screenshots/step_mesh/*` · `/step_physics/*` · `/step_boundary/*`.
 
 ## Disposition guide
 | Status | Meaning |
