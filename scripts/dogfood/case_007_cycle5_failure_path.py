@@ -281,6 +281,44 @@ def main() -> int:
     print(f"  [7] final rail.kind = {rail_final['kind']}")
     print(f"  [7] final rail.field_path = {rail_final.get('field_path')}")
 
+    # ── Step 8: BUG-CYCLE5-3 regression (DEC-V61-202-SUB-M31-CYCLE7) ──
+    # Simulate corruption arriving via a non-PATCH path: write a
+    # structurally-broken manifest directly to disk (legacy data /
+    # manual YAML edit), then fetch the frame. The rail MUST surface
+    # the corruption as a critical info_gap on every step + disable
+    # the topbar CTA. Cycle 6 prevents corruption via PATCH; cycle 7
+    # ensures non-PATCH ingress paths are also caught.
+    corrupted_case_id = f"{CASE_ID}_corrupted_via_disk"
+    corrupted_dir = imported_root / corrupted_case_id
+    corrupted_dir.mkdir()
+    (corrupted_dir / "case_manifest.yaml").write_text(yaml.safe_dump({
+        "case_id": corrupted_case_id,
+        "solver_backend": "openfoam",
+        "physics": {"solver": "interFoam", "turbulence_model": "kOmegaSST"},
+        "case_family": "ship_vof",
+        "bc": {"patches": {
+            "inlet": "not_a_dict",  # direct disk corruption
+            "outlet": {"patch_type": "zeroGradient"},
+            "wall": {"patch_type": "noSlip"},
+        }},
+    }))
+    corrupted_rails: list[tuple[int, str, bool]] = []
+    for step in (1, 2, 3, 4, 5):
+        r_corr = client.get(
+            f"/api/cases/{corrupted_case_id}/workbench_frame?step={step}"
+        )
+        f_corr = r_corr.json()
+        corrupted_rails.append((
+            step,
+            f_corr["rail_primary"]["kind"],
+            f_corr["topbar_cta"]["enabled"],
+        ))
+    for step, kind, enabled in corrupted_rails:
+        print(f"  [8] step {step} on disk-corrupted manifest: rail.kind={kind} cta.enabled={enabled}")
+    cycle7_passes = all(
+        kind == "info_gap" and enabled is False for _, kind, enabled in corrupted_rails
+    )
+
     # ── Checks ────────────────────────────────────────────────────────
     checks = [
         ("Step 1: rail surfaced case_family gap",
@@ -316,6 +354,12 @@ def main() -> int:
          inlet_type_after_revert == "fixedValue"),
         ("Step 7: rail returned to step_default (no lingering FAIL)",
          rail_final["kind"] == "step_default"),
+        # DEC-V61-202-SUB-M31-CYCLE7 (BUG-CYCLE5-3 closure): a manifest
+        # corrupted via disk write (legacy data / manual YAML edit)
+        # must surface a critical info_gap on every step + topbar CTA
+        # disabled. Pre-cycle-7 this fell through to step_default.
+        ("Step 8: disk-corrupted manifest surfaces critical rail on every step + CTA disabled",
+         cycle7_passes),
     ]
 
     print()

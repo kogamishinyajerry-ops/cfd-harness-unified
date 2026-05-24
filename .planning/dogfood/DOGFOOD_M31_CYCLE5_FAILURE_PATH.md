@@ -88,7 +88,7 @@ to BUG-1 likely fixes this too.
 
 **Cycle-6 sub-DEC candidate (likely bundled with BUG-1 fix).** → Confirmed: same root, fixed by cycle 6's type preservation. Once BUG-1 prevents the corruption, step-6 revert PATCH succeeds (path traversal never has to descend through a string node).
 
-### BUG-CYCLE5-3 [P2] · Final rail shows step_default despite corrupted manifest
+### BUG-CYCLE5-3 [P2] · Final rail shows step_default despite corrupted manifest — **FIXED in cycle 7**
 
 **Symptom**: Step 7 fetches the frame at step 4 with a manifest where
 `bc.patches.inlet` is the string `"not_a_dict"` (no patch_type field).
@@ -108,7 +108,7 @@ upstream (preferred), or (b) the analyzer adds a "manifest schema
 re-validation" check that runs on the post-PATCH manifest before
 declaring completeness.
 
-**Cycle-6 / cycle-7 sub-DEC candidate.**
+**Cycle-6 / cycle-7 sub-DEC candidate.** → Fixed in cycle 7 by `DEC-V61-202-SUB-M31-CYCLE7-CORRUPTED-MANIFEST-RAIL`. Root cause was `workbench_decide._gaps_for_step` filtering critical gaps by step-prefix — the analyzer's `field_path="case_manifest.yaml"` meta-path didn't match any step's prefix tuple. Fix: narrow allow-list `_STRUCTURAL_META_PATHS = {"case_manifest.yaml"}` bypasses the filter for corruption-class criticals.
 
 ### BUG-CYCLE5-4 [P3] · Silent acceptance of typo'd `patch_type` values
 
@@ -168,7 +168,7 @@ happy-path surrogate cannot.**
 |---|---|---|---|
 | BUG-CYCLE5-1 (PATCH no type validation) | P1 | cycle 6 | **FIXED** (DEC-V61-202-SUB-M31-CYCLE6) |
 | BUG-CYCLE5-2 (cascade blocks revert) | P1 | cycle 6 (bundled with -1) | **FIXED** (same root) |
-| BUG-CYCLE5-3 (analyzer misses corruption) | P2 | cycle 7 | OPEN — out of cycle-6 scope (analyzer-side hardening for non-PATCH corruption paths) |
+| BUG-CYCLE5-3 (analyzer misses corruption) | P2 | cycle 7 | **FIXED** (DEC-V61-202-SUB-M31-CYCLE7 · `_STRUCTURAL_META_PATHS` allow-list in `workbench_decide._gaps_for_step`) |
 | BUG-CYCLE5-4 (typo'd patch_type) | P3 | cycle 7+ | OPEN — ergonomics layer |
 
 ## Bottom line

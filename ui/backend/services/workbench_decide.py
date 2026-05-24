@@ -45,6 +45,16 @@ from ui.backend.services.case_family_registry import (
 # Step → JSON-path prefix mapping. Used to route problems + gaps to the
 # step on which they should surface. A gap with prefix in multiple
 # steps' lists goes to the first matching step.
+# DEC-V61-202-SUB-M31-CYCLE7 (BUG-CYCLE5-3 fix): structural-meta paths
+# that surface manifest-level corruption (schema-invalid YAML, etc).
+# Critical gaps with these field_paths are globally blocking — they
+# bypass the step-prefix filter and surface on every step's rail so
+# an engineer can't proceed past them. Pattern is opt-in (narrow
+# allow-list) rather than "any unprefixed gap" to avoid accidentally
+# promoting legitimate off-step findings.
+_STRUCTURAL_META_PATHS: frozenset[str] = frozenset({"case_manifest.yaml"})
+
+
 _STEP_PATH_PREFIXES: dict[int, tuple[str, ...]] = {
     # DEC-V61-202-SUB-M31-CYCLE1 (Codex R2 P1 fix): `case_family` is
     # case-metadata that should be labeled early (step 1, import/
@@ -983,11 +993,19 @@ def _gaps_for_step(
         field_path = str(raw.get("field_path", ""))
         if not field_path:
             continue
-        if not any(field_path.startswith(p) for p in prefixes):
-            continue
         sev = str(raw.get("severity", "info"))
         if sev not in severities:
             continue
+        # DEC-V61-202-SUB-M31-CYCLE7 (BUG-CYCLE5-3): structural-meta
+        # critical gaps (manifest schema-invalid, etc) bypass the
+        # step-prefix filter — they're globally blocking and must
+        # surface on every step's rail until repaired.
+        is_structural_meta_critical = (
+            sev == "critical" and field_path in _STRUCTURAL_META_PATHS
+        )
+        if not is_structural_meta_critical:
+            if not any(field_path.startswith(p) for p in prefixes):
+                continue
         # Attach skeleton if registered; do not mutate the source list
         # entry so completeness report consumers downstream see the
         # original shape.
