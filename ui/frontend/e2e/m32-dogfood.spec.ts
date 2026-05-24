@@ -182,4 +182,155 @@ test.describe("M3.2 cycle 6 dogfood · severity + clipboard + toast", () => {
     await expect(toast).toHaveAttribute("aria-live", "polite");
     await expect(toast).toContainText("已复制");
   });
+
+  // ─── Cycle 7 · failure-path dogfood ──────────────────────────────────────
+  // Mirrors M3.1 cycle 5 pattern: drive scenarios where things go subtly
+  // wrong, document what the workbench actually does, classify findings.
+
+  test("cycle 7 · rapid double-click → toast remains visible (no flash off)", async ({
+    page,
+  }) => {
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=geometry`);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes(`/api/cases/${SEED_CASE_ID}/workbench_frame`) &&
+        resp.status() === 200,
+      { timeout: 15_000 },
+    );
+
+    const copyBtn = page.getByTestId("dynamic-frame-copy-field-path");
+    const toast = copyBtn.locator("[role='status']");
+
+    await copyBtn.click();
+    await expect(toast).toBeVisible();
+    await copyBtn.click();
+    // Toast still visible — copied state stays true across rapid re-clicks.
+    await expect(toast).toBeVisible();
+
+    // Documented behavior: first-click setTimeout wins (re-click does NOT
+    // extend the 1.5s window). Acceptable per current model; if UX research
+    // ever shows confusion, cycle 8+ could add useEffect timer-cleanup ref.
+    test.info().annotations.push({
+      type: "m32-cycle7-observation",
+      description:
+        "rapid double-click: timer does not extend on re-click (first setTimeout wins). Functional invariant — no flash; toast persists across the window. Not a bug at current SSOT.",
+    });
+  });
+
+  test("cycle 7 · step navigation after copy → no JS exception + no stale toast", async ({
+    page,
+  }) => {
+    // M3.2 invariant: navigation during the toast's 1.5s window must not
+    // (a) raise an uncaught JS exception (setState-on-unmounted, etc.)
+    // (b) bleed the previous-step toast into the new step's rail.
+    //
+    // Pre-existing backend console-error noise (e.g. 404/422 from
+    // step-specific resource fetches) is captured but not failed on —
+    // those are M3.0-era findings outside cycle-7 scope. They are
+    // annotated for separate backlog assessment.
+    const pageErrors: string[] = [];
+    const consoleErrors: string[] = [];
+    page.on("pageerror", (e) => pageErrors.push(e.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=geometry`);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes(`/api/cases/${SEED_CASE_ID}/workbench_frame`) &&
+        resp.status() === 200,
+      { timeout: 15_000 },
+    );
+
+    const copyBtn = page.getByTestId("dynamic-frame-copy-field-path");
+    await copyBtn.click();
+    await expect(copyBtn.locator("[role='status']")).toBeVisible();
+
+    // Navigate to step=boundary while toast is still in-flight (within 1.5s).
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=boundary`);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes(`/api/cases/${SEED_CASE_ID}/workbench_frame`) &&
+        resp.status() === 200,
+      { timeout: 15_000 },
+    );
+    await expect(page.getByTestId("dynamic-frame-panel")).toBeVisible();
+
+    // (a) Stale toast must not bleed through (cycle-5 aria-live cleanup).
+    await expect(page.locator("[role='status']")).toHaveCount(0);
+    // (b) No uncaught JS exception (M3.2 components must clean up).
+    expect(pageErrors).toEqual([]);
+
+    // Backend network noise during step nav → backlog (not a cycle-7 fail).
+    if (consoleErrors.length) {
+      test.info().annotations.push({
+        type: "m32-cycle7-finding-step-nav-console-noise",
+        description: `step=boundary navigation surfaces ${consoleErrors.length} console.error(s) on unrelated backend resources (404/422 from upstream M3.0-era endpoints). Not in M3.2 scope; file as separate backlog item for backend triage. Samples: ${consoleErrors.slice(0, 3).join(" | ")}`,
+      });
+    }
+  });
+
+  test("cycle 7 · sequential clicks on both copy buttons → independent toasts", async ({
+    page,
+  }) => {
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=geometry`);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes(`/api/cases/${SEED_CASE_ID}/workbench_frame`) &&
+        resp.status() === 200,
+      { timeout: 15_000 },
+    );
+
+    const fieldBtn = page.getByTestId("dynamic-frame-copy-field-path");
+    const bodyBtn = page.getByTestId("dynamic-frame-copy-body-text");
+    if ((await bodyBtn.count()) === 0) {
+      test.info().annotations.push({
+        type: "m32-cycle7-skip",
+        description:
+          "no body_text on case_family rail in this run — sequential test skipped",
+      });
+      test.skip();
+      return;
+    }
+
+    await fieldBtn.click();
+    await expect(fieldBtn.locator("[role='status']")).toBeVisible();
+
+    await bodyBtn.click();
+    // Body button's toast appears AND field button's toast still visible —
+    // each button has independent useState(copied), so both can be true.
+    await expect(bodyBtn.locator("[role='status']")).toBeVisible();
+    await expect(fieldBtn.locator("[role='status']")).toBeVisible();
+  });
+
+  test("cycle 7 · clipboard write rejects → silent degrade (no ✓ · no toast)", async ({
+    page,
+  }) => {
+    // Override navigator.clipboard.writeText to reject — exercises the
+    // try/catch silent-degrade path that cycle-3 R1 fixed (false-✓ bug).
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: { writeText: () => Promise.reject(new Error("denied")) },
+      });
+    });
+
+    await page.goto(`/workbench/case/${SEED_CASE_ID}?step=geometry`);
+    await page.waitForResponse(
+      (resp) =>
+        resp.url().includes(`/api/cases/${SEED_CASE_ID}/workbench_frame`) &&
+        resp.status() === 200,
+      { timeout: 15_000 },
+    );
+
+    const copyBtn = page.getByTestId("dynamic-frame-copy-field-path");
+    await expect(copyBtn).toBeVisible();
+    await copyBtn.click();
+
+    // Silent degrade: no toast, no ✓, button stays in 📋 default state.
+    await expect(copyBtn.locator("[role='status']")).toHaveCount(0);
+    expect(await copyBtn.getAttribute("data-copied")).toBe("false");
+    expect((await copyBtn.textContent())?.trim()).toBe("📋");
+  });
 });
