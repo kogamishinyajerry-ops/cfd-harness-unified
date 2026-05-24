@@ -4,8 +4,8 @@ title: M3.1 cycle 7 — surface corrupted-manifest critical on rail (fix BUG-CYC
 status: Accepted
 proposed_date: 2026-05-24
 accepted_date: 2026-05-24
-codex_review_arc: R0 pending (post-commit)
-final_commit: TBD (set post-commit)
+codex_review_arc: R0 APPROVE (0 P1 / 0 P2 / 0 P3 · "I did not identify an actionable bug introduced by this diff")
+final_commit: 0e912b0
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED
 phase: M3.1 cycle 7 (manifest-corruption visibility)
 notion_sync_status: pending_accepted
