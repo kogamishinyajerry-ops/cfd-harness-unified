@@ -212,6 +212,96 @@ def test_non_dict_patch_entry_silently_skipped(isolated_imported_root):
     assert info_gaps_about_inlet == []
 
 
+def test_groovy_and_coded_bcs_are_known(isolated_imported_root):
+    """Cycle-8 R1 P2 regression: groovyBC + swak4Foam are coded BCs
+    that the V63-A catalog intentionally excludes (it audits typos,
+    not enum closure). The cycle-8 typo-detector includes them so
+    cases legitimately using groovyBC don't info-warn.
+    """
+    _write_case(
+        isolated_imported_root,
+        "case_coded",
+        _base_manifest(
+            "case_coded",
+            {
+                "inlet": {"patch_type": "groovyBC"},
+                "outlet": {"patch_type": "swak4Foam"},
+                "wall": {"patch_type": "codedFixedValue"},
+            },
+        ),
+    )
+    report = analyze_case_completeness("case_coded")
+    info_gaps = [m for m in report.missing if m.severity == "info"]
+    assert info_gaps == []
+
+
+def test_case_completeness_does_not_import_geometry_ingest():
+    """Cycle-8 R1 P1 regression: case_completeness must NOT pull
+    geometry_ingest (which transitively imports trimesh) into its
+    import tree. Base `[ui]` install without `[workbench]` extra
+    must boot ui.backend.main successfully.
+
+    Static check: scan the analyzer source for any
+    `geometry_ingest` import. The vocabulary is inline-copied with
+    a CANONICAL SSOT comment pointing back to the V63-A catalog.
+    Drift between the two is caught by the separate
+    `test_v63a_catalog_is_subset_of_known_types`.
+
+    Why static (not importlib): `importlib.reload(analyzer)` corrupts
+    subsequent test state because other test modules cache analyzer
+    references at collection time. A source-level grep is cheap +
+    deterministic.
+    """
+    from pathlib import Path
+    import ui.backend.services.case_completeness.analyzer as analyzer
+
+    src = Path(analyzer.__file__).read_text(encoding="utf-8")
+    bad_imports = [
+        line for line in src.splitlines()
+        if "geometry_ingest" in line
+        and ("import" in line or "from" in line)
+        and not line.lstrip().startswith("#")
+    ]
+    assert not bad_imports, (
+        "case_completeness/analyzer.py imports from geometry_ingest, "
+        "which transitively imports trimesh and breaks base `[ui]` "
+        "install. Inline-copy the vocabulary instead. Offending lines: "
+        f"{bad_imports}"
+    )
+    # Spot-check: the inlined vocabulary is populated.
+    assert "fixedValue" in analyzer._KNOWN_OPENFOAM_PATCH_TYPES
+    assert "waveTransmissive" in analyzer._KNOWN_OPENFOAM_PATCH_TYPES
+    assert "groovyBC" in analyzer._KNOWN_OPENFOAM_PATCH_TYPES
+    assert "patch" in analyzer._KNOWN_OPENFOAM_PATCH_TYPES
+
+
+def test_v63a_catalog_is_subset_of_known_types():
+    """Drift-detection: if V63-A canonical catalog grows, our inlined
+    copy must keep up. Failing this test signals the canonical
+    `STANDARD_OPENFOAM_BCS` added entries not yet mirrored into
+    `_KNOWN_OPENFOAM_PATCH_TYPES`. This import only runs in the
+    `[workbench]` test environment (trimesh available).
+    """
+    try:
+        from ui.backend.services.geometry_ingest.bc_type_name_validity_advisor import (
+            STANDARD_OPENFOAM_BCS,
+        )
+    except ImportError:
+        pytest.skip("geometry_ingest unavailable in this install (base [ui] only)")
+        return
+
+    from ui.backend.services.case_completeness.analyzer import (
+        _KNOWN_OPENFOAM_PATCH_TYPES,
+    )
+
+    missing_from_local = STANDARD_OPENFOAM_BCS - _KNOWN_OPENFOAM_PATCH_TYPES
+    assert not missing_from_local, (
+        "V63-A canonical catalog has entries not mirrored in "
+        "case_completeness/analyzer.py:_KNOWN_OPENFOAM_PATCH_TYPES: "
+        f"{sorted(missing_from_local)}. Mirror them per the SSOT comment."
+    )
+
+
 def test_compressible_les_patch_types_are_known(isolated_imported_root):
     """Cycle-8 R0 P2-B regression: types like waveTransmissive /
     turbulentInlet / mixed / timeVaryingMappedFixedValue are

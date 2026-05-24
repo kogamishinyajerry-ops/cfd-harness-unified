@@ -473,23 +473,114 @@ from ui.backend.services.case_family_registry import (
 # time, so a typo (e.g. "fixedValue_typo") manifests as a cryptic
 # runtime error rather than a workbench-time gap.
 #
-# Cycle-8 R0 P2 fix (per Codex review): reuse the existing V63-A
-# Tier-1-audited catalog (`STANDARD_OPENFOAM_BCS`, ~138 entries from
-# case-evidence + ESI v2412 mainline) for field-level BC vocabulary.
-# Catches typos against the same vocabulary the geometry-ingest
-# advisor uses — single source of truth. Includes patch types like
-# `waveTransmissive`, `turbulentInlet`, `mixed`, `timeVaryingMappedFixedValue`
-# that compressible/LES manifests legitimately use.
+# Cycle-8 R1 P1 fix (per Codex review): the vocabulary is INLINE-COPIED
+# (not imported) to avoid pulling `ui.backend.services.geometry_ingest`
+# into case_completeness's import tree. The geometry_ingest package
+# transitively imports trimesh (a `[workbench]` extra), so importing
+# from there breaks the base `[ui]` install — ui.backend.main fails
+# at startup when cases.router imports analyze_case_completeness.
+# Inline-copy keeps the always-on case_completeness path on the base
+# dependency set.
+#
+# **CANONICAL SSOT** for the field-level BC vocabulary remains
+# `STANDARD_OPENFOAM_BCS` in
+# `ui/backend/services/geometry_ingest/bc_type_name_validity_advisor.py`
+# (V63-A Tier-1 audited, case-evidence-driven from case_006 / case_011 /
+# case_016 + ESI v2412 mainline). Append-only per V63-A policy. If the
+# canonical catalog grows, mirror new entries here too.
+#
+# Cycle-8 R1 P2 fix (per Codex review): include `groovyBC` and
+# `swak4Foam` (coded BCs the V63-A audit catalog intentionally excludes
+# because it's a typo-and-foam-extend-mismatch audit, not an enum-closure
+# audit; for the cycle-8 typo-detector purpose these are legitimate).
 #
 # Augment with polyMesh boundary base-types — `bc.patches.<name>.patch_type`
 # in the manifest is overloaded: it carries either a field-level BC
 # (e.g. "fixedValue") OR a polyMesh boundary base-type
-# (e.g. "patch", "mappedPatch"). `STANDARD_OPENFOAM_BCS` covers the
-# former (and the wall constraint), so we extend with the remaining
-# common base-types. Skipped: "wall" already in the catalog.
-from ui.backend.services.geometry_ingest.bc_type_name_validity_advisor import (
-    STANDARD_OPENFOAM_BCS as _FIELD_LEVEL_BC_TYPES,
-)
+# (e.g. "patch", "mappedPatch"). The V63-A catalog covers the former
+# (and the wall constraint), so we extend with the remaining common
+# base-types. Skipped: "wall" — already in the V63-A catalog.
+
+_FIELD_LEVEL_BC_TYPES: frozenset[str] = frozenset({
+    # === Mirror of STANDARD_OPENFOAM_BCS (bc_type_name_validity_advisor.py) ===
+    # Core patchField subclasses (value/gradient/mixed)
+    "calculated", "empty", "fixedGradient", "fixedValue", "mixed",
+    "uniformFixedValue", "uniformFixedGradient", "uniformMixed",
+    "uniformInletOutlet", "zeroGradient",
+    "fixedMean", "fixedMeanOutletInlet",
+    # Geometric constraints
+    "cyclic", "cyclicAMI", "cyclicACMI", "cyclicSlip", "cyclicPeriodicAMI",
+    "nonuniformTransformCyclic", "jumpCyclic", "jumpCyclicAMI",
+    "processor", "processorCyclic",
+    "slip", "noSlip", "partialSlip", "fixedNormalSlip",
+    "symmetry", "symmetryPlane", "wedge", "wall",
+    # Inlet / outlet families
+    "inletOutlet", "outletInlet", "advective", "fanPressure",
+    "fixedFluxPressure", "fixedProfile",
+    "flowRateInletVelocity", "flowRateOutletVelocity",
+    "mappedFixed", "mappedFixedValue", "mappedField", "mappedFlowRate",
+    "mappedMixed", "mappedVelocityFlux",
+    "pressureDirectedInletOutletVelocity", "pressureDirectedInletVelocity",
+    "pressureInletOutletVelocity", "pressureInletOutletParSlipVelocity",
+    "pressureInletUniformVelocity", "pressureInletVelocity",
+    "pressureNormalInletOutletVelocity", "pressureOutlet",
+    "fixedNormalInletOutletVelocity", "entrainmentPressure",
+    "syringePressure", "inletOutletTotalTemperature",
+    "surfaceNormalFixedValue",
+    "swirlFlowRateInletVelocity", "swirlInletVelocity",
+    "timeVaryingMappedFixedValue",
+    "turbulentInlet", "turbulentDFSEMInlet", "turbulentDigitalFilterInlet",
+    "turbulentMixingLengthDissipationRateInlet",
+    "turbulentMixingLengthFrequencyInlet",
+    "totalPressure", "totalTemperature",
+    "prghPressure", "prghTotalPressure", "prghTotalHydrostaticPressure",
+    "variableHeightFlowRate", "variableHeightFlowRateInletVelocity",
+    # Compressible / far-field
+    "freestream", "freestreamPressure", "freestreamVelocity",
+    "supersonicFreestream", "waveTransmissive",
+    # ABL / atmospheric
+    "atmBoundaryLayerInletVelocity", "atmBoundaryLayerInletK",
+    "atmBoundaryLayerInletEpsilon", "atmBoundaryLayerInletOmega",
+    "atmTurbulentHeatFluxTemperature",
+    "atmAlphatkWallFunction", "atmEpsilonWallFunction",
+    "atmNutkWallFunction", "atmNutUWallFunction",
+    "atmNutWallFunction", "atmOmegaWallFunction",
+    # Turbulence wall functions
+    "epsilonWallFunction", "fWallFunction", "kLowReWallFunction",
+    "kqRWallFunction",
+    "nutLowReWallFunction", "nutUSpaldingWallFunction",
+    "nutUTabulatedWallFunction", "nutUWallFunction", "nutUBlendedWallFunction",
+    "nutkAtmRoughWallFunction", "nutkRoughWallFunction", "nutkWallFunction",
+    "omegaWallFunction", "v2WallFunction",
+    # Wall velocities
+    "movingWallVelocity", "rotatingWallVelocity", "translatingWallVelocity",
+    # Thermal / CHT
+    "alphatJayatillekeWallFunction", "alphatWallFunction",
+    "compressible::alphatJayatillekeWallFunction",
+    "compressible::alphatWallFunction",
+    "compressible::epsilonWallFunction",
+    "compressible::kqRWallFunction",
+    "compressible::omegaWallFunction",
+    "compressible::nutkWallFunction",
+    "compressible::nutkRoughWallFunction",
+    "compressible::nutUSpaldingWallFunction",
+    "compressible::nutUWallFunction",
+    "compressible::nutLowReWallFunction",
+    "compressible::turbulentTemperatureCoupledBaffleMixed",
+    "compressible::turbulentTemperatureRadCoupledMixed",
+    "externalWallHeatFluxTemperature", "humidityTemperatureCoupledMixed",
+    "turbulentHeatFluxTemperature",
+    # Radiation
+    "MarshakRadiation", "MarshakRadiationFixedTemperature",
+    "greyDiffusiveRadiation", "greyDiffusiveRadiationViewFactor",
+    "wideBandDiffusiveRadiation", "fixedIncidentRadiation",
+    # Multiphase / VOF / contact-angle
+    "alphaContactAngle", "constantAlphaContactAngle", "dynamicAlphaContactAngle",
+    "temperatureDependentContactAngle", "timeVaryingAlphaContactAngle",
+    "waveSurfacePressure", "waveVelocity", "waveDisplacement",
+    # Coded / programmable
+    "codedFixedValue", "codedMixed",
+})
 
 _POLYMESH_BASE_PATCH_TYPES: frozenset[str] = frozenset({
     "patch",            # default base-type (gmshToFoam, fluentMeshToFoam, …)
@@ -497,8 +588,16 @@ _POLYMESH_BASE_PATCH_TYPES: frozenset[str] = frozenset({
     "directMappedPatch",  # foam-extend / legacy direct-mapped
 })
 
+_CODED_USER_BCS: frozenset[str] = frozenset({
+    # Coded BCs the V63-A audit catalog excludes (it audits typos +
+    # foam-extend-vs-ESI mismatch, not enum closure); legitimate
+    # patch_type values for the typo-detector's purpose.
+    "groovyBC",     # swak4Foam-provided coded BC
+    "swak4Foam",    # base swak4Foam BC family
+})
+
 _KNOWN_OPENFOAM_PATCH_TYPES: frozenset[str] = (
-    _FIELD_LEVEL_BC_TYPES | _POLYMESH_BASE_PATCH_TYPES
+    _FIELD_LEVEL_BC_TYPES | _POLYMESH_BASE_PATCH_TYPES | _CODED_USER_BCS
 )
 
 
