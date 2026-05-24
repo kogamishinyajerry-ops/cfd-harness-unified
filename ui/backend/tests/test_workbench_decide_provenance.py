@@ -308,9 +308,13 @@ def test_replay_script_runs_without_pythonpath(tmp_path, monkeypatch):
 
 
 def test_rail_severity_extracted_from_provenance(provenance_enabled):
-    """Codex R0 P2 #2 regression: when the rail is driven by a FAIL
-    finding, the log row must carry severity='fail' so post-hoc replay
-    can tell WARN-vs-FAIL apart even though kind/title may coincide."""
+    """Codex M3.0 R0 P2 #2 + M3.2 cycle-1 R0 P2 regression: when the
+    rail is driven by a FAIL finding, the log row must carry
+    severity='fail' so post-hoc replay can tell WARN-vs-FAIL apart.
+    Cycle-1 R0 P2 swapped the implementation from provenance-scraping
+    to reading the new `RailPrimary.severity` schema field; the
+    expected value is the same (normalized 'fail').
+    """
     state = _state(
         case_id="case_sev_fail",
         artifacts={
@@ -330,6 +334,52 @@ def test_rail_severity_extracted_from_provenance(provenance_enabled):
     rec = lines[0]
     # The rail was driven by the FAIL finding → severity surfaces.
     assert rec["rail_primary"].get("severity") == "fail"
+
+
+def test_step_default_rail_logs_info_severity_not_null(provenance_enabled):
+    """M3.2 cycle-1 R0 P2 regression: step_default rails (no blocker)
+    used to log severity=null because the old scraper couldn't find
+    a `severity=X` token in their provenance. New schema field carries
+    the default 'info', which the log now serializes faithfully so
+    replay/analytics consumers don't see spurious nulls.
+    """
+    state = _state(case_id="case_step_default_severity")
+    decide(state)
+    log_path = (
+        provenance_enabled / "case_step_default_severity" / "decisions.jsonl"
+    )
+    lines = _read_lines(log_path)
+    assert len(lines) == 1
+    rec = lines[0]
+    assert rec["rail_primary"]["kind"] == "step_default"
+    assert rec["rail_primary"]["severity"] == "info"
+
+
+def test_rail_severity_normalized_vocabulary_matches_api(provenance_enabled):
+    """M3.2 cycle-1 R0 P2 regression: when an artifact carries source
+    severity 'critical', the rail surfaces it as normalized 'fail'.
+    Old log path used to write the raw source vocabulary ('critical')
+    if it leaked into provenance; the new schema-field-driven path
+    always logs the same vocabulary the API returns.
+    """
+    state = _state(
+        case_id="case_sev_normalized",
+        artifacts={
+            "bc_audit.json": {
+                "findings": [
+                    {"severity": "critical", "title": "must-fix",
+                     "message": "x", "field_path": "bc.x"},
+                ]
+            }
+        },
+    )
+    decide(state)
+    log_path = provenance_enabled / "case_sev_normalized" / "decisions.jsonl"
+    lines = _read_lines(log_path)
+    assert len(lines) == 1
+    rec = lines[0]
+    # Both API and log must use 'fail' (normalized), never 'critical' (raw).
+    assert rec["rail_primary"]["severity"] == "fail"
 
 
 def test_dot_only_case_id_uses_stable_digest(provenance_enabled, monkeypatch):

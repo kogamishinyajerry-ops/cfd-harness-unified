@@ -81,24 +81,12 @@ def _lock_for_case(safe: str) -> threading.Lock:
             _PER_CASE_LOCKS[safe] = lock
         return lock
 
-# Parse `severity=X` out of a RailPrimary.provenance line.
-# decide() builders write traces like
-#     "step=4 · problem_fix · severity=fail"
-# Surfacing severity in the log row preserves the WARN-vs-FAIL signal that
-# rail.kind/title alone collapse (Codex R0 P2 #2 fix).
-_SEVERITY_TOKEN_RE = re.compile(r"\bseverity=([A-Za-z_]+)\b")
-
-
-def _rail_severity(provenance: list[str] | None) -> str | None:
-    """Best-effort extract of severity from RailPrimary.provenance.
-    Returns None when no token is found (e.g., step_default rails)."""
-    if not provenance:
-        return None
-    for line in provenance:
-        match = _SEVERITY_TOKEN_RE.search(str(line))
-        if match:
-            return match.group(1)
-    return None
+# M3.2 cycle-1 R0 P2: severity parser removed. Provenance scraping was
+# the old (M3.0 cycle 6) way to surface WARN-vs-FAIL in the log row;
+# `RailPrimary` now has a first-class `severity` field
+# (DEC-V61-202-SUB-M32-CYCLE1), so the log writer reads it directly
+# below. Keeps API and audit_v2 vocabulary in sync — no risk of
+# logging raw "critical" while the API returns normalized "fail".
 
 
 def _safe_case_id(case_id: str) -> str:
@@ -178,12 +166,17 @@ def log_decision(state: CaseStateSnapshot, frame: WorkbenchFrame) -> None:
                     "kind": frame.rail_primary.kind,
                     "title": frame.rail_primary.title,
                     "field_path": frame.rail_primary.field_path,
-                    # severity is parsed out of provenance traces
-                    # (RailPrimary itself has no severity field — the
-                    # upstream finding/gap severity is only encoded in
-                    # the provenance strings). Codex R0 P2 #2 fix:
-                    # surface WARN-vs-FAIL in the log row.
-                    "severity": _rail_severity(frame.rail_primary.provenance),
+                    # M3.2 cycle 1 (R0 P2): use the first-class
+                    # `severity` field added in DEC-V61-202-SUB-M32-CYCLE1
+                    # rather than scraping the provenance string. The
+                    # provenance-scraping path (a) returned None for
+                    # step_default rails (no severity= token), and (b)
+                    # could log raw source vocabulary like "critical"
+                    # instead of the API-canonical "fail" when the
+                    # provenance carried source severity rather than
+                    # the normalized form. Reading the schema field
+                    # ensures the JSONL record matches /workbench_frame.
+                    "severity": frame.rail_primary.severity,
                 },
                 "topbar_cta": {
                     "kind": frame.topbar_cta.kind,
