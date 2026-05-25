@@ -26,25 +26,13 @@ import {
   type ViewportKernel,
 } from "@/visualization/viewport_kernel";
 import { loadStlFromUrl, StlLoadError } from "@/visualization/stl_loader";
+import { detectWebGL } from "@/visualization/webgl_support";
 
 export type VtkMode = "geometry" | "mesh";
 
 interface VtkCanvasV3Props {
   caseId: string;
   mode: VtkMode;
-}
-
-function detectWebGL(): boolean {
-  try {
-    const c = document.createElement("canvas");
-    return !!(
-      c.getContext("webgl2") ||
-      c.getContext("webgl") ||
-      c.getContext("experimental-webgl")
-    );
-  } catch {
-    return false;
-  }
 }
 
 function useFps(active: boolean): number {
