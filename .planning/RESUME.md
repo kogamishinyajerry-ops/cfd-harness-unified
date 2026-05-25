@@ -3,7 +3,9 @@
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
 > **Updated**: 2026-05-25T11:10 — **M3.2 → M3.8 SEVEN MILESTONES CLOSED** in one continuous run.
-> **Updated**: 2026-05-25 (continuation) — **M3.9 → M3.12 FOUR MORE MILESTONES CLOSED** (`f8c895d` → `b4564f7`).
+> **Updated**: 2026-05-25 (continuation) — **M3.9 → M3.14 SIX MORE MILESTONES CLOSED**, then **PUSHED to origin/main** (`f8c895d` → `5b3978d`; local == origin).
+> The push tripped the `codex-cadence` pre-push floor (84 commits since last Codex trailer). Cleared it the honest way: ran `codex-review-relay --base 2648adf` (86gs gpt-5.4 xhigh) on **this session's** delta → **R0 found 3 REAL bugs** (vtk partial-window leak · M3.13 gate missed tsconfig·json · spot-check `localhost` IPv6 trap) → **R1 verbatim fixes** (`5b3978d`, carries `Codex-verified: RESOLVED` trailer) → push passed. Prior-session 70817a0..2648adf not re-reviewed (its spike-class call).
+> **CI GREEN on origin/main** (run 26386645089): Frontend tsc+vite build ✓ · Backend pytest py3.12 ✓ (3m33s). Whole arc validated end-to-end on remote. (Unrelated: the "§11.2 Sampling Audit Reminder" workflow fails-by-design when an audit is due — pre-existing governance cron, not this arc.)
 
 ---
 
