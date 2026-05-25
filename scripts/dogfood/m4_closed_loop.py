@@ -103,14 +103,19 @@ def main() -> int:
         return 1
     print(f"  ✓ residual-series source flipped to '{src}'")
     sstatus, summ = _req("GET", f"{base}/api/cases/{cid}/results-summary")
-    umag = None
-    if isinstance(summ, dict):
-        umag = (summ.get("u_magnitude") or summ.get("U_magnitude") or {})
-    finite_stats = isinstance(umag, dict) and any(_finite(v) for v in umag.values())
+    # /results-summary returns flat u_magnitude_{min,max,mean} keys (verified
+    # against the live backend during the C4 run — not a nested dict).
+    umag_keys = ("u_magnitude_min", "u_magnitude_max", "u_magnitude_mean")
+    finite_stats = isinstance(summ, dict) and all(
+        _finite(summ.get(k)) for k in umag_keys
+    )
     if not finite_stats:
         print(f"  ✗ FAIL: results-summary lacks finite U stats (HTTP {sstatus}): {summ}")
         return 1
-    print(f"  ✓ results-summary has finite U-magnitude stats")
+    print(
+        f"  ✓ results-summary finite U-magnitude stats "
+        f"(max={summ['u_magnitude_max']:.4g}, cells={summ.get('cell_count')})"
+    )
 
     # ── Criterion 3 · report figures OR classified fallback ────────────
     print("[3/3] GET /report-bundle (figures render OR classified fallback)…")

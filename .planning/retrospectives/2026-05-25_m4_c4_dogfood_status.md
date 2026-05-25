@@ -1,79 +1,88 @@
-# M4 cycle 4 status · closed-loop dogfood · 2026-05-25
+# M4 cycle 4 close · closed-loop dogfood + LIVE e2e · 2026-05-25
 
-> Parent charter: DEC-V61-204 (Accepted) · sub-DEC
-> commit `b8edb30` · 0 Codex (script + small fix) · 0 Kogami
-> **Status: dogfood authored + loop validated to the solver boundary; live
-> run BLOCKED on infra — charter NOT yet operationally complete.**
+> Parent charter: DEC-V61-204 (Accepted) · sub-DEC · **M4 phase-close retro**
+> commits `b8edb30` (dogfood + 404 fix) · `<this>` (live-run dogfood fix)
+> 0 Codex · 0 Kogami
+> **Status: C4 PASSES — closed loop proven against a REAL OpenFOAM 10 solve.
+> M4 charter operationally COMPLETE.**
 
 ## 做了什么 (what)
 
-- **`scripts/dogfood/m4_closed_loop.py`** (new): the charter's required dogfood.
-  Asserts close-criterion 1-4 against a backend base-url: (1) POST /solve →
-  exit_code 0 / converged; (2) /residual-series source flips off "empty" +
-  /results-summary finite U stats; (3) /report-bundle 4 figures OR a classified
-  matplotlib-500 fallback; (4) vitest reminder for no-regression. Setup/infra
-  blockers (container down / case not imported / no mesh) → exit 2
-  ("not exercised"), with precise remediation — **never a fabricated pass**.
-- **404 fallback fix** in ReportFiguresPanel (real-backend discovery): unsolved
-  cases return report-bundle 404 ("case not found", no working dir) or 409
-  ("no time directories"); both now map to the friendly empty state, +1 test.
+- **`scripts/dogfood/m4_closed_loop.py`** (new): asserts the charter
+  close-criterion 1-4 against a running backend. Setup/infra blockers exit 2
+  ("not exercised"), never a fabricated pass.
+- **404 fallback fix** in ReportFiguresPanel: unsolved cases 404/409 → friendly
+  empty state (not a crit error). Real-backend discovery.
+- **Stood up the live OpenFOAM 10 run** (user chose "stand up the live run"):
+  pulled `openfoam/openfoam10-paraview56` (amd64), started it under
+  `--platform linux/amd64` emulation as `cfd-openfoam` (entrypoint override
+  `tail -f /dev/null`; USER 98765 matches the harness's expected uid).
+  Verified icoFoam/gmshToFoam/blockMesh execute under QEMU emulation.
+- Drove the full live pipeline + closed-loop assertion.
+
+## C4 LIVE-RUN EVIDENCE (passes:true)
+
+`smoke_simulation.py --base-url http://127.0.0.1:8001 --case backward_step`
+→ **all F-series invariants PASS**: STL upload → gmsh mesh (2829 cells) →
+setup-bc → **real icoFoam solve converged=True wall_time 1.5s** → run-history /
+results-summary / field U+p all 200.
+
+`m4_closed_loop.py --case-id imported_2026-05-25T09-00-12Z_9da7c214`:
+1. ✅ POST /solve → 200 · converged=True · wall_time 1.48s (real icoFoam).
+2. ✅ /residual-series source flipped `empty`→`log`; /results-summary finite
+   U-magnitude stats (max=0.2783, 2829 cells).
+3. ✅ /report-bundle → 200 · 4 artifacts · plane=[x,y].
+4. ✅ no regression: V4 vitest 838 green.
+
+Real-backend V4 Post visual spot-check (port 5188 → backend 8001, `/tmp/c4_spot/`):
+all 4 figure cards present; the `|U| + 流线` card renders a **real matplotlib
+PNG** (naturalWidth 1455 × 448, complete); provenance line
+"v2_000000 · t=2s · 2,829 cells · lid_driven_cavity". **No page errors.**
 
 ## 为什么 (why)
 
-- C4 is the charter close gate: prove the C2 trigger + C3 display loop against a
-  **real solver**, not just mock mode. The dogfood is the programmatic half of
-  that proof (the charter literally says "verified by a dogfood script that
-  asserts 1-4 programmatically").
-- Running it against the live backend (8001) surfaced two real facts the
-  mock-mode C2/C3 spot-checks couldn't: (a) the 404-vs-409 unsolved-case
-  behavior (→ the fallback fix); (b) the precise live-run prerequisites.
+- C4 is the charter close gate — prove the C2 trigger + C3 display loop against
+  a real solver, not just mock mode. Done: a real icoFoam run produced real
+  matplotlib figures shown in the V4 Post UI, end to end.
+- The live run earned its keep by surfacing **two real bugs** mock mode missed:
+  (a) unsolved cases 404/409 (→ ReportFiguresPanel fallback fix, in b8edb30);
+  (b) my dogfood's `results-summary` assertion assumed a nested `u_magnitude`
+  dict, but the live schema is flat `u_magnitude_{min,max,mean}` (fixed here).
 
-## C4 live-run blocker (honest — why passes:true is NOT claimed)
+## Infra note (load-bearing for re-running C4)
 
-Criteria 1-3 require an actual icoFoam run, which needs:
-1. **cfd-openfoam container** — currently DOWN (only old `case028*` containers,
-   exited 9 days ago). `run_icofoam` connects to a container named `cfd-openfoam`.
-2. **A built case** — NO imported case has a `polyMesh` (none solvable).
-   `lid_driven_cavity` isn't in the imported workspace at all (solve → 404);
-   `circular_cylinder_wake` is imported with `system/controlDict` + geometry but
-   no mesh (solve → would 409 mesh_missing).
-
-Standing this up = bring up the container + run the full build pipeline
-(import → mesh → BC) on a case + a ~60s solve. That is infra/pipeline work
-beyond validating the (already shipped + tested) C2/C3 code, so it is the
-charter's explicit remaining gate, surfaced to the user rather than fabricated.
+The solve/mesh stack hardcodes OpenFOAM 10 (`/opt/openfoam10/etc/bashrc`, 6
+services + adapter). Host is arm64; Foundation OF10 is amd64-only, so the
+`cfd-openfoam` container runs **under x86 emulation** (icoFoam LDC-class solves
+complete in ~1.5s emulated — fine for dogfood; large meshes would be slow).
+Bootstrap: `docker run -d --platform linux/amd64 --name cfd-openfoam
+--entrypoint tail openfoam/openfoam10-paraview56:latest -f /dev/null`. The
+container is left running for future live runs.
 
 ## v2.3 governance check
 
 | Gate | Status | Note |
 |---|---|---|
-| DEC scope | ✅ sub-DEC | under DEC-V61-204; commit-governed |
-| Codex | ✅ N/A | dogfood script + 10-line classifier fix; no security boundary; <500 LOC |
+| DEC scope | ✅ sub-DEC | under DEC-V61-204; M4 phase-close retro |
+| Codex | ✅ N/A | dogfood script + assertion fix; no security boundary |
 | Kogami | ✅ N/A | opt-in; not summoned |
-| Four-question gate | ✅ 4/4 | unchanged (engineer-initiated · LLM-offline · artifacts · advisory-only) |
-| Build / tests | ✅ green | tsc -b exit 0 · vitest 838 (criterion 4 holds) · ReportFiguresPanel now 8 |
-| Visual spot-check | ✅ N/A (documented) | no UI change beyond the 404→empty classifier (covered by unit test); C2/C3 spot-checks stand |
-| Dogfood live run | ⏭ exit 2 (blocked) | solver/case not ready — precise remediation printed; criteria 1-3 not exercised |
-| Push | ✅ b8edb30 | dbc2cee..b8edb30 |
+| Four-question gate | ✅ 4/4 | engineer-initiated solve · LLM-offline (icoFoam, no LLM) · canonical artifacts (run + PNGs) · advisory-only |
+| Build / tests | ✅ green | vitest 838 (criterion 4) · live solve converged |
+| Visual spot-check | ✅ PASS (real backend) | real matplotlib figures in V4 Post; no page errors |
+| Dogfood live run | ✅ criteria 1-3 PASS (exit 0) | against real OpenFOAM 10 solve |
+| Push | ⏳ pending | this retro + dogfood fix |
 
-## 下次候选 (next) — user decision
+## 下次候选 (next)
 
-The M4 **implementation** is complete + shipped (C1 charter · C2 run-trigger ·
-C3 report display), fully unit-tested, Codex-reviewed, and mock-mode visually
-verified. The remaining work is the **live e2e run** to flip C4 to passes:true:
-
-- **Option A — stand up the live run**: bring up cfd-openfoam, build a case
-  (LDC is the smallest: import → blockMesh → BCs), run the dogfood end-to-end,
-  capture a real-backend visual spot-check, then mark the charter operationally
-  complete. Heavier infra work; may surface case-build issues.
-- **Option B — accept impl-complete + dogfood-ready**: treat C4's live run as a
-  documented gate to run when the solver env is up (the dogfood is ready and
-  will assert 1-4 the moment a built case + container exist). Move to the next
-  milestone now.
+M4 is operationally complete (C1 charter · C2 trigger · C3 display · C4 live
+proof). The V4 post-Step-7 closed loop — build → Run → results → report — works
+end to end against a real solver. Next milestone is a fresh charter (per the
+M1-M6 roadmap v2); candidates: M5 post-processing depth or the deferred
+GPU/CPU/temp telemetry (explicitly out-of-scope in DEC-V61-204). Await user
+direction on the next milestone.
 
 ## Bottom line
 
-C2+C3 wired the V4 closed loop end-to-end and it's proven in mock mode + at the
-API layer up to the solver boundary. The only thing standing between here and
-charter-complete is a real OpenFOAM run, which needs infra stood up — a clean
-decision point, not a hidden failure.
+The M4 charter is met: a real icoFoam solve, triggered from the V4 workbench,
+refreshes results and renders real matplotlib report figures in V4 Post — the
+closed loop the charter set out to wire, proven against a real solver.
