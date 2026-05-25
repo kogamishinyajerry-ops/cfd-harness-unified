@@ -157,6 +157,18 @@ export const handlers = [
     return HttpResponse.json({ patches: [], latest_time: null });
   }),
 
+  // DEC-V61-205 (M5 C3): comparison verdict context. Mock mode has no gold
+  // baseline, so return 404 → useComparisonVerdict resolves the honest
+  // "no baseline" state (not a fabricated PASS). Avoids MSW unhandled-request
+  // noise when ModeRendererPost mounts in mock/dev.
+  http.get(
+    "/api/cases/:caseId/runs/:runLabel/comparison-report/context",
+    async () => {
+      await delay(15);
+      return new HttpResponse(null, { status: 404 });
+    },
+  ),
+
   http.get("/api/cases/:caseId/completeness", async ({ params }) => {
     await delay(15);
     // V68-B.2 · MSW now mirrors the real backend completeness shape

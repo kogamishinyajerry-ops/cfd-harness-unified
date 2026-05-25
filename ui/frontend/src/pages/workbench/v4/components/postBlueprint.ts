@@ -37,11 +37,10 @@ export const POST_BLUEPRINT_KPIS = {
   gainPct: 4.2,
 } as const;
 
-export const POST_BLUEPRINT_VERDICT = {
-  label: "通过 · 对比基准",
-  flowGainPct: 4.2,
-  temperatureDeltaPct: 0.8,
-} as const;
+// DEC-V61-205 (M5 C3): POST_BLUEPRINT_VERDICT (the hardcoded "通过 · +4.2%"
+// PASS) was removed — the Post verdict pill now renders the REAL backend
+// gold-vs-measured verdict via useComparisonVerdict, or an honest no-baseline
+// state. A truth-chain workbench must not ship a fabricated PASS.
 
 export const POST_BLUEPRINT_MINI_CHARTS: PostBlueprintMiniChart[] = [
   {

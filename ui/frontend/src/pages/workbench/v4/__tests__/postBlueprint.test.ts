@@ -6,7 +6,6 @@ import {
   POST_BLUEPRINT_RADIAL_GAUGE,
   POST_BLUEPRINT_RIGHT_CARDS,
   POST_BLUEPRINT_TABS,
-  POST_BLUEPRINT_VERDICT,
 } from "../components/postBlueprint";
 
 describe("Post blueprint contract", () => {
@@ -39,12 +38,11 @@ describe("Post blueprint contract", () => {
     expect(POST_BLUEPRINT_RADIAL_GAUGE.valuePct).toBe(65);
   });
 
-  it("keeps the comparator verdict pill and right-panel cards aligned to blueprint image 7", () => {
-    expect(POST_BLUEPRINT_VERDICT).toMatchObject({
-      label: "通过 · 对比基准",
-      flowGainPct: 4.2,
-      temperatureDeltaPct: 0.8,
-    });
+  // M5 C3: the hardcoded POST_BLUEPRINT_VERDICT was removed — the Post
+  // verdict pill renders the real comparison verdict (useComparisonVerdict)
+  // or an honest no-baseline state. The right-panel cards remain blueprint
+  // placeholders pending M5 C4 (honest-ify / back with real run data).
+  it("keeps the right-panel blueprint cards stable pending C4", () => {
     expect(POST_BLUEPRINT_RIGHT_CARDS.map((card) => card.title)).toEqual([
       "对比基准 · 通过",
       "增益 +4.2%",

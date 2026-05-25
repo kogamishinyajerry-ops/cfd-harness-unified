@@ -39,10 +39,13 @@ import {
 } from "../../hooks/useGlbAvailability";
 import { usePostPatches } from "../../hooks/usePostPatches";
 import {
+  useComparisonVerdict,
+  type PostVerdict,
+} from "../../hooks/useComparisonVerdict";
+import {
   POST_BLUEPRINT_MINI_CHARTS,
   POST_BLUEPRINT_RADIAL_GAUGE,
   POST_BLUEPRINT_TABS,
-  POST_BLUEPRINT_VERDICT,
   type PostBlueprintMiniChart,
 } from "../postBlueprint";
 
@@ -571,6 +574,96 @@ function PostMiniProfileChart({ chart }: { chart: PostBlueprintMiniChart }) {
   );
 }
 
+/** M5 C3 · Post verdict pill. Renders the REAL gold-vs-measured verdict
+ *  (PASS/PARTIAL/FAIL) when the case has a comparison baseline, or an honest
+ *  neutral "无基准对比" state otherwise — never the old hardcoded "通过
+ *  · +4.2%" PASS. Hidden while the comparison context is loading. */
+export function PostVerdictPill({ verdict }: { verdict: PostVerdict }) {
+  if (verdict.state === "loading") return null;
+
+  if (verdict.state === "verdict" && verdict.level) {
+    const tone =
+      verdict.level === "PASS"
+        ? V4_PALETTE.healthy
+        : verdict.level === "PARTIAL"
+          ? V4_PALETTE.warn
+          : V4_PALETTE.crit;
+    const label =
+      verdict.level === "PASS"
+        ? "通过 · 对比基准"
+        : verdict.level === "PARTIAL"
+          ? "部分通过 · 对比基准"
+          : "未通过 · 对比基准";
+    const counts =
+      verdict.nPass != null && verdict.nTotal != null
+        ? `${verdict.nPass}/${verdict.nTotal} gold 点通过`
+        : verdict.detail;
+    return (
+      <div
+        data-testid="v4-mode-post-verdict"
+        data-verdict={verdict.level.toLowerCase()}
+        className="absolute bottom-3 right-3 flex max-w-[320px] items-center gap-2.5 rounded-md border bg-v4-surfaceRaised/95 px-3.5 py-2.5 shadow-xl backdrop-blur"
+        style={{ borderColor: tone + "99" }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="shrink-0">
+          <circle cx="12" cy="12" r="10" stroke={tone} strokeWidth="2.2" />
+          {verdict.level === "PASS" ? (
+            <path d="M8 12l3 3 5-6" stroke={tone} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          ) : verdict.level === "FAIL" ? (
+            <path d="M8 8l8 8M16 8l-8 8" stroke={tone} strokeWidth="2.2" strokeLinecap="round" />
+          ) : (
+            <path d="M12 7.5v5.5M12 16.3v.2" stroke={tone} strokeWidth="2.2" strokeLinecap="round" />
+          )}
+        </svg>
+        <div className="flex min-w-0 flex-col">
+          <span className="text-[13px] font-semibold" style={{ color: tone }}>
+            {label}
+          </span>
+          {counts && (
+            <span className="font-mono text-[10px] text-v4-textSecondary">
+              {counts}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // state === "none" (no baseline / visual-only) or "error": honest neutral —
+  // explicitly NOT a PASS. This is the truth-chain fix: a workbench case with
+  // no gold reference must say so, not fabricate "通过 · +4.2%".
+  const isError = verdict.state === "error";
+  return (
+    <div
+      data-testid="v4-mode-post-verdict"
+      data-verdict={isError ? "error" : "none"}
+      className="absolute bottom-3 right-3 flex min-w-[236px] items-center gap-2.5 rounded-md border border-v4-border bg-v4-surfaceRaised/95 px-3.5 py-2.5 shadow-xl backdrop-blur"
+    >
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={V4_PALETTE.textTertiary}
+        strokeWidth="2"
+        className="shrink-0"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v5" strokeLinecap="round" />
+        <circle cx="12" cy="16.4" r="0.7" fill={V4_PALETTE.textTertiary} stroke="none" />
+      </svg>
+      <div className="flex flex-col">
+        <span className="text-[13px] font-semibold text-v4-textSecondary">
+          {isError ? "对比报告暂不可用" : "无基准对比"}
+        </span>
+        <span className="font-mono text-[10px] text-v4-textTertiary">
+          {isError ? "report service unavailable" : "仅可视化结果 · 无 gold 基准"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
   const ctx = useV4WorkbenchContext(caseId ?? null);
   const glbUrl = geometryGlbUrl(caseId ?? null);
@@ -599,7 +692,14 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
   const showingFallbackRun =
     ctx.successfulRunDetail != null &&
     ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
-  const verdictColor = V4_PALETTE.healthy;
+  // M5 C3 · real gold-vs-measured verdict (or honest no-baseline) replacing
+  // the hardcoded POST_BLUEPRINT_VERDICT "通过 · +4.2%". Keyed on the
+  // successful run; degrades to a neutral "无基准对比" state for cases with
+  // no reference (the common workbench-imported case) — never a fake PASS.
+  const postVerdict = useComparisonVerdict(
+    caseId ?? null,
+    ctx.successfulRunDetail?.run_id ?? null,
+  );
   const uMax =
     vtpScalarRange != null
       ? vtpScalarRange[1]
@@ -665,34 +765,7 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
           ) : (
             <PostEmptyViewport probing={probingGeom} />
           )}
-          <div
-            data-testid="v4-mode-post-verdict"
-            data-verdict="ok"
-            className="absolute bottom-3 right-3 flex min-w-[236px] items-center gap-2.5 rounded-md border bg-v4-surfaceRaised/95 px-3.5 py-2.5 shadow-xl backdrop-blur"
-            style={{ borderColor: verdictColor + "99" }}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke={verdictColor} strokeWidth="2.2" />
-              <path
-                d="M8 12l3 3 5-6"
-                stroke={verdictColor}
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <div className="flex flex-col">
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: verdictColor }}
-              >
-                {POST_BLUEPRINT_VERDICT.label}
-              </span>
-              <span className="font-mono text-[10px] text-v4-textSecondary">
-                流量 +{POST_BLUEPRINT_VERDICT.flowGainPct.toFixed(1)}% · 温度 +{POST_BLUEPRINT_VERDICT.temperatureDeltaPct.toFixed(1)}%
-              </span>
-            </div>
-          </div>
+          <PostVerdictPill verdict={postVerdict} />
         </div>
 
         {/* Right column · image-7 telemetry: 3 mini profiles + 1 radial gauge */}
