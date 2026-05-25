@@ -47,11 +47,11 @@
 
 **Severity**: P3 (real estate waste · not breaking · low priority)
 **Track**: V4 shell layout / overall workbench information architecture
-**Status**: Open
-**Evidence**: Left sidebar shows case tree (案例树 LIVE · 搜索 · R-042 · 几何 · 零件 17 · 修复 2 · 包裹 1 · 区域 5 · 网格 · 物理模型 · 工况与求解 · 结果) but the bottom ~60% of the sidebar is empty.
-**Hypothesis**: Sidebar height = full viewport but content collapses. Could host a minimap, recent activities, or thumbnails.
-**Repro**: same URL as B1.
-**Action**: defer until M3.4+ unless V4 shell owner picks it up. Not blocking.
+**Status**: **CLOSED 2026-05-25 M3.9 — WON'T-FIX (BY-DESIGN)**. Verified against top-tier industrial CAE left panels by industrial-ui-comparator (parity 8/10, high confidence): empty surface below a top-anchored model tree is the **industry-standard norm**, not a defect — Hyperworks Model Browser, Abaqus/CAE Model Tree, ANSYS Mechanical Outline, and Simcenter Sim Navigator all leave the area below the last node empty. `LeftRailV4.tsx` already matches this exactly (tree container `flex … flex-1` at :439 with a non-flex `<ul className="flex flex-col">` at :456 → top-anchored; void is plain `bg-v4-surface`).
+**Why no fill**: Stretching the tree (`flex-1` on `<ul>`) or inserting spacers/minimap/recent-activities would be an **anti-pattern that REDUCES parity** (no reference tool does this). The authentic location for at-a-glance status is the app's full-width bottom status bar — which this shell already has (`BottomBarV4`). Completeness % is already surfaced in 3 places (LeftRailV4 tree rows :153-159, `RightPanelV4` CompletenessCard, BottomBarV4 hasBackend flag), so a rail footer would be redundant.
+**Original evidence (kept for archive)**: at step=geometry the geometry-blueprint variant (`buildGeometryTree`, 242px) shows ~9 short rows and leaves ~60% empty below. The case-tree variant (`buildCaseTree`) is longer (~30% empty). Both follow the same top-anchored industry pattern.
+**Verification screenshot**: `/tmp/m39_b4_check/m33_ux_demo_seed_idle.png` (M3.9 spot-check via hardened `workbench_visual_spot_check.mjs --base-url`).
+**Disposition**: closes the last open finding from the 2026-05-25 M3.2 visual audit. No code change to `LeftRailV4.tsx`.
 
 ### B6 · ModeRendererGeometry rendered in narrow 148px column at step=geometry
 

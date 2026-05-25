@@ -5,6 +5,8 @@
 //   --case-id <id>   (default: m33_ux_demo_seed)
 //   --step <step>    (default: geometry)
 //   --out-dir <dir>  (default: /tmp/cfd_workbench_screenshots/)
+//   --base-url <url> (default: http://localhost:<port>)
+//   --port <n>       (default: $CFD_FRONTEND_PORT or 5180 — matches vite.config)
 import { mkdirSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,10 +25,12 @@ const flag = (name, fallback) => {
 };
 const caseId = flag("--case-id", "m33_ux_demo_seed");
 const step = flag("--step", "geometry");
+const port = flag("--port", process.env.CFD_FRONTEND_PORT ?? "5180");
+const baseUrl = flag("--base-url", `http://localhost:${port}`).replace(/\/$/, "");
 const outDir = resolve(flag("--out-dir", "/tmp/cfd_workbench_screenshots/"));
 mkdirSync(outDir, { recursive: true });
 
-const url = `http://localhost:5173/workbench/case/${encodeURIComponent(caseId)}?step=${encodeURIComponent(step)}`;
+const url = `${baseUrl}/workbench/case/${encodeURIComponent(caseId)}?step=${encodeURIComponent(step)}`;
 const browser = await chromium.launch({
   headless: true,
   args: ["--use-gl=swiftshader", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist"],
