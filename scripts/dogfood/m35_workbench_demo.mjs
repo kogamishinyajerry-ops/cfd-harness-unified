@@ -22,38 +22,31 @@ const { chromium } = await import(playwrightUrl.href);
 const OUT_DIR = resolve("/tmp/cfd_demo_recording");
 mkdirSync(OUT_DIR, { recursive: true });
 
-const CASE_ID = "m33_ux_demo_seed";
+// M3.6 cycle 1: switched from m33_ux_demo_seed (no CAD) to circular_cylinder_wake
+// (canonical fixture with imported cylinder.stl + 7 patches). With --use-gl=swiftshader,
+// vtk.js gets a real WebGL context and renders the actual 3D cylinder model.
+const CASE_ID = "circular_cylinder_wake";
 const BASE = "http://localhost:5173";
 
 const STEPS = [
   {
     step: "geometry",
-    title: "第 1 步 · 几何 (Geometry) · 导入 CAD",
+    title: "第 1 步 · 几何 (Geometry) · 真实 CAD 渲染",
     narration:
-      "工程师在这里上传 CAD。\n当前案例还没有 CAD → 工作台显示「未找到可渲染几何 / No CAD geometry yet」+ 醒目「↑ 上传 CAD / Upload CAD」CTA (M3.4 cycle 3 polish 成果)。\n右栏 case_family 字段提示 + 「待补充」amber 标签 (M3.2 severity surfacing 工作)。\n📋 + 📝 复制按钮可见 (M3.2 cycle 3-5)。",
+      "工程师在这里看到 case 的 3D CAD 模型。\n中心 viewport 渲染真实 cylinder.stl (经 solver STL → glTF transcode)。\n顶部 tab 工具栏: 修复 / 简化 / 缝隙填充 / 切割 / 包裹 / 区域抽取 / 布尔 / 质量 / 视图 / 显示。\n左栏 patches 列表: cylinder · 入口 · 出口 · 上界 (slip) · 下界 (slip) · 前后面 (2D empty)。\n右栏 Step 1 几何就绪 · AI 自动识别零件 94% 置信。",
     holdMs: 7000,
     interact: async (page) => {
-      const cta = page.getByTestId("v4-mode-geometry-upload-cta");
-      if (await cta.count()) {
-        const box = await cta.boundingBox();
-        if (box) {
-          await page.mouse.move(720, 400, { steps: 30 });
-          await page.waitForTimeout(800);
-          await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 40 });
-          await page.waitForTimeout(1500);
-        }
-      }
-      // hover the copy field_path button to show ✓ + toast
-      const copyBtn = page.getByTestId("dynamic-frame-copy-field-path");
-      if (await copyBtn.count()) {
-        const box2 = await copyBtn.boundingBox();
-        if (box2) {
-          await page.mouse.move(box2.x + box2.width / 2, box2.y + box2.height / 2, { steps: 30 });
-          await page.waitForTimeout(800);
-          await copyBtn.click();
-          await page.waitForTimeout(1500);
-        }
-      }
+      // center the cursor on the 3D model
+      await page.mouse.move(720, 400, { steps: 30 });
+      await page.waitForTimeout(1000);
+      // sweep to patch list in left panel
+      await page.mouse.move(280, 180, { steps: 25 });
+      await page.waitForTimeout(800);
+      await page.mouse.move(280, 240, { steps: 20 });
+      await page.waitForTimeout(800);
+      // back to 3D model
+      await page.mouse.move(700, 400, { steps: 25 });
+      await page.waitForTimeout(800);
     },
   },
   {
@@ -160,7 +153,15 @@ const overlayScript = `(() => {
   }
 })();`;
 
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  args: [
+    "--use-gl=swiftshader",
+    "--use-angle=swiftshader",
+    "--enable-webgl",
+    "--ignore-gpu-blocklist",
+  ],
+});
 const context = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   recordVideo: { dir: OUT_DIR, size: { width: 1440, height: 900 } },
@@ -187,8 +188,8 @@ await page.getByTestId("dynamic-frame-panel").waitFor();
 await page.waitForTimeout(1000);
 
 await setCaption(
-  "CFD 工作台 0→1 全流程演示 · M3.2-M3.4 改进总验",
-  "案例: m33_ux_demo_seed · 走完 6 步 (Geometry→Mesh→Physics→Boundary→Solver→Post) · 红色光标 = 鼠标轨迹 · 底部黑色框 = 中文标注 · 录制开始",
+  "CFD 工作台 0→1 全流程演示 · 真实 CAD 渲染版",
+  "案例: circular_cylinder_wake (圆柱绕流 · 经典 CFD 教科书算例) · cylinder.stl 经 solver STL → glTF transcode · 7 patches · 走完 6 步 (Geometry→Mesh→Physics→Boundary→Solver→Post) · 红色光标 = 鼠标轨迹 · 底部黑色框 = 中文标注 · 录制开始",
 );
 await page.mouse.move(720, 450, { steps: 40 });
 await page.waitForTimeout(3500);

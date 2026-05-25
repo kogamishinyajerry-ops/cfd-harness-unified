@@ -1,16 +1,23 @@
-# M3.5 cycles 1+2 · CFD 工作台 0→1 全流程演示 · 文字版
+# M3.5+M3.6 · CFD 工作台 0→1 全流程演示 · 文字版
 
-> 视频文件: `~/Desktop/cfd_workbench_demo_2026-05-25.webm` (4.7 MB · 73s)
-> 抽样帧: `~/Desktop/cfd_workbench_demo_frame_intro.png` + `cfd_workbench_demo_frame_boundary.png`
+> 视频文件 (M3.6 cycle 1 · 真实 CAD): `~/Desktop/cfd_workbench_demo_realcad_2026-05-25.webm` (~5 MB · 72s)
+> 视频文件 (M3.5 · 无 CAD seed): `~/Desktop/cfd_workbench_demo_2026-05-25.webm` (4.7 MB · 73s) — 保留对比基线
+> 抽样帧 (M3.6 cycle 1):
+>   - `~/Desktop/cfd_workbench_demo_realcad_geometry.png` (步 1 · 真实 3D cylinder)
+>   - `~/Desktop/cfd_workbench_demo_realcad_boundary.png` (步 4 · BC patches)
+>   - `~/Desktop/cfd_workbench_demo_realcad_post.png` (步 6 · 后处理 + 残差曲线)
 > 录制脚本: `scripts/dogfood/m35_workbench_demo.mjs`
-> 案例: `m33_ux_demo_seed` (BC patches 3 个 · 无真实 CAD 上传)
+> 案例 (M3.6): `circular_cylinder_wake` (圆柱绕流经典 CFD 算例 · 7 patches · 真实 cylinder.stl 渲染)
 > 录制日期: 2026-05-25
-> 视频时长: 73 秒
-> 视口: 1440×900 headless chromium · webm 格式
+> 视频时长: 72 秒
+> 视口: 1440×900 headless chromium + `--use-gl=swiftshader` (软件 WebGL)
 >
-> Cycle 1 → Cycle 2 修复: overlay IIFE 在 `document.body` 存在前执行 →
-> 用 `DOMContentLoaded` guard 延迟 appendChild · z-index 提到 2147483647
-> · cursor 半径 24→28 px + box-shadow 加强可见度
+> 演化路径:
+> - M3.5 cycle 1: 初版录制 · overlay 不可见 (IIFE 在 body 不存在时执行)
+> - M3.5 cycle 2: `DOMContentLoaded` guard 修复 overlay 注入 · z-index → 2147483647
+> - M3.6 cycle 1: 切换 case `m33_ux_demo_seed` → `circular_cylinder_wake`
+>   + 加 `--use-gl=swiftshader` 启用软件 WebGL → vtk.js 拿到真 GL context
+>   → 中心 viewport 渲染真实 3D cylinder 模型 (case geometry.glb · solver STL transcode)
 >
 > 本文档与视频配对使用: 视频内已嵌入中文 caption + 红色 cursor; 本文档给出每步的更深解释 + UI/功能/操作三重视角。
 

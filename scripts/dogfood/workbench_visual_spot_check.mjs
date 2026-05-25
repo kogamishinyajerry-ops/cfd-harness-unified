@@ -27,7 +27,10 @@ const outDir = resolve(flag("--out-dir", "/tmp/cfd_workbench_screenshots/"));
 mkdirSync(outDir, { recursive: true });
 
 const url = `http://localhost:5173/workbench/case/${encodeURIComponent(caseId)}?step=${encodeURIComponent(step)}`;
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  args: ["--use-gl=swiftshader", "--use-angle=swiftshader", "--enable-webgl", "--ignore-gpu-blocklist"],
+});
 const ctx = await browser.newContext({
   viewport: { width: 1440, height: 900 },
   permissions: ["clipboard-read", "clipboard-write"],
