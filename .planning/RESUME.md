@@ -2,16 +2,27 @@
 
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
-> **Updated**: 2026-05-25T02:10 — **M3.2 + M3.3 + M3.4 ALL CLOSED**. Three milestones in one session.
-> **M3.4 (geometry empty-state) shipped in 5 cycles**:
-> - cycle 1 (research-only): 3 parallel investigation subagents (S3 charter intent · S4 root cause · S5 reuse candidates)
-> - cycle 2 (`e398397`): 1-LOC fix at ModeRendererGeometry — closes B1 MainCanvas proxy error
-> - cycle 3 (`bf3d41d`): polished GeometryEmptyState + Upload CAD CTA (reuses PostEmptyViewport + Step1Import patterns)
-> - cycle 4 (research-only): B6 root cause subagent — found CSS content-overflow leak
-> - cycle 5 (`0a122d3`): 2-LOC fix at WorkbenchShellV4 — closes B6 + cascade-clears B2 + B5
-> - phase-close retro: `.planning/retrospectives/2026-05-25_m34_milestone_close.md`
-> Cascade-clear pattern: cycle 5 closed 3 findings with 2 LOC. Multi-agent crew at full deployment (4 subagents across cycles 1 + 4).
-> **Session arc**: M3.2 cycles 4-7 + M3.2 retro + M3.3 cycles 1-3 + M3.3 retro + M3.4 cycles 1-5 + M3.4 retro
+> **Updated**: 2026-05-25T11:10 — **M3.2 → M3.8 SEVEN MILESTONES CLOSED** in one continuous run.
+>
+> **Session-end accumulator (2026-05-25)**:
+> - 7 milestones closed (M3.2 / M3.3 / M3.4 / M3.5 / M3.6 / M3.7 / M3.8)
+> - 20 cycles total
+> - 25 new commits (`72e6acb` → `0f3358b`)
+> - 0 post-R3 defects
+> - 0 Codex relay invocations (all spike-class single-functionality sub-DECs)
+> - 0 Kogami invocations (v2.3 opt-in only)
+> - Multi-agent crew validated (Sonnet 4.6 narration · Explore survey · 6+ subagents across milestones)
+> - Visual spot-check methodology hardened (added DOMContentLoaded overlay-init guard · added `--use-gl=swiftshader` for headless WebGL)
+> - 4 demo .webm deliverables on user Desktop (progressive arc: empty seed → real CAD pre-B7 → real CAD post-B7)
+>
+> **Closing commit lineage**:
+> - M3.2: `092a710` retro + multiple cycle commits
+> - M3.3: M3.3 close retro
+> - M3.4: `093e5b9` retro
+> - M3.5: `f3f055b` retro (demo recording infrastructure)
+> - M3.6: `6de6504` retro (real-CAD demo on circular_cylinder_wake fixture)
+> - M3.7: `6ea1725` retro (workbench chrome de-hardcoding · closed B7)
+> - M3.8: `0f3358b` retro (DRY useEffectiveCaseId hook)
 
 ---
 
@@ -51,21 +62,39 @@ Parent charter: `DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED`.
 
 Total new test coverage: **48 unit tests + 4 dogfood steps**.
 
-## M3.5 entry candidates (M3.4 closed 2026-05-25)
+## M3.9+ entry candidates (M3.2-M3.8 closed 2026-05-25)
 
-### Outstanding from M3.4 backlog
-- **B4** (P3 · sidebar dead vertical space) — lowest priority · may be moot post-cycle-5 layout recovery · defer unless re-screenshot confirms still relevant
-- Re-screenshot all 4 steps (geometry / mesh / physics / boundary) to confirm cascade-clear didn't break other steps
+### Open backlog (cosmetic / janitorial)
+- **B4** (P3 · left sidebar dead vertical space) — only open finding from M3.2 visual audit · ~5-15 LOC
+- **M3.4 B1 partial-fix caveat** — opened by M3.6 retro · M3.4 cycle 2 fix only covered empty-CAD cases · authored cases hit proxy bug in headless until M3.6's swiftshader workaround applied · root-fix in vtk.js wrapper deferred
 
 ### Carry-overs from earlier retros
 - **Open in IDE via `vscode://`** — workbench → editor jump (M3.2 retro)
 - **Raw YAML viewer modal** — backend YAML route + modal (M3.2 retro)
 - **"Replace whole node" UI recovery** — M3.1 cycle 6 deferred
 - **Backend `gap.why` enrichment** across all gap families (M3.3 retro)
-- **Real-user click-through validation** of M3.4 fixes (cycles 2 + 3 + 5)
+- **Workbench-basics + manifest cross-validation** — M3.6 retro · basics says 7 patches but cylinder.stl has all_default_faces=true
 
-### Suggested M3.5 theme
-**Real-user re-validation arc + B4 cosmetic** — light milestone closing the loop on M3.2-M3.4 work: user clicks through fixed UI with real CAD upload OR uses an existing case with real CAD; verifies UX is clean across all 4 steps; B4 fix included if relevant. Charter-light (≤3 cycles).
+### Demo deliverables (Desktop, 2026-05-25)
+- `cfd_workbench_demo_2026-05-25.webm` (M3.5 · empty seed · 73s) — baseline
+- `cfd_workbench_demo_realcad_2026-05-25.webm` (M3.6 · real CAD pre-B7 · 72s) — APU chrome bleed-through visible
+- `cfd_workbench_demo_post_b7_2026-05-25.webm` (M3.7 post-B7 · 72s) — **canonical: case-authentic chrome + 3D cylinder**
+- 9 PNG keyframes mapped per demo
+- Companion: `scripts/dogfood/m35_workbench_demo_narration.md`
+
+### Suggested M3.9 theme(s)
+- **M3.9 = B4 cosmetic** — close last visual-audit finding · smallest cycle · ~10 LOC
+- **M3.9 = M4 charter scoping** — what comes after Step 7 Post · solver_run / results / report / Notion sync · multi-day · likely Kogami opt-in
+- **M3.9 = vtk.js proxy bug root-fix** — guard `new Proxy(null,...)` in ViewportV4's vtk.js bootstrap layer · removes need for swiftshader workaround · P2 followup
+
+### Reusable infrastructure (NEW this session)
+- `scripts/dogfood/m35_workbench_demo.mjs` — Playwright demo recorder with caption + cursor overlay (217 LOC)
+- `scripts/dogfood/stage_m36_realcad_demo.py` — idempotent canonical-fixture case staging (98 LOC)
+- `ui/frontend/src/pages/workbench/v4/hooks/useEffectiveCaseId.ts` — DRY blueprint-vs-case gate (48 LOC · M3.8 cycle 1)
+- `.planning/methodology/screenshot_spot_check.md` (hardened with DOMContentLoaded + swiftshader notes from M3.5/M3.6)
+
+### Notion sync debt (carried)
+- `DEC-V61-201` (Status: Accepted 2026-05-21 · `notion_sync_status: pending`) — 4-day-old debt from session-end batch · attempted in this session-end
 
 ---
 
