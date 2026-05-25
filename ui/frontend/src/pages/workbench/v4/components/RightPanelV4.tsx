@@ -649,14 +649,24 @@ function modeCardsFor(
       // collapsing into "待求解". The verdict + evidence cards still gate on
       // successfulRunDetail (no valid comparison / no artifacts without one).
       const d = ctx.successfulRunDetail ?? ctx.runDetail;
+      // Codex M5-C4 R1 P2 · disclose "历史成功" when the newest run failed but
+      // an older success is being shown, mirroring ModeRendererPost — a plain
+      // green "成功" would contradict the failed head run.
+      const showingFallbackRun =
+        ctx.successfulRunDetail != null &&
+        ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
       const runCard: FactCardProps = d
         ? {
             title: "求解结果",
             facts: [
               {
                 label: "状态",
-                value: d.success ? "成功" : "失败",
-                tone: d.success ? "healthy" : "crit",
+                value: showingFallbackRun
+                  ? "历史成功"
+                  : d.success
+                    ? "成功"
+                    : "失败",
+                tone: showingFallbackRun ? "warn" : d.success ? "healthy" : "crit",
               },
               { label: "用时", value: `${d.duration_s.toFixed(1)} s` },
               { label: "退出码", value: String(d.exit_code) },
@@ -664,7 +674,9 @@ function modeCardsFor(
                 ? [{ label: "残差 p", value: d.residuals.p.toExponential(1) }]
                 : []),
             ],
-            footer: `${d.run_id} · ${d.verdict_summary}`,
+            footer: showingFallbackRun
+              ? `${d.run_id} · 最新尝试失败 · 显示历史成功`
+              : `${d.run_id} · ${d.verdict_summary}`,
           }
         : {
             title: "求解结果",
@@ -701,6 +713,14 @@ function modeCardsFor(
         baselineCard = {
           title: "基准对比",
           facts: [{ label: "状态", value: "对比报告暂不可用", tone: "warn" }],
+        };
+      } else if (v.state === "loading") {
+        // Codex M5-C4 R1 P3 · don't declare "无 gold 基准" while the verdict
+        // fetch is still in flight — a gold-standard case would flash a false
+        // negative before flipping to PASS/FAIL. Show a neutral pending state.
+        baselineCard = {
+          title: "基准对比",
+          facts: [{ label: "状态", value: "对比中…", tone: "neutral" }],
         };
       } else {
         baselineCard = {

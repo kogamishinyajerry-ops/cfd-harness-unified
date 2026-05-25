@@ -70,7 +70,7 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
 /** M5 C4 · the Post KPI strip's "对比基准" chip, derived from the REAL
  *  gold-vs-measured verdict (useComparisonVerdict) — never a fabricated
  *  "+4.2% 增益". No baseline ⇒ honest "无基准"; service error ⇒ "不可用". */
-function postVerdictKpi(v: PostVerdict): KpiChip {
+export function postVerdictKpi(v: PostVerdict): KpiChip {
   if (v.state === "verdict" && v.level) {
     const label =
       v.level === "PASS" ? "通过" : v.level === "PARTIAL" ? "部分通过" : "未通过";
@@ -85,6 +85,10 @@ function postVerdictKpi(v: PostVerdict): KpiChip {
     };
   }
   if (v.state === "error") return { value: "不可用", label: "对比基准" };
+  // Codex M5-C4 R1 P3 · while the verdict fetch is in flight, show a neutral
+  // "对比中…" rather than reusing the no-baseline copy — otherwise a solved
+  // gold-standard case briefly flashes a false "无基准" before PASS/FAIL.
+  if (v.state === "loading") return { value: "…", label: "对比基准" };
   return { value: "无基准", label: "对比基准" };
 }
 
@@ -397,12 +401,19 @@ function chipsFor(
       }
       const pRes =
         typeof d.residuals?.p === "number" ? d.residuals.p : null;
+      // Codex M5-C4 R1 P2 · when the newest run failed but an older success is
+      // being shown (fallback), disclose "历史成功" like ModeRendererPost does
+      // — a plain green "成功" here would contradict the failed head run the
+      // user is debugging.
+      const showingFallbackRun =
+        ctx.successfulRunDetail != null &&
+        ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
       return [
         {
           value: d.success ? "成功" : "失败",
           label: "求解状态",
-          delta: d.success ? "已完成" : "已退出",
-          deltaTone: d.success ? "healthy" : "crit",
+          delta: showingFallbackRun ? "历史成功" : d.success ? "已完成" : "已退出",
+          deltaTone: showingFallbackRun ? "warn" : d.success ? "healthy" : "crit",
         },
         { value: fmt(d.duration_s, 1), label: "用时", unit: "s" },
         { value: String(d.exit_code), label: "退出码" },
