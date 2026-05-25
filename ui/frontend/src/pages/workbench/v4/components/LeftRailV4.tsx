@@ -383,12 +383,17 @@ export function LeftRailV4({
 }: LeftRailV4Props) {
   const isDoe = activeStep === "doe";
   const isGeometry = activeStep === "geometry";
-  const effectiveCaseId = isDoe || isGeometry ? null : caseId;
+  // DEC-V61-202 M3.7 cycle 1: gate geometry blueprint preview on absence of
+  // caseId. With a real case open, step=geometry shows the case-specific tree
+  // built from ctx (basics + completeness + residuals) instead of the
+  // hardcoded "R-042_ApuVent" APU blueprint label.
+  const isGeometryBlueprint = isGeometry && !caseId;
+  const effectiveCaseId = isDoe || isGeometryBlueprint ? null : caseId;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const residuals = useResidualSeries(effectiveCaseId);
   const tree = isDoe
     ? buildDoeTree()
-    : isGeometry
+    : isGeometryBlueprint
       ? buildGeometryTree()
       : buildCaseTree(activeStep, ctx, residuals.data);
   const railWidth = isGeometry ? "w-[242px]" : "w-[224px]";

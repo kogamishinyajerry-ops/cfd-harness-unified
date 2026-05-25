@@ -59,7 +59,11 @@ function compactCaseLabel(caseId: string | undefined, display: string | null): s
 
 export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
   const isDoe = activeStep === "doe";
-  const isGeometryBlueprint = activeStep === "geometry";
+  // DEC-V61-202 M3.7 cycle 1: gate geometry blueprint mode on absence of caseId.
+  // With a real case loaded, even step=geometry should show real case identity,
+  // not the APU teaching blueprint placeholder (B7 backlog finding from M3.6
+  // close · "R-042_ApuVent" appeared regardless of which case was open).
+  const isGeometryBlueprint = activeStep === "geometry" && !caseId;
   const useStaticBlueprintHeader = isDoe || isGeometryBlueprint;
   const effectiveCaseId = useStaticBlueprintHeader ? null : caseId ?? null;
   const ctx = useV4WorkbenchContext(effectiveCaseId);

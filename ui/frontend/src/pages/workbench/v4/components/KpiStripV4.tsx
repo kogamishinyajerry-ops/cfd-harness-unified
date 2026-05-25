@@ -490,8 +490,14 @@ interface KpiStripV4Props {
 }
 
 export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
+  // DEC-V61-202 M3.7 cycle 1: only force null caseId in blueprint preview mode
+  // (DoE static, geometry static when no case). With a real case loaded, step=
+  // geometry should bind to ctx.basics so KPI chips reflect actual patch /
+  // material / dimension counts instead of GEOMETRY_BLUEPRINT_SUMMARY constants.
   const ctx = useV4WorkbenchContext(
-    activeStep === "doe" || activeStep === "geometry" ? null : caseId,
+    activeStep === "doe" || (activeStep === "geometry" && !caseId)
+      ? null
+      : caseId,
   );
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
