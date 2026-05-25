@@ -28,6 +28,7 @@ import { useV4AdvisorMatches } from "../hooks/useV4AdvisorMatches";
 import {
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import { useReportBundle } from "../hooks/useReportBundle";
 import {
   GEOMETRY_BLUEPRINT_RIGHT_CARDS,
   hasAuthoredCadParts,
@@ -275,6 +276,7 @@ function modeCardsFor(
     nPass: null,
     nTotal: null,
   },
+  reportFiguresAvailable = false,
 ): FactCardProps[] {
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
@@ -742,10 +744,20 @@ function modeCardsFor(
             title: "证据产物",
             facts: [
               { label: "主视图", value: "表面场 + 流线" },
-              { label: "曲线", value: "残差 / matplotlib 图" },
+              // Codex M5-C4 R2 P2 · only claim matplotlib figures when the
+              // report bundle actually rendered. On matplotlib-missing/503
+              // builds ReportFiguresPanel says "unavailable", so advertising
+              // the figures here would make the right rail self-contradictory.
+              // Residuals are always available; figures are conditional.
+              {
+                label: "曲线",
+                value: reportFiguresAvailable ? "残差 / matplotlib 图" : "残差",
+              },
               { label: "来源", value: "foamToVTK · 后端" },
             ],
-            footer: "产物由后端导出 · 在主视图与图表面板查看",
+            footer: reportFiguresAvailable
+              ? "产物由后端导出 · 在主视图与图表面板查看"
+              : "产物由后端导出 · 报告图在此构建不可用",
           }
         : {
             title: "证据产物",
@@ -859,9 +871,21 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
     effectiveCaseId,
     activeStep === "post" ? (ctx.successfulRunDetail?.run_id ?? null) : null,
   );
+  // M5 C4 R2 P2 · real report-bundle availability so the evidence card only
+  // claims matplotlib figures when they actually rendered (gated to post).
+  const reportBundle = useReportBundle(
+    activeStep === "post" ? effectiveCaseId : null,
+  );
+  const reportFiguresAvailable = reportBundle.data != null;
   const realMatcherMode = Boolean(effectiveCaseId);
   const modeCards = realMatcherMode
-    ? modeCardsFor(activeStep, ctx, solverResiduals.data, postVerdict)
+    ? modeCardsFor(
+        activeStep,
+        ctx,
+        solverResiduals.data,
+        postVerdict,
+        reportFiguresAvailable,
+      )
     : [];
   const placeholderPills = realMatcherMode
     ? []

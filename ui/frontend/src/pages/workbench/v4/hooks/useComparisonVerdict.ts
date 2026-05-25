@@ -13,9 +13,10 @@
  * renders but no gold, and 404/400 for cases not opted into comparison.
  *
  * State the caller renders:
- *   - "loading"  → no run yet / fetch in flight → pill hidden
+ *   - "loading"  → enabled fetch genuinely in flight → pill hidden
  *   - "verdict"  → real PASS/PARTIAL/FAIL from gold comparison
- *   - "none"     → no baseline (visual_only / 404 / 400) → honest neutral pill
+ *   - "none"     → no run to compare (disabled) OR no baseline (visual_only /
+ *                  404 / 400) → honest neutral pill (never a perpetual pending)
  *   - "error"    → 5xx / network → honest "report unavailable" (never a PASS)
  */
 import { useQuery } from "@tanstack/react-query";
@@ -79,7 +80,15 @@ export function useComparisonVerdict(
     refetchOnWindowFocus: false,
   });
 
-  if (!enabled || q.isLoading) {
+  // Codex M5-C4 R2 P2 · a DISABLED query (no run to compare — unsolved or
+  // failed-only case) must resolve to honest "none", NOT a perpetual
+  // "loading": the query will never fire on its own, so reusing the pending
+  // state would strand the Post surfaces in "对比中…"/"…" forever. "loading"
+  // is reserved for an enabled fetch genuinely in flight.
+  if (!enabled) {
+    return { state: "none", level: null, detail: null, nPass: null, nTotal: null };
+  }
+  if (q.isLoading) {
     return { state: "loading", level: null, detail: null, nPass: null, nTotal: null };
   }
 
