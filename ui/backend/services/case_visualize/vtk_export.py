@@ -77,19 +77,40 @@ def _u_field_path(time_dir: Path) -> Path | None:
     return p if p.is_file() else None
 
 
-def _vtk_output_dir(case_dir: Path, time_name: str) -> Path:
-    return case_dir / "VTK" / f"case_{time_name}"
+def _discover_vtk_output_dir(case_dir: Path) -> Path | None:
+    """Find the foamToVTK output dir that carries internal.vtu.
+
+    DEC-V61-205 (M5 C2) fix: foamToVTK names its output
+    ``VTK/<caseMountName>_<timeINDEX>/`` — the time **index** (step
+    counter), NOT the time value. The case mounts at ``/case`` so the
+    prefix is ``case``; for t=2.0s at deltaT=5e-3 the dir is ``case_400``,
+    not ``case_2``. Constructing ``case_<time_value>`` therefore missed
+    the real output and 500'd ("internal.vtu missing") on any case whose
+    time index ≠ time value. Discover it instead: ``-latestTime`` writes
+    exactly one such dir, so pick the one with internal.vtu and the
+    highest numeric index suffix.
+    """
+    vtk_dir = case_dir / "VTK"
+    if not vtk_dir.is_dir():
+        return None
+    candidates: list[tuple[int, Path]] = []
+    for child in vtk_dir.iterdir():
+        if child.is_dir() and (child / "internal.vtu").is_file():
+            m = re.search(r"_(\d+)$", child.name)
+            candidates.append((int(m.group(1)) if m else -1, child))
+    if not candidates:
+        return None
+    candidates.sort()
+    return candidates[-1][1]
 
 
-def _vtk_is_stale(case_dir: Path, time_name: str, time_dir: Path) -> bool:
+def _vtk_is_stale(case_dir: Path, time_dir: Path) -> bool:
     """Return True if the cached VTK output is missing or older than the
     latest U field (i.e. solver re-ran since last export)."""
-    target = _vtk_output_dir(case_dir, time_name)
-    if not target.is_dir():
+    target = _discover_vtk_output_dir(case_dir)
+    if target is None:
         return True
     internal = target / "internal.vtu"
-    if not internal.is_file():
-        return True
     u_field = _u_field_path(time_dir)
     if u_field is None:
         return False  # no U yet; nothing fresher exists either
@@ -128,14 +149,15 @@ def ensure_vtk_output(case_dir: Path, *, force: bool = False) -> VtkExportResult
             "only initial condition (0/) exists — solver hasn't run yet."
         )
 
-    if not force and not _vtk_is_stale(case_dir, time_name, time_dir):
-        out = _vtk_output_dir(case_dir, time_name)
-        return VtkExportResult(
-            case_time_dir=out,
-            internal_vtu=out / "internal.vtu",
-            boundary_dir=out / "boundary",
-            latest_time=time_name,
-        )
+    if not force and not _vtk_is_stale(case_dir, time_dir):
+        out = _discover_vtk_output_dir(case_dir)
+        if out is not None:
+            return VtkExportResult(
+                case_time_dir=out,
+                internal_vtu=out / "internal.vtu",
+                boundary_dir=out / "boundary",
+                latest_time=time_name,
+            )
 
     result = _run_foam_to_vtk(case_dir)
     if result.returncode != 0:
@@ -144,11 +166,11 @@ def ensure_vtk_output(case_dir: Path, *, force: bool = False) -> VtkExportResult
             f"stderr tail: {result.stderr[-500:]}"
         )
 
-    out = _vtk_output_dir(case_dir, time_name)
-    if not (out / "internal.vtu").is_file():
+    out = _discover_vtk_output_dir(case_dir)
+    if out is None or not (out / "internal.vtu").is_file():
         raise VtkExportError(
-            f"foamToVTK returned 0 but {out / 'internal.vtu'} missing.\n"
-            f"stdout tail: {result.stdout[-500:]}"
+            f"foamToVTK returned 0 but no VTK/case_*/internal.vtu found under "
+            f"{case_dir / 'VTK'}.\nstdout tail: {result.stdout[-500:]}"
         )
     return VtkExportResult(
         case_time_dir=out,
