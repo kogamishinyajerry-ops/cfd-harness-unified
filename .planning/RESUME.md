@@ -22,6 +22,7 @@ Work M3.x here.
 | M3.10 | **vtk.js proxy bug root-fix** — `detectWebGL()` + typed `WebGLUnavailableError` in new `webgl_support.ts`; guard at `createKernel` chokepoint; ViewportV4 catches → graceful badge. Real-browser before/after PROVEN (4 Proxy crashes → 0). Removes hard dep on `--use-gl=swiftshader`. | `89ebd82` `dc96286` |
 | M3.11 | **Unblocked `tsc -b` build** — pre-existing error at `TopBarV4.tsx:67` (left by the 7-milestone session; no frontend tsc gate caught it). Widened `useEffectiveCaseId` activeStep to `\| undefined`. | `06448b1` `47db1b6` |
 | M3.12 | Completed M3.10 root-fix to legacy `Viewport.tsx` (defensive — that component is currently unrouted per App.tsx; honest disposition in retro). | `b4564f7` + retro |
+| M3.13 | **Frontend `tsc -b` pre-commit gate** (`DEC-V61-203`, **Accepted · user-ratified "A"** · synced to Notion). Blocks red-build commits; closes the gap that caused M3.11. Verified clean→Pass / type-error→Fail / live commit self-skips on non-frontend. | `f6e06c4` + retro |
 
 **Visual-audit backlog now FULLY DRAINED** (B1/B2/B3/B5/B6 closed M3.4; B4 closed M3.9).
 
@@ -30,12 +31,11 @@ root: `uv run uvicorn ui.backend.main:app --port 8001`); vite `:5188` (`CFD_FRON
 CFD_BACKEND_PORT=8001 npm run dev`). ⚠️ A **stale StructureOptimizer `vite preview` squats
 IPv6 `[::1]:5180`** — do NOT kill it; use explicit `127.0.0.1:<port>` + a fresh port.
 
-**TOP NEXT CANDIDATE (needs USER ratification — governance-rule-change, NOT autonomous):**
-**Add a frontend `tsc -b` pre-commit (or pre-push) gate.** M3.11 existed *only* because no
-gate caught a red build — the prior session marked "7 milestones closed" with a broken
-`tsc -b`. This changes the commit gate for all frontend work (broad blast radius) → per v2.3
-it's a governance-rule-change warranting a full DEC + user sign-off. Did NOT do it
-autonomously. Scope it to `^ui/frontend/.*\.(ts|tsx)$`, `pass_filenames: false`, local tsc.
+**TOP NEXT CANDIDATE:** **Mirror the `tsc -b` gate in CI** (`.github/workflows/ci.yml`)
+so a `--no-verify` / `SKIP=frontend-typecheck` bypass can't reach the remote default branch
+unchecked. The local pre-commit gate landed in M3.13 (`DEC-V61-203`, user-ratified); CI mirror
+is the natural completion (DEC-V61-203 §Follow-up). Lower-priority: DRY `VtkCanvasV3` onto
+`webgl_support`. Deferred: M4 charter scoping (multi-day · needs Kogami opt-in / user召唤).
 
 **Pre-existing uncommitted dirt (NOT touched this session — triage):** 12 deleted
 `test-results/v4-*-2026-05-19.png` + 4 modified `ui/backend/audit/cases/flat_plate_rans_sst/

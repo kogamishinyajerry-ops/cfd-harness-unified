@@ -4,7 +4,7 @@ title: Frontend tsc -b pre-commit build gate (governance-rule-change)
 status: Accepted
 parent_dec: DEC-V61-133 (v2.3 B+ governance baseline) · trigger: M3.11 red-build slip
 phase: M3.13 (continuation session 2026-05-25 · workbench-dynamic-guided arc)
-notion_sync_status: pending (session-end batch · per v2.3 Accepted-only)
+notion_sync_status: synced 2026-05-25 (https://www.notion.so/36bc68942bed8159a193de0b45de7ce5)
 autonomous_governance: false
 confidence: high
 date: 2026-05-25
