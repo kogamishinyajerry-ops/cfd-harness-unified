@@ -95,9 +95,20 @@ AI advisory-only (no AI). All Y / n-a.
   M3.11 slip was NOT a missing CI check but that the branch sat ~87 commits
   ahead and **unpushed**, so CI never ran. The M3.13 local pre-commit gate is
   precisely the layer that closes that gap (catches pre-commit, before push).
-- **Residual (branch-protection, NOT a code change — needs GitHub admin):**
-  `frontend-build` runs post-push on direct pushes to `main`, so a `--no-verify`
-  + direct-push of a red build would land before CI goes red. Making
-  `frontend-build` a **required, merge-blocking status check** (+ requiring PRs
-  into `main`) is a GitHub branch-protection setting, not a yaml edit. Flagged
-  for the user to configure if desired.
+- **Branch protection — DONE (2026-05-25, user-authorized "继续").** Applied to
+  `main` via `gh api` (owner admin token):
+  - required status checks (strict): `Backend · pytest (py3.12)` +
+    `Frontend · tsc + vite build` (NOT `check_sampling_audit_due`, which
+    fails-by-design as a reminder).
+  - require pull request before merging, `required_approving_review_count: 0`
+    (solo: PR required, self-merge OK).
+  - **`enforce_admins: false`** — deliberately, so the solo owner **keeps
+    direct-push to `main`** (their established 88-commit-batch workflow is not
+    broken). The PR path is CI-gated; the M3.13 local pre-commit gate covers
+    accidental red commits on the direct-push path.
+  - **Strict knob (owner's choice):** to make it fully airtight against a
+    deliberate `--no-verify` direct push (forces PRs for ALL changes, incl. the
+    owner), flip enforce_admins:
+    `gh api --method PUT repos/<repo>/branches/main/protection/enforce_admins`.
+  - **Revert (one call):**
+    `gh api --method DELETE repos/<repo>/branches/main/protection`.

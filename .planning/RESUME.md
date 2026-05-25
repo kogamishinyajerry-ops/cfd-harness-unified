@@ -38,11 +38,16 @@ IPv6 `[::1]:5180`** — do NOT kill it; use explicit `127.0.0.1:<port>` + a fres
 + PRs. No CI change needed. The M3.11 slip's real cause was the branch being ~87 commits
 unpushed (CI never ran), which the M3.13 local gate now covers pre-commit.
 
-**TOP NEXT CANDIDATE (needs GitHub admin — NOT a code change):** make `frontend-build` a
-**required merge-blocking status check** + require PRs into `main` (branch-protection setting).
-Direct `--no-verify` pushes to `main` currently land before CI goes red. Flagged for user.
-Lower-priority code item: DRY `VtkCanvasV3` onto `webgl_support`. Deferred: M4 charter scoping
-(multi-day · needs Kogami opt-in / user召唤).
+**Branch protection — DONE (2026-05-25, user-authorized).** `main` now has required CI checks
+(`Backend · pytest (py3.12)` + `Frontend · tsc + vite build`, strict) + require-PR (0 reviews,
+solo self-merge). **`enforce_admins: false`** on purpose → **you keep direct-push to `main`**
+(workflow unchanged); the PR path is CI-gated. To force PRs for everything (airtight vs
+`--no-verify`): `gh api --method PUT .../branches/main/protection/enforce_admins`. To revert:
+`gh api --method DELETE .../branches/main/protection`. See DEC-V61-203 §Follow-up.
+
+**TOP NEXT CANDIDATE (code, low-priority):** DRY `VtkCanvasV3` onto `webgl_support` (it still
+has a local detectWebGL copy). Deferred: M4 charter scoping (multi-day · needs Kogami opt-in /
+user召唤).
 
 **Pre-existing uncommitted dirt (NOT touched this session — triage):** 12 deleted
 `test-results/v4-*-2026-05-19.png` + 4 modified `ui/backend/audit/cases/flat_plate_rans_sst/
