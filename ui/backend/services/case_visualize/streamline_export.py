@@ -41,7 +41,7 @@ BASHRC = "/usr/lib/openfoam/openfoam2312/etc/bashrc"
 # that already produced a (degenerate, KJ66-seeded) VTP would keep serving
 # it forever — the seed fix would be invisible until a re-solve or a manual
 # cache wipe (Codex M5-C2 R0 P1). "1" = legacy hardcoded KJ66 line.
-_SEED_POLICY_VERSION = "2-mesh-bbox-diag"
+_SEED_POLICY_VERSION = "3-func-streamlines-grid"
 
 
 @dataclass(frozen=True)
@@ -190,7 +190,14 @@ seedSampleSet
     );
 }}
 """
-    (case_dir / "system" / "streamlinesDict").write_text(
+    # Bug #5 fix: the file MUST be named to match the `-func streamlines`
+    # argument (i.e. system/streamlines, NOT system/streamlinesDict).
+    # postProcess -func <name> resolves system/<name>; with the wrong name
+    # it silently fell back to the BUILT-IN streamlines preset (default
+    # single-seed config) → "seeded 1 particles" regardless of this dict.
+    # With the correct name our 60-seed grid is used (verified: 54 tracks,
+    # 6 seeds correctly dropped inside the backward-step solid).
+    (case_dir / "system" / "streamlines").write_text(
         dict_text, encoding="utf-8"
     )
     return len(pts)

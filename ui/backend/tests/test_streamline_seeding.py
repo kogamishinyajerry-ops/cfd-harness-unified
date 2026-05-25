@@ -119,7 +119,7 @@ def test_build_dict_uses_mesh_bbox_not_legacy(tmp_path: Path):
     (tmp_path / "system").mkdir()
     n = _build_streamlines_dict(tmp_path)
     assert n == 5 * 4 * 3  # mesh-derived seed grid
-    text = (tmp_path / "system" / "streamlinesDict").read_text()
+    text = (tmp_path / "system" / "streamlines").read_text()
     # Legacy KJ66 seeds were at x=-2.95; the mesh-derived seeds are in
     # x∈(0,10) so the old marker must be gone.
     assert "-2.95" not in text
@@ -132,7 +132,7 @@ def test_build_dict_falls_back_to_legacy_without_bbox(tmp_path: Path):
     # No polyMesh/points, no manifest → legacy KJ66 box.
     n = _build_streamlines_dict(tmp_path)
     assert n == 8
-    text = (tmp_path / "system" / "streamlinesDict").read_text()
+    text = (tmp_path / "system" / "streamlines").read_text()
     assert "-2.95" in text
 
 
