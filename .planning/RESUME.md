@@ -31,11 +31,16 @@ root: `uv run uvicorn ui.backend.main:app --port 8001`); vite `:5188` (`CFD_FRON
 CFD_BACKEND_PORT=8001 npm run dev`). ⚠️ A **stale StructureOptimizer `vite preview` squats
 IPv6 `[::1]:5180`** — do NOT kill it; use explicit `127.0.0.1:<port>` + a fresh port.
 
-**TOP NEXT CANDIDATE:** **Mirror the `tsc -b` gate in CI** (`.github/workflows/ci.yml`)
-so a `--no-verify` / `SKIP=frontend-typecheck` bypass can't reach the remote default branch
-unchecked. The local pre-commit gate landed in M3.13 (`DEC-V61-203`, user-ratified); CI mirror
-is the natural completion (DEC-V61-203 §Follow-up). Lower-priority: DRY `VtkCanvasV3` onto
-`webgl_support`. Deferred: M4 charter scoping (multi-day · needs Kogami opt-in / user召唤).
+**CI mirror — DONE/MOOT (M3.14 verified):** CI already has a `frontend-build` job
+(`ci.yml:155-178`) running `npm run typecheck` + `npm run build` (both run tsc) on push-to-main
++ PRs. No CI change needed. The M3.11 slip's real cause was the branch being ~87 commits
+unpushed (CI never ran), which the M3.13 local gate now covers pre-commit.
+
+**TOP NEXT CANDIDATE (needs GitHub admin — NOT a code change):** make `frontend-build` a
+**required merge-blocking status check** + require PRs into `main` (branch-protection setting).
+Direct `--no-verify` pushes to `main` currently land before CI goes red. Flagged for user.
+Lower-priority code item: DRY `VtkCanvasV3` onto `webgl_support`. Deferred: M4 charter scoping
+(multi-day · needs Kogami opt-in / user召唤).
 
 **Pre-existing uncommitted dirt (NOT touched this session — triage):** 12 deleted
 `test-results/v4-*-2026-05-19.png` + 4 modified `ui/backend/audit/cases/flat_plate_rans_sst/

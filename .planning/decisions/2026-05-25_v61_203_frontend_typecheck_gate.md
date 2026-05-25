@@ -85,6 +85,19 @@ AI advisory-only (no AI). All Y / n-a.
 
 ## Follow-up
 
-Mirror the same gate in CI (`.github/workflows/ci.yml`) so a `--no-verify`
-bypass can't reach the remote default branch unchecked. Out of scope here
-(local gate first); noted for the next governance touch.
+- **CI mirror — ALREADY SATISFIED (verified M3.14, 2026-05-25).** The
+  `frontend-build` job in `.github/workflows/ci.yml` (lines 155-178) already
+  runs `npm run typecheck` (`tsc --noEmit`) **and** `npm run build`
+  (`tsc -b && vite build`) on `push: [main]` + `pull_request: [main,
+  codex/stack-*]`. The M3.11 error surfaces in both `tsc --noEmit` and `tsc -b`,
+  so CI's typecheck step would have caught it. **No CI change made** — adding a
+  redundant tsc step would be pointless duplication. The real root cause of the
+  M3.11 slip was NOT a missing CI check but that the branch sat ~87 commits
+  ahead and **unpushed**, so CI never ran. The M3.13 local pre-commit gate is
+  precisely the layer that closes that gap (catches pre-commit, before push).
+- **Residual (branch-protection, NOT a code change — needs GitHub admin):**
+  `frontend-build` runs post-push on direct pushes to `main`, so a `--no-verify`
+  + direct-push of a red build would land before CI goes red. Making
+  `frontend-build` a **required, merge-blocking status check** (+ requiring PRs
+  into `main`) is a GitHub branch-protection setting, not a yaml edit. Flagged
+  for the user to configure if desired.
