@@ -115,10 +115,51 @@ def get_residual_series(case_id: str) -> dict:
 
 
 # ──────────────── B2.5 · Post viewport VTP feeds ────────────────
-# Two endpoints for the V4 Post-mode 3D viewport's real surface +
-# streamline overlay. Both serve XML PolyData (VTP), consumed client-
-# side by vtk.js's vtkXMLPolyDataReader. See B2.5 architecture decision
-# 2026-05-19 (.planning/v4_real_viewport_audit_2026-05-19.md).
+# Endpoints for the V4 Post-mode 3D viewport's real surface + streamline
+# overlay. Both serve XML PolyData (VTP), consumed client-side by vtk.js's
+# vtkXMLPolyDataReader. See B2.5 architecture decision 2026-05-19
+# (.planning/v4_real_viewport_audit_2026-05-19.md).
+
+
+def _ensure_vtk_or_http(case_dir: Path):
+    """Run ``ensure_vtk_output`` and map ``VtkExportError`` to the HTTP
+    status the Post overlay endpoints share (409 no run / 503 container /
+    500 otherwise). Extracted so surface.vtp + patches stay in lockstep."""
+    try:
+        return ensure_vtk_output(case_dir)
+    except VtkExportError as exc:
+        msg = str(exc)
+        if "no time directories" in msg or "solver hasn't run" in msg:
+            raise HTTPException(status_code=409, detail=msg) from exc
+        if "container" in msg.lower() and "not running" in msg.lower():
+            raise HTTPException(status_code=503, detail=msg) from exc
+        raise HTTPException(status_code=500, detail=msg) from exc
+
+
+@router.get("/cases/{case_id}/post/patches", tags=["case-visualize"])
+def get_post_patches(case_id: str) -> dict:
+    """List the case's real boundary patches for the Post surface overlay.
+
+    DEC-V61-205 (M5 C2) bug #2 fix: the frontend used to hardcode
+    ``patch=engine`` (an APU-bay-only name) and 404'd on every other case
+    (LDC has ``fixedWalls``/``lid``, backward_step its own). This endpoint
+    returns the patches that actually exist for this solved case so the
+    client can pick a real one. Each entry carries the on-disk VTP byte
+    size as a cheap proxy for "how much surface this patch carries" — the
+    client defaults to the largest wall-like patch.
+
+    Errors mirror surface.vtp (409 no run / 503 container / 500).
+    """
+    case_dir = _resolve(case_id)
+    vtk = _ensure_vtk_or_http(case_dir)
+    patches = sorted(
+        (
+            {"name": p.stem, "bytes": p.stat().st_size}
+            for p in vtk.boundary_dir.glob("*.vtp")
+        ),
+        key=lambda d: d["name"],
+    )
+    return {"patches": patches, "latest_time": vtk.latest_time}
 
 
 @router.get("/cases/{case_id}/post/surface.vtp", tags=["case-visualize"])
@@ -128,9 +169,9 @@ def get_post_surface_vtp(case_id: str, patch: str = "engine") -> Response:
     Runs ``foamToVTK -latestTime`` in the cfd-openfoam container the
     first time (cached afterwards · re-runs on solver re-execute).
 
-    Default ``patch=engine`` matches the canonical KJ66 + external-aero
-    naming convention. For internal-flow cases, pass ``patch=wall``
-    or whatever wall patch carries the body of interest.
+    The caller should resolve a real patch name via ``/post/patches``
+    first; the ``engine`` default is kept only as a legacy fallback for
+    the canonical KJ66 + external-aero naming convention.
 
     Errors:
       - 409 when solver hasn't run yet
@@ -143,15 +184,7 @@ def get_post_surface_vtp(case_id: str, patch: str = "engine") -> Response:
         raise HTTPException(status_code=400, detail=f"unsafe patch: {patch!r}")
 
     case_dir = _resolve(case_id)
-    try:
-        vtk = ensure_vtk_output(case_dir)
-    except VtkExportError as exc:
-        msg = str(exc)
-        if "no time directories" in msg or "solver hasn't run" in msg:
-            raise HTTPException(status_code=409, detail=msg) from exc
-        if "container" in msg.lower() and "not running" in msg.lower():
-            raise HTTPException(status_code=503, detail=msg) from exc
-        raise HTTPException(status_code=500, detail=msg) from exc
+    vtk = _ensure_vtk_or_http(case_dir)
 
     vtp_path = vtk.boundary_dir / f"{patch}.vtp"
     if not vtp_path.is_file():

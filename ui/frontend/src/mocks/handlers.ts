@@ -147,6 +147,16 @@ export const handlers = [
     });
   }),
 
+  // DEC-V61-205 (M5 C2): post/patches mock. Mock mode has no real
+  // foamToVTK output, so return an empty patch set → ModeRendererPost
+  // resolves no surface overlay (it relies on the geometry/render GLB
+  // mock for the base actor instead). Keeps MSW from logging the request
+  // as unhandled.
+  http.get("/api/cases/:caseId/post/patches", async () => {
+    await delay(20);
+    return HttpResponse.json({ patches: [], latest_time: null });
+  }),
+
   http.get("/api/cases/:caseId/completeness", async ({ params }) => {
     await delay(15);
     // V68-B.2 · MSW now mirrors the real backend completeness shape

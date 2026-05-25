@@ -37,6 +37,7 @@ import {
   geometryGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
+import { usePostPatches } from "../../hooks/usePostPatches";
 import {
   POST_BLUEPRINT_MINI_CHARTS,
   POST_BLUEPRINT_RADIAL_GAUGE,
@@ -579,9 +580,16 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
   // B2.5 · VTP overlay URLs · backend endpoints serve real foamToVTK
   // output. When unavailable (no solver run yet), the kernel attach
   // silently fails and the base glb keeps rendering — graceful degrade.
-  const surfaceVtpUrl = caseId
-    ? `/api/cases/${encodeURIComponent(caseId)}/post/surface.vtp?patch=engine`
-    : null;
+  //
+  // M5 C2 bug #2 fix · the surface patch is resolved from the case's real
+  // boundary set (usePostPatches) instead of a hardcoded `engine` name
+  // that only existed on APU-bay cases. No solve / no patches ⇒ null ⇒
+  // no surface overlay (streamlines + panels still carry truth).
+  const { selectedPatch } = usePostPatches(caseId ?? null);
+  const surfaceVtpUrl =
+    caseId && selectedPatch
+      ? `/api/cases/${encodeURIComponent(caseId)}/post/surface.vtp?patch=${encodeURIComponent(selectedPatch)}`
+      : null;
   const streamlinesVtpUrl = caseId
     ? `/api/cases/${encodeURIComponent(caseId)}/post/streamlines.vtp`
     : null;
@@ -598,6 +606,17 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
       : typeof (detail?.key_quantities as Record<string, unknown> | undefined)?.u_max === "number"
         ? ((detail!.key_quantities as Record<string, unknown>).u_max as number)
         : 40;
+
+  // M5 C2 bug #3 fix · mount the viewport when geometry (GLB) exists OR a
+  // solve exists. Imported cases carry STL but no GLB, yet their foamToVTK
+  // surface/streamline overlays should still render — ViewportV4 mounts an
+  // empty kernel and the VTP becomes the base actor (glbUrl null). Without
+  // this, a no-GLB case hit PostEmptyViewport and the overlays never
+  // mounted (the C4 spot-check symptom). Wait for the GLB probe to settle
+  // before falling back to VTP-base so a GLB case doesn't flash VTP-only.
+  const probingGeom = glbProbe.isLoading;
+  const hasRun = detail != null;
+  const showViewport = hasGeom || (!probingGeom && hasRun);
 
   return (
     <div data-testid="v4-mode-post" className="flex h-full w-full flex-col bg-v4-canvas">
@@ -623,10 +642,10 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
             backend exporter); the bottom legend is a labeled
             placeholder reading the run's u_max when present. */}
         <div className="relative flex min-h-0 flex-[1.4] items-center justify-center">
-          {hasGeom && glbUrl ? (
+          {showViewport ? (
             <>
               <ViewportV4
-                glbUrl={glbUrl}
+                glbUrl={hasGeom ? glbUrl : null}
                 cameraPreset={cameraPreset}
                 surfaceVtpUrl={surfaceVtpUrl}
                 streamlinesVtpUrl={streamlinesVtpUrl}
@@ -642,7 +661,7 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
               />
             </>
           ) : (
-            <PostEmptyViewport probing={glbProbe.available === undefined} />
+            <PostEmptyViewport probing={probingGeom} />
           )}
           <div
             data-testid="v4-mode-post-verdict"

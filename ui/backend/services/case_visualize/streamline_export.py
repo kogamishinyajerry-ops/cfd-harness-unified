@@ -18,10 +18,14 @@ Why container-side streamLine and not Python vtkStreamTracer:
 """
 from __future__ import annotations
 
+import math
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+Vec3 = tuple[float, float, float]
 
 
 class StreamlineExportError(RuntimeError):
@@ -41,56 +45,126 @@ class StreamlineExportResult:
     seed_count: int  # number of input seeds (not output track count)
 
 
-# ─────────────── Auto inlet seeding ───────────────
+# ─────────────── Mesh-derived seeding (DEC-V61-205 M5 C2) ───────────────
+#
+# The seed points MUST land inside the fluid domain or streamLine returns
+# a single degenerate track (NumberOfPoints=1, U=0). The legacy code
+# hardcoded an x=-2.95 line for the KJ66 external-aero box, so EVERY other
+# geometry (LDC, backward_step, …) seeded outside its mesh → no streamline
+# overlay ever rendered. We now derive the seed line from the case's real
+# bounding box: prefer the actual mesh extent (polyMesh/points), fall back
+# to the ingest manifest's geometry bbox, and only then to the legacy box.
+
+# Legacy KJ66 external-aero seed line · last resort when no bbox is found.
+_LEGACY_KJ66_SEEDS: list[Vec3] = [
+    (-2.95, -1.0, -1.0),
+    (-2.95, -0.7, -0.7),
+    (-2.95, -0.4, -0.4),
+    (-2.95, -0.1, -0.1),
+    (-2.95, 0.1, 0.1),
+    (-2.95, 0.4, 0.4),
+    (-2.95, 0.7, 0.7),
+    (-2.95, 1.0, 1.0),
+]
+
+_POINT_RE = re.compile(
+    r"\(\s*([-\d.eE+]+)\s+([-\d.eE+]+)\s+([-\d.eE+]+)\s*\)"
+)
 
 
-def _inlet_bbox_from_vtp(inlet_vtp: Path) -> tuple[
-    tuple[float, float, float], tuple[float, float, float]
-] | None:
-    """Parse just enough of an inlet.vtp XML to extract its point AABB.
+def _bbox_from_points_file(points_path: Path) -> tuple[Vec3, Vec3] | None:
+    """AABB from an ASCII ``constant/polyMesh/points`` file. Returns None
+    for a missing/binary/empty file (caller falls back)."""
+    if not points_path.is_file():
+        return None
+    try:
+        text = points_path.read_text(errors="ignore")
+    except OSError:
+        return None
+    mins = [math.inf, math.inf, math.inf]
+    maxs = [-math.inf, -math.inf, -math.inf]
+    found = False
+    for m in _POINT_RE.finditer(text):
+        try:
+            xyz = (float(m.group(1)), float(m.group(2)), float(m.group(3)))
+        except ValueError:
+            continue
+        found = True
+        for i in range(3):
+            mins[i] = min(mins[i], xyz[i])
+            maxs[i] = max(maxs[i], xyz[i])
+    if not found or not all(math.isfinite(v) for v in (*mins, *maxs)):
+        return None
+    return ((mins[0], mins[1], mins[2]), (maxs[0], maxs[1], maxs[2]))
 
-    foamToVTK writes ``boundary/inlet.vtp`` with binary-encoded Float32
-    points. We don't decode those (no numpy dependency hoist needed
-    here); instead we scan the human-readable XML headers OpenFOAM also
-    emits for many fields — but the VTP format doesn't include a bbox.
 
-    Fallback: we read the polyMesh boundary file directly (text format)
-    to find the inlet face range, then read the corresponding points
-    from points file. That's slow; for now, return None and let the
-    caller hardcode a sensible default. M-VIZ-V plan §S4 will harden
-    this with a proper polyMesh parser.
-    """
-    # Pragmatic: skip parsing for now. The caller has a baseline
-    # seeding policy (8-point line on the inlet AABB diagonal) which
-    # works for the common axis-aligned external-aero geometry.
-    return None
+def _bbox_from_manifest(case_dir: Path) -> tuple[Vec3, Vec3] | None:
+    """AABB from the ingest manifest's ``ingest_report_summary.bbox_*``.
+    The geometry bbox is in the same coordinate frame as the gmshToFoam
+    mesh, so it's a safe fallback when polyMesh/points is binary."""
+    manifest = case_dir / "case_manifest.yaml"
+    if not manifest.is_file():
+        return None
+    try:
+        import yaml
+
+        data = yaml.safe_load(manifest.read_text()) or {}
+    except Exception:
+        return None
+    summ = data.get("ingest_report_summary") or {}
+    bmin, bmax = summ.get("bbox_min"), summ.get("bbox_max")
+    if not (isinstance(bmin, list) and isinstance(bmax, list)):
+        return None
+    if len(bmin) != 3 or len(bmax) != 3:
+        return None
+    try:
+        return (
+            (float(bmin[0]), float(bmin[1]), float(bmin[2])),
+            (float(bmax[0]), float(bmax[1]), float(bmax[2])),
+        )
+    except (TypeError, ValueError):
+        return None
 
 
-def _build_streamlines_dict(case_dir: Path, seed_count: int = 32) -> int:
+def _mesh_bbox(case_dir: Path) -> tuple[Vec3, Vec3] | None:
+    """Domain AABB for seeding: real mesh extent first, manifest second."""
+    box = _bbox_from_points_file(case_dir / "constant" / "polyMesh" / "points")
+    if box is not None:
+        return box
+    return _bbox_from_manifest(case_dir)
+
+
+def _seed_points_from_bbox(bmin: Vec3, bmax: Vec3, n: int = 12) -> list[Vec3]:
+    """``n`` points along the interior body diagonal (5%–95% of the AABB)
+    so seeds land inside the fluid domain for any geometry. A degenerate
+    (zero-width) axis collapses to its midpoint rather than producing NaNs."""
+    n = max(2, n)
+    lo, hi = 0.05, 0.95
+    pts: list[Vec3] = []
+    for i in range(n):
+        t = lo + (hi - lo) * (i / (n - 1))
+        pts.append(
+            tuple(  # type: ignore[arg-type]
+                bmin[k] + t * (bmax[k] - bmin[k]) for k in range(3)
+            )
+        )
+    return pts
+
+
+def _build_streamlines_dict(case_dir: Path, seed_count: int = 12) -> int:
     """Write system/streamlinesDict for OpenFOAM streamLine function.
 
-    Returns ``seed_count`` echoing the actual seed point count written.
-
-    Default seeding: 32-point line spanning ~80% of the inlet AABB
-    diagonal at x = (mesh_xmin + 0.03). For the KJ66 external-aero
-    case (x∈[-3,5], y∈[-1.5,1.5], z∈[-1.5,1.5]), this lands at
-    x≈-2.97, sweeping (y,z) from (-1.0,-1.0) to (+1.0,+1.0).
-
-    M-VIZ-V follow-up: read the case's polyMesh boundary file to find
-    the actual inlet patch's bbox instead of hardcoding the external-
-    aero pattern.
+    Returns the actual seed point count written. Seeds are derived from
+    the case's real bounding box (DEC-V61-205 M5 C2) so streamlines
+    integrate inside the domain for any geometry — not the legacy
+    hardcoded KJ66 external-aero box.
     """
-    # 8-point line · diagonal across inlet at x = -2.95 (near-inlet)
-    pts = [
-        (-2.95, -1.0, -1.0),
-        (-2.95, -0.7, -0.7),
-        (-2.95, -0.4, -0.4),
-        (-2.95, -0.1, -0.1),
-        (-2.95,  0.1,  0.1),
-        (-2.95,  0.4,  0.4),
-        (-2.95,  0.7,  0.7),
-        (-2.95,  1.0,  1.0),
-    ]
+    bbox = _mesh_bbox(case_dir)
+    if bbox is not None:
+        pts = _seed_points_from_bbox(bbox[0], bbox[1], seed_count)
+    else:
+        # No mesh points + no manifest bbox → legacy KJ66 box as last resort.
+        pts = _LEGACY_KJ66_SEEDS
     pts_block = "\n        ".join(f"({x} {y} {z})" for x, y, z in pts)
     dict_text = f"""\
 type            streamLine;

@@ -197,8 +197,19 @@ export function ViewportV4({
   } | null>(null);
 
   // Mount + load. Re-fires only on glbUrl change.
+  //
+  // M5 C2 bug #3 fix · the kernel also mounts in "VTP-base" mode when
+  // there is no GLB but a post overlay URL is present (imported cases
+  // carry STL → no GLB, yet foamToVTK surface/streamline overlays should
+  // still render). In that mode we mount an empty kernel and mark it
+  // `ready` so the VTP attach effects below fire; the first attachVtp
+  // auto-fits the camera to the VTP bounds, so the overlay becomes the
+  // base actor. glbUrl never transitions null↔string mid-life here — the
+  // Post renderer waits for the GLB probe to settle before deciding —
+  // so the `[glbUrl]` dep stays correct.
   useEffect(() => {
-    if (!glbUrl) return;
+    const hasVtp = Boolean(surfaceVtpUrl || streamlinesVtpUrl);
+    if (!glbUrl && !hasVtp) return;
     const container = containerRef.current;
     if (!container) return;
 
@@ -221,25 +232,34 @@ export function ViewportV4({
     let cancelled = false;
     setLoadState({ status: "loading" });
 
-    loadGlbFromUrl(glbUrl, controller.signal)
-      .then(({ importer }) => {
-        if (cancelled) {
-          importer.delete();
-          return;
-        }
-        kernel.attachGltf(importer);
-        kernel.setCameraPreset(cameraPreset);
-        setLoadState({ status: "ready" });
-        onReady?.();
-      })
-      .catch((err: unknown) => {
-        if ((err as { name?: string })?.name === "AbortError" || cancelled) return;
-        const msg =
-          err instanceof GlbLoadError
-            ? `${err.kind}: ${err.message}`
-            : (err as Error).message ?? "unknown error";
-        setLoadState({ status: "error", message: msg });
-      });
+    if (!glbUrl) {
+      // VTP-base mode · no GLB to load. Mount the empty kernel and mark
+      // ready so the surface/streamline attach effects run; the kernel
+      // auto-fits the camera on the first VTP attach.
+      kernel.setCameraPreset(cameraPreset);
+      setLoadState({ status: "ready" });
+      onReady?.();
+    } else {
+      loadGlbFromUrl(glbUrl, controller.signal)
+        .then(({ importer }) => {
+          if (cancelled) {
+            importer.delete();
+            return;
+          }
+          kernel.attachGltf(importer);
+          kernel.setCameraPreset(cameraPreset);
+          setLoadState({ status: "ready" });
+          onReady?.();
+        })
+        .catch((err: unknown) => {
+          if ((err as { name?: string })?.name === "AbortError" || cancelled) return;
+          const msg =
+            err instanceof GlbLoadError
+              ? `${err.kind}: ${err.message}`
+              : (err as Error).message ?? "unknown error";
+          setLoadState({ status: "error", message: msg });
+        });
+    }
 
     return () => {
       cancelled = true;
