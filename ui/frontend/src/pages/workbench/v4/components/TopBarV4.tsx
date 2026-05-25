@@ -18,6 +18,7 @@ import {
   convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import { useEffectiveCaseId } from "../hooks/useEffectiveCaseId";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 
 interface TopBarV4Props {
@@ -58,14 +59,13 @@ function compactCaseLabel(caseId: string | undefined, display: string | null): s
 }
 
 export function TopBarV4({ caseId, activeStep }: TopBarV4Props) {
-  const isDoe = activeStep === "doe";
-  // DEC-V61-202 M3.7 cycle 1: gate geometry blueprint mode on absence of caseId.
-  // With a real case loaded, even step=geometry should show real case identity,
-  // not the APU teaching blueprint placeholder (B7 backlog finding from M3.6
-  // close · "R-042_ApuVent" appeared regardless of which case was open).
-  const isGeometryBlueprint = activeStep === "geometry" && !caseId;
-  const useStaticBlueprintHeader = isDoe || isGeometryBlueprint;
-  const effectiveCaseId = useStaticBlueprintHeader ? null : caseId ?? null;
+  // DEC-V61-202 M3.8 cycle 1: blueprint-vs-case gating extracted to
+  // `useEffectiveCaseId` hook. Was duplicated across TopBar / LeftRail /
+  // KpiStrip until M3.7 cycle 1 (which fixed all three inline). M3.8 cycle 1
+  // DRYs the pattern so future shell additions inherit the same gate.
+  const { effectiveCaseId, isBlueprintMode, isDoe, isGeometryBlueprint } =
+    useEffectiveCaseId(caseId, activeStep);
+  const useStaticBlueprintHeader = isBlueprintMode;
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const residuals = useResidualSeries(effectiveCaseId);
   const gauge = convergenceGaugeFromSeries(residuals.data);

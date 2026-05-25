@@ -13,6 +13,7 @@ import {
   convergenceGaugeFromSeries,
   useResidualSeries,
 } from "../hooks/useResidualSeries";
+import { useEffectiveCaseId } from "../hooks/useEffectiveCaseId";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
 import {
   BOUNDARY_BLUEPRINT_RECOGNITION,
@@ -381,14 +382,12 @@ export function LeftRailV4({
   onStepChange,
   caseId = null,
 }: LeftRailV4Props) {
-  const isDoe = activeStep === "doe";
+  // DEC-V61-202 M3.8 cycle 1: shared blueprint-vs-case gate (see useEffectiveCaseId.ts).
   const isGeometry = activeStep === "geometry";
-  // DEC-V61-202 M3.7 cycle 1: gate geometry blueprint preview on absence of
-  // caseId. With a real case open, step=geometry shows the case-specific tree
-  // built from ctx (basics + completeness + residuals) instead of the
-  // hardcoded "R-042_ApuVent" APU blueprint label.
-  const isGeometryBlueprint = isGeometry && !caseId;
-  const effectiveCaseId = isDoe || isGeometryBlueprint ? null : caseId;
+  const { effectiveCaseId, isDoe, isGeometryBlueprint } = useEffectiveCaseId(
+    caseId,
+    activeStep,
+  );
   const ctx = useV4WorkbenchContext(effectiveCaseId);
   const residuals = useResidualSeries(effectiveCaseId);
   const tree = isDoe
