@@ -14,7 +14,8 @@
  * - DoE step: ALWAYS blueprint mode (no per-case DoE wiring exists yet)
  * - Geometry step + no case: blueprint mode (APU teaching preview)
  * - Geometry step + case loaded: case mode (real basics-driven render)
- * - Any other step: case mode (caseId passed through; null falls back to em-dash placeholder)
+ * - Any other step (incl. `undefined`): case mode (caseId passed through; null
+ *   falls back to em-dash placeholder)
  */
 import { useMemo } from "react";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -32,7 +33,11 @@ export interface EffectiveCaseId {
 
 export function useEffectiveCaseId(
   caseId: string | null | undefined,
-  activeStep: V4PipelineStepId,
+  // `undefined` is accepted: callers like TopBarV4 expose an optional
+  // activeStep prop. The gate logic below is already undefined-safe (an
+  // undefined step matches neither "doe" nor "geometry" → case mode), so the
+  // signature now reflects the implementation rather than over-constraining it.
+  activeStep: V4PipelineStepId | undefined,
 ): EffectiveCaseId {
   return useMemo(() => {
     const isDoe = activeStep === "doe";
