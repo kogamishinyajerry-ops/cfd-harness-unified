@@ -4,7 +4,7 @@ title: M5 charter — V4 post-processing depth (truth-chain: real overlays, no f
 status: Accepted
 parent_dec: DEC-V61-204-M4-POST-STEP7-CLOSED-LOOP (M4 closed loop · operationally complete)
 phase: M5 cycle 1 (charter scoping · continuation session 2026-05-25)
-notion_sync_status: pending (session-end batch · Accepted · per v2.3)
+notion_sync_status: synced 2026-05-25 (https://www.notion.so/36bc68942bed8144a947ce2a9baef9a6)
 autonomous_governance: false
 confidence: high
 date: 2026-05-25

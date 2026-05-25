@@ -4,7 +4,7 @@ title: M4 charter — Post-Step-7 closed loop wired into the V4 shell
 status: Accepted
 parent_dec: DEC-V61-202-WORKBENCH-DYNAMIC-GUIDED (M3.x guided construction arc · Accepted)
 phase: M4 cycle 1 (charter scoping · continuation session 2026-05-25)
-notion_sync_status: pending (session-end batch · Accepted · per v2.3)
+notion_sync_status: synced 2026-05-25 (https://www.notion.so/36bc68942bed813c8b1fd6ea8a1550a7)
 autonomous_governance: false
 confidence: high
 date: 2026-05-25
