@@ -29,6 +29,7 @@ import { useState } from "react";
 
 import { useV4WorkbenchContext } from "../../hooks/useV4WorkbenchContext";
 import { ModeTabStrip } from "../ModeTabStrip";
+import { ReportFiguresPanel } from "./ReportFiguresPanel";
 import { V4_CFD_COLORMAP, V4_PALETTE } from "@/theme/industrial_minimalist";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 import { ViewportV4, type V4CameraPreset } from "../ViewportV4";
@@ -683,6 +684,11 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
             worst="基准覆盖率"
             achieved
           />
+          {/* DEC-V61-204 (M4 C3): backend matplotlib report figures as
+              canonical, provenance-labelled artifacts. Auto-fetches; on a
+              matplotlib-absent build it shows an explicit "unavailable on
+              this build" state, never a crash. */}
+          <ReportFiguresPanel caseId={caseId ?? null} />
           <div className="rounded border border-dashed border-v4-border bg-v4-canvas p-2 text-[9px] leading-relaxed text-v4-textTertiary">
             基准剖面参考；主视图保持后端表面场与流线结果。
           </div>

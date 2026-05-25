@@ -14,6 +14,8 @@
 //   - v4-ctx-runs        : run history → latestRun (ModeRendererSolver/Post)
 //   - v4-ctx-detail      : per-run detail (residual source flips empty→log)
 //   - v4-advisor-runs    : advisor match list keyed off the latest run
+//   - v4-report-bundle   : matplotlib figure bundle (M4 C3) — re-render
+//                          on the new run's cache_version
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -41,6 +43,7 @@ const POST_RUN_QUERY_PREFIXES = [
   "v4-ctx-runs",
   "v4-ctx-detail",
   "v4-advisor-runs",
+  "v4-report-bundle",
 ] as const;
 
 export function useSolveRun(

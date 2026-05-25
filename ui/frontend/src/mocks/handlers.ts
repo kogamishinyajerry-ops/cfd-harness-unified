@@ -115,6 +115,38 @@ export const handlers = [
     });
   }),
 
+  // DEC-V61-204 (M4 C3): report-bundle mock. Returns the 4 figure
+  // artifacts as inline SVG data-URIs so the V4 Post figures render in
+  // dev/mock mode without a real matplotlib backend or PNG endpoints.
+  // (The real route serves /api/cases/{id}/report/{name}.png; the matplotlib-
+  // absent + 409 fallbacks are exercised by ReportFiguresPanel unit tests.)
+  http.get("/api/cases/:caseId/report-bundle", async () => {
+    await delay(120);
+    const fig = (label: string, color: string) =>
+      "data:image/svg+xml," +
+      encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="150">` +
+          `<rect width="220" height="150" fill="${color}"/>` +
+          `<text x="110" y="80" font-family="monospace" font-size="13" ` +
+          `fill="#ffffff" text-anchor="middle">${label}</text></svg>`,
+      );
+    return HttpResponse.json({
+      final_time: 100,
+      cell_count: 89745,
+      slab_cell_count: 4096,
+      plane_axes: ["x", "y"],
+      summary_text: "MSW mock report bundle",
+      cache_version: "msw00000",
+      case_kind: "lid_driven_cavity",
+      artifacts: {
+        contour_streamlines: fig("|U| + streamlines", "#1f6f6f"),
+        pressure: fig("pressure", "#7a4fb0"),
+        vorticity: fig("vorticity", "#b08038"),
+        centerline: fig("centerline", "#3a6ea5"),
+      },
+    });
+  }),
+
   http.get("/api/cases/:caseId/completeness", async ({ params }) => {
     await delay(15);
     // V68-B.2 · MSW now mirrors the real backend completeness shape

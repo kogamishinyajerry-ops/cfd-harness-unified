@@ -91,6 +91,7 @@ describe("useSolveRun", () => {
         "v4-ctx-runs",
         "v4-ctx-detail",
         "v4-advisor-runs",
+        "v4-report-bundle",
       ]) {
         expect(invalidateSpy).toHaveBeenCalledWith({
           queryKey: [prefix, "test_case"],
