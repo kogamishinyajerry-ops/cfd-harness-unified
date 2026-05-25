@@ -136,3 +136,7 @@ _adjacent_workspaces/
 # Playwright e2e artifacts (V67-C.1)
 ui/frontend/test-results/
 ui/frontend/playwright-report/
+# Kogami briefing INPUTS are large + reconstructable; commit the verdict
+# (review.md/json), invoke_meta, and the prompt_sha256 integrity anchor only.
+.planning/reviews/kogami/*/prompt.txt
+.planning/reviews/kogami/*/briefing_manifest.json

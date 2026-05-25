@@ -1,0 +1,26 @@
+{
+  "wrapper_version": "1.0",
+  "attempt": 1,
+  "schema_ok": true,
+  "prompt_sha256": "f5eeedcda271ac3afc9e17cbc8fb09ed8597e4f629126c62386ddbc778c289fa",
+  "empty_cwd": "/tmp/strategic_brief_cwd_9MysKV",
+  "trigger": "user-approved-next-milestone",
+  "artifact": ".planning/decisions/2026-05-25_v61_204_m4_post_step7_charter.md",
+  "invoked_at_utc": "2026-05-25T07:53:31Z",
+  "envelope": {
+    "subtype": "success",
+    "num_turns": 2,
+    "duration_ms": 150393,
+    "total_cost_usd": 4.483535,
+    "stop_reason": "end_turn",
+    "terminal_reason": "completed",
+    "session_id": "286bcf76-a104-4e1f-a15d-583725fc2891",
+    "uuid": "aa0cb482-3d45-4dec-8026-137ad6d19a2c",
+    "model_keys": [
+      "claude-opus-4-7[1m]"
+    ],
+    "cache_creation_tokens": 5648,
+    "cache_read_tokens": 0,
+    "output_tokens": 4796
+  }
+}
