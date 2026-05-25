@@ -107,5 +107,8 @@ repos:
         entry: scripts/governance/check_frontend_typecheck.sh
         language: script
         pass_filenames: false
-        files: ^ui/frontend/.*\.(ts|tsx)$
+        # Match TS/TSX sources AND the tsconfig*.json files that are part of
+        # the `tsc -b` project graph — a config-only edit can break the build
+        # too (Codex R0 P2). vite.config.ts is already covered by the .ts arm.
+        files: ^ui/frontend/(.*\.(ts|tsx)|tsconfig[^/]*\.json)$
         stages: [pre-commit]

@@ -5,7 +5,7 @@
 //   --case-id <id>   (default: m33_ux_demo_seed)
 //   --step <step>    (default: geometry)
 //   --out-dir <dir>  (default: /tmp/cfd_workbench_screenshots/)
-//   --base-url <url> (default: http://localhost:<port>)
+//   --base-url <url> (default: http://127.0.0.1:<port>)
 //   --port <n>       (default: $CFD_FRONTEND_PORT or 5180 — matches vite.config)
 import { mkdirSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
@@ -26,7 +26,10 @@ const flag = (name, fallback) => {
 const caseId = flag("--case-id", "m33_ux_demo_seed");
 const step = flag("--step", "geometry");
 const port = flag("--port", process.env.CFD_FRONTEND_PORT ?? "5180");
-const baseUrl = flag("--base-url", `http://localhost:${port}`).replace(/\/$/, "");
+// 127.0.0.1, not localhost: vite binds 127.0.0.1 only, and `localhost` can
+// resolve to ::1 first — Playwright would then hit an unrelated process on
+// [::1]:<port> (Codex R0 P3; this exact IPv6 trap was hit during M3.9).
+const baseUrl = flag("--base-url", `http://127.0.0.1:${port}`).replace(/\/$/, "");
 const outDir = resolve(flag("--out-dir", "/tmp/cfd_workbench_screenshots/"));
 mkdirSync(outDir, { recursive: true });
 

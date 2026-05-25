@@ -295,11 +295,26 @@ export function createKernel(
   }
   let grw: ReturnType<typeof vtkGenericRenderWindow.newInstance>;
   try {
-    grw = vtkGenericRenderWindow.newInstance({
+    const rw = vtkGenericRenderWindow.newInstance({
       background: opts.background ?? [0.06, 0.07, 0.09],
     });
-    grw.setContainer(container);
-    grw.resize();
+    try {
+      rw.setContainer(container);
+      rw.resize();
+    } catch (initErr) {
+      // newInstance() succeeded but setContainer()/resize() threw — vtk has
+      // already attached global resources (e.g. a window resize listener).
+      // Callers return immediately on the throw, so their effect cleanup never
+      // runs; dispose the partial window here or an unsupported browser leaks
+      // one render window per failed mount (Codex R0 P2).
+      try {
+        rw.delete();
+      } catch {
+        /* best-effort cleanup; the init error is the one that matters */
+      }
+      throw initErr;
+    }
+    grw = rw; // assigned only on full success → stays non-optional below
   } catch (err) {
     throw new WebGLUnavailableError(
       "vtk.js render window init failed (no usable WebGL context)",
