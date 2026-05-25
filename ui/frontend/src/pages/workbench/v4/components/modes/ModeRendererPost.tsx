@@ -44,10 +44,13 @@ import {
 } from "../../hooks/useComparisonVerdict";
 import {
   POST_BLUEPRINT_MINI_CHARTS,
-  POST_BLUEPRINT_RADIAL_GAUGE,
   POST_BLUEPRINT_TABS,
   type PostBlueprintMiniChart,
 } from "../postBlueprint";
+import {
+  useResidualSeries,
+  convergenceGaugeFromSeries,
+} from "../../hooks/useResidualSeries";
 
 interface Props {
   caseId?: string;
@@ -334,9 +337,15 @@ interface ConvergenceGaugeProps {
   value: number;
   worst: string | null;
   achieved: boolean;
+  label?: string;
 }
 
-function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
+export function ConvergenceGauge({
+  value,
+  worst,
+  achieved,
+  label = "收敛度",
+}: ConvergenceGaugeProps) {
   const v = Math.max(0, Math.min(100, value));
   const tone = achieved
     ? V4_PALETTE.healthy
@@ -394,7 +403,7 @@ function ConvergenceGauge({ value, worst, achieved }: ConvergenceGaugeProps) {
           fill={V4_PALETTE.textTertiary}
           fontFamily="ui-monospace"
         >
-          {POST_BLUEPRINT_RADIAL_GAUGE.label}
+          {label}
         </text>
       </svg>
       <div className="flex w-full items-baseline justify-between text-[9px]">
@@ -516,7 +525,13 @@ function VelocityLegendStrip({ uMax }: { uMax: number | null }) {
   );
 }
 
-function PostMiniProfileChart({ chart }: { chart: PostBlueprintMiniChart }) {
+export function PostMiniProfileChart({
+  chart,
+  illustrative = false,
+}: {
+  chart: PostBlueprintMiniChart;
+  illustrative?: boolean;
+}) {
   const min = Math.min(...chart.samples);
   const max = Math.max(...chart.samples);
   const range = Math.max(1e-6, max - min);
@@ -532,13 +547,23 @@ function PostMiniProfileChart({ chart }: { chart: PostBlueprintMiniChart }) {
 
   return (
     <div
-      className="rounded border border-v4-border bg-v4-surfaceRaised p-2"
+      className={`rounded border border-v4-border bg-v4-surfaceRaised p-2 ${
+        illustrative ? "opacity-60" : ""
+      }`}
       data-testid={`v4-post-mini-chart-${chart.id}`}
+      data-illustrative={illustrative ? "true" : "false"}
     >
       <div className="flex items-baseline justify-between text-[10px]">
-        <span className="text-v4-textSecondary">{chart.label}</span>
-        <span className="font-mono text-v4-textPrimary">
-          {latest.toFixed(chart.id === "velocity" ? 1 : 1)} {chart.unit}
+        <span className="flex items-center gap-1 text-v4-textSecondary">
+          {chart.label}
+          {illustrative && (
+            <span className="rounded-sm border border-v4-border px-1 text-[8px] font-normal text-v4-textTertiary">
+              示意
+            </span>
+          )}
+        </span>
+        <span className="font-mono text-v4-textTertiary">
+          {illustrative ? "示意" : `${latest.toFixed(1)} ${chart.unit}`}
         </span>
       </div>
       <svg
@@ -700,6 +725,15 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
     caseId ?? null,
     ctx.successfulRunDetail?.run_id ?? null,
   );
+  // M5 C4 · the radial gauge now reads the REAL worst-equation convergence
+  // (−log10(residual)/−log10(target_floor)) from the same residual-series
+  // endpoint TopBar/LeftRail already trust — replacing the hardcoded 65%
+  // "通过率" blueprint. No residual series (un-solved / log-less run) ⇒
+  // honest "无残差数据" placeholder, never a fabricated percentage.
+  const residuals = useResidualSeries(caseId ?? null);
+  const gauge = convergenceGaugeFromSeries(residuals.data);
+  const hasResiduals =
+    residuals.data != null && residuals.data.sample_count > 0;
   const uMax =
     vtpScalarRange != null
       ? vtpScalarRange[1]
@@ -771,20 +805,35 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
         {/* Right column · image-7 telemetry: 3 mini profiles + 1 radial gauge */}
         <div className="flex w-72 shrink-0 flex-col gap-2 border-l border-v4-border bg-v4-shell p-3 overflow-y-auto">
           {POST_BLUEPRINT_MINI_CHARTS.map((chart) => (
-            <PostMiniProfileChart key={chart.id} chart={chart} />
+            <PostMiniProfileChart key={chart.id} chart={chart} illustrative />
           ))}
-          <ConvergenceGauge
-            value={POST_BLUEPRINT_RADIAL_GAUGE.valuePct}
-            worst="基准覆盖率"
-            achieved
-          />
+          {hasResiduals ? (
+            <ConvergenceGauge
+              value={gauge.value}
+              worst={gauge.worst}
+              achieved={gauge.achieved}
+            />
+          ) : (
+            <div
+              className="flex flex-col items-center justify-center rounded border border-dashed border-v4-border bg-v4-surfaceRaised p-3 text-center"
+              data-testid="v4-post-gauge-empty"
+            >
+              <span className="font-mono text-[13px] text-v4-textTertiary">
+                —
+              </span>
+              <span className="mt-1 text-[9px] text-v4-textTertiary">
+                无残差数据 · 收敛度待求解
+              </span>
+            </div>
+          )}
           {/* DEC-V61-204 (M4 C3): backend matplotlib report figures as
               canonical, provenance-labelled artifacts. Auto-fetches; on a
               matplotlib-absent build it shows an explicit "unavailable on
               this build" state, never a crash. */}
           <ReportFiguresPanel caseId={caseId ?? null} />
           <div className="rounded border border-dashed border-v4-border bg-v4-canvas p-2 text-[9px] leading-relaxed text-v4-textTertiary">
-            基准剖面参考；主视图保持后端表面场与流线结果。
+            上方三条剖面为示意波形（非运行数据）；收敛度与主视图表面场 /
+            流线为后端真实结果。
           </div>
         </div>
       </div>

@@ -42,6 +42,13 @@ export const POST_BLUEPRINT_KPIS = {
 // gold-vs-measured verdict via useComparisonVerdict, or an honest no-baseline
 // state. A truth-chain workbench must not ship a fabricated PASS.
 
+// DEC-V61-205 (M5 C4): these three profile waveforms are ILLUSTRATIVE design
+// tokens only — the workbench has no per-quantity profile source for a generic
+// imported case. ModeRendererPost renders them with an explicit "示意" badge +
+// muted styling (illustrative prop) so they never masquerade as run data. The
+// adjacent radial gauge below is now driven by REAL residual convergence
+// (useResidualSeries), so POST_BLUEPRINT_RADIAL_GAUGE.valuePct is a retired
+// blueprint value kept only for the contract test.
 export const POST_BLUEPRINT_MINI_CHARTS: PostBlueprintMiniChart[] = [
   {
     id: "pressure",
