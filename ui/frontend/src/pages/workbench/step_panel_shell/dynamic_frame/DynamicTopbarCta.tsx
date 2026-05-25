@@ -26,6 +26,15 @@ interface DynamicTopbarCtaProps {
    * for legacy mounts that don't pass this prop.
    */
   railSeverity?: FrameSeverity;
+  /**
+   * DEC-V61-204 (M4 C2): when a mutating CTA (submit_solve) has its
+   * action in flight, render a disabled spinner state so the engineer
+   * sees the run is running. Defaults to false — legacy mounts
+   * (StepPanelShell) that omit it are unchanged.
+   */
+  busy?: boolean;
+  /** Label shown in place of `cta.label` while `busy` (e.g. "求解中…"). */
+  busyLabel?: string;
 }
 
 const KIND_TONE: Record<
@@ -67,6 +76,8 @@ export function DynamicTopbarCta({
   cta,
   onClick,
   railSeverity,
+  busy,
+  busyLabel,
 }: DynamicTopbarCtaProps) {
   const tone = KIND_TONE[cta.kind] ?? KIND_TONE.step_default;
   // Severity defaults to "info" when caller doesn't pass one — preserves
@@ -75,7 +86,13 @@ export function DynamicTopbarCta({
   const disabledClass =
     DISABLED_CLASS_BY_SEVERITY[effectiveSeverity] ??
     DISABLED_CLASS_BY_SEVERITY.info;
-  const className = cta.enabled ? tone.enabled : disabledClass;
+  const isBusy = busy ?? false;
+  // While busy the action is in flight: block interaction (no double-run)
+  // but keep the enabled hue dimmed + cursor-wait so it reads "running",
+  // not "blocked" (which would re-use the muted severity tones).
+  const interactionDisabled = !cta.enabled || isBusy;
+  const baseClass = cta.enabled ? tone.enabled : disabledClass;
+  const className = isBusy ? `${tone.enabled} cursor-wait opacity-70` : baseClass;
 
   return (
     <button
@@ -83,15 +100,27 @@ export function DynamicTopbarCta({
       data-testid="dynamic-topbar-cta"
       data-kind={cta.kind}
       data-enabled={cta.enabled}
+      data-busy={isBusy}
       data-rail-severity={effectiveSeverity}
-      disabled={!cta.enabled}
-      onClick={cta.enabled ? onClick : undefined}
+      disabled={interactionDisabled}
+      onClick={interactionDisabled ? undefined : onClick}
       title={cta.reason ?? undefined}
       aria-label={cta.label}
-      aria-disabled={!cta.enabled}
+      aria-disabled={interactionDisabled}
+      aria-busy={isBusy}
       className={`rounded-sm border px-2 py-0.5 font-mono text-[11px] uppercase tracking-wider transition ${className}`}
     >
-      {cta.label}
+      {isBusy ? (
+        <span className="inline-flex items-center gap-1">
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-2.5 animate-spin rounded-full border border-current border-t-transparent"
+          />
+          {busyLabel ?? cta.label}
+        </span>
+      ) : (
+        cta.label
+      )}
     </button>
   );
 }

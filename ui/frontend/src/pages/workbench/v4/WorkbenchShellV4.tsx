@@ -45,6 +45,7 @@ import { DynamicTopbarCta } from "../step_panel_shell/dynamic_frame/DynamicTopba
 import { DynamicViewportOverlays } from "../step_panel_shell/dynamic_frame/DynamicViewportOverlays";
 import { FacePickUrlSync } from "../step_panel_shell/dynamic_frame/FacePickUrlSync";
 import { useWorkbenchFrame } from "../step_panel_shell/dynamic_frame/useWorkbenchFrame";
+import { useSolveRun } from "./hooks/useSolveRun";
 import { v4StepToBackendStep } from "./step_id_translator";
 
 /** Compact 1-line fallback for fixed-height thin zones (TopBar 32px,
@@ -150,6 +151,14 @@ export function WorkbenchShellV4() {
   });
   const dynamicFrame = workbenchFrameQuery.data ?? null;
 
+  // DEC-V61-204 (M4 C2): engineer-initiated solve run. The solver-step
+  // frame emits a `submit_solve` topbar CTA (backend step 5; V4 "solver"
+  // maps there) which carried target_step=null and was a dead button
+  // before M4. This wires its click to the blocking /solve and refreshes
+  // the results queries on completion. AI never triggers it.
+  const solveRun = useSolveRun(caseId);
+  const isSolveCta = dynamicFrame?.topbar_cta.kind === "submit_solve";
+
   return (
     <FacePickProvider key={caseId ?? "__none__"}>
       {dynamicFrameEnabled ? (
@@ -168,7 +177,27 @@ export function WorkbenchShellV4() {
             <TopBarV4 caseId={caseId} activeStep={activeStep} />
           </div>
           {dynamicFrameEnabled && dynamicFrame ? (
-            <div className="shrink-0 pr-2">
+            <div className="flex shrink-0 items-center gap-2 pr-2">
+              {/* DEC-V61-204 (M4 C2): solve run-status. The CTA itself
+                  shows the spinner while running; this element surfaces
+                  the terminal result (converged / wall-time, or the
+                  failure message) once a run completes. */}
+              {isSolveCta && (solveRun.summary || solveRun.error) ? (
+                <span
+                  data-testid="v4-solve-run-status"
+                  data-status={solveRun.error ? "error" : "success"}
+                  title={solveRun.error?.message ?? undefined}
+                  className={`max-w-[280px] truncate font-mono text-[10px] ${
+                    solveRun.error ? "text-rose-300" : "text-emerald-300"
+                  }`}
+                >
+                  {solveRun.error
+                    ? `✗ 求解失败 · ${solveRun.error.message}`
+                    : `✓ 求解完成 · ${
+                        solveRun.summary?.converged ? "已收敛" : "未收敛"
+                      } · ${Math.round(solveRun.summary?.wall_time_s ?? 0)}s`}
+                </span>
+              ) : null}
               <DynamicTopbarCta
                 cta={dynamicFrame.topbar_cta}
                 // DEC-V61-202-SUB-M32-CYCLE2 R0 P1 fix: live V4 mount
@@ -177,7 +206,19 @@ export function WorkbenchShellV4() {
                 // pick up the rose/amber tone instead of falling through
                 // to the sky-info default.
                 railSeverity={dynamicFrame.rail_primary.severity}
+                // DEC-V61-204 (M4 C2): solver-step CTA shows a running
+                // spinner; the prop is false for all other steps.
+                busy={isSolveCta && solveRun.isRunning}
+                busyLabel="求解中…"
                 onClick={() => {
+                  // DEC-V61-204 (M4 C2): the submit_solve CTA is the
+                  // engineer-initiated run trigger (target_step=null,
+                  // mutating not navigation). Fire the solve instead of
+                  // falling into the navigation early-return below.
+                  if (dynamicFrame.topbar_cta.kind === "submit_solve") {
+                    solveRun.runSolve();
+                    return;
+                  }
                   const target = dynamicFrame.topbar_cta.target_step;
                   if (target == null) return;
                   // Codex R2 P2 fix: balance two contracts —

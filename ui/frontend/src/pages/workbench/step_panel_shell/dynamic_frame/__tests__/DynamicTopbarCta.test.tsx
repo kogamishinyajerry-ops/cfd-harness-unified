@@ -187,4 +187,37 @@ describe("DynamicTopbarCta", () => {
     expect(btn.className).toContain("emerald");
     expect(btn.className).not.toContain("rose");
   });
+
+  // DEC-V61-204 (M4 C2): busy state for the in-flight submit_solve run.
+  it("busy state disables the CTA, shows busyLabel + aria-busy, suppresses onClick", async () => {
+    const onClick = vi.fn();
+    render(
+      <DynamicTopbarCta
+        cta={cta({ kind: "submit_solve", label: "提交求解" })}
+        onClick={onClick}
+        busy
+        busyLabel="求解中…"
+      />,
+    );
+    const btn = screen.getByTestId("dynamic-topbar-cta");
+    expect(btn.dataset.busy).toBe("true");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("aria-busy", "true");
+    expect(btn.textContent).toContain("求解中…");
+    expect(btn.className).toContain("cursor-wait");
+    await userEvent.click(btn).catch(() => {
+      /* disabled — no-op */
+    });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("non-busy CTA reports data-busy=false and renders the plain label", () => {
+    render(
+      <DynamicTopbarCta cta={cta({ kind: "submit_solve", label: "提交求解" })} />,
+    );
+    const btn = screen.getByTestId("dynamic-topbar-cta");
+    expect(btn.dataset.busy).toBe("false");
+    expect(btn).toHaveAttribute("aria-busy", "false");
+    expect(btn.textContent).toBe("提交求解");
+  });
 });

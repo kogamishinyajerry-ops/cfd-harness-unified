@@ -96,6 +96,25 @@ export const handlers = [
     return HttpResponse.json({ ok: true, msw: true });
   }),
 
+  // DEC-V61-204 (M4 C2): engineer-initiated solve. Mirrors the real
+  // POST /api/import/{caseId}/solve → SolveSummary so dev/mock mode + MSW
+  // tests exercise the V4 run-trigger without a live backend. The real
+  // dogfood (C4) runs against the actual solver.
+  http.post("/api/import/:caseId/solve", async ({ params }) => {
+    await delay(300);
+    return HttpResponse.json({
+      case_id: String(params.caseId),
+      end_time_reached: 100,
+      last_initial_residual_p: 8.7e-4,
+      last_initial_residual_U: [3.2e-4, 2.9e-4, null],
+      last_continuity_error: 1.1e-6,
+      n_time_steps_written: 5,
+      time_directories: ["0", "20", "40", "60", "80", "100"],
+      wall_time_s: 42.3,
+      converged: true,
+    });
+  }),
+
   http.get("/api/cases/:caseId/completeness", async ({ params }) => {
     await delay(15);
     // V68-B.2 · MSW now mirrors the real backend completeness shape
