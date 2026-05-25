@@ -45,9 +45,12 @@ solo self-merge). **`enforce_admins: false`** on purpose → **you keep direct-p
 `--no-verify`): `gh api --method PUT .../branches/main/protection/enforce_admins`. To revert:
 `gh api --method DELETE .../branches/main/protection`. See DEC-V61-203 §Follow-up.
 
-**TOP NEXT CANDIDATE (code, low-priority):** DRY `VtkCanvasV3` onto `webgl_support` (it still
-has a local detectWebGL copy). Deferred: M4 charter scoping (multi-day · needs Kogami opt-in /
-user召唤).
+**DRY VtkCanvasV3 — DONE (M3.15, `b25a4d7`):** `detectWebGL` now defined once in `webgl_support`,
+imported by viewport_kernel + VtkCanvasV3. WebGL arc fully closed (M3.10→M3.12→M3.15).
+
+**TOP NEXT CANDIDATE:** **M4 charter scoping** — post-Step-7 solver_run / results / report /
+Notion sync. Multi-day; needs **Kogami opt-in** (user must召唤) per v2.3 — NOT autonomous.
+Optional governance knob: flip `enforce_admins: true` to fully PR-gate main (DEC-V61-203 §Follow-up).
 
 **Pre-existing uncommitted dirt (NOT touched this session — triage):** 12 deleted
 `test-results/v4-*-2026-05-19.png` + 4 modified `ui/backend/audit/cases/flat_plate_rans_sst/
