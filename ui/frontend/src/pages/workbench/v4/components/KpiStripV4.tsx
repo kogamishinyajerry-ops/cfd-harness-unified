@@ -27,8 +27,11 @@ import {
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
-import { POST_BLUEPRINT_KPIS } from "./postBlueprint";
 import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
+import {
+  useComparisonVerdict,
+  type PostVerdict,
+} from "../hooks/useComparisonVerdict";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { Patch } from "@/types/workbench_basics";
 import type { V4PipelineStepId } from "@/theme/industrial_minimalist";
@@ -64,7 +67,32 @@ function countPatchesByRole(patches: Patch[] | undefined): Record<string, number
   return counts;
 }
 
-function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
+/** M5 C4 · the Post KPI strip's "对比基准" chip, derived from the REAL
+ *  gold-vs-measured verdict (useComparisonVerdict) — never a fabricated
+ *  "+4.2% 增益". No baseline ⇒ honest "无基准"; service error ⇒ "不可用". */
+function postVerdictKpi(v: PostVerdict): KpiChip {
+  if (v.state === "verdict" && v.level) {
+    const label =
+      v.level === "PASS" ? "通过" : v.level === "PARTIAL" ? "部分通过" : "未通过";
+    const tone =
+      v.level === "PASS" ? "healthy" : v.level === "PARTIAL" ? "warn" : "crit";
+    return {
+      value:
+        v.nPass != null && v.nTotal != null ? `${v.nPass}/${v.nTotal}` : label,
+      label: "对比基准",
+      delta: label,
+      deltaTone: tone,
+    };
+  }
+  if (v.state === "error") return { value: "不可用", label: "对比基准" };
+  return { value: "无基准", label: "对比基准" };
+}
+
+function chipsFor(
+  step: V4PipelineStepId,
+  ctx: V4Context,
+  postVerdict: PostVerdict,
+): KpiChip[] {
   if (
     step === "geometry" &&
     (!ctx.basics || !hasAuthoredCadParts(ctx.basics.patches?.length))
@@ -346,34 +374,37 @@ function chipsFor(step: V4PipelineStepId, ctx: V4Context): KpiChip[] {
     }
 
     case "post": {
+      // M5 C4 · de-faked. The old strip showed fabricated domain KPIs
+      // (248.6 Pa 压降 / 3.62 kg/s 质量流量 / 96.4°C 出口温度 / +4.2% 增益)
+      // that the workbench never computes for a generic imported case.
+      // It now reports REAL solver-truth facts from the successful run plus
+      // the real gold-vs-measured verdict — honest "—"/"待求解"/"无基准"
+      // when a fact is absent, never a confident invented number.
+      const d = ctx.successfulRunDetail;
+      if (!d) {
+        return [
+          { value: "待求解", label: "求解状态" },
+          { value: "—", label: "用时", unit: "s" },
+          { value: "—", label: "残差 p" },
+          postVerdictKpi(postVerdict),
+        ];
+      }
+      const pRes =
+        typeof d.residuals?.p === "number" ? d.residuals.p : null;
       return [
         {
-          value: POST_BLUEPRINT_KPIS.pressurePa.toFixed(1),
-          label: "压降",
-          unit: "Pa",
+          value: d.success ? "成功" : "失败",
+          label: "求解状态",
+          delta: d.success ? "已完成" : "已退出",
+          deltaTone: d.success ? "healthy" : "crit",
         },
+        { value: fmt(d.duration_s, 1), label: "用时", unit: "s" },
+        { value: String(d.exit_code), label: "退出码" },
         {
-          value: POST_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
-          label: "质量流量",
-          unit: "kg/s",
+          value: pRes != null ? pRes.toExponential(1) : "—",
+          label: "残差 p",
         },
-        {
-          value: POST_BLUEPRINT_KPIS.temperatureC.toFixed(1),
-          label: "出口温度",
-          unit: "°C",
-        },
-        {
-          value: String(POST_BLUEPRINT_KPIS.progressPct),
-          label: "覆盖率",
-          unit: "%",
-        },
-        {
-          value: `+${POST_BLUEPRINT_KPIS.gainPct.toFixed(1)}`,
-          label: "对比基准",
-          unit: "%",
-          delta: "增益",
-          deltaTone: "healthy",
-        },
+        postVerdictKpi(postVerdict),
       ];
     }
   }
@@ -494,10 +525,16 @@ export function KpiStripV4({ activeStep, caseId = null }: KpiStripV4Props) {
   // DEC-V61-202 M3.8 cycle 1: shared blueprint-vs-case gate (see useEffectiveCaseId.ts).
   const { effectiveCaseId } = useEffectiveCaseId(caseId, activeStep);
   const ctx = useV4WorkbenchContext(effectiveCaseId);
+  // M5 C4 · real gold-vs-measured verdict for the Post strip's 对比基准 chip.
+  // Gated to the post step (runLabel null elsewhere ⇒ the hook stays idle).
+  const postVerdict = useComparisonVerdict(
+    effectiveCaseId,
+    activeStep === "post" ? (ctx.successfulRunDetail?.run_id ?? null) : null,
+  );
   if (activeStep === "mesh") {
     return <MeshKpiStrip ctx={ctx} />;
   }
-  const chips = chipsFor(activeStep, ctx);
+  const chips = chipsFor(activeStep, ctx, postVerdict);
   const isGeometry = activeStep === "geometry";
 
   return (

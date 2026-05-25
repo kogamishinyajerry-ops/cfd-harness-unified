@@ -43,7 +43,10 @@ import {
   SOLVER_BLUEPRINT_RIGHT_CARDS,
   SOLVER_BLUEPRINT_TELEMETRY,
 } from "./solverBlueprint";
-import { POST_BLUEPRINT_RIGHT_CARDS } from "./postBlueprint";
+import {
+  useComparisonVerdict,
+  type PostVerdict,
+} from "../hooks/useComparisonVerdict";
 import {
   DOE_BLUEPRINT_CONFIDENCE,
   DOE_BLUEPRINT_RIGHT_CARDS,
@@ -265,6 +268,13 @@ function modeCardsFor(
   step: V4PipelineStepId,
   ctx: V4Context,
   solverResiduals: ResidualSeriesPayload | null = null,
+  postVerdict: PostVerdict = {
+    state: "none",
+    level: null,
+    detail: null,
+    nPass: null,
+    nTotal: null,
+  },
 ): FactCardProps[] {
   const basics = ctx.basics;
   const mesh = ctx.meshMetrics;
@@ -628,7 +638,87 @@ function modeCardsFor(
       }));
     }
     case "post": {
-      return POST_BLUEPRINT_RIGHT_CARDS;
+      // M5 C4 · de-faked. The old cards asserted "对比基准·通过 / 增益+4.2% /
+      // 导出 PDF" — a fabricated PASS, an invented gain, and a non-functional
+      // export affordance. They now report REAL run facts + the real
+      // gold-vs-measured verdict, with an honest no-baseline card for the
+      // common imported case (no gold reference) and no fake export CTA.
+      const d = ctx.successfulRunDetail;
+      const runCard: FactCardProps = d
+        ? {
+            title: "求解结果",
+            facts: [
+              {
+                label: "状态",
+                value: d.success ? "成功" : "失败",
+                tone: d.success ? "healthy" : "crit",
+              },
+              { label: "用时", value: `${d.duration_s.toFixed(1)} s` },
+              { label: "退出码", value: String(d.exit_code) },
+              ...(typeof d.residuals?.p === "number"
+                ? [{ label: "残差 p", value: d.residuals.p.toExponential(1) }]
+                : []),
+            ],
+            footer: `${d.run_id} · ${d.verdict_summary}`,
+          }
+        : {
+            title: "求解结果",
+            facts: [{ label: "状态", value: "待求解", tone: "neutral" }],
+            footer: "尚无成功运行 · 先在求解步骤提交",
+          };
+
+      const v = postVerdict;
+      let baselineCard: FactCardProps;
+      if (v.state === "verdict" && v.level) {
+        const concl =
+          v.level === "PASS"
+            ? "通过"
+            : v.level === "PARTIAL"
+              ? "部分通过"
+              : "未通过";
+        const tone =
+          v.level === "PASS"
+            ? "healthy"
+            : v.level === "PARTIAL"
+              ? "warn"
+              : "crit";
+        baselineCard = {
+          title: "基准对比",
+          facts: [
+            { label: "结论", value: concl, tone },
+            ...(v.nPass != null && v.nTotal != null
+              ? [{ label: "gold 点", value: `${v.nPass}/${v.nTotal}` }]
+              : []),
+          ],
+          footer: v.detail ?? "与 gold 基准逐点对比",
+        };
+      } else if (v.state === "error") {
+        baselineCard = {
+          title: "基准对比",
+          facts: [{ label: "状态", value: "对比报告暂不可用", tone: "warn" }],
+        };
+      } else {
+        baselineCard = {
+          title: "基准对比",
+          facts: [
+            { label: "状态", value: "无 gold 基准", tone: "neutral" },
+            { label: "说明", value: "仅可视化结果" },
+          ],
+          footer: "此算例无 gold 参考 · 不做通过/未通过判定",
+        };
+      }
+
+      const evidenceCard: FactCardProps = {
+        title: "证据产物",
+        facts: [
+          { label: "主视图", value: "表面场 + 流线" },
+          { label: "曲线", value: "残差 / matplotlib 图" },
+          { label: "来源", value: "foamToVTK · 后端" },
+        ],
+        footer: "产物由后端导出 · 在主视图与图表面板查看",
+      };
+
+      return [runCard, baselineCard, evidenceCard];
     }
     case "doe":
       return DOE_BLUEPRINT_RIGHT_CARDS;
@@ -726,9 +816,15 @@ export function RightPanelV4({ activeStep, caseId = null }: RightPanelV4Props) {
   const solverResiduals = useResidualSeries(
     activeStep === "solver" ? effectiveCaseId : null,
   );
+  // M5 C4 · real gold-vs-measured verdict for the Post 基准对比 card.
+  // Gated to post (runLabel null elsewhere ⇒ the hook stays idle).
+  const postVerdict = useComparisonVerdict(
+    effectiveCaseId,
+    activeStep === "post" ? (ctx.successfulRunDetail?.run_id ?? null) : null,
+  );
   const realMatcherMode = Boolean(effectiveCaseId);
   const modeCards = realMatcherMode
-    ? modeCardsFor(activeStep, ctx, solverResiduals.data)
+    ? modeCardsFor(activeStep, ctx, solverResiduals.data, postVerdict)
     : [];
   const placeholderPills = realMatcherMode
     ? []

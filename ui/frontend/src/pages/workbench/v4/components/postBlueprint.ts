@@ -9,18 +9,6 @@ export interface PostBlueprintMiniChart {
   samples: number[];
 }
 
-export interface PostBlueprintRightCard {
-  title: string;
-  facts: Array<{
-    label: string;
-    value: string;
-    tone?: "healthy" | "warn" | "crit" | "neutral";
-  }>;
-  footer?: string;
-  cta?: string;
-  ctaTone?: "active" | "neutral";
-}
-
 export const POST_BLUEPRINT_TABS: ModeTab[] = [
   { id: "pv", label: "逐层 PV" },
   { id: "iso", label: "等值面" },
@@ -29,26 +17,25 @@ export const POST_BLUEPRINT_TABS: ModeTab[] = [
   { id: "render", label: "渲染" },
 ];
 
-export const POST_BLUEPRINT_KPIS = {
-  pressurePa: 248.6,
-  massFlowKgS: 3.62,
-  temperatureC: 96.4,
-  progressPct: 65,
-  gainPct: 4.2,
-} as const;
+// DEC-V61-205 · de-fake history. A truth-chain workbench must not ship
+// fabricated telemetry, so the following blueprint constants were RETIRED:
+//   • M5 C3 — POST_BLUEPRINT_VERDICT ("通过 · +4.2%"): the Post verdict pill
+//     now renders the REAL gold-vs-measured verdict (useComparisonVerdict).
+//   • M5 C4 — POST_BLUEPRINT_KPIS (248.6 Pa / 3.62 kg/s / 96.4°C / +4.2%):
+//     the KpiStripV4 post strip now reports REAL run facts (success / 用时 /
+//     退出码 / 残差 p) + the real verdict.
+//   • M5 C4 — POST_BLUEPRINT_RADIAL_GAUGE (65% "通过率"): the radial gauge now
+//     reads REAL residual convergence (useResidualSeries.convergenceGauge…).
+//   • M5 C4 — POST_BLUEPRINT_RIGHT_CARDS ("对比基准·通过 / 增益+4.2% / 导出 PDF"):
+//     RightPanelV4 post cards now report real run facts + verdict + an honest
+//     evidence-artifact card (no fake PDF-export affordance).
+// They were deleted (not just unused) so they cannot silently re-fake later.
 
-// DEC-V61-205 (M5 C3): POST_BLUEPRINT_VERDICT (the hardcoded "通过 · +4.2%"
-// PASS) was removed — the Post verdict pill now renders the REAL backend
-// gold-vs-measured verdict via useComparisonVerdict, or an honest no-baseline
-// state. A truth-chain workbench must not ship a fabricated PASS.
-
-// DEC-V61-205 (M5 C4): these three profile waveforms are ILLUSTRATIVE design
-// tokens only — the workbench has no per-quantity profile source for a generic
-// imported case. ModeRendererPost renders them with an explicit "示意" badge +
-// muted styling (illustrative prop) so they never masquerade as run data. The
-// adjacent radial gauge below is now driven by REAL residual convergence
-// (useResidualSeries), so POST_BLUEPRINT_RADIAL_GAUGE.valuePct is a retired
-// blueprint value kept only for the contract test.
+// The three profile waveforms below are ILLUSTRATIVE design tokens only — the
+// workbench has no per-quantity profile source for a generic imported case.
+// ModeRendererPost renders them with an explicit "示意" badge + muted styling
+// (illustrative prop) and hides the terminal value, so they never masquerade
+// as run data (charter: honest blueprint-labelled states).
 export const POST_BLUEPRINT_MINI_CHARTS: PostBlueprintMiniChart[] = [
   {
     id: "pressure",
@@ -70,43 +57,5 @@ export const POST_BLUEPRINT_MINI_CHARTS: PostBlueprintMiniChart[] = [
     unit: "°C",
     color: V4_PALETTE.warn,
     samples: [88.1, 90.2, 91.8, 93.0, 94.0, 94.8, 95.3, 95.8, 96.1, 96.3, 96.4],
-  },
-];
-
-export const POST_BLUEPRINT_RADIAL_GAUGE = {
-  label: "通过率",
-  valuePct: 65,
-  color: V4_PALETTE.healthy,
-} as const;
-
-export const POST_BLUEPRINT_RIGHT_CARDS: PostBlueprintRightCard[] = [
-  {
-    title: "对比基准 · 通过",
-    facts: [
-      { label: "压降", value: "248.6 Pa" },
-      { label: "流量", value: "3.62 kg/s", tone: "healthy" },
-      { label: "温度", value: "96.4 °C" },
-    ],
-    footer: "基准库 KJ66-Baseline · 自动对比完成",
-  },
-  {
-    title: "增益 +4.2%",
-    facts: [
-      { label: "流量增益", value: "+4.2 %", tone: "healthy" },
-      { label: "温度偏差", value: "+0.8 %" },
-      { label: "覆盖率", value: "65 %" },
-    ],
-    footer: "与基准截面流量对比 · 稳定区间",
-  },
-  {
-    title: "导出 PDF",
-    facts: [
-      { label: "视图", value: "PV + 曲线" },
-      { label: "证据", value: "表面场" },
-      { label: "状态", value: "就绪", tone: "healthy" },
-    ],
-    cta: "导出 PDF",
-    ctaTone: "active",
-    footer: "报告包包含主视图、剖面曲线、验收摘要",
   },
 ];
