@@ -113,6 +113,17 @@ describe("ReportFiguresPanel", () => {
     );
   });
 
+  it("404 (case not built / no results yet) → friendly empty state, not an error", async () => {
+    apiMock.reportBundle.mockRejectedValueOnce(
+      new ApiError(404, "case 'lid_driven_cavity' not found"),
+    );
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByTestId("v4-report-empty")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("v4-report-error")).not.toBeInTheDocument();
+  });
+
   it("generic 500 (non-matplotlib) → error state with HTTP status", async () => {
     apiMock.reportBundle.mockRejectedValueOnce(
       new ApiError(500, "internal field malformed"),

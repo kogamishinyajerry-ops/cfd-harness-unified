@@ -161,8 +161,11 @@ export function ReportFiguresPanel({ caseId }: ReportFiguresPanelProps) {
     const status = error instanceof ApiError ? error.status : null;
     const msg = error.message;
 
-    // 409 — solver hasn't produced results yet. Friendly empty state.
-    if (status === 409) {
+    // 409 ("solver hasn't run" / "no time directories") or 404 ("case
+    // not found" — a seeded case with no solved working dir yet): both
+    // mean "no results yet", a friendly empty state, not a hard error.
+    // (404 mapping confirmed against the live backend during C4 prep.)
+    if (status === 409 || status === 404) {
       return (
         <StateCard testid="v4-report-empty" tone="muted">
           结果图：先在求解步运行求解器，完成后这里会显示后端报告图。
