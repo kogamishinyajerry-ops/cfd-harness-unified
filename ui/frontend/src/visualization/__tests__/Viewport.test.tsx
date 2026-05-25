@@ -63,6 +63,7 @@ vi.mock("../viewport_kernel", () => ({
 }));
 
 import { Viewport } from "../Viewport";
+import { WebGLUnavailableError } from "../webgl_support";
 
 describe("Viewport", () => {
   beforeEach(() => {
@@ -74,6 +75,22 @@ describe("Viewport", () => {
     resetCameraMock.mockReset();
     setPickHandlerMock.mockReset();
     disposeMock.mockReset();
+  });
+
+  it("degrades gracefully when WebGL is unavailable (no Proxy crash)", async () => {
+    // M3.12: createKernel throws WebGLUnavailableError (shared kernel guard,
+    // M3.10) → Viewport must render its error state, not crash the tree, and
+    // must NOT proceed to fetch geometry.
+    createKernelMock.mockImplementationOnce(() => {
+      throw new WebGLUnavailableError();
+    });
+
+    render(<Viewport stlUrl="/api/cases/abc/geometry/stl" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Viewport error \(webgl\)/)).toBeInTheDocument();
+    });
+    expect(loadStlFromUrlMock).not.toHaveBeenCalled();
   });
 
   it("creates a kernel, fetches the STL, and attaches it", async () => {

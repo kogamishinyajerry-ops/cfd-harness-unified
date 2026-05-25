@@ -19,6 +19,7 @@ import { api } from "@/api/client";
 
 import { GlbLoadError, loadGlbFromUrl } from "./glb_loader";
 import { loadStlFromUrl, StlLoadError } from "./stl_loader";
+import { WebGLUnavailableError } from "./webgl_support";
 import {
   createKernel,
   type PickResult,
@@ -118,7 +119,8 @@ type LoaderErrorKind =
   | StlLoadError["kind"]
   | GlbLoadError["kind"]
   | "unknown"
-  | "config";
+  | "config"
+  | "webgl";
 
 type LoadState =
   | { status: "loading" }
@@ -181,7 +183,22 @@ function ViewportVtk({
       return;
     }
 
-    const kernel = createKernel(container, background ? { background } : {});
+    let kernel: ReturnType<typeof createKernel>;
+    try {
+      kernel = createKernel(container, background ? { background } : {});
+    } catch (err) {
+      // No usable WebGL context → graceful error state instead of vtk.js's
+      // opaque Proxy(null) crash (shared kernel guard, M3.10/M3.12).
+      setLoadState({
+        status: "error",
+        message:
+          err instanceof WebGLUnavailableError
+            ? "WebGL unavailable — 3D viewport disabled"
+            : ((err as Error)?.message ?? "viewport init failed"),
+        kind: "webgl",
+      });
+      return;
+    }
     kernelRef.current = kernel;
 
     const controller = new AbortController();
