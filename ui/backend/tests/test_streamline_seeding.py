@@ -16,7 +16,7 @@ from ui.backend.services.case_visualize.streamline_export import (
     _build_streamlines_dict,
     _mesh_bbox,
     _read_seed_policy,
-    _seed_points_from_bbox,
+    _seed_grid_from_bbox,
     _streamlines_root,
     _write_seed_policy,
 )
@@ -80,27 +80,35 @@ def test_mesh_bbox_does_not_fall_back_to_manifest_stl_bbox(tmp_path: Path):
     assert _mesh_bbox(tmp_path) is None
 
 
-# -- seed generation ----------------------------------------------------
+# -- seed grid generation (Codex R1 P1: grid, not diagonal) -------------
 
 
-def test_seed_points_lie_strictly_inside_bbox(tmp_path: Path):
+def test_seed_grid_lies_strictly_inside_bbox(tmp_path: Path):
     bmin, bmax = (0.0, 0.0, 0.0), (10.0, 2.0, 1.0)
-    pts = _seed_points_from_bbox(bmin, bmax, 12)
-    assert len(pts) == 12
+    pts = _seed_grid_from_bbox(bmin, bmax)
+    assert len(pts) == 5 * 4 * 3  # default nx*ny*nz
     for x, y, z in pts:
         assert 0.0 < x < 10.0
         assert 0.0 < y < 2.0
         assert 0.0 < z < 1.0
-    # Spans the interior diagonal (first near min-corner, last near max).
-    assert pts[0][0] < pts[-1][0]
-    assert pts[0] != pts[-1]
 
 
-def test_seed_points_handle_thin_axis_without_nan(tmp_path: Path):
-    # backward_step is ~1 cell thick in z; a zero-width axis must not NaN.
-    pts = _seed_points_from_bbox((0.0, 0.0, 0.5), (10.0, 2.0, 0.5), 8)
+def test_seed_grid_covers_fluid_region_of_non_convex_domain(tmp_path: Path):
+    # backward_step: solid step occupies x<2 && y<1. A single diagonal would
+    # start inside that solid; a grid must place many seeds in the fluid
+    # region (x>2 OR y>1) so streamLine keeps enough tracks.
+    pts = _seed_grid_from_bbox((0.0, 0.0, 0.0), (10.0, 2.0, 1.0))
+    fluid = [(x, y, z) for x, y, z in pts if x > 2.0 or y > 1.0]
+    assert len(fluid) >= 20  # broad coverage of the open channel
+
+
+def test_seed_grid_handles_thin_axis_without_nan(tmp_path: Path):
+    # backward_step is ~1 cell thick in z; a zero-width axis collapses to a
+    # single mid value rather than producing NaNs.
+    pts = _seed_grid_from_bbox((0.0, 0.0, 0.5), (10.0, 2.0, 0.5))
     assert all(z == 0.5 for _, _, z in pts)
     assert all(x == x for x, _, _ in pts)  # no NaN
+    assert len(pts) == 5 * 4 * 1  # thin z collapses to one plane
 
 
 # -- dict integration ---------------------------------------------------
@@ -110,7 +118,7 @@ def test_build_dict_uses_mesh_bbox_not_legacy(tmp_path: Path):
     _write_points(tmp_path, [(0, 0, 0), (10, 2, 1)])
     (tmp_path / "system").mkdir()
     n = _build_streamlines_dict(tmp_path)
-    assert n == 12
+    assert n == 5 * 4 * 3  # mesh-derived seed grid
     text = (tmp_path / "system" / "streamlinesDict").read_text()
     # Legacy KJ66 seeds were at x=-2.95; the mesh-derived seeds are in
     # x∈(0,10) so the old marker must be gone.

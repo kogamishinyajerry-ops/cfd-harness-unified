@@ -121,24 +121,37 @@ def _mesh_bbox(case_dir: Path) -> tuple[Vec3, Vec3] | None:
     return _bbox_from_points_file(case_dir / "constant" / "polyMesh" / "points")
 
 
-def _seed_points_from_bbox(bmin: Vec3, bmax: Vec3, n: int = 12) -> list[Vec3]:
-    """``n`` points along the interior body diagonal (5%–95% of the AABB)
-    so seeds land inside the fluid domain for any geometry. A degenerate
-    (zero-width) axis collapses to its midpoint rather than producing NaNs."""
-    n = max(2, n)
-    lo, hi = 0.05, 0.95
-    pts: list[Vec3] = []
-    for i in range(n):
-        t = lo + (hi - lo) * (i / (n - 1))
-        pts.append(
-            tuple(  # type: ignore[arg-type]
-                bmin[k] + t * (bmax[k] - bmin[k]) for k in range(3)
-            )
-        )
-    return pts
+def _axis_samples(lo_v: float, hi_v: float, count: int) -> list[float]:
+    """``count`` samples across [10%,90%] of [lo_v,hi_v]. A zero-width axis
+    (thin/2D mesh) collapses to a single mid value so we don't waste seeds."""
+    extent = hi_v - lo_v
+    if extent <= 0:
+        return [lo_v]
+    if count <= 1:
+        return [lo_v + 0.5 * extent]
+    lo, hi = 0.10, 0.90
+    return [lo_v + (lo + (hi - lo) * i / (count - 1)) * extent for i in range(count)]
 
 
-def _build_streamlines_dict(case_dir: Path, seed_count: int = 12) -> int:
+def _seed_grid_from_bbox(
+    bmin: Vec3, bmax: Vec3, nx: int = 5, ny: int = 4, nz: int = 3
+) -> list[Vec3]:
+    """A 3D grid of seed points spanning 10%–90% of the AABB.
+
+    A grid (not a single diagonal) is essential for NON-CONVEX domains
+    (Codex M5-C2 R1 P1): backward-step's solid step occupies the lower-left
+    sub-box, so a diagonal starting at (0.5,0.1,…) seeds inside the solid
+    and streamLine drops it. streamLine silently discards in-solid seeds,
+    so broad coverage is what guarantees enough fluid seeds survive on any
+    geometry (internal cavity, backward step, external freestream).
+    """
+    xs = _axis_samples(bmin[0], bmax[0], nx)
+    ys = _axis_samples(bmin[1], bmax[1], ny)
+    zs = _axis_samples(bmin[2], bmax[2], nz)
+    return [(x, y, z) for x in xs for y in ys for z in zs]
+
+
+def _build_streamlines_dict(case_dir: Path) -> int:
     """Write system/streamlinesDict for OpenFOAM streamLine function.
 
     Returns the actual seed point count written. Seeds are derived from
@@ -148,9 +161,9 @@ def _build_streamlines_dict(case_dir: Path, seed_count: int = 12) -> int:
     """
     bbox = _mesh_bbox(case_dir)
     if bbox is not None:
-        pts = _seed_points_from_bbox(bbox[0], bbox[1], seed_count)
+        pts = _seed_grid_from_bbox(bbox[0], bbox[1])
     else:
-        # No mesh points + no manifest bbox → legacy KJ66 box as last resort.
+        # No readable mesh points → legacy KJ66 box as last resort.
         pts = _LEGACY_KJ66_SEEDS
     pts_block = "\n        ".join(f"({x} {y} {z})" for x, y, z in pts)
     dict_text = f"""\

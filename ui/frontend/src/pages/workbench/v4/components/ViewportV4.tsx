@@ -565,7 +565,12 @@ export function ViewportV4({
     };
   }, [pickMode, caseId, loadState.status]);
 
-  if (!glbUrl) return null;
+  // M5 C2 bug #3 (Codex R1 P1): render the container whenever there is
+  // something to show — a GLB OR a post VTP overlay. The earlier
+  // `if (!glbUrl) return null` short-circuited BEFORE the container div
+  // existed, so the VTP-base mount effect found no containerRef and never
+  // created the kernel. Mirror the mount-effect gate exactly.
+  if (!glbUrl && !surfaceVtpUrl && !streamlinesVtpUrl) return null;
 
   return (
     <div
