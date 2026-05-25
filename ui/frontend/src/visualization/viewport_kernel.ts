@@ -28,6 +28,8 @@ import vtkPolyData from "@kitware/vtk.js/Common/DataModel/PolyData";
 import type { vtkSTLReader } from "@kitware/vtk.js/IO/Geometry/STLReader";
 import type { vtkGLTFImporter } from "@kitware/vtk.js/IO/Geometry/GLTFImporter";
 
+import { detectWebGL, WebGLUnavailableError } from "./webgl_support";
+
 // B2.5 · VTP polydata reader for foamToVTK / streamLine output (real
 // solver data layered onto the viewport per V4 blueprint 6/7).
 // Lazy import path keeps the IO/XML chunk out of the initial bundle.
@@ -281,11 +283,29 @@ export function createKernel(
   container: HTMLElement,
   opts: KernelOptions = {},
 ): ViewportKernel {
-  const grw = vtkGenericRenderWindow.newInstance({
-    background: opts.background ?? [0.06, 0.07, 0.09],
-  });
-  grw.setContainer(container);
-  grw.resize();
+  // Guard the single vtk.js bootstrap chokepoint. Without a usable WebGL
+  // context, GenericRenderWindow.setContainer() reaches RenderWindow.js's
+  // `new Proxy(null, ...)` and throws an opaque TypeError that crashes the
+  // React tree. Pre-check + try/catch convert that into a typed
+  // WebGLUnavailableError so every caller (ViewportV4, legacy Viewport) can
+  // degrade gracefully. Removes the app's hard dependency on the
+  // --use-gl=swiftshader headless workaround.
+  if (!detectWebGL()) {
+    throw new WebGLUnavailableError();
+  }
+  let grw: ReturnType<typeof vtkGenericRenderWindow.newInstance>;
+  try {
+    grw = vtkGenericRenderWindow.newInstance({
+      background: opts.background ?? [0.06, 0.07, 0.09],
+    });
+    grw.setContainer(container);
+    grw.resize();
+  } catch (err) {
+    throw new WebGLUnavailableError(
+      "vtk.js render window init failed (no usable WebGL context)",
+      { cause: err },
+    );
+  }
 
   // GenericRenderWindow.newInstance already installs a
   // vtkInteractorStyleTrackballCamera on its interactor (see

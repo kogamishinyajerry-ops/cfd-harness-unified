@@ -30,6 +30,7 @@ import {
   type PickResult,
   type ViewportKernel,
 } from "@/visualization/viewport_kernel";
+import { WebGLUnavailableError } from "@/visualization/webgl_support";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
 
 import type { FaceIndexDocument } from "@/pages/workbench/step_panel_shell/types";
@@ -201,7 +202,19 @@ export function ViewportV4({
     const container = containerRef.current;
     if (!container) return;
 
-    const kernel = createKernel(container, { background: V4_CANVAS_RGB });
+    let kernel: ViewportKernel;
+    try {
+      kernel = createKernel(container, { background: V4_CANVAS_RGB });
+    } catch (err) {
+      // No usable WebGL context → degrade gracefully instead of crashing the
+      // React tree with vtk.js's opaque Proxy(null) TypeError.
+      const msg =
+        err instanceof WebGLUnavailableError
+          ? "WebGL 不可用 · 3D 视口已降级"
+          : (err as Error)?.message ?? "viewport init failed";
+      setLoadState({ status: "error", message: msg });
+      return;
+    }
     kernelRef.current = kernel;
 
     const controller = new AbortController();
