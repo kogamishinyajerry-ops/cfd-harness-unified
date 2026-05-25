@@ -35,6 +35,16 @@ describe("Post telemetry honesty (M5 C4 de-fake)", () => {
     expect(screen.getByTestId("v4-post-gauge").textContent).toContain("已收敛");
   });
 
+  it("gauge discloses a fallback-run mismatch via the '最新尝试' label (R0 P2)", () => {
+    // When a fallback older successful run is visualized, ModeRendererPost
+    // passes label='最新尝试' so the case-level residual gauge does not imply
+    // it describes the same run as the surfaces/figures.
+    render(<ConvergenceGauge value={42} worst="p" achieved={false} label="最新尝试" />);
+    const gauge = screen.getByTestId("v4-post-gauge");
+    expect(gauge.textContent).toContain("最新尝试");
+    expect(gauge.textContent).not.toContain("收敛度");
+  });
+
   it("illustrative mini-charts carry the 示意 badge and hide the confident value", () => {
     const chart = POST_BLUEPRINT_MINI_CHARTS[0];
     render(<PostMiniProfileChart chart={chart} illustrative />);

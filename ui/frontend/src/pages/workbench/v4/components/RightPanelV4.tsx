@@ -643,7 +643,12 @@ function modeCardsFor(
       // export affordance. They now report REAL run facts + the real
       // gold-vs-measured verdict, with an honest no-baseline card for the
       // common imported case (no gold reference) and no fake export CTA.
-      const d = ctx.successfulRunDetail;
+      //
+      // Codex M5-C4 R0 P2 · fall back to the latest run (may be FAILED) so a
+      // failed-only case shows the real exit code / duration instead of
+      // collapsing into "待求解". The verdict + evidence cards still gate on
+      // successfulRunDetail (no valid comparison / no artifacts without one).
+      const d = ctx.successfulRunDetail ?? ctx.runDetail;
       const runCard: FactCardProps = d
         ? {
             title: "求解结果",
@@ -708,15 +713,27 @@ function modeCardsFor(
         };
       }
 
-      const evidenceCard: FactCardProps = {
-        title: "证据产物",
-        facts: [
-          { label: "主视图", value: "表面场 + 流线" },
-          { label: "曲线", value: "残差 / matplotlib 图" },
-          { label: "来源", value: "foamToVTK · 后端" },
-        ],
-        footer: "产物由后端导出 · 在主视图与图表面板查看",
-      };
+      // Codex M5-C4 R0 P2 · the post-exportable artifacts (foamToVTK surface /
+      // streamlines, matplotlib figures) only exist once a run has SUCCEEDED.
+      // Gate the evidence card on successfulRunDetail so a fresh / failed-only
+      // case doesn't assert artifacts that aren't there — it says so honestly.
+      const evidenceCard: FactCardProps = ctx.successfulRunDetail
+        ? {
+            title: "证据产物",
+            facts: [
+              { label: "主视图", value: "表面场 + 流线" },
+              { label: "曲线", value: "残差 / matplotlib 图" },
+              { label: "来源", value: "foamToVTK · 后端" },
+            ],
+            footer: "产物由后端导出 · 在主视图与图表面板查看",
+          }
+        : {
+            title: "证据产物",
+            facts: [
+              { label: "状态", value: "运行成功后生成", tone: "neutral" },
+            ],
+            footer: "尚无成功运行 · 暂无可视化产物",
+          };
 
       return [runCard, baselineCard, evidenceCard];
     }

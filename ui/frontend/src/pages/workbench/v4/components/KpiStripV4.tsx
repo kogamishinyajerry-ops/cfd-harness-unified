@@ -377,10 +377,16 @@ function chipsFor(
       // M5 C4 · de-faked. The old strip showed fabricated domain KPIs
       // (248.6 Pa 压降 / 3.62 kg/s 质量流量 / 96.4°C 出口温度 / +4.2% 增益)
       // that the workbench never computes for a generic imported case.
-      // It now reports REAL solver-truth facts from the successful run plus
+      // It now reports REAL solver-truth facts from the run being shown plus
       // the real gold-vs-measured verdict — honest "—"/"待求解"/"无基准"
       // when a fact is absent, never a confident invented number.
-      const d = ctx.successfulRunDetail;
+      //
+      // Codex M5-C4 R0 P2 · fall back to the latest run (which may be FAILED)
+      // rather than collapsing a failed-only case into "待求解": runDetail
+      // still carries the real exit code / duration the user needs to debug.
+      // The verdict chip stays keyed on successfulRunDetail (a failed run has
+      // no valid gold comparison ⇒ honest "无基准").
+      const d = ctx.successfulRunDetail ?? ctx.runDetail;
       if (!d) {
         return [
           { value: "待求解", label: "求解状态" },

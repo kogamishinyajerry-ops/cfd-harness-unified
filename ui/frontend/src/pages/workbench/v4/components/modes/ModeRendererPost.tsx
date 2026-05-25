@@ -808,10 +808,16 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
             <PostMiniProfileChart key={chart.id} chart={chart} illustrative />
           ))}
           {hasResiduals ? (
+            // Codex M5-C4 R0 P2 · useResidualSeries(caseId) is case-level (the
+            // LATEST run's residuals). When a fallback older successful run is
+            // being visualized (showingFallbackRun), the gauge describes a
+            // different run than the surfaces/figures, so label it "最新尝试"
+            // to disclose the mismatch rather than implying one coherent run.
             <ConvergenceGauge
               value={gauge.value}
               worst={gauge.worst}
               achieved={gauge.achieved}
+              label={showingFallbackRun ? "最新尝试" : "收敛度"}
             />
           ) : (
             <div
