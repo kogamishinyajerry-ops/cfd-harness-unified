@@ -94,3 +94,18 @@ repos:
         stages: [commit-msg]
         pass_filenames: true
         always_run: true
+
+      # DEC-V61-203 (2026-05-25) · Frontend TypeScript build gate. A prior
+      # session committed a RED `tsc -b` (TopBarV4 step-union error) that no
+      # gate caught — it reached HEAD and surfaced a session later (M3.11).
+      # This blocks an un-buildable frontend from being committed. Scoped to
+      # frontend TS/TSX touches; pass_filenames:false because `tsc -b` is a
+      # project-graph build, not a per-file check. Override:
+      # SKIP=frontend-typecheck git commit ...  (or --no-verify).
+      - id: frontend-typecheck
+        name: frontend tsc -b build gate (DEC-V61-203)
+        entry: scripts/governance/check_frontend_typecheck.sh
+        language: script
+        pass_filenames: false
+        files: ^ui/frontend/.*\.(ts|tsx)$
+        stages: [pre-commit]
