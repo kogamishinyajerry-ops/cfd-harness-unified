@@ -16,6 +16,11 @@
 //   - v4-advisor-runs    : advisor match list keyed off the latest run
 //   - v4-report-bundle   : matplotlib figure bundle (M4 C3) — re-render
 //                          on the new run's cache_version
+//   - v4-post-patches    : the Post surface-overlay patch list (M5 C2).
+//                          A pre-solve open caches an empty list (409);
+//                          without this the surface overlay stays disabled
+//                          after the solve until the 30s staleTime expires
+//                          or a reload (Codex M5-C2 R0 P2).
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -44,6 +49,7 @@ const POST_RUN_QUERY_PREFIXES = [
   "v4-ctx-detail",
   "v4-advisor-runs",
   "v4-report-bundle",
+  "v4-post-patches",
 ] as const;
 
 export function useSolveRun(

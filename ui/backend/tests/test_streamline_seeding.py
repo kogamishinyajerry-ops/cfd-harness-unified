@@ -11,11 +11,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from ui.backend.services.case_visualize.streamline_export import (
-    _bbox_from_manifest,
+    _SEED_POLICY_VERSION,
     _bbox_from_points_file,
     _build_streamlines_dict,
     _mesh_bbox,
+    _read_seed_policy,
     _seed_points_from_bbox,
+    _streamlines_root,
+    _write_seed_policy,
 )
 
 _POINTS_HEADER = (
@@ -54,30 +57,27 @@ def test_bbox_from_points_file_none_when_binary(tmp_path: Path):
     assert _bbox_from_points_file(poly / "points") is None
 
 
-# -- bbox from manifest -------------------------------------------------
+# -- mesh bbox source (Codex R0 P2: NO manifest STL-bbox fallback) ------
 
 
-def test_bbox_from_manifest_reads_ingest_summary(tmp_path: Path):
-    (tmp_path / "case_manifest.yaml").write_text(
-        "ingest_report_summary:\n"
-        "  bbox_min: [0.0, 0.0, 0.0]\n"
-        "  bbox_max: [10.0, 2.0, 1.0]\n"
-    )
-    assert _bbox_from_manifest(tmp_path) == (
-        (0.0, 0.0, 0.0),
-        (10.0, 2.0, 1.0),
-    )
-
-
-def test_mesh_bbox_prefers_points_over_manifest(tmp_path: Path):
-    # Points say [0..5]; manifest says [0..10]. Mesh extent wins.
+def test_mesh_bbox_uses_mesh_points(tmp_path: Path):
     _write_points(tmp_path, [(0, 0, 0), (5, 5, 5)])
+    assert _mesh_bbox(tmp_path) == ((0.0, 0.0, 0.0), (5.0, 5.0, 5.0))
+
+
+def test_mesh_bbox_does_not_fall_back_to_manifest_stl_bbox(tmp_path: Path):
+    # Codex R0 P2: the ingest STL bbox is the solid body for external-flow
+    # cases — seeding it would land inside the obstacle. Binary/unreadable
+    # points must yield None (→ caller uses legacy seeds), NOT the manifest.
+    poly = tmp_path / "constant" / "polyMesh"
+    poly.mkdir(parents=True)
+    (poly / "points").write_bytes(b"\x00\x01 binary no triples")
     (tmp_path / "case_manifest.yaml").write_text(
         "ingest_report_summary:\n"
         "  bbox_min: [0.0, 0.0, 0.0]\n"
         "  bbox_max: [10.0, 10.0, 10.0]\n"
     )
-    assert _mesh_bbox(tmp_path) == ((0.0, 0.0, 0.0), (5.0, 5.0, 5.0))
+    assert _mesh_bbox(tmp_path) is None
 
 
 # -- seed generation ----------------------------------------------------
@@ -126,3 +126,29 @@ def test_build_dict_falls_back_to_legacy_without_bbox(tmp_path: Path):
     assert n == 8
     text = (tmp_path / "system" / "streamlinesDict").read_text()
     assert "-2.95" in text
+
+
+# -- seed-policy cache marker (Codex R0 P1) -----------------------------
+
+
+def test_seed_policy_marker_roundtrip(tmp_path: Path):
+    # No marker yet → None (a pre-fix cache reads as stale).
+    assert _read_seed_policy(tmp_path) is None
+    _streamlines_root(tmp_path).mkdir(parents=True)
+    _write_seed_policy(tmp_path)
+    assert _read_seed_policy(tmp_path) == _SEED_POLICY_VERSION
+
+
+def test_write_seed_policy_noop_without_root(tmp_path: Path):
+    # No streamlines output dir → best-effort write is a no-op, no crash.
+    _write_seed_policy(tmp_path)
+    assert _read_seed_policy(tmp_path) is None
+
+
+def test_stale_policy_reads_as_mismatch(tmp_path: Path):
+    # A cache stamped with the old policy must not equal the current one,
+    # so ensure_streamlines re-runs the (now mesh-derived) seeding.
+    root = _streamlines_root(tmp_path)
+    root.mkdir(parents=True)
+    (root / ".seed_policy").write_text("1", encoding="utf-8")
+    assert _read_seed_policy(tmp_path) != _SEED_POLICY_VERSION

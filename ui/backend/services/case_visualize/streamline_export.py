@@ -35,6 +35,14 @@ class StreamlineExportError(RuntimeError):
 IMAGE = os.environ.get("CFD_OPENFOAM_IMAGE", "opencfd/openfoam-default:2312")
 BASHRC = "/usr/lib/openfoam/openfoam2312/etc/bashrc"
 
+# Seed-policy version. Bumped whenever _build_streamlines_dict's seeding
+# logic changes, so a cached track0.vtp generated under the OLD policy is
+# treated as stale even though it's newer than U. Without this, a case
+# that already produced a (degenerate, KJ66-seeded) VTP would keep serving
+# it forever — the seed fix would be invisible until a re-solve or a manual
+# cache wipe (Codex M5-C2 R0 P1). "1" = legacy hardcoded KJ66 line.
+_SEED_POLICY_VERSION = "2-mesh-bbox-diag"
+
 
 @dataclass(frozen=True)
 class StreamlineExportResult:
@@ -98,40 +106,19 @@ def _bbox_from_points_file(points_path: Path) -> tuple[Vec3, Vec3] | None:
     return ((mins[0], mins[1], mins[2]), (maxs[0], maxs[1], maxs[2]))
 
 
-def _bbox_from_manifest(case_dir: Path) -> tuple[Vec3, Vec3] | None:
-    """AABB from the ingest manifest's ``ingest_report_summary.bbox_*``.
-    The geometry bbox is in the same coordinate frame as the gmshToFoam
-    mesh, so it's a safe fallback when polyMesh/points is binary."""
-    manifest = case_dir / "case_manifest.yaml"
-    if not manifest.is_file():
-        return None
-    try:
-        import yaml
-
-        data = yaml.safe_load(manifest.read_text()) or {}
-    except Exception:
-        return None
-    summ = data.get("ingest_report_summary") or {}
-    bmin, bmax = summ.get("bbox_min"), summ.get("bbox_max")
-    if not (isinstance(bmin, list) and isinstance(bmax, list)):
-        return None
-    if len(bmin) != 3 or len(bmax) != 3:
-        return None
-    try:
-        return (
-            (float(bmin[0]), float(bmin[1]), float(bmin[2])),
-            (float(bmax[0]), float(bmax[1]), float(bmax[2])),
-        )
-    except (TypeError, ValueError):
-        return None
-
-
 def _mesh_bbox(case_dir: Path) -> tuple[Vec3, Vec3] | None:
-    """Domain AABB for seeding: real mesh extent first, manifest second."""
-    box = _bbox_from_points_file(case_dir / "constant" / "polyMesh" / "points")
-    if box is not None:
-        return box
-    return _bbox_from_manifest(case_dir)
+    """Fluid-domain AABB for seeding, from the meshed ``polyMesh/points``.
+
+    Deliberately does NOT fall back to the ingest manifest's
+    ``ingest_report_summary.bbox_*`` (Codex M5-C2 R0 P2): that bbox is the
+    uploaded STL *surface*, which for an external-flow case is the solid
+    body, not the fluid volume — seeding its diagonal would put seeds
+    inside the obstacle and reproduce the degenerate output this fix
+    targets. The mesh points are the fluid domain for both internal and
+    external geometries. If points are unreadable (binary), the caller
+    falls back to the legacy seeds rather than risk seeding in a solid.
+    """
+    return _bbox_from_points_file(case_dir / "constant" / "polyMesh" / "points")
 
 
 def _seed_points_from_bbox(bmin: Vec3, bmax: Vec3, n: int = 12) -> list[Vec3]:
@@ -210,9 +197,39 @@ def _run_streamlines(case_dir: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
 
+def _streamlines_root(case_dir: Path) -> Path:
+    return case_dir / "postProcessing" / "sets" / "streamlines"
+
+
+def _seed_policy_marker(case_dir: Path) -> Path:
+    return _streamlines_root(case_dir) / ".seed_policy"
+
+
+def _read_seed_policy(case_dir: Path) -> str | None:
+    marker = _seed_policy_marker(case_dir)
+    if not marker.is_file():
+        return None
+    try:
+        return marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def _write_seed_policy(case_dir: Path) -> None:
+    root = _streamlines_root(case_dir)
+    if not root.is_dir():
+        return
+    try:
+        _seed_policy_marker(case_dir).write_text(
+            _SEED_POLICY_VERSION, encoding="utf-8"
+        )
+    except OSError:
+        pass  # best-effort; a missing marker just forces one re-export
+
+
 def _latest_streamlines_vtp(case_dir: Path) -> Path | None:
     """Return the newest track0.vtp under postProcessing/sets/streamlines."""
-    root = case_dir / "postProcessing" / "sets" / "streamlines"
+    root = _streamlines_root(case_dir)
     if not root.is_dir():
         return None
     time_dirs = [p for p in root.iterdir() if p.is_dir()]
@@ -252,7 +269,10 @@ def ensure_streamlines(
             "only initial condition (0/) exists — solver hasn't run."
         )
 
-    # Cache check.
+    # Cache check. Reuse the existing VTP only if it is fresh w.r.t. U AND
+    # was generated under the current seed policy — a policy bump (e.g. the
+    # KJ66→mesh-bbox seed fix) invalidates an otherwise-fresh cache so the
+    # new seeding actually runs (Codex M5-C2 R0 P1).
     existing = _latest_streamlines_vtp(case_dir)
     u_field = time_dir / "U"
     if (
@@ -260,6 +280,7 @@ def ensure_streamlines(
         and existing is not None
         and u_field.is_file()
         and existing.stat().st_mtime >= u_field.stat().st_mtime
+        and _read_seed_policy(case_dir) == _SEED_POLICY_VERSION
     ):
         return StreamlineExportResult(
             track_vtp=existing,
@@ -281,6 +302,7 @@ def ensure_streamlines(
             "postProcess returned 0 but no track0.vtp on disk.\n"
             f"stdout tail: {result.stdout[-500:]}"
         )
+    _write_seed_policy(case_dir)
     return StreamlineExportResult(
         track_vtp=fresh, latest_time=time_name, seed_count=seed_count
     )
