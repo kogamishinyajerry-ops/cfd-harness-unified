@@ -179,8 +179,12 @@ def get_post_surface_vtp(case_id: str, patch: str = "engine") -> Response:
       - 503 when the OpenFOAM container isn't running
       - 500 for everything else
     """
-    # Safety: patch name traversal guard (alphanum + _ + -).
-    if not all(c.isalnum() or c in ("_", "-") for c in patch):
+    # Safety: patch name traversal guard. Allow alnum + _ - . so dotted
+    # patch names (e.g. "domain.0") that /post/patches legitimately
+    # advertises round-trip without a 400 (Codex M5-C2 R2 P2). "/" is
+    # excluded by the char set and ".." is rejected outright, so no path
+    # traversal: the name only ever forms boundary_dir/<patch>.vtp.
+    if not all(c.isalnum() or c in ("_", "-", ".") for c in patch) or ".." in patch:
         raise HTTPException(status_code=400, detail=f"unsafe patch: {patch!r}")
 
     case_dir = _resolve(case_id)

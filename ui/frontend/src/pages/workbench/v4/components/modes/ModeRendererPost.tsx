@@ -608,15 +608,17 @@ export function ModeRendererPost({ caseId, cameraPreset = "iso" }: Props) {
         : 40;
 
   // M5 C2 bug #3 fix · mount the viewport when geometry (GLB) exists OR a
-  // solve exists. Imported cases carry STL but no GLB, yet their foamToVTK
-  // surface/streamline overlays should still render — ViewportV4 mounts an
-  // empty kernel and the VTP becomes the base actor (glbUrl null). Without
-  // this, a no-GLB case hit PostEmptyViewport and the overlays never
-  // mounted (the C4 spot-check symptom). Wait for the GLB probe to settle
-  // before falling back to VTP-base so a GLB case doesn't flash VTP-only.
+  // SUCCESSFUL solve exists. Imported cases carry STL but no GLB, yet their
+  // foamToVTK surface/streamline overlays should still render — ViewportV4
+  // mounts an empty kernel and the VTP becomes the base actor (glbUrl null).
+  // Gate the VTP-base path on successfulRunDetail (not any runDetail): a
+  // FAILED solve still exposes runDetail but produces no post-exportable
+  // output, so the overlays would 409 and the user would see a blank canvas
+  // instead of the empty-state guidance (Codex M5-C2 R2 P2). Wait for the
+  // GLB probe to settle before falling back so a GLB case doesn't flash.
   const probingGeom = glbProbe.isLoading;
-  const hasRun = detail != null;
-  const showViewport = hasGeom || (!probingGeom && hasRun);
+  const hasSuccessfulRun = ctx.successfulRunDetail != null;
+  const showViewport = hasGeom || (!probingGeom && hasSuccessfulRun);
 
   return (
     <div data-testid="v4-mode-post" className="flex h-full w-full flex-col bg-v4-canvas">

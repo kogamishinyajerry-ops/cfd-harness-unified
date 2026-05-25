@@ -120,3 +120,44 @@ def test_unknown_case_returns_404(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(cv, "IMPORTED_DIR", tmp_path)
     resp = _new_client().get("/api/cases/nonexistent/post/patches")
     assert resp.status_code == 404
+
+
+# -- surface.vtp patch-name guard (Codex R2 P2: dotted names round-trip) --
+
+
+def test_surface_accepts_dotted_patch_name(monkeypatch, case_dir: Path):
+    # /post/patches can advertise dotted names (e.g. "domain.0"); the
+    # surface.vtp guard must NOT 400 them. A missing file → 404, proving it
+    # passed the guard.
+    import ui.backend.routes.case_visualize as cv
+
+    boundary = case_dir / "VTK" / "case_400" / "boundary"
+    boundary.mkdir(parents=True)
+    monkeypatch.setattr(
+        cv, "ensure_vtk_output", lambda _cd: _fake_result(boundary)
+    )
+    resp = _new_client().get(
+        "/api/cases/case1/post/surface.vtp?patch=domain.0"
+    )
+    assert resp.status_code == 404  # past the 400 guard, just not present
+
+
+def test_surface_serves_dotted_patch_when_present(monkeypatch, case_dir: Path):
+    import ui.backend.routes.case_visualize as cv
+
+    boundary = case_dir / "VTK" / "case_400" / "boundary"
+    boundary.mkdir(parents=True)
+    (boundary / "domain.0.vtp").write_bytes(b"<VTKFile/>")
+    monkeypatch.setattr(
+        cv, "ensure_vtk_output", lambda _cd: _fake_result(boundary)
+    )
+    resp = _new_client().get(
+        "/api/cases/case1/post/surface.vtp?patch=domain.0"
+    )
+    assert resp.status_code == 200
+    assert resp.content == b"<VTKFile/>"
+
+
+def test_surface_rejects_dotdot_patch(case_dir: Path):
+    resp = _new_client().get("/api/cases/case1/post/surface.vtp?patch=..")
+    assert resp.status_code == 400
