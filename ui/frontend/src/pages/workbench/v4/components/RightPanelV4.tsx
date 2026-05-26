@@ -36,10 +36,6 @@ import {
 import { MESH_BLUEPRINT_NUMERICS } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import {
-  BOUNDARY_BLUEPRINT_KPIS,
-  BOUNDARY_BLUEPRINT_RECOGNITION,
-} from "./boundaryBlueprint";
-import {
   SOLVER_BLUEPRINT_KPIS,
   SOLVER_BLUEPRINT_RIGHT_CARDS,
   SOLVER_BLUEPRINT_TELEMETRY,
@@ -538,54 +534,23 @@ function modeCardsFor(
     }
     case "boundary": {
       if ((basics?.patches?.length ?? 0) === 0) {
+        // M5.5 C4 (Codex C4 R0 P1 · DEC-V61-206): was a fabricated "AI 边界识别
+        // 完成 · 61/62 · 98.4% 覆盖率" card + invented inlet/outlet/wall counts +
+        // action CTAs ("请确认" / "应用 AI 提案"), all presented as real AI
+        // results. Honest pending card instead — no fake recognition, no
+        // fabricated counts, no CTA (advisor-not-driver: AI never auto-applies).
         return [
           {
-            title: "AI 边界识别完成 · 61/62",
+            title: "边界面待识别",
             facts: [
-              {
-                label: "已识别",
-                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.recognized} 面`,
-                tone: "healthy",
-              },
-              {
-                label: "总计",
-                value: `${BOUNDARY_BLUEPRINT_RECOGNITION.total} 面`,
-              },
-              { label: "覆盖率", value: "98.4 %" },
+              { label: "状态", value: "待识别" },
+              // Codex C4 R1 P2: the data source here is the workbench-basics
+              // endpoint (knowledge/workbench_basics/<case>.yaml), NOT setup-bc —
+              // imported cases 404 → empty. State the true source, no false
+              // "run X to fix" instruction (the recurring de-fake failure mode).
+              { label: "来源", value: "workbench-basics（暂无边界面）" },
             ],
-            footer: "贴体 BC patches 已按类型预分组 · advisory only",
-          },
-          {
-            title: "1 处未识别 · 请确认",
-            facts: [
-              {
-                label: "候选类型",
-                value: "壁面",
-                tone: "warn",
-              },
-              { label: "位置", value: "外壳小面" },
-              { label: "建议", value: "人工确认" },
-            ],
-            cta: "请确认",
-            ctaTone: "active",
-          },
-          {
-            title: "应用 AI 提案",
-            facts: [
-              {
-                label: "入口/出口",
-                value: `${BOUNDARY_BLUEPRINT_KPIS.inletCount}/${BOUNDARY_BLUEPRINT_KPIS.outletCount}`,
-              },
-              {
-                label: "壁面",
-                value: `${BOUNDARY_BLUEPRINT_KPIS.wallCount} 处`,
-              },
-              {
-                label: "转子域",
-                value: `${BOUNDARY_BLUEPRINT_KPIS.rotorCount} 处`,
-              },
-            ],
-            cta: "应用 AI 提案",
+            footer: "尚未从算例派生边界面信息 · advisory only",
           },
         ];
       }

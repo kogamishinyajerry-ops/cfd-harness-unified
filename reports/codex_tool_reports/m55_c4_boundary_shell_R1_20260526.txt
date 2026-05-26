@@ -1,0 +1,30 @@
+Codex C4 R1 governance review — M5.5 boundary shell de-fake
+Relay: 86gs gpt-5.4 (xhigh) · code-only diff (commit 68d17d3, pre-amend)
+Round: C4 arc round 2 (R0 CHANGES_REQUIRED → this R1) · tokens 89,857
+Date: 2026-05-26
+
+VERDICT: CHANGES_REQUIRED (1 P2)
+
+R0 findings CONFIRMED RESOLVED:
+- Left rail boundary shell no longer shows 61/62 / 入口×28 (LeftRailV4.tsx:214)
+- DOE tree no longer exposes V-12 最优解 (LeftRailV4.tsx:286)
+- Boundary scaffold no longer shows x{count} / confirm x1
+  (ModeRendererBoundary.tsx:468, :511)
+
+NEW finding:
+- P2 [RightPanelV4.tsx:547]: the honest no-patches card's 来源 said
+  "运行 setup-bc 后入库" — a false provenance/action claim. This panel reads
+  ctx.basics ← GET /api/cases/{id}/workbench-basics ←
+  knowledge/workbench_basics/<case>.yaml (useV4WorkbenchContext.ts:87,
+  api/client.ts:174, workbench_basics.py:41). setup-bc fills the manifest
+  bc.patches (test_case_completeness.py:759), NOT this endpoint's source — so a
+  user following the hint would still see 待识别. This is the arc's recurring
+  failure mode: an "honest" replacement that is itself untrue.
+
+RESOLUTION (verbatim per finding · v2.3 verbatim exception):
+- RightPanelV4.tsx:547 来源 → "workbench-basics（暂无边界面）" (true source named;
+  qualifier accurate to the branch condition patches.length===0, covering both
+  the 404 imported-case path and a present-but-empty basics entry; no false
+  "run X to fix" instruction).
+- Folded into amended commit; round cap=3 not exhausted (verbatim landing of
+  Codex's identified correction does not consume a review round per v2.3).

@@ -15,11 +15,6 @@ import {
 } from "../hooks/useResidualSeries";
 import { useEffectiveCaseId } from "../hooks/useEffectiveCaseId";
 import { useV4WorkbenchContext } from "../hooks/useV4WorkbenchContext";
-import {
-  BOUNDARY_BLUEPRINT_RECOGNITION,
-  BOUNDARY_BLUEPRINT_TREE_COUNTS,
-} from "./boundaryBlueprint";
-import { DOE_BLUEPRINT_LEFT_TREE } from "./doeBlueprint";
 import { GEOMETRY_BLUEPRINT_SUMMARY } from "./geometryBlueprint";
 import type { V4Context } from "../hooks/useV4WorkbenchContext";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
@@ -221,9 +216,9 @@ function buildCaseTree(
       "边界",
       activeStep,
       bcMissing ? "warn" : "ok",
-      hasBoundaryPatches
-        ? String(basics?.patches.length)
-        : `${BOUNDARY_BLUEPRINT_RECOGNITION.recognized}/${BOUNDARY_BLUEPRINT_RECOGNITION.total}`,
+      // M5.5 C4 (Codex C4 R0 P1 · DEC-V61-206): honest "待识别" when patches are
+      // not derived, not a fabricated 61/62 recognition.
+      hasBoundaryPatches ? String(basics?.patches.length) : "待识别",
     ),
     ...(hasBoundaryPatches
       ? [
@@ -234,13 +229,15 @@ function buildCaseTree(
             status: "ok" as const,
           },
         ]
-      : BOUNDARY_BLUEPRINT_TREE_COUNTS.map((item) => ({
-          label: `${item.labelZh} ×${item.count}`,
-          kind: "item" as const,
-          depth: 1,
-          status: item.status,
-          mono: item.id === "unidentified",
-        }))),
+      : [
+          // Was BOUNDARY_BLUEPRINT_TREE_COUNTS (fabricated 入口×28/出口×27/…).
+          {
+            label: "边界面待识别",
+            kind: "item" as const,
+            depth: 1,
+            status: "muted" as const,
+          },
+        ]),
 
     section(
       "solver",
@@ -287,27 +284,24 @@ function buildCaseTree(
 }
 
 function buildDoeTree(): TreeNode[] {
-  return DOE_BLUEPRINT_LEFT_TREE.flatMap((sectionDef) => {
-    const sectionNode: TreeNode = {
-      label: sectionDef.label,
+  // M5.5 C4 (Codex C4 R0 P2 · DEC-V61-206): DOE has no real parameter-sweep
+  // backend, so the left rail must NOT expose fabricated DOE_BLUEPRINT_LEFT_TREE
+  // values (方案集 counts / 最优解 "V-12") as if they were real results. A single
+  // illustrative placeholder, consistent with the DOE step's 示意 banner.
+  return [
+    {
+      label: "设计探索",
       kind: "section",
       step: "doe",
-      status:
-        sectionDef.label === "方案集" || sectionDef.label === "最优解"
-          ? "active"
-          : "muted",
-    };
-    const itemNodes: TreeNode[] = sectionDef.items.map((item) => ({
-      label: item.label,
+      status: "muted",
+    },
+    {
+      label: "示意 · 无寻优数据",
       kind: "item",
       depth: 1,
-      status: item.status,
-      count: item.value,
-      mono: item.status === "ok" || item.status === "active",
-      title: item.value ? `${item.label} · ${item.value}` : item.label,
-    }));
-    return [sectionNode, ...itemNodes];
-  });
+      status: "muted",
+    },
+  ];
 }
 
 function buildGeometryTree(): TreeNode[] {

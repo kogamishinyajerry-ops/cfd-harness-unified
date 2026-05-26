@@ -472,7 +472,7 @@ function BoundaryBlueprintCallouts() {
               fontSize="7.5"
               fontFamily="ui-monospace, monospace"
             >
-              {type.labelEn} x{type.count}
+              {type.labelEn}
             </text>
           </g>
         );
@@ -515,7 +515,7 @@ function BoundaryBlueprintCallouts() {
           fontSize="7.5"
           fontFamily="ui-monospace, monospace"
         >
-          confirm x1
+          示意
         </text>
       </g>
     </g>

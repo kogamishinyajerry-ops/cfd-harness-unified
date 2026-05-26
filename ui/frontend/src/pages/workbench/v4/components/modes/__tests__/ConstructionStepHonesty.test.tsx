@@ -25,6 +25,8 @@ import { ModeRendererSolver } from "../ModeRendererSolver";
 import { ModeRendererDoe } from "../ModeRendererDoe";
 import { ModeRendererBoundary } from "../ModeRendererBoundary";
 import { KpiStripV4 } from "../../KpiStripV4";
+import { LeftRailV4 } from "../../LeftRailV4";
+import { RightPanelV4 } from "../../RightPanelV4";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -139,5 +141,28 @@ describe("Boundary step honesty (M5.5 C4)", () => {
     expect(container.textContent).toContain("待识别");
     expect(container.textContent).not.toContain("28");
     expect(container.textContent).not.toContain("27");
+  });
+
+  // Codex C4 P1: the fake also rendered in the shell (left rail + right panel),
+  // not only the center renderer / KPI strip. These guard the whole boundary
+  // surface against a silent re-fake.
+  it("left rail boundary section shows 待识别, not fabricated 61/62 + 入口×28", () => {
+    const { container } = render(
+      <LeftRailV4 activeStep="boundary" onStepChange={() => {}} caseId="case-x" />,
+      { wrapper },
+    );
+    expect(container.textContent).toContain("待识别");
+    expect(container.textContent).not.toContain("61/62");
+    expect(container.textContent).not.toContain("入口×28");
+  });
+
+  it("right panel boundary with no patches shows a single honest 待识别 card, not AI 识别完成 98.4%", () => {
+    const { container } = render(
+      <RightPanelV4 activeStep="boundary" caseId="case-x" />,
+      { wrapper },
+    );
+    expect(container.textContent).toContain("待识别");
+    expect(container.textContent).not.toContain("98.4");
+    expect(container.textContent).not.toContain("识别完成");
   });
 });
