@@ -203,7 +203,13 @@ function buildCaseTree(
     {
       label: basics?.solver
         ? `${basics.solver.steady_state ? "稳态" : "瞬态"} · ${
-            basics.solver.laminar ? "层流" : "湍流"
+            // null/undefined ⇒ turbulence unknown (DEC-V61-206): show 待识别,
+            // never a false 湍流 default.
+            basics.solver.laminar == null
+              ? "湍流模型待识别"
+              : basics.solver.laminar
+                ? "层流"
+                : "湍流"
           }`
         : "工况 · —",
       kind: "item",

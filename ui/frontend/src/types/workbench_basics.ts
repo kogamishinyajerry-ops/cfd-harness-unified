@@ -99,7 +99,9 @@ export interface Solver {
   name: string;
   family: string;
   steady_state: boolean;
-  laminar: boolean;
+  // Optional: a derived case with no readable turbulence metadata cannot
+  // claim laminar-vs-turbulent (DEC-V61-206). null/undefined ⇒ "待识别".
+  laminar?: boolean | null;
   display_zh: string;
   reasoning_zh: string;
 }

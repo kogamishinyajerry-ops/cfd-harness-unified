@@ -63,7 +63,12 @@ def _patch_blocks(content: str) -> dict[str, str]:
     out: dict[str, str] = {}
     i, n = 0, len(content)
     while i < n:
-        m = re.compile(r"([A-Za-z_][\w.\-]*)\s*\{").match(content, i)
+        # Codex R0 P2: keep the accepted name charset identical to the
+        # reused polyMesh reader (_PATCH_RE = r"(\w+)"). A broader charset
+        # here would parse patch names the boundary reader cannot, so the
+        # two would silently disagree. (Dotted/dashed names like wall.001
+        # are unsupported by the shared reader app-wide — out of scope.)
+        m = re.compile(r"(\w+)\s*\{").match(content, i)
         if not m:
             i += 1
             continue
@@ -151,38 +156,36 @@ def _is_zero_vec(v: object) -> bool:
     return isinstance(v, list) and all(abs(float(x)) < 1e-12 for x in v)
 
 
-def _role_from_u(u_bc: Optional[dict[str, object]], name: str) -> str:
+def _role_from_u(u_bc: Optional[dict[str, object]]) -> str:
     """Faithful role from the ACTUAL U boundary condition (the ground
-    truth of what setup-bc configured), with a name hint only as a
-    last resort. A ``periodic_*`` patch that was written as ``noSlip``
-    honestly derives to ``wall`` — not ``periodic`` — because that is
-    what the solver actually ran.
+    truth of what setup-bc configured). A ``periodic_*`` patch that was
+    written as ``noSlip`` honestly derives to ``wall`` — not ``periodic`` —
+    because that is what the solver actually ran.
+
+    When there is NO U field for this patch the role is unknowable from
+    disk, so we return "unknown" rather than guessing from the patch name
+    (Codex R0 P1: a name guess would be a fabricated semantic claim, which
+    breaks the faithful-mirror contract — DEC-V61-206).
     """
-    if u_bc is not None:
-        t = str(u_bc.get("type", ""))
-        if t == "noSlip" or t == "slip":
-            return "wall"
-        if t in ("zeroGradient", "inletOutlet", "outletInlet"):
-            return "outlet"
-        if t in ("cyclic", "cyclicAMI"):
-            return "cyclic"
-        if t in ("symmetry", "symmetryPlane"):
-            return "symmetry"
-        if t == "empty":
-            return "empty"
-        if t == "fixedValue":
-            return "wall" if _is_zero_vec(u_bc.get("value")) else "inlet"
-        if t in ("movingWallVelocity", "rotatingWallVelocity"):
-            return "moving_wall"
-    # No U field for this patch → fall back to a conservative name hint.
-    low = name.lower()
-    if "inlet" in low:
-        return "inlet"
-    if "outlet" in low:
+    if u_bc is None:
+        return "unknown"
+    t = str(u_bc.get("type", ""))
+    if t == "noSlip" or t == "slip":
+        return "wall"
+    if t in ("zeroGradient", "inletOutlet", "outletInlet"):
         return "outlet"
-    if low in ("frontandback", "front_back", "frontback"):
+    if t in ("cyclic", "cyclicAMI"):
+        return "cyclic"
+    if t in ("symmetry", "symmetryPlane"):
+        return "symmetry"
+    if t == "empty":
         return "empty"
-    return "wall"
+    if t == "fixedValue":
+        return "wall" if _is_zero_vec(u_bc.get("value")) else "inlet"
+    if t in ("movingWallVelocity", "rotatingWallVelocity"):
+        return "moving_wall"
+    # A U BC exists but its type is one we don't map → still don't guess.
+    return "unknown"
 
 
 def _display_zh(field: str, btype: str, value: object) -> str:
@@ -268,7 +271,14 @@ def _derive_patches(
 ) -> list[Patch]:
     patches: list[Patch] = []
     for name, _start, nfaces in patch_ranges:
-        role = _role_from_u(u_by_patch.get(name), name)
+        u_bc = u_by_patch.get(name)
+        role = _role_from_u(u_bc)
+        # Faithful provenance per patch: only claim 0/U when this patch
+        # actually has a U BC on disk (Codex R0 P1).
+        if u_bc is not None:
+            desc = f"{nfaces} faces · 派生自 polyMesh/boundary + 0/U"
+        else:
+            desc = f"{nfaces} faces · 派生自 polyMesh/boundary（无 0/U，类型未识别）"
         patches.append(
             Patch(
                 id=name,
@@ -276,7 +286,7 @@ def _derive_patches(
                 location="derived",
                 label_zh=name,
                 label_en=name,
-                description_zh=f"{nfaces} faces · 派生自 polyMesh/boundary + 0/U",
+                description_zh=desc,
             )
         )
     return patches
@@ -345,25 +355,32 @@ def _derive_solver(case_dir: Path) -> Optional[Solver]:
     steady = app in _STEADY_APPS
     transient = app in _TRANSIENT_APPS
     # Turbulence model from constant/momentumTransport (laminar vs RAS/LES).
-    laminar = True
+    # Codex R0 P1: only make a laminar claim when the file is actually read —
+    # a missing/unparseable file degrades to None ("待识别"), never a false
+    # positive "层流".
+    laminar: Optional[bool] = None
+    sim: Optional[str] = None
     mt = case_dir / "constant" / "momentumTransport"
     if not mt.is_file():
         mt = case_dir / "constant" / "turbulenceProperties"  # legacy
     if mt.is_file():
         try:
             sim = _foam_token(_strip_comments(mt.read_text(encoding="utf-8")), "simulationType")
-            laminar = (sim or "laminar") == "laminar"
         except Exception:  # noqa: BLE001
-            pass
+            sim = None
+        if sim is not None:
+            laminar = sim == "laminar"
     state_zh = "稳态" if steady else ("瞬态" if transient else "未知时间格式")
+    reasoning = f"派生自 system/controlDict（application={app}）"
+    if sim is not None:
+        reasoning += f"，constant/momentumTransport simulationType={sim}"
     return Solver(
         name=app,
         family="OpenFOAM",
         steady_state=steady,
         laminar=laminar,
         display_zh=f"{app} · {state_zh}",
-        reasoning_zh=f"派生自 system/controlDict（application={app}）"
-        + ("，constant/momentumTransport 为 laminar" if laminar else ""),
+        reasoning_zh=reasoning,
     )
 
 
@@ -429,11 +446,18 @@ def derive_workbench_basics(
     solver = _derive_solver(case_dir)
     geometry = _derive_geometry(case_dir)
 
+    # Dimension from disk, not hardcoded (Codex R0 P2): OpenFOAM marks the
+    # front/back of a 2D case with an `empty` boundary condition. If any U BC
+    # is `empty` → 2D, else 3D.
+    dimension = 2 if any(
+        str(bc.get("type")) == "empty" for bc in u_by_patch.values()
+    ) else 3
+
     return WorkbenchBasics(
         case_id=case_id,
         display_name=case_id,
         provenance="derived",
-        dimension=3,
+        dimension=dimension,
         geometry=geometry,
         patches=patches,
         boundary_conditions=boundary_conditions,

@@ -160,6 +160,71 @@ def test_endpoint_returns_derived_basics_for_imported_case(tmp_path, monkeypatch
     assert u["per_patch"]["inlet"]["display_zh"] == "U=(1, 0, 0)"
 
 
+def test_patch_without_u_bc_derives_to_unknown_role_not_a_name_guess(tmp_path):
+    # Codex R0 P1: a patch present in polyMesh/boundary but absent from 0/U
+    # has unknowable semantics. The deriver must say role="unknown" and label
+    # the patch as having no 0/U — NOT guess "inlet" from the name.
+    case = tmp_path / "c"
+    (case / "constant" / "polyMesh").mkdir(parents=True)
+    (case / "0").mkdir()
+    (case / "constant" / "polyMesh" / "boundary").write_text(
+        "FoamFile { object boundary; }\n1\n(\n  inlet { type patch; nFaces 5; startFace 1; }\n)\n"
+    )
+    # 0/U exists but does NOT cover the `inlet` patch.
+    (case / "0" / "U").write_text(
+        "FoamFile { object U; }\nboundaryField\n{\n  somethingElse { type noSlip; }\n}\n"
+    )
+    m = derive_workbench_basics("c", case_dir=case)
+    assert m is not None
+    inlet = next(p for p in m.patches if p.id == "inlet")
+    assert inlet.role == "unknown"
+    assert "无 0/U" in (inlet.description_zh or "")
+
+
+def test_solver_without_momentum_transport_does_not_claim_laminar(tmp_path):
+    # Codex R0 P1: no constant/momentumTransport → laminar is unknowable, so
+    # it must be None and the reasoning must NOT assert laminar.
+    case = tmp_path / "c"
+    (case / "constant" / "polyMesh").mkdir(parents=True)
+    (case / "0").mkdir()
+    (case / "system").mkdir()
+    (case / "constant" / "polyMesh" / "boundary").write_text(
+        "FoamFile { object boundary; }\n1\n(\n  inlet { type patch; nFaces 5; startFace 1; }\n)\n"
+    )
+    (case / "0" / "U").write_text(
+        "FoamFile { object U; }\nboundaryField\n{\n  inlet { type fixedValue; value uniform (1 0 0); }\n}\n"
+    )
+    (case / "system" / "controlDict").write_text(
+        "FoamFile { object controlDict; }\napplication simpleFoam;\n"
+    )
+    m = derive_workbench_basics("c", case_dir=case)
+    assert m is not None and m.solver is not None
+    assert m.solver.laminar is None
+    assert "laminar" not in m.solver.reasoning_zh
+    assert "momentumTransport" not in m.solver.reasoning_zh
+
+
+def test_dimension_derived_from_empty_patch(tmp_path):
+    # Codex R0 P2: dimension must be read from disk. An `empty` U BC marks a
+    # 2D case; without one it is 3D.
+    case = tmp_path / "c"
+    (case / "constant" / "polyMesh").mkdir(parents=True)
+    (case / "0").mkdir()
+    (case / "constant" / "polyMesh" / "boundary").write_text(
+        "FoamFile { object boundary; }\n2\n(\n"
+        "  inlet { type patch; nFaces 5; startFace 1; }\n"
+        "  frontAndBack { type empty; nFaces 50; startFace 6; }\n)\n"
+    )
+    (case / "0" / "U").write_text(
+        "FoamFile { object U; }\nboundaryField\n{\n"
+        "  inlet { type fixedValue; value uniform (1 0 0); }\n"
+        "  frontAndBack { type empty; }\n}\n"
+    )
+    m = derive_workbench_basics("c", case_dir=case)
+    assert m is not None
+    assert m.dimension == 2
+
+
 def test_periodic_patch_written_noslip_derives_to_wall(tmp_path):
     # Faithful-to-disk: a patch NAMED periodic_* but WRITTEN as noSlip ran
     # as a wall — the deriver must say wall, not periodic.

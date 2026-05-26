@@ -130,7 +130,11 @@ class Solver(BaseModel):
     name: str
     family: str
     steady_state: bool
-    laminar: bool
+    # Optional: a derived case whose constant/momentumTransport is missing or
+    # unparseable cannot honestly claim laminar-vs-turbulent, so it degrades to
+    # None ("待识别") rather than a false positive (DEC-V61-206 · Codex R0 P1).
+    # Hand-authored cases still set it.
+    laminar: Optional[bool] = None
     display_zh: str
     reasoning_zh: str
 
