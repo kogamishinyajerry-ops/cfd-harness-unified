@@ -31,14 +31,14 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("Physics step honesty (M5.5 C2)", () => {
-  it("velocity legend shows a real range, else 范围待求解 — never a fabricated 0-40", () => {
-    const { rerender } = render(<PhysicsVelocityLegend range={[0, 1.6]} />);
-    let legend = screen.getByTestId("v4-physics-velocity-legend");
-    expect(legend.textContent).toContain("0 → 1.60 m/s");
-
-    rerender(<PhysicsVelocityLegend range={null} />);
-    legend = screen.getByTestId("v4-physics-velocity-legend");
-    expect(legend.textContent).toContain("范围待求解");
+  it("velocity legend is explicitly illustrative (pre-solve) — no fabricated m/s range", () => {
+    // Codex R0 P1-2: the Physics viewport contour is a blueprint-scaled preview
+    // (kernel overrides the VTP range), so the legend must NOT show a numeric
+    // m/s value as if measured — it carries a 示意 badge instead.
+    render(<PhysicsVelocityLegend />);
+    const legend = screen.getByTestId("v4-physics-velocity-legend");
+    expect(legend.textContent).toContain("示意");
+    expect(legend.textContent).not.toContain("m/s");
     expect(legend.textContent).not.toContain("40");
   });
 
@@ -69,9 +69,11 @@ describe("Solver step honesty (M5.5 C2)", () => {
     expect(container.textContent).toContain("未开始");
     expect(container.textContent).not.toContain("1250");
     expect(container.textContent).not.toContain("00:12:14");
-    // temperature: honest no-energy-equation state, not a fabricated 96.4 °C
+    // temperature: NEUTRAL no-data state (Codex R0 P1-1 — must not claim "no
+    // energy equation", which is false for thermal solvers), not a fake 96.4 °C
     const temp = screen.getByTestId("v4-solver-temperature-panel");
-    expect(temp.textContent).toContain("不可压缩求解无能量方程");
+    expect(temp.textContent).toContain("暂无温度数据");
+    expect(temp.textContent).not.toContain("不可压缩求解无能量方程");
     expect(temp.textContent).not.toContain("96.4");
     // the fake temperature chart component is gone
     expect(screen.queryByTestId("v4-solver-temperature-chart")).toBeNull();

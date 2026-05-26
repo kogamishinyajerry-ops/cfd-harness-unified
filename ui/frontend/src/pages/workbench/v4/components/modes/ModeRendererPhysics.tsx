@@ -12,8 +12,6 @@
  * advisor-derived; replacing those with case-real values is M5.5 (not
  * blocking the viewport-truthfulness arc).
  */
-import { useState } from "react";
-
 import { V4_CFD_COLORMAP } from "@/theme/industrial_minimalist";
 import { ViewportV4, type V4CameraPreset } from "../ViewportV4";
 import { ModeTabStrip } from "../ModeTabStrip";
@@ -44,12 +42,6 @@ export function ModeRendererPhysics({
   const surfaceVtpUrl = caseId
     ? `/api/cases/${encodeURIComponent(caseId)}/post/surface.vtp?patch=engine`
     : null;
-  const [vtpScalarRange, setVtpScalarRange] =
-    useState<[number, number] | null>(null);
-  // Honest legend: show a numeric |U| range only once the REAL VTP scalar
-  // range has loaded; otherwise render a "待求解" state rather than a
-  // fabricated 0–40 m/s (M5.5 truth-chain de-fake · DEC-V61-206).
-  const velocityRange: [number, number] | null = vtpScalarRange;
 
   return (
     <div data-testid="v4-mode-physics" className="flex h-full w-full flex-col bg-v4-canvas">
@@ -72,9 +64,8 @@ export function ModeRendererPhysics({
                 cameraPreset={cameraPreset}
                 surfaceVtpUrl={surfaceVtpUrl}
                 surfaceVtpScalarRange={PHYSICS_BLUEPRINT_VELOCITY_RANGE_TUPLE}
-                onVtpRangeReady={setVtpScalarRange}
               />
-              <PhysicsVelocityLegend range={velocityRange} />
+              <PhysicsVelocityLegend />
             </>
           ) : (
             <EmptyViewport probing={probe.available === undefined} />
@@ -135,7 +126,13 @@ export function ModeRendererPhysics({
   );
 }
 
-export function PhysicsVelocityLegend({ range }: { range: [number, number] | null }) {
+export function PhysicsVelocityLegend() {
+  // M5.5 (Codex R0 P1-2 · DEC-V61-206): the Physics step is PRE-solve — the
+  // viewport shows a deterministic geometry-derived preview contour (the
+  // viewport kernel forces a blueprint scalar range when the VTP U field is
+  // all-zero), NOT a measured velocity field. A numeric m/s range here would be
+  // a false "real" claim, so the legend is explicitly illustrative. The real
+  // |U| range appears in the Solver/Post steps where it reads the solved field.
   return (
     <div
       data-testid="v4-physics-velocity-legend"
@@ -148,11 +145,10 @@ export function PhysicsVelocityLegend({ range }: { range: [number, number] | nul
           background: `linear-gradient(to right, ${V4_CFD_COLORMAP.join(", ")})`,
         }}
       />
-      <span className="font-mono text-v4-textPrimary">
-        {range
-          ? `${range[0].toFixed(0)} → ${range[1].toFixed(2)} m/s`
-          : "范围待求解"}
+      <span className="rounded border border-v4-warn/50 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-v4-warn">
+        示意
       </span>
+      <span className="font-mono text-v4-textTertiary">预览等值面</span>
     </div>
   );
 }

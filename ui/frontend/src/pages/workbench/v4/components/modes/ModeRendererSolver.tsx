@@ -358,6 +358,16 @@ export function ModeRendererSolver({
   const velocityLegendRange = vtpScalarRange ?? SOLVER_BLUEPRINT_VELOCITY_RANGE;
 
   const iterCount = residuals.data?.sample_count ?? 0;
+  // P2-3 (Codex R0 · DEC-V61-206): residual-series `sample_count` is an
+  // iteration count only when source==="log"; for source==="runs" it is the
+  // number of historical runs, so labelling it "迭代" would be a new false
+  // claim. Source-aware label keeps it honest in the no-log fallback.
+  const progressLabel =
+    iterCount === 0
+      ? "未开始"
+      : residuals.data?.source === "log"
+        ? `迭代 ${iterCount}`
+        : `${iterCount} 个样本`;
   const runId = ctx.latestRun?.run_id ?? null;
   const converging =
     residuals.data?.source === "log" || residuals.data?.source === "runs";
@@ -408,7 +418,7 @@ export function ModeRendererSolver({
               de-fake · DEC-V61-206). No fabricated iter X/2000 target — the
               solver runs to convergence/endTime, there is no real "total". */}
           <span className="font-mono text-v4-textPrimary">
-            {iterCount > 0 ? `迭代 ${iterCount}` : "未开始"}
+            {progressLabel}
           </span>
           <span className="text-v4-textTertiary">·</span>
           <span className="font-mono text-v4-textSecondary">
@@ -466,21 +476,23 @@ export function ModeRendererSolver({
             <span className="font-mono">{iterCount} samples</span>
           </div>
         </div>
-        {/* Incompressible solvers (icoFoam/simpleFoam/...) carry no energy
-            equation, so there is no temperature field to chart. Honest no-data
-            state replaces the fabricated 96.4 °C history (M5.5 truth-chain
-            de-fake · DEC-V61-206); a real chart returns once a compressible /
-            CHT solver lands. */}
+        {/* Honest no-data state replaces the fabricated 96.4 °C history (M5.5
+            de-fake · DEC-V61-206). NEUTRAL wording (Codex R0 P1-1): this
+            renderer doesn't read a temperature field, so it states only that
+            the current run has none charted — it does NOT claim "no energy
+            equation", which would be false for the thermal solvers the backend
+            supports (buoyantSimpleFoam/buoyantPimpleFoam). A real chart returns
+            when a run carries temperature. */}
         <div
           className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2"
           data-testid="v4-solver-temperature-panel"
         >
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textSecondary">温度 · time history</span>
-            <span className="font-mono text-v4-textTertiary">不适用</span>
+            <span className="font-mono text-v4-textTertiary">暂无数据</span>
           </div>
           <div className="flex h-[78px] items-center justify-center px-3 text-center text-[9px] leading-relaxed text-v4-textTertiary">
-            不可压缩求解无能量方程 · 无温度场（compressible / CHT 求解器上线后接入）
+            暂无温度数据 · 当前运行未输出温度场
           </div>
         </div>
         <SolverTelemetryChips />

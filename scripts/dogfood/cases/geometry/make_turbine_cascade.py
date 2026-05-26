@@ -11,6 +11,8 @@ Watertightness strategy:
   boundary edge that has count=0, and recover the missing fluid-side triangle by choosing
   the correct neighbor triangle from the full Delaunay.
 """
+from pathlib import Path
+
 import numpy as np
 from scipy.spatial import Delaunay
 from collections import defaultdict, Counter
@@ -142,7 +144,7 @@ def rect_boundary_pts(xmin, xmax, ymin, ymax, nx=35, ny=15):
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def main():
-    OUT = "/Users/Zhuanz/Desktop/cfd-audit-merge/scripts/dogfood/cases/geometry/turbine_cascade.stl"
+    OUT = str(Path(__file__).resolve().parent / "turbine_cascade.stl")
     xmin, xmax = -1.0, 2.5
     ymin, ymax =  0.0, 1.0
     zmin, zmax =  0.0, 0.1
@@ -210,12 +212,6 @@ def main():
     # ── Delaunay ──────────────────────────────────────────────────────────────
     tri_obj = Delaunay(all_pts_2d)
     simplices = tri_obj.simplices  # (K,3)
-
-    # Build vertex→triangles map
-    vertex_to_tris = defaultdict(set)
-    for ti, s in enumerate(simplices):
-        for v in s:
-            vertex_to_tris[v].add(ti)
 
     # Build edge→triangles map for full Delaunay
     edge_to_tris_full = defaultdict(list)
