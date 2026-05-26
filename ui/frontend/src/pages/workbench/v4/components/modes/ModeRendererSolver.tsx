@@ -31,12 +31,10 @@ import {
 } from "../../hooks/useGlbAvailability";
 import {
   SOLVER_BLUEPRINT_RESIDUAL_SERIES,
-  SOLVER_BLUEPRINT_STREAMLINE_COUNT,
   SOLVER_BLUEPRINT_TELEMETRY,
   SOLVER_BLUEPRINT_VELOCITY_RANGE,
   type SolverBlueprintResidualSeries,
 } from "../solverBlueprint";
-import { StreamlineField } from "../scene/streamlines";
 import type { ResidualSeriesPayload } from "@/types/residual_series";
 
 interface ModeRendererSolverProps {
@@ -95,26 +93,6 @@ function VelocityLegendStrip({ range }: { range: [number, number] | null }) {
         </span>
       </div>
     </div>
-  );
-}
-
-function SolverFlowOverlay() {
-  return (
-    <svg
-      className="pointer-events-none absolute inset-4 z-10 h-[calc(100%-2rem)] w-[calc(100%-2rem)] mix-blend-screen"
-      viewBox="0 0 640 360"
-      preserveAspectRatio="xMidYMid meet"
-      aria-hidden
-      data-testid="v4-solver-dense-streamlines"
-    >
-      <StreamlineField
-        count={SOLVER_BLUEPRINT_STREAMLINE_COUNT}
-        seed={37}
-        opacityMul={0.72}
-        baseStroke={0.62}
-        animated
-      />
-    </svg>
   );
 }
 
@@ -390,7 +368,10 @@ export function ModeRendererSolver({
               surfaceVtpScalarRange={SOLVER_BLUEPRINT_VELOCITY_RANGE}
               onVtpRangeReady={handleVtpRangeReady}
             />
-            <SolverFlowOverlay />
+            {/* M5.5 follow-up (DEC-V61-206): removed the SolverFlowOverlay
+                hand-drawn SVG StreamlineField cartoon. The real integrated
+                streamlines render inside ViewportV4 from streamlinesVtpUrl
+                (post/streamlines.vtp) — no fabricated overlay on top. */}
             <VelocityLegendStrip range={velocityLegendRange} />
           </>
         ) : (

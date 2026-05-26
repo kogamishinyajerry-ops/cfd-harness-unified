@@ -115,8 +115,14 @@ export interface WorkbenchBasics {
   display_name: string;
   display_name_zh?: string;
   canonical_ref?: string;
+  // "authored" = hand-curated knowledge yaml; "derived" = mirrored from a
+  // real imported OpenFOAM case on disk (DEC-V61-206). Absent ⇒ treat as
+  // authored (older payloads). The UI labels derived data "派生自算例".
+  provenance?: "authored" | "derived";
   dimension: number;
-  geometry: Geometry;
+  // Optional: derived imported cases have no <CaseFrame> shape category
+  // (the V4 workbench renders the real GLB viewport instead).
+  geometry?: Geometry;
   patches: Patch[];
   boundary_conditions: BoundaryCondition[];
   materials: Material[];

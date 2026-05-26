@@ -166,3 +166,69 @@ describe("Boundary step honesty (M5.5 C4)", () => {
     expect(container.textContent).not.toContain("识别完成");
   });
 });
+
+describe("Boundary step surfaces derived BCs (DEC-V61-206 deriver)", () => {
+  // A derived WorkbenchBasics mirroring the turbine cascade — exactly what
+  // the manifest→WorkbenchBasics deriver returns for an imported case that
+  // has been through setup-bc. Seeded into the query cache so the boundary
+  // step renders the REAL patches + BC values instead of 待识别.
+  const derivedBasics = {
+    case_id: "turbine",
+    display_name: "turbine",
+    provenance: "derived",
+    dimension: 3,
+    patches: [
+      { id: "inlet", role: "inlet", location: "derived", label_zh: "inlet", label_en: "inlet" },
+      { id: "outlet", role: "outlet", location: "derived", label_zh: "outlet", label_en: "outlet" },
+      { id: "blade", role: "wall", location: "derived", label_zh: "blade", label_en: "blade" },
+    ],
+    boundary_conditions: [
+      {
+        field: "U",
+        quantity: "velocity",
+        units: "m/s",
+        per_patch: {
+          inlet: { type: "fixedValue", value: [1, 0, 0], display_zh: "U=(1, 0, 0)" },
+          outlet: { type: "zeroGradient", display_zh: "∂U/∂n = 0" },
+          blade: { type: "noSlip", display_zh: "U = 0" },
+        },
+      },
+      {
+        field: "p",
+        quantity: "kinematic_pressure",
+        units: "m^2/s^2",
+        per_patch: {
+          outlet: { type: "fixedValue", value: 0, display_zh: "p = 0" },
+        },
+      },
+    ],
+    materials: [],
+    derived: [],
+  };
+
+  function seededWrapper() {
+    const qc = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    qc.setQueryData(["v4-ctx-basics", "turbine"], derivedBasics);
+    return ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client: qc }, children);
+  }
+
+  it("shows the real per-patch U BC values + a 派生自算例 provenance badge, not 待识别", () => {
+    const { container } = render(<ModeRendererBoundary caseId="turbine" />, {
+      wrapper: seededWrapper(),
+    });
+    // real patch count, not 待识别
+    expect(container.textContent).toContain("边界面 · 3 项");
+    // derived provenance is labelled (not hand-authored, not fabricated)
+    expect(screen.getByTestId("v4-mode-boundary-provenance").textContent).toContain(
+      "派生自算例",
+    );
+    // the ACTUAL BC values are surfaced — "标注出来你怎么设置的边界条件"
+    const bc = screen.getByTestId("v4-mode-boundary-bc-values");
+    expect(bc.textContent).toContain("U=(1, 0, 0)");
+    expect(bc.textContent).toContain("∂U/∂n = 0");
+    expect(bc.textContent).toContain("U = 0");
+  });
+});

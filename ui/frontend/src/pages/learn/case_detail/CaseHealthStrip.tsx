@@ -149,7 +149,7 @@ function wbToneFrom(
   }
   return {
     tone: "green",
-    primary: data.geometry.shape,
+    primary: data.geometry?.shape ?? `${data.patches.length} patch`,
     detail: `${data.patches.length} patch · ${data.materials.length} material`,
   };
 }

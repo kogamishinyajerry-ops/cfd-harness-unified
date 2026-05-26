@@ -28,8 +28,6 @@ export const SOLVER_BLUEPRINT_KPIS = {
   elapsed: "00:12:14",
 } as const;
 
-export const SOLVER_BLUEPRINT_STREAMLINE_COUNT = 72;
-
 export const SOLVER_BLUEPRINT_VELOCITY_RANGE: [number, number] = [0, 40];
 
 export const SOLVER_BLUEPRINT_RESIDUAL_SERIES: SolverBlueprintResidualSeries[] = [

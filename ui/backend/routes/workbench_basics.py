@@ -27,6 +27,7 @@ from ui.backend.schemas.workbench_basics import (
     validate_patch_consistency,
 )
 from ui.backend.services.run_ids import _validate_segment
+from ui.backend.services.workbench_basics_deriver import derive_workbench_basics
 
 router = APIRouter()
 
@@ -42,12 +43,20 @@ def get_workbench_basics(case_id: str) -> JSONResponse:
     _validate_segment(case_id, "case_id")
     yaml_path = BASICS_DIR / f"{case_id}.yaml"
     if not yaml_path.exists():
+        # No hand-authored knowledge yaml. Derive a faithful WorkbenchBasics
+        # from the real imported OpenFOAM case on disk (DEC-V61-206) so the
+        # workbench shows the actual patches / boundary conditions / material /
+        # solver instead of falling back to fabricated placeholders. Returns
+        # None when there is no OpenFOAM boundary yet → keep the honest 404
+        # (the UI then shows "待识别", not a guess).
+        derived = derive_workbench_basics(case_id)
+        if derived is not None:
+            return JSONResponse(derived.model_dump(exclude_none=True))
         raise HTTPException(
             status_code=404,
             detail=(
-                f"workbench-basics not yet authored for {case_id!r}; "
-                "Stage 2 MVP rollout is in progress (close trigger: "
-                "≥8 of 10 cases populated)."
+                f"workbench-basics not yet authored for {case_id!r} and no "
+                "imported OpenFOAM case to derive from."
             ),
         )
     try:

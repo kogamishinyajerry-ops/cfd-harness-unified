@@ -162,13 +162,13 @@ function buildCaseTree(
       basics?.patches.length != null ? String(basics.patches.length) : undefined,
     ),
     {
-      label: basics?.geometry.shape ?? "GLB 视口可用 · metadata 缺失",
+      label: basics?.geometry?.shape ?? "GLB 视口可用 · metadata 缺失",
       kind: "item",
       depth: 1,
       status: basics ? "ok" : "muted",
     },
     {
-      label: basics?.geometry.characteristic_length
+      label: basics?.geometry?.characteristic_length
         ? `${basics.geometry.characteristic_length.name} · ${basics.geometry.characteristic_length.value} ${basics.geometry.characteristic_length.unit}`
         : "特征长度 · —",
       kind: "item",

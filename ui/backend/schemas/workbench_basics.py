@@ -159,8 +159,17 @@ class WorkbenchBasics(BaseModel):
     display_name: str
     display_name_zh: Optional[str] = None
     canonical_ref: Optional[str] = None
+    # "authored" = hand-curated knowledge/workbench_basics/<id>.yaml;
+    # "derived"  = mirrored from a real imported OpenFOAM case on disk
+    # (DEC-V61-206). The frontend labels derived data "派生自算例" so the
+    # user can tell it apart from curated content — and from a fabricated
+    # placeholder, which this is explicitly NOT.
+    provenance: str = "authored"
     dimension: int = Field(..., ge=2, le=3)
-    geometry: Geometry
+    # Geometry is optional for derived cases: an imported STL has no
+    # <CaseFrame> shape category, and the V4 workbench renders the real
+    # GLB viewport anyway. Hand-authored cases still populate it.
+    geometry: Optional[Geometry] = None
     patches: list[Patch]
     boundary_conditions: list[BoundaryCondition]
     materials: list[Material]

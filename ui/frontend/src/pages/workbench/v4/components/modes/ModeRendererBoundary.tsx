@@ -138,6 +138,25 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
 
   const showViewport = activeGlbUrl != null;
   const hasBoundaryPatches = patches.length > 0;
+  // Provenance: "derived" patches are mirrored from the real OpenFOAM case
+  // on disk (DEC-V61-206), not hand-authored — and crucially NOT fabricated.
+  // Label them so the user can tell real-derived from curated.
+  const isDerived = ctx.basics?.provenance === "derived";
+
+  // "标注出来你怎么设置的边界条件": surface the ACTUAL per-patch BC values
+  // (e.g. inlet U=(1,0,0), outlet p=0). Default view lists each patch's U
+  // BC (the driving field); selecting a patch shows all of its fields.
+  const boundaryConditions = ctx.basics?.boundary_conditions ?? [];
+  const uField = boundaryConditions.find((bc) => bc.field === "U");
+  const selectedBcRows: Array<{ field: string; display: string }> =
+    selectedPatchId
+      ? boundaryConditions
+          .map((bc) => {
+            const pp = bc.per_patch?.[selectedPatchId];
+            return pp ? { field: bc.field, display: pp.display_zh ?? pp.type } : null;
+          })
+          .filter((r): r is { field: string; display: string } => r !== null)
+      : [];
 
   return (
     <div data-testid="v4-mode-boundary" className="flex h-full w-full bg-v4-canvas">
@@ -146,10 +165,21 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
         className="flex w-[184px] shrink-0 flex-col border-r border-v4-border bg-v4-shell/60"
         data-testid="v4-mode-boundary-patch-list"
       >
-        <div className="border-b border-v4-border px-3 py-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
-          {hasBoundaryPatches
-            ? `边界面 · ${patches.length} 项`
-            : "边界面 · 待识别"}
+        <div className="flex items-center justify-between gap-1 border-b border-v4-border px-3 py-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
+          <span>
+            {hasBoundaryPatches
+              ? `边界面 · ${patches.length} 项`
+              : "边界面 · 待识别"}
+          </span>
+          {hasBoundaryPatches && isDerived && (
+            <span
+              className="rounded-sm bg-v4-surfaceRaised px-1 py-0.5 text-[8px] normal-case tracking-normal text-v4-active"
+              data-testid="v4-mode-boundary-provenance"
+              title="边界面派生自算例磁盘文件（polyMesh/boundary + 0/U），非人工录入、非示意"
+            >
+              派生自算例
+            </span>
+          )}
         </div>
         <ul className="flex-1 overflow-y-auto px-1.5 py-1.5 text-[11px]">
           {!hasBoundaryPatches && (
@@ -326,6 +356,68 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
             </span>
           </div>
         </div>
+
+        {/* Actual BC values — "标注出来你怎么设置的边界条件" (DEC-V61-206).
+            Selected patch → all its fields; otherwise each patch's U BC. */}
+        {hasBoundaryPatches && (
+          <div
+            className="mt-3 border-t border-v4-border pt-2"
+            data-testid="v4-mode-boundary-bc-values"
+          >
+            <div className="mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-wider text-v4-textTertiary">
+              <span>
+                {selectedPatchId
+                  ? `${selectedPatchId} · 边界条件`
+                  : "边界条件 · U"}
+              </span>
+              {selectedPatchId && (
+                <button
+                  className="normal-case tracking-normal text-v4-active hover:underline"
+                  onClick={() => setSelectedPatchId(null)}
+                >
+                  全部
+                </button>
+              )}
+            </div>
+            <ul className="space-y-1 font-mono text-[10px]">
+              {selectedPatchId
+                ? selectedBcRows.map((row) => (
+                    <li
+                      key={row.field}
+                      className="flex items-baseline justify-between gap-2"
+                    >
+                      <span className="text-v4-textTertiary">{row.field}</span>
+                      <span className="truncate text-v4-textPrimary" title={row.display}>
+                        {row.display}
+                      </span>
+                    </li>
+                  ))
+                : patches.map((p) => {
+                    const pp = uField?.per_patch?.[p.id];
+                    return (
+                      <li
+                        key={p.id}
+                        className="flex items-baseline justify-between gap-2"
+                      >
+                        <button
+                          className="truncate text-left text-v4-textSecondary hover:text-v4-textPrimary"
+                          onClick={() => setSelectedPatchId(p.id)}
+                          title={`查看 ${p.id} 全部场`}
+                        >
+                          {p.id}
+                        </button>
+                        <span
+                          className="truncate text-v4-textPrimary"
+                          title={pp?.display_zh ?? pp?.type ?? "—"}
+                        >
+                          {pp?.display_zh ?? pp?.type ?? "—"}
+                        </span>
+                      </li>
+                    );
+                  })}
+            </ul>
+          </div>
+        )}
       </aside>
     </div>
   );

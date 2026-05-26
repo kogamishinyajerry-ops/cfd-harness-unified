@@ -4,7 +4,6 @@ import {
   SOLVER_BLUEPRINT_KPIS,
   SOLVER_BLUEPRINT_RESIDUAL_SERIES,
   SOLVER_BLUEPRINT_RIGHT_CARDS,
-  SOLVER_BLUEPRINT_STREAMLINE_COUNT,
   SOLVER_BLUEPRINT_TELEMETRY,
   SOLVER_BLUEPRINT_TEMPERATURE_HISTORY,
 } from "../components/solverBlueprint";
@@ -23,8 +22,10 @@ describe("Solver blueprint contract", () => {
     });
   });
 
-  it("keeps dense curved streamlines and split charts mechanically auditable", () => {
-    expect(SOLVER_BLUEPRINT_STREAMLINE_COUNT).toBeGreaterThanOrEqual(60);
+  it("keeps split residual charts mechanically auditable", () => {
+    // SOLVER_BLUEPRINT_STREAMLINE_COUNT removed (DEC-V61-206 follow-up): the
+    // solver step no longer renders a hand-drawn StreamlineField SVG cartoon —
+    // real integrated streamlines come from post/streamlines.vtp.
     expect(SOLVER_BLUEPRINT_RESIDUAL_SERIES).toHaveLength(3);
     for (const series of SOLVER_BLUEPRINT_RESIDUAL_SERIES) {
       expect(series.samples.length).toBeGreaterThanOrEqual(10);

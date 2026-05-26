@@ -104,11 +104,17 @@ export function CaseFrame({ caseId }: { caseId: string }) {
       </div>
 
       <div className="grid gap-5 md:grid-cols-[1fr_280px]">
-        <GeometryPanel
-          geometry={data.geometry}
-          patches={data.patches}
-          dimension={data.dimension}
-        />
+        {data.geometry ? (
+          <GeometryPanel
+            geometry={data.geometry}
+            patches={data.patches}
+            dimension={data.dimension}
+          />
+        ) : (
+          <div className="flex items-center justify-center rounded border border-dashed border-surface-300 p-6 text-[12px] text-surface-600">
+            几何示意图待识别（派生算例渲染真实 GLB 视口）
+          </div>
+        )}
         <PhysicsAnchor data={data} />
       </div>
 
