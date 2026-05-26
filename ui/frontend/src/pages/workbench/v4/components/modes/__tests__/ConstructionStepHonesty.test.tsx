@@ -69,11 +69,12 @@ describe("Solver step honesty (M5.5 C2)", () => {
     expect(container.textContent).toContain("未开始");
     expect(container.textContent).not.toContain("1250");
     expect(container.textContent).not.toContain("00:12:14");
-    // temperature: NEUTRAL no-data state (Codex R0 P1-1 — must not claim "no
-    // energy equation", which is false for thermal solvers), not a fake 96.4 °C
+    // temperature: FULLY renderer-scoped neutral state (Codex R0/R1 P1-1 — must
+    // claim nothing about the run or physics), not a fake 96.4 °C
     const temp = screen.getByTestId("v4-solver-temperature-panel");
-    expect(temp.textContent).toContain("暂无温度数据");
+    expect(temp.textContent).toContain("温度时程暂未接入");
     expect(temp.textContent).not.toContain("不可压缩求解无能量方程");
+    expect(temp.textContent).not.toContain("当前运行未输出");
     expect(temp.textContent).not.toContain("96.4");
     // the fake temperature chart component is gone
     expect(screen.queryByTestId("v4-solver-temperature-chart")).toBeNull();

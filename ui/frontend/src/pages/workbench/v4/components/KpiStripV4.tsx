@@ -323,12 +323,15 @@ function chipsFor(
 
     case "solver": {
       // M5.5 C2 · de-faked. The old strip showed fabricated KPIs (18.76M cells
-      // / 248.6 Pa 压降 / 3.62 kg/s 质量流量 / 96.4 °C 出口温度 / 65%) that the
-      // workbench never computes for a generic case — and temperature is
-      // impossible for an incompressible solve (no energy equation). Now reports
-      // REAL run-truth from the latest run, honest "待求解"/"—" when absent
-      // (mirrors the M5 post-case pattern · DEC-V61-206).
-      const d = ctx.successfulRunDetail ?? ctx.runDetail;
+      // / 248.6 Pa 压降 / 3.62 kg/s 质量流量 / 96.4 °C 出口温度 / 65%) the
+      // workbench never computes for a generic case. Now reports REAL run-truth.
+      //
+      // Codex R1 P1 · the SOLVER step reflects the LATEST run (not the last
+      // successful one — unlike Post). Using `successfulRunDetail ?? runDetail`
+      // here would report a FAILED latest run as 成功 (with a 历史成功 delta),
+      // which is false for "did the solve just succeed?". So the solver strip is
+      // keyed on ctx.runDetail (latest) only; honest "待求解"/"—" when absent.
+      const d = ctx.runDetail;
       if (!d) {
         return [
           { value: "待求解", label: "求解状态" },
@@ -338,15 +341,12 @@ function chipsFor(
         ];
       }
       const pRes = typeof d.residuals?.p === "number" ? d.residuals.p : null;
-      const showingFallbackRun =
-        ctx.successfulRunDetail != null &&
-        ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
       return [
         {
           value: d.success ? "成功" : "失败",
           label: "求解状态",
-          delta: showingFallbackRun ? "历史成功" : d.success ? "已完成" : "已退出",
-          deltaTone: showingFallbackRun ? "warn" : d.success ? "healthy" : "crit",
+          delta: d.success ? "已完成" : "已退出",
+          deltaTone: d.success ? "healthy" : "crit",
         },
         { value: fmt(d.duration_s, 1), label: "用时", unit: "s" },
         { value: String(d.exit_code), label: "退出码" },

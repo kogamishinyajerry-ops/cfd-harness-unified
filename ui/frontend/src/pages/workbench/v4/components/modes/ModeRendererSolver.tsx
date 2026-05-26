@@ -477,22 +477,23 @@ export function ModeRendererSolver({
           </div>
         </div>
         {/* Honest no-data state replaces the fabricated 96.4 °C history (M5.5
-            de-fake · DEC-V61-206). NEUTRAL wording (Codex R0 P1-1): this
-            renderer doesn't read a temperature field, so it states only that
-            the current run has none charted — it does NOT claim "no energy
-            equation", which would be false for the thermal solvers the backend
-            supports (buoyantSimpleFoam/buoyantPimpleFoam). A real chart returns
-            when a run carries temperature. */}
+            de-fake · DEC-V61-206). FULLY RENDERER-SCOPED wording (Codex R0/R1
+            P1-1): this component reads no temperature artifact, so it makes NO
+            claim about the run or the physics — it states only that the
+            temperature time-history is not wired into this view. (It must not
+            say "no energy equation" — false for buoyantSimpleFoam/buoyant-
+            PimpleFoam — nor "this run output no temperature", which it cannot
+            verify.) A real chart returns when this view reads a temp field. */}
         <div
           className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2"
           data-testid="v4-solver-temperature-panel"
         >
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textSecondary">温度 · time history</span>
-            <span className="font-mono text-v4-textTertiary">暂无数据</span>
+            <span className="font-mono text-v4-textTertiary">未接入</span>
           </div>
           <div className="flex h-[78px] items-center justify-center px-3 text-center text-[9px] leading-relaxed text-v4-textTertiary">
-            暂无温度数据 · 当前运行未输出温度场
+            温度时程暂未接入此视图
           </div>
         </div>
         <SolverTelemetryChips />
