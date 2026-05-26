@@ -178,7 +178,11 @@ def test_patch_without_u_bc_derives_to_unknown_role_not_a_name_guess(tmp_path):
     assert m is not None
     inlet = next(p for p in m.patches if p.id == "inlet")
     assert inlet.role == "unknown"
-    assert "无 0/U" in (inlet.description_zh or "")
+    # Codex R1 P2: must not claim the file is absent (this also covers a
+    # partial/unreadable 0/U) — only that THIS patch's U BC wasn't identified.
+    assert "未识别到该面的 0/U" in (inlet.description_zh or "")
+    # dimension is unknowable when 0/U doesn't cover every patch → omitted.
+    assert m.dimension is None
 
 
 def test_solver_without_momentum_transport_does_not_claim_laminar(tmp_path):
@@ -223,6 +227,32 @@ def test_dimension_derived_from_empty_patch(tmp_path):
     m = derive_workbench_basics("c", case_dir=case)
     assert m is not None
     assert m.dimension == 2
+
+
+def test_legacy_turbulence_properties_cites_correct_filename(tmp_path):
+    # Codex R1 P2: a case using the legacy constant/turbulenceProperties must
+    # NOT have reasoning_zh claim "constant/momentumTransport".
+    case = tmp_path / "c"
+    (case / "constant" / "polyMesh").mkdir(parents=True)
+    (case / "0").mkdir()
+    (case / "system").mkdir()
+    (case / "constant" / "polyMesh" / "boundary").write_text(
+        "FoamFile { object boundary; }\n1\n(\n  inlet { type patch; nFaces 5; startFace 1; }\n)\n"
+    )
+    (case / "0" / "U").write_text(
+        "FoamFile { object U; }\nboundaryField\n{\n  inlet { type fixedValue; value uniform (1 0 0); }\n}\n"
+    )
+    (case / "system" / "controlDict").write_text(
+        "FoamFile { object controlDict; }\napplication simpleFoam;\n"
+    )
+    (case / "constant" / "turbulenceProperties").write_text(
+        "FoamFile { object turbulenceProperties; }\nsimulationType RAS;\n"
+    )
+    m = derive_workbench_basics("c", case_dir=case)
+    assert m is not None and m.solver is not None
+    assert m.solver.laminar is False
+    assert "constant/turbulenceProperties" in m.solver.reasoning_zh
+    assert "momentumTransport" not in m.solver.reasoning_zh
 
 
 def test_periodic_patch_written_noslip_derives_to_wall(tmp_path):

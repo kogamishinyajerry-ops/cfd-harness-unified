@@ -278,7 +278,10 @@ def _derive_patches(
         if u_bc is not None:
             desc = f"{nfaces} faces · 派生自 polyMesh/boundary + 0/U"
         else:
-            desc = f"{nfaces} faces · 派生自 polyMesh/boundary（无 0/U，类型未识别）"
+            # Codex R1 P2: this branch also covers an unreadable/partial 0/U,
+            # so do NOT claim the file is absent — only that THIS patch's U BC
+            # was not identified.
+            desc = f"{nfaces} faces · 派生自 polyMesh/boundary（未识别到该面的 0/U）"
         patches.append(
             Patch(
                 id=name,
@@ -361,8 +364,10 @@ def _derive_solver(case_dir: Path) -> Optional[Solver]:
     laminar: Optional[bool] = None
     sim: Optional[str] = None
     mt = case_dir / "constant" / "momentumTransport"
+    mt_name = "constant/momentumTransport"
     if not mt.is_file():
         mt = case_dir / "constant" / "turbulenceProperties"  # legacy
+        mt_name = "constant/turbulenceProperties"
     if mt.is_file():
         try:
             sim = _foam_token(_strip_comments(mt.read_text(encoding="utf-8")), "simulationType")
@@ -373,7 +378,9 @@ def _derive_solver(case_dir: Path) -> Optional[Solver]:
     state_zh = "稳态" if steady else ("瞬态" if transient else "未知时间格式")
     reasoning = f"派生自 system/controlDict（application={app}）"
     if sim is not None:
-        reasoning += f"，constant/momentumTransport simulationType={sim}"
+        # Codex R1 P2: cite the file actually read (momentumTransport OR the
+        # legacy turbulenceProperties), not a hardcoded name.
+        reasoning += f"，{mt_name} simulationType={sim}"
     return Solver(
         name=app,
         family="OpenFOAM",
@@ -446,12 +453,19 @@ def derive_workbench_basics(
     solver = _derive_solver(case_dir)
     geometry = _derive_geometry(case_dir)
 
-    # Dimension from disk, not hardcoded (Codex R0 P2): OpenFOAM marks the
-    # front/back of a 2D case with an `empty` boundary condition. If any U BC
-    # is `empty` → 2D, else 3D.
-    dimension = 2 if any(
-        str(bc.get("type")) == "empty" for bc in u_by_patch.values()
-    ) else 3
+    # Dimension from disk, never a default (Codex R0 P2 + R1 P1): OpenFOAM marks
+    # the front/back of a 2D case with an `empty` boundary condition. Dimension
+    # is only knowable when 0/U was read AND covers every patch — otherwise an
+    # `empty` could be hiding in an unread patch, so we must degrade to None
+    # ("待识别") rather than assert 3D.
+    u_complete = bool(u_by_patch) and all(n in u_by_patch for n in patch_names)
+    dimension: Optional[int]
+    if u_complete:
+        dimension = 2 if any(
+            str(bc.get("type")) == "empty" for bc in u_by_patch.values()
+        ) else 3
+    else:
+        dimension = None
 
     return WorkbenchBasics(
         case_id=case_id,

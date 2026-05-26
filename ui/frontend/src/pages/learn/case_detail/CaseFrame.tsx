@@ -140,7 +140,7 @@ function GeometryPanel({
 }: {
   geometry: Geometry;
   patches: Patch[];
-  dimension: number;
+  dimension?: number;
 }) {
   return (
     <div className="rounded-md border border-surface-800 bg-surface-900/40 p-4">
@@ -149,7 +149,8 @@ function GeometryPanel({
           几何 · {geometry.shape}
         </p>
         <span className="mono text-[10px] text-surface-500">
-          {dimension}D · L={geometry.characteristic_length.value}
+          {dimension != null ? `${dimension}D` : "—"} · L=
+          {geometry.characteristic_length.value}
           {geometry.characteristic_length.unit}
         </span>
       </div>

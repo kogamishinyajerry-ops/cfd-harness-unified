@@ -121,7 +121,9 @@ export interface WorkbenchBasics {
   // real imported OpenFOAM case on disk (DEC-V61-206). Absent ⇒ treat as
   // authored (older payloads). The UI labels derived data "派生自算例".
   provenance?: "authored" | "derived";
-  dimension: number;
+  // Optional: a derived case with no readable/complete 0/U cannot be
+  // classified 2D-vs-3D (DEC-V61-206). Absent ⇒ "待识别".
+  dimension?: number;
   // Optional: derived imported cases have no <CaseFrame> shape category
   // (the V4 workbench renders the real GLB viewport instead).
   geometry?: Geometry;

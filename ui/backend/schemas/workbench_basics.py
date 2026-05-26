@@ -169,7 +169,10 @@ class WorkbenchBasics(BaseModel):
     # user can tell it apart from curated content — and from a fabricated
     # placeholder, which this is explicitly NOT.
     provenance: str = "authored"
-    dimension: int = Field(..., ge=2, le=3)
+    # Optional: a derived case whose 0/U is missing/partial cannot be confidently
+    # classified 2D-vs-3D from disk, so it degrades to None ("待识别") rather than
+    # a default (DEC-V61-206 · Codex R1 P1). Hand-authored cases always set it.
+    dimension: Optional[int] = Field(None, ge=2, le=3)
     # Geometry is optional for derived cases: an imported STL has no
     # <CaseFrame> shape category, and the V4 workbench renders the real
     # GLB viewport anyway. Hand-authored cases still populate it.

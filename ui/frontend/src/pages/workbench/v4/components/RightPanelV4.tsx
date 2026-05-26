@@ -328,7 +328,7 @@ function modeCardsFor(
           title: "几何摘要",
           facts: [
             { label: "形状", value: basics?.geometry?.shape ?? "—" },
-            { label: "维度", value: basics ? `${basics.dimension}D` : "—" },
+            { label: "维度", value: basics?.dimension != null ? `${basics.dimension}D` : "—" },
             {
               label: cl?.name ?? "特征长度",
               value: cl ? `${cl.value.toPrecision(3)} ${cl.unit}` : "—",
