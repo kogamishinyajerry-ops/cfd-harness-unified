@@ -26,7 +26,6 @@ import {
 } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
-import { SOLVER_BLUEPRINT_KPIS } from "./solverBlueprint";
 import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
 import {
   useComparisonVerdict,
@@ -342,37 +341,37 @@ function chipsFor(
     }
 
     case "solver": {
+      // M5.5 C2 · de-faked. The old strip showed fabricated KPIs (18.76M cells
+      // / 248.6 Pa 压降 / 3.62 kg/s 质量流量 / 96.4 °C 出口温度 / 65%) that the
+      // workbench never computes for a generic case — and temperature is
+      // impossible for an incompressible solve (no energy equation). Now reports
+      // REAL run-truth from the latest run, honest "待求解"/"—" when absent
+      // (mirrors the M5 post-case pattern · DEC-V61-206).
+      const d = ctx.successfulRunDetail ?? ctx.runDetail;
+      if (!d) {
+        return [
+          { value: "待求解", label: "求解状态" },
+          { value: "—", label: "用时", unit: "s" },
+          { value: "—", label: "退出码" },
+          { value: "—", label: "残差 p" },
+        ];
+      }
+      const pRes = typeof d.residuals?.p === "number" ? d.residuals.p : null;
+      const showingFallbackRun =
+        ctx.successfulRunDetail != null &&
+        ctx.latestRun?.run_id !== ctx.latestSuccessfulRun?.run_id;
       return [
         {
-          value: SOLVER_BLUEPRINT_KPIS.estimatedCellsM.toFixed(2),
-          label: "估算单元",
-          unit: "M",
+          value: d.success ? "成功" : "失败",
+          label: "求解状态",
+          delta: showingFallbackRun ? "历史成功" : d.success ? "已完成" : "已退出",
+          deltaTone: showingFallbackRun ? "warn" : d.success ? "healthy" : "crit",
         },
+        { value: fmt(d.duration_s, 1), label: "用时", unit: "s" },
+        { value: String(d.exit_code), label: "退出码" },
         {
-          value: SOLVER_BLUEPRINT_KPIS.residualP.toExponential(1),
+          value: pRes != null ? pRes.toExponential(1) : "—",
           label: "残差 p",
-        },
-        {
-          value: SOLVER_BLUEPRINT_KPIS.pressurePa.toFixed(1),
-          label: "压降",
-          unit: "Pa",
-        },
-        {
-          value: SOLVER_BLUEPRINT_KPIS.massFlowKgS.toFixed(2),
-          label: "质量流量",
-          unit: "kg/s",
-        },
-        {
-          value: SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1),
-          label: "出口温度",
-          unit: "°C",
-        },
-        {
-          value: String(SOLVER_BLUEPRINT_KPIS.progressPct),
-          label: `${SOLVER_BLUEPRINT_KPIS.iterCurrent}/${SOLVER_BLUEPRINT_KPIS.iterTotal} iter`,
-          unit: "%",
-          delta: "良好",
-          deltaTone: "healthy",
         },
       ];
     }

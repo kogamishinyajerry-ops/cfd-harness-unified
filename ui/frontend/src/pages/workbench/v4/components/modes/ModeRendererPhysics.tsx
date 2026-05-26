@@ -26,7 +26,6 @@ import {
   PHYSICS_BLUEPRINT_MODELS,
   PHYSICS_BLUEPRINT_SUMMARY,
   PHYSICS_BLUEPRINT_TABS,
-  PHYSICS_BLUEPRINT_VELOCITY_RANGE,
   PHYSICS_BLUEPRINT_VELOCITY_RANGE_TUPLE,
 } from "../physicsBlueprint";
 
@@ -47,10 +46,10 @@ export function ModeRendererPhysics({
     : null;
   const [vtpScalarRange, setVtpScalarRange] =
     useState<[number, number] | null>(null);
-  const velocityRange: [number, number] = vtpScalarRange ?? [
-    PHYSICS_BLUEPRINT_VELOCITY_RANGE.min,
-    PHYSICS_BLUEPRINT_VELOCITY_RANGE.max,
-  ];
+  // Honest legend: show a numeric |U| range only once the REAL VTP scalar
+  // range has loaded; otherwise render a "待求解" state rather than a
+  // fabricated 0–40 m/s (M5.5 truth-chain de-fake · DEC-V61-206).
+  const velocityRange: [number, number] | null = vtpScalarRange;
 
   return (
     <div data-testid="v4-mode-physics" className="flex h-full w-full flex-col bg-v4-canvas">
@@ -60,7 +59,7 @@ export function ModeRendererPhysics({
         trailing={
           <span className="font-mono text-[10px]">
             {PHYSICS_BLUEPRINT_SUMMARY.caseType} ·{" "}
-            {PHYSICS_BLUEPRINT_SUMMARY.recommendedModel} · Re 8.4e5 · Pr 0.71
+            {PHYSICS_BLUEPRINT_SUMMARY.recommendedModel}
           </span>
         }
       />
@@ -136,7 +135,7 @@ export function ModeRendererPhysics({
   );
 }
 
-function PhysicsVelocityLegend({ range }: { range: [number, number] }) {
+export function PhysicsVelocityLegend({ range }: { range: [number, number] | null }) {
   return (
     <div
       data-testid="v4-physics-velocity-legend"
@@ -150,7 +149,9 @@ function PhysicsVelocityLegend({ range }: { range: [number, number] }) {
         }}
       />
       <span className="font-mono text-v4-textPrimary">
-        {range[0].toFixed(0)} → {range[1].toFixed(2)} m/s
+        {range
+          ? `${range[0].toFixed(0)} → ${range[1].toFixed(2)} m/s`
+          : "范围待求解"}
       </span>
     </div>
   );

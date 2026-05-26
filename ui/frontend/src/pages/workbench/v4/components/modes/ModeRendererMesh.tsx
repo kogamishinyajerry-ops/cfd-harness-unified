@@ -16,7 +16,6 @@ import {
 import { IndustrialBoxScene } from "../scene/IndustrialBoxScene";
 import { ModeTabStrip } from "../ModeTabStrip";
 import { ViewportV4, type V4CameraPreset } from "../ViewportV4";
-import { MESH_BLUEPRINT_NUMERICS } from "../meshBlueprint";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
 
 function fmt(n: number | null | undefined, digits = 2): string {
@@ -83,9 +82,12 @@ export function ModeRendererMesh({ caseId, cameraPreset }: Props) {
   const gci = mesh?.gci;
   const densities = mesh?.densities ?? [];
   const lastDensity = densities[densities.length - 1];
+  // Honest trailing: real mesh-metrics summary when present, else an explicit
+  // no-metrics state — never a fabricated cell-count/skewness (M5.5 truth-chain
+  // de-fake · DEC-V61-206).
   const trailing = mesh
     ? `${densities.length} 级 · 最细 ${lastDensity?.n_cells_1d ?? "—"} · GCI 数据`
-    : `QA histogram · ${MESH_BLUEPRINT_NUMERICS.estimatedCellsM.toFixed(2)}M · skew ${MESH_BLUEPRINT_NUMERICS.maxSkewness.toFixed(3)}`;
+    : "尚无网格指标 · 先生成网格";
 
   return (
     <div data-testid="v4-mode-mesh" className="flex h-full w-full flex-col bg-v4-canvas">

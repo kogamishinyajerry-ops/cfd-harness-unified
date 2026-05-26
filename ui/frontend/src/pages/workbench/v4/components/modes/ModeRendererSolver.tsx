@@ -30,11 +30,9 @@ import {
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
 import {
-  SOLVER_BLUEPRINT_KPIS,
   SOLVER_BLUEPRINT_RESIDUAL_SERIES,
   SOLVER_BLUEPRINT_STREAMLINE_COUNT,
   SOLVER_BLUEPRINT_TELEMETRY,
-  SOLVER_BLUEPRINT_TEMPERATURE_HISTORY,
   SOLVER_BLUEPRINT_VELOCITY_RANGE,
   type SolverBlueprintResidualSeries,
 } from "../solverBlueprint";
@@ -298,76 +296,6 @@ function BlueprintResidualsChart({
   );
 }
 
-function TemperatureHistoryChart() {
-  const samples = [...SOLVER_BLUEPRINT_TEMPERATURE_HISTORY];
-  const min = Math.min(...samples);
-  const max = Math.max(...samples);
-  const x0 = 10;
-  const x1 = 230;
-  const y0 = 10;
-  const y1 = 72;
-  const points = samples
-    .map((value, index) => {
-      const x = x0 + (index / Math.max(1, samples.length - 1)) * (x1 - x0);
-      const t = (value - min) / Math.max(1, max - min);
-      const y = y1 - t * (y1 - y0);
-      return `${x},${y}`;
-    })
-    .join(" ");
-
-  return (
-    <svg
-      viewBox="0 0 240 84"
-      preserveAspectRatio="none"
-      className="h-full w-full"
-      data-testid="v4-solver-temperature-chart"
-    >
-      {[0, 1, 2].map((i) => {
-        const yy = y0 + i * ((y1 - y0) / 2);
-        return (
-          <line
-            key={i}
-            x1={x0}
-            x2={x1}
-            y1={yy}
-            y2={yy}
-            stroke={V4_PALETTE.border}
-            strokeWidth="0.35"
-          />
-        );
-      })}
-      <polyline
-        points={points}
-        fill="none"
-        stroke={V4_CFD_COLORMAP[4]}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="230" cy="10" r="2.6" fill={V4_CFD_COLORMAP[5]} />
-      <text
-        x="10"
-        y="81"
-        fontSize="7"
-        fill={V4_PALETTE.textTertiary}
-        fontFamily="ui-monospace, monospace"
-      >
-        {min.toFixed(1)} °C
-      </text>
-      <text
-        x="230"
-        y="81"
-        fontSize="7"
-        fill={V4_PALETTE.textSecondary}
-        fontFamily="ui-monospace, monospace"
-        textAnchor="end"
-      >
-        {SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1)} °C
-      </text>
-    </svg>
-  );
-}
-
 function SolverTelemetryChips() {
   const chips = [
     { label: "GPU", value: `${SOLVER_BLUEPRINT_TELEMETRY.gpuPct}%`, tone: "warn" },
@@ -476,13 +404,15 @@ export function ModeRendererSolver({
               animation: converging && !achieved ? "pulse 2s infinite" : undefined,
             }}
           />
+          {/* Real recorded-iteration count + real wall time (M5.5 truth-chain
+              de-fake · DEC-V61-206). No fabricated iter X/2000 target — the
+              solver runs to convergence/endTime, there is no real "total". */}
           <span className="font-mono text-v4-textPrimary">
-            iter {SOLVER_BLUEPRINT_KPIS.iterCurrent}/
-            {SOLVER_BLUEPRINT_KPIS.iterTotal}
+            {iterCount > 0 ? `迭代 ${iterCount}` : "未开始"}
           </span>
           <span className="text-v4-textTertiary">·</span>
           <span className="font-mono text-v4-textSecondary">
-            elapsed {SOLVER_BLUEPRINT_KPIS.elapsed}
+            用时 {ctx.elapsedDisplay}
           </span>
           {runId && (
             <span className="font-mono text-v4-textTertiary">
@@ -533,18 +463,24 @@ export function ModeRendererSolver({
           </div>
           <div className="flex justify-between gap-2 text-[9px] text-v4-textTertiary">
             <span>{residuals.data?.note ?? "blueprint residual envelope"}</span>
-            <span className="font-mono">{iterCount || SOLVER_BLUEPRINT_KPIS.iterCurrent} samples</span>
+            <span className="font-mono">{iterCount} samples</span>
           </div>
         </div>
-        <div className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
+        {/* Incompressible solvers (icoFoam/simpleFoam/...) carry no energy
+            equation, so there is no temperature field to chart. Honest no-data
+            state replaces the fabricated 96.4 °C history (M5.5 truth-chain
+            de-fake · DEC-V61-206); a real chart returns once a compressible /
+            CHT solver lands. */}
+        <div
+          className="flex flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2"
+          data-testid="v4-solver-temperature-panel"
+        >
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textSecondary">温度 · time history</span>
-            <span className="font-mono text-v4-warn">
-              {SOLVER_BLUEPRINT_KPIS.temperatureC.toFixed(1)} °C
-            </span>
+            <span className="font-mono text-v4-textTertiary">不适用</span>
           </div>
-          <div className="h-[78px]">
-            <TemperatureHistoryChart />
+          <div className="flex h-[78px] items-center justify-center px-3 text-center text-[9px] leading-relaxed text-v4-textTertiary">
+            不可压缩求解无能量方程 · 无温度场（compressible / CHT 求解器上线后接入）
           </div>
         </div>
         <SolverTelemetryChips />
