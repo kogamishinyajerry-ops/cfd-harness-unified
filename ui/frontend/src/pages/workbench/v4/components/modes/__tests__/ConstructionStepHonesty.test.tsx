@@ -22,6 +22,7 @@ import {
 } from "../ModeRendererPhysics";
 import { ModeRendererMesh } from "../ModeRendererMesh";
 import { ModeRendererSolver } from "../ModeRendererSolver";
+import { ModeRendererDoe } from "../ModeRendererDoe";
 import { KpiStripV4 } from "../../KpiStripV4";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -88,5 +89,26 @@ describe("Solver step honesty (M5.5 C2)", () => {
     expect(container.textContent).not.toContain("248.6");
     expect(container.textContent).not.toContain("出口温度");
     expect(container.textContent).not.toContain("质量流量");
+  });
+});
+
+describe("DOE step honesty (M5.5 C3)", () => {
+  it("shows a prominent illustrative banner — the fabricated optima are not presented as truth", () => {
+    render(<ModeRendererDoe />);
+    const banner = screen.getByTestId("v4-mode-doe-illustrative-banner");
+    expect(banner.textContent).toContain("示意");
+    expect(banner.textContent).toContain("非真实寻优结果");
+  });
+
+  it("DOE KPI strip shows an honest placeholder, not fabricated optima", () => {
+    const { container } = render(
+      <KpiStripV4 activeStep="doe" caseId="case-x" />,
+      { wrapper },
+    );
+    // no fabricated 212.6 Pa / 94.1 °C / 18h42m "V-12 winner" presented as truth
+    expect(container.textContent).toContain("示意");
+    expect(container.textContent).not.toContain("212.6");
+    expect(container.textContent).not.toContain("18h42m");
+    expect(container.textContent).not.toContain("V-12");
   });
 });

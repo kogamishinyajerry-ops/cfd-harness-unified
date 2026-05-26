@@ -26,7 +26,6 @@ import {
 } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
 import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
-import { DOE_BLUEPRINT_KPIS } from "./doeBlueprint";
 import {
   useComparisonVerdict,
   type PostVerdict,
@@ -130,33 +129,15 @@ function chipsFor(
   }
 
   if (step === "doe") {
+    // M5.5 C3 · DOE has no real sweep backend (see the illustrative banner in
+    // ModeRendererDoe). The old strip presented fabricated optima (28 方案 /
+    // 212.6 Pa 最优 / 94.1 °C / 18h42m · "V-12" winner) as truth. Honest
+    // placeholder instead — no fabricated optimisation results (DEC-V61-206).
     return [
-      {
-        value: String(DOE_BLUEPRINT_KPIS.sampleCount),
-        label: "方案数",
-        delta: `已完成 ${DOE_BLUEPRINT_KPIS.completedCount}`,
-        deltaTone: "healthy",
-      },
-      {
-        value: DOE_BLUEPRINT_KPIS.bestPressurePa.toFixed(1),
-        label: "最优压降",
-        unit: "Pa",
-        delta: "V-12",
-        deltaTone: "healthy",
-      },
-      {
-        value: DOE_BLUEPRINT_KPIS.bestTemperatureC.toFixed(1),
-        label: "最高温度",
-        unit: "°C",
-        delta: "V-12",
-        deltaTone: "healthy",
-      },
-      {
-        value: DOE_BLUEPRINT_KPIS.estimatedComputeTime,
-        label: "预计计算时长",
-        delta: `剩余 ${DOE_BLUEPRINT_KPIS.remainingComputeTime}`,
-        deltaTone: "warn",
-      },
+      { value: "示意", label: "设计探索", delta: "功能开发中", deltaTone: "warn" },
+      { value: "—", label: "方案数" },
+      { value: "—", label: "最优压降", unit: "Pa" },
+      { value: "—", label: "预计计算时长" },
     ];
   }
 

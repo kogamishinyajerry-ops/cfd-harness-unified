@@ -11,7 +11,6 @@ import { IndustrialBoxScene } from "../scene/IndustrialBoxScene";
 import { StreamlineField } from "../scene/streamlines";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
 import {
-  DOE_BLUEPRINT_KPIS,
   DOE_BLUEPRINT_SCATTER_POINTS,
   DOE_BLUEPRINT_SCATTER,
   DOE_BLUEPRINT_TOOLBAR,
@@ -197,8 +196,8 @@ export function ModeRendererDoe() {
       <div className="flex h-11 shrink-0 items-center gap-3 border-b border-v4-border px-3">
         <div className="min-w-[210px] text-[13px] font-medium text-v4-textPrimary">
           设计探索
-          <span className="ml-2 text-[12px] font-normal text-v4-textSecondary">
-            / 探索集_02 ({DOE_BLUEPRINT_KPIS.sampleCount})
+          <span className="ml-2 rounded border border-v4-warn/50 px-1.5 py-0.5 align-middle font-mono text-[9px] uppercase tracking-wider text-v4-warn">
+            示意
           </span>
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2 text-[10px] text-v4-textSecondary">
@@ -244,16 +243,31 @@ export function ModeRendererDoe() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 p-3">
-        <div className="grid min-h-0 flex-1 grid-cols-4 gap-2">
-          {DOE_BLUEPRINT_VISIBLE_SAMPLES.map((s) => (
-            <Thumbnail
-              key={s.id}
-              sample={s}
-              active={s.id === activeId}
-              onClick={() => setActiveId(s.id)}
-            />
-          ))}
+        {/* M5.5 C3 · DOE has no real sweep backend — the matrix / Pareto /
+            最优解 below are an illustrative LAYOUT preview, NOT real
+            optimisation results. A prominent banner + dimming make that
+            unmissable so the fabricated optima are never read as truth
+            (DEC-V61-206). A real DOE arrives with a parameter-sweep runner. */}
+        <div
+          data-testid="v4-mode-doe-illustrative-banner"
+          className="flex shrink-0 items-center gap-2 rounded border border-v4-warn/40 bg-v4-surfaceRaised px-3 py-1.5 text-[11px] text-v4-textSecondary"
+        >
+          <span className="rounded border border-v4-warn/50 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-v4-warn">
+            示意
+          </span>
+          设计探索功能开发中 · 以下为布局示意，非真实寻优结果（无 DOE 寻优后端）
         </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 opacity-60">
+          <div className="grid min-h-0 flex-1 grid-cols-4 gap-2">
+            {DOE_BLUEPRINT_VISIBLE_SAMPLES.map((s) => (
+              <Thumbnail
+                key={s.id}
+                sample={s}
+                active={s.id === activeId}
+                onClick={() => setActiveId(s.id)}
+              />
+            ))}
+          </div>
         <div className="flex h-56 shrink-0 flex-col gap-1 rounded border border-v4-border bg-v4-surfaceRaised p-2">
           <div className="flex items-baseline justify-between text-[10px]">
             <span className="text-v4-textSecondary">
@@ -269,6 +283,7 @@ export function ModeRendererDoe() {
               activeId={activeId}
             />
           </div>
+        </div>
         </div>
       </div>
     </div>
