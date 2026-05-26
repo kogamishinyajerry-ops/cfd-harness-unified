@@ -28,11 +28,7 @@ import {
   geometryGlbUrl,
   useGlbAvailability,
 } from "../../hooks/useGlbAvailability";
-import {
-  BOUNDARY_BLUEPRINT_RECOGNITION,
-  BOUNDARY_BLUEPRINT_TREE_COUNTS,
-  BOUNDARY_BLUEPRINT_TYPES,
-} from "../boundaryBlueprint";
+import { BOUNDARY_BLUEPRINT_TYPES } from "../boundaryBlueprint";
 import { IndustrialBoxScene } from "../scene/IndustrialBoxScene";
 import { ViewportV4, type V4CameraPreset, type V4FacePickEvent } from "../ViewportV4";
 import { V4_PALETTE } from "@/theme/industrial_minimalist";
@@ -83,8 +79,17 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
   const bcProbe = useGlbAvailability(glbUrl);
   // Fall back to geometry.glb for pickMode if bc.glb missing — picks
   // still work, just no per-patch coloring.
+  //
+  // M5.5 C4 · probe geometry.glb UNCONDITIONALLY (DEC-V61-206). The previous
+  // gate (`bcProbe.available === false ? geomUrl : null`) only probed geometry
+  // once bc resolved to exactly false; when the bc/render probe stalls at
+  // `undefined` (the common case — most cases never run setup-bc to produce a
+  // bc.glb), the geometry fallback never activated and the step fell through to
+  // the fabricated BoundaryBlueprintScene SVG even though the REAL geometry was
+  // available (it renders fine in Physics/Solver). Probing unconditionally
+  // makes the real geometry show whenever it exists; bc.glb is still preferred.
   const geomUrl = geometryGlbUrl(caseId);
-  const geomProbe = useGlbAvailability(bcProbe.available === false ? geomUrl : null);
+  const geomProbe = useGlbAvailability(geomUrl);
 
   const activeGlbUrl =
     bcProbe.available === true
@@ -144,40 +149,20 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
         <div className="border-b border-v4-border px-3 py-2 text-[10px] uppercase tracking-wider text-v4-textTertiary">
           {hasBoundaryPatches
             ? `边界面 · ${patches.length} 项`
-            : `BC 类型 · ${BOUNDARY_BLUEPRINT_RECOGNITION.recognized}/${BOUNDARY_BLUEPRINT_RECOGNITION.total}`}
+            : "边界面 · 待识别"}
         </div>
         <ul className="flex-1 overflow-y-auto px-1.5 py-1.5 text-[11px]">
-          {!hasBoundaryPatches &&
-            BOUNDARY_BLUEPRINT_TREE_COUNTS.map((item) => {
-              const color =
-                BOUNDARY_BLUEPRINT_TYPES.find((type) => type.id === item.id)?.color ??
-                V4_PALETTE.warn;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={[
-                      "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors",
-                      item.status === "warn"
-                        ? "text-v4-warn"
-                        : "text-v4-textSecondary hover:bg-v4-surfaceRaised hover:text-v4-textPrimary",
-                    ].join(" ")}
-                    data-testid={`v4-mode-boundary-type-${item.id}`}
-                    title={item.labelZh}
-                  >
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 shrink-0 rounded-sm"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="flex-1 truncate">{item.labelZh}</span>
-                    <span className="font-mono text-[9px] text-v4-textTertiary">
-                      ×{item.count}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+          {!hasBoundaryPatches && (
+            // M5.5 C4 · de-faked (DEC-V61-206). Was BOUNDARY_BLUEPRINT_TREE_COUNTS
+            // (fabricated 入口×28 / 出口×27 / … presented as recognised patches).
+            // Honest pending state until the case's patches are derived.
+            <li
+              className="px-2 py-2 text-[10px] leading-relaxed text-v4-textTertiary"
+              data-testid="v4-mode-boundary-patches-pending"
+            >
+              边界面尚未识别 · 运行 setup-bc 后在此显示真实分组
+            </li>
+          )}
           {hasBoundaryPatches && patches.map((p) => {
             const c = roleColor(p.role);
             const isSelected = p.id === selectedPatchId;
@@ -229,7 +214,7 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
         className="relative flex min-h-0 flex-1 items-center justify-center"
         data-viewport-active={showViewport ? "true" : "false"}
       >
-        {showViewport && hasBoundaryPatches ? (
+        {showViewport ? (
           <ViewportV4
             glbUrl={activeGlbUrl}
             cameraPreset={cameraPreset ?? "iso"}
@@ -313,20 +298,16 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
                   </span>
                 </li>
               ))
-            : BOUNDARY_BLUEPRINT_TYPES.map((type) => (
-                <li key={type.id} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ backgroundColor: type.color }}
-                    />
-                    <span className="text-v4-textPrimary">{type.labelZh}</span>
-                  </span>
-                  <span className="font-mono text-v4-textSecondary">
-                    {type.count} 处
-                  </span>
+            : (
+                // M5.5 C4 · de-faked (DEC-V61-206): was BOUNDARY_BLUEPRINT_TYPES
+                // fabricated per-type counts. Honest pending state instead.
+                <li
+                  className="text-[10px] leading-relaxed text-v4-textTertiary"
+                  data-testid="v4-mode-boundary-stats-pending"
+                >
+                  边界面待识别 · 暂无统计
                 </li>
-              ))}
+              )}
         </ul>
         <div className="mt-3 border-t border-v4-border pt-2">
           <div className="flex items-baseline justify-between text-[10px]">
@@ -334,7 +315,7 @@ export function ModeRendererBoundary({ caseId, cameraPreset }: Props) {
             <span className="font-mono text-v4-textSecondary">
               {hasBoundaryPatches
                 ? (ctx.basics?.boundary_conditions?.length ?? "—")
-                : BOUNDARY_BLUEPRINT_RECOGNITION.recognized}{" "}
+                : "—"}{" "}
               项
             </span>
           </div>

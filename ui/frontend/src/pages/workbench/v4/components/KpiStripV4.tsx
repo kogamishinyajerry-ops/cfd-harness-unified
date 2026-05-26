@@ -25,7 +25,6 @@ import {
   type MeshBlueprintHistogram,
 } from "./meshBlueprint";
 import { PHYSICS_BLUEPRINT_SUMMARY } from "./physicsBlueprint";
-import { BOUNDARY_BLUEPRINT_KPIS } from "./boundaryBlueprint";
 import {
   useComparisonVerdict,
   type PostVerdict,
@@ -282,23 +281,15 @@ function chipsFor(
 
     case "boundary": {
       if ((basics?.patches?.length ?? 0) === 0) {
+        // M5.5 C4 · de-faked (DEC-V61-206). The old strip showed fabricated
+        // patch counts (inlet 28 / outlet 27 / wall 6 / rotor 1) from
+        // BOUNDARY_BLUEPRINT_KPIS, presented as if real. When this case has no
+        // derived patches yet, show honest placeholders rather than fake counts.
         return [
-          {
-            value: String(BOUNDARY_BLUEPRINT_KPIS.inletCount),
-            label: "入口",
-          },
-          {
-            value: String(BOUNDARY_BLUEPRINT_KPIS.outletCount),
-            label: "出口",
-          },
-          {
-            value: String(BOUNDARY_BLUEPRINT_KPIS.wallCount),
-            label: "壁面",
-          },
-          {
-            value: String(BOUNDARY_BLUEPRINT_KPIS.rotorCount),
-            label: "转子域",
-          },
+          { value: "—", label: "入口" },
+          { value: "—", label: "出口" },
+          { value: "—", label: "壁面" },
+          { value: "待识别", label: "边界面" },
         ];
       }
       const counts = countPatchesByRole(basics?.patches);

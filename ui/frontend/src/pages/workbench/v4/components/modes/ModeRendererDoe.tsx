@@ -273,9 +273,10 @@ export function ModeRendererDoe() {
             <span className="text-v4-textSecondary">
               帕累托前沿 · 压降 vs 最高温度
             </span>
-            <span className="font-mono text-v4-textTertiary">
-              全部方案 · 最优解 {DOE_BLUEPRINT_VERDICT.selectedId}
-            </span>
+            {/* Codex R2 P2 (DEC-V61-206): the concrete "最优解 V-12" winner is a
+                fabricated result, not a real optimum. Neutral label under the
+                illustrative banner. */}
+            <span className="font-mono text-v4-textTertiary">全部方案 · 示意前沿</span>
           </div>
           <div className="min-h-0 flex-1">
             <ScatterPlot

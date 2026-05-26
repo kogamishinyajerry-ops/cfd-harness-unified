@@ -23,6 +23,7 @@ import {
 import { ModeRendererMesh } from "../ModeRendererMesh";
 import { ModeRendererSolver } from "../ModeRendererSolver";
 import { ModeRendererDoe } from "../ModeRendererDoe";
+import { ModeRendererBoundary } from "../ModeRendererBoundary";
 import { KpiStripV4 } from "../../KpiStripV4";
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -97,10 +98,12 @@ describe("Solver step honesty (M5.5 C2)", () => {
 
 describe("DOE step honesty (M5.5 C3)", () => {
   it("shows a prominent illustrative banner — the fabricated optima are not presented as truth", () => {
-    render(<ModeRendererDoe />);
+    const { container } = render(<ModeRendererDoe />);
     const banner = screen.getByTestId("v4-mode-doe-illustrative-banner");
     expect(banner.textContent).toContain("示意");
     expect(banner.textContent).toContain("非真实寻优结果");
+    // Codex R2 P2: no concrete "最优解 V-12" winner presented as a real optimum.
+    expect(container.textContent).not.toContain("最优解");
   });
 
   it("DOE KPI strip shows an honest placeholder, not fabricated optima", () => {
@@ -113,5 +116,28 @@ describe("DOE step honesty (M5.5 C3)", () => {
     expect(container.textContent).not.toContain("212.6");
     expect(container.textContent).not.toContain("18h42m");
     expect(container.textContent).not.toContain("V-12");
+  });
+});
+
+describe("Boundary step honesty (M5.5 C4)", () => {
+  it("no-patches case shows pending states, not fabricated 61/62 + per-type counts", () => {
+    const { container } = render(<ModeRendererBoundary caseId={undefined} />, {
+      wrapper,
+    });
+    // the fabricated recognition (61/62) + tree counts (入口×28 …) must be gone
+    expect(container.textContent).toContain("待识别");
+    expect(container.textContent).not.toContain("61/62");
+    expect(container.textContent).not.toContain("61/");
+  });
+
+  it("boundary KPI strip with no patches shows honest placeholders, not 28/27/6/1", () => {
+    const { container } = render(
+      <KpiStripV4 activeStep="boundary" caseId="case-x" />,
+      { wrapper },
+    );
+    // un-derived case → honest 待识别/—, never fabricated inlet 28 / outlet 27
+    expect(container.textContent).toContain("待识别");
+    expect(container.textContent).not.toContain("28");
+    expect(container.textContent).not.toContain("27");
   });
 });
