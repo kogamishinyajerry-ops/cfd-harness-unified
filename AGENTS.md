@@ -156,6 +156,85 @@ Per V133 (2026-05-07), Kogami is now **opt-in only** (user explicitly invokes); 
 manual invocation path remains operational with all contract files (P-1..P-5)
 preserved and Q1 canary verification intact.
 
+## Crew architecture v2 (DEC-V61-208 · 2026-05-27)
+
+> Establishes the **cfd-chief-engineer** (商业-CAE 总工程师) as the apex
+> delivery-owner of the Blueprint v4 vertical arc, and rationalizes the crew's
+> division of labor against the **live** system. Aligns with v2.3's
+> anti-over-engineering stance: this **does not add an orchestration layer** —
+> it names a single delivery driver and tells the truth about which agents are live.
+
+### The honest state of the crew (audited 2026-05-27)
+
+The `.claude/agents/` crew was built around an aspirational **CWOS** scaffold
+(`docs/project-memory/`, `docs/strategy/`, `docs/vv/`, `docs/status/`,
+`.cwos/tasks.yaml`, `tools/cwos_event.py`). **None of those paths exist in this
+repo.** Real delivery runs on: a single Opus driver (main session) + Codex relay
+(code review) + Kogami (opt-in strategic) + `.planning/` DECs (574 commits) +
+STATE.md + Blueprint v4. So the director agents are **dormant** — they would fail
+on their "Required files to read before acting" step.
+
+### Roles, reclassified against the live system
+
+| Tier | Agent / actor | Status | Owns |
+|---|---|---|---|
+| **Sponsor / final authority** | the human user | live | direction, charter ratification, autonomy grants, override anytime |
+| **Apex delivery-owner** | **`cfd-chief-engineer`** (NEW) | **live** | drives Blueprint v4 P1→P4; runnable-coverage exit-gate go/no-go; coordinates the crew; wired to `.planning/` (not CWOS) |
+| **Implementation** | `backend-engineer`, `frontend-engineer`, `openfoam-adapter-engineer`, `docs-knowledge-engineer` | usable | mechanical impl dispatched by the Chief Engineer; main-session Opus reviews their diffs |
+| **Domain consults (on-demand)** | `cfd-vv-director` (V&V / tolerance / "covered" semantics), `system-architect` (boundaries / four-plane law / adapter / schemas) | **live (repointed)** | consulted by the Chief Engineer at exit gates / boundary-touching changes; repointed off the dead scaffold onto `.planning/` + `ui/backend/`; NOT autonomous owners |
+| **Audit / QA** | `test-red-team` + global `functional-tester` / `novice-simulator` / `industrial-ui-comparator` | usable | independent functional/UX/parity audits commissioned at exit gates |
+| **Implementation** (also) | `docs-knowledge-engineer` | usable | corpus / docs / V-series knowledge work |
+| **Independent code review** | Codex relay (86gs/CRS) | live | risk-tier code review, round cap = 3 (unchanged) |
+| **Independent strategic review** | `kogami-claude-cosplay` | live (opt-in) | strategic second opinion when the user invokes (unchanged) |
+| **Archive** | Notion | live | session-end batch sync of Accepted DECs (unchanged) |
+| **Marketing (separate track)** | `marketing-director` | usable | Chinese-MG video + real-screenshot demos (unchanged) |
+| **Retired (DEC-V61-208)** | ~~`project-governor`, `strategy-director`, `engineering-director`, `benchmark-director`, `product-ui-director`, `progress-intelligence-agent`~~ | **deleted** (git-recoverable) | their delivery-driving intent is absorbed by `cfd-chief-engineer`; their process/scope intent lives in CLAUDE.md v2.3 + `.planning/` DECs |
+
+**Disposition (resolved · DEC-V61-208)**: of the 8 dormant CWOS directors, **6 were
+retired** (deleted — recoverable from git) and **2 repointed** onto the live system
+(`cfd-vv-director`, `system-architect`) as on-demand consults. The Chief Engineer
+absorbs the delivery-driving intent the directors only aspired to; the two
+surviving consults carry the domain-gatekeeper intent (V&V policy, architecture
+boundaries) and are invoked by the Chief Engineer on demand. The crew is now
+**10 agents**.
+
+### How the Chief Engineer coordinates (the loop)
+
+```
+Blueprint v4 phase (P1..P4)
+  → cfd-chief-engineer defines exit gate (Law 1: runnable + benchmark-passed)
+  → dispatches impl to engineer agents (Opus main reviews diffs)
+  → risk-tier hit → Codex relay review (round cap=3)
+  → exit-gate candidate → test-red-team + evaluator audits + benchmark vs gold
+  → four-question gate + V&V tolerance check
+  → go/no-go call (on evidence) → sub-DEC + STATE.md update
+  → [autonomy L0: stop for user ratification of next phase]
+```
+
+### Two autonomies, kept orthogonal (critical)
+
+- **DEV-crew autonomy** (this DEC grants it, graduated L0→L1→L2): the Chief
+  Engineer + dev agents may develop and eventually push autonomously once mature.
+- **PRODUCT-AI advisor-not-driver** (DEC-V61-130, untouchable): the shipped
+  product's AI never drives a simulation / never mutates a case.
+
+Granting dev-crew autonomy **never** relaxes the product's advisor-not-driver
+invariant. The Chief Engineer's hard guardrails enforce this wall at every level.
+
+### Graduated autonomy (summary — full ladder + maturity criteria in the agent file)
+
+- **L0 · Advisory** (current): drives inside a user-approved phase; stops at every
+  phase boundary; no autonomous push.
+- **L1 · Supervised**: executes + pushes passing work within a phase; stops at
+  exit gates for the next-phase go/no-go.
+- **L2 · Full autonomy** (成熟后全权): drives multi-phase, makes exit-gate calls,
+  pushes validated work; only charter/direction changes + escalations + guardrail
+  conflicts return to the user.
+
+Graduation is **evidence-gated** (zero gate-violations, exit-gate calls confirmed
+correct by evidence, V&V loop closed — see `cfd-chief-engineer.md`), never
+calendar-gated, and each promotion is a governance-rule change → DEC + user ratification.
+
 ## Imported Claude Cowork project instructions
 
 AI CFD with reliable trust gate
