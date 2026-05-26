@@ -200,7 +200,13 @@ function chipsFor(
       }
       return [
         { value: String(basics?.patches?.length ?? "—"), label: "边界面" },
-        { value: String(basics?.dimension ?? "—"), label: "维度", unit: "D" },
+        {
+          value: String(basics?.dimension ?? "—"),
+          label: "维度",
+          // Codex R2 P3: drop the "D" suffix when dimension is unknown so the
+          // chip reads "—" not "— D".
+          unit: basics?.dimension != null ? "D" : undefined,
+        },
         {
           value: cl?.value != null ? fmt(cl.value, 3) : "—",
           label: cl?.name ?? "特征长度",

@@ -461,8 +461,11 @@ def derive_workbench_basics(
     u_complete = bool(u_by_patch) and all(n in u_by_patch for n in patch_names)
     dimension: Optional[int]
     if u_complete:
+        # Codex R2 P1: scan ONLY boundary-backed patch names — a stale/extra
+        # `empty` block in 0/U for a patch that is not in polyMesh/boundary
+        # must not force 2D.
         dimension = 2 if any(
-            str(bc.get("type")) == "empty" for bc in u_by_patch.values()
+            str(u_by_patch.get(n, {}).get("type")) == "empty" for n in patch_names
         ) else 3
     else:
         dimension = None

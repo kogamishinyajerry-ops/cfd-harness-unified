@@ -229,6 +229,29 @@ def test_dimension_derived_from_empty_patch(tmp_path):
     assert m.dimension == 2
 
 
+def test_stale_empty_block_in_0U_does_not_force_2d(tmp_path):
+    # Codex R2 P1: the 2D/3D decision must scan only boundary-backed patches.
+    # A 0/U with an `empty` block for a patch NOT in polyMesh/boundary (stale)
+    # must NOT make the case 2D when every real patch is non-empty.
+    case = tmp_path / "c"
+    (case / "constant" / "polyMesh").mkdir(parents=True)
+    (case / "0").mkdir()
+    (case / "constant" / "polyMesh" / "boundary").write_text(
+        "FoamFile { object boundary; }\n1\n(\n  inlet { type patch; nFaces 5; startFace 1; }\n)\n"
+    )
+    # 0/U covers the real `inlet` (non-empty) PLUS a stale `frontAndBack` empty
+    # block that is not a real mesh patch.
+    (case / "0" / "U").write_text(
+        "FoamFile { object U; }\nboundaryField\n{\n"
+        "  inlet { type fixedValue; value uniform (1 0 0); }\n"
+        "  frontAndBack { type empty; }\n}\n"
+    )
+    m = derive_workbench_basics("c", case_dir=case)
+    assert m is not None
+    # only `inlet` is boundary-backed and it is non-empty → 3D, not 2D.
+    assert m.dimension == 3
+
+
 def test_legacy_turbulence_properties_cites_correct_filename(tmp_path):
     # Codex R1 P2: a case using the legacy constant/turbulenceProperties must
     # NOT have reasoning_zh claim "constant/momentumTransport".
