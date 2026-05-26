@@ -1,0 +1,29 @@
+Codex R2 governance review — DEC-V61-206 deriver (commit ed310c7) · ROUND CAP=3
+Relay: 86gs gpt-5.4 (xhigh) · code-only · tokens 150,738 · Date: 2026-05-26
+
+VERDICT: CHANGES_REQUIRED (1 P1 + 1 P3)
+
+R1 carryovers — ALL resolved as described:
+  - incomplete/missing 0/U → dimension omitted (schema/types Optional)
+  - patch wording corrected ("未识别到该面的 0/U")
+  - turbulence provenance cites the file actually read
+  Frontend dimension consumers all traced safe on omission (CaseFrame,
+  RightPanelV4 ×2, KpiStripV4 ×2, ModeRendererGeometry).
+
+P1 [deriver.py dimension]: the empty-scan iterated u_by_patch.values() (all
+  parsed 0/U blocks), so a STALE `empty` block for a patch not in
+  polyMesh/boundary could still force dimension=2. Must scan boundary-backed
+  patch names only + regression test for "all real patches covered + extra
+  stale empty block".
+P3 [KpiStripV4]: omitted dimension renders "— D" (unit:"D" unconditional) —
+  retro-queue polish, not a blocker.
+
+Note: round-cap R3 — merging as-is would require user ratification of the
+residual P1. Static review only (no test run in read-only sandbox).
+
+RESOLUTION (commit 44c5e82, verbatim per Codex R2 — does NOT consume a round
+per v2.3 verbatim exception):
+  P1 → dimension scans only boundary-backed patch names; + the exact regression
+       test Codex specified (stale empty block stays 3D).
+  P3 → KpiStripV4 drops the "D" suffix when dimension unknown.
+  Verdict trailer on HEAD: RESOLVED.

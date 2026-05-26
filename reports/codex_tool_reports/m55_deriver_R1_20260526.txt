@@ -1,0 +1,29 @@
+Codex R1 governance review — DEC-V61-206 deriver (commit db1c220)
+Relay: 86gs gpt-5.4 (xhigh) · code-only · tokens 187,038 · Date: 2026-05-26
+
+VERDICT: CHANGES_REQUIRED (1 P1 + 2 P2)
+
+R0 resolution check: 3 of 4 resolved cleanly —
+  1. role guessing → fixed (_role_from_u returns "unknown", no name guess)
+  2. false laminar → fixed (Optional, reasoning only when parsed; frontend safe)
+  3. regex mismatch → fixed (_patch_blocks aligned to \w+)
+  4. hardcoded dimension → PARTIAL: no longer hardcodes 3, but still asserts 3D
+     when 0/U is missing/unreadable/partial (same faithfulness class).
+
+P1 [deriver.py orchestrator; schema dimension]: dimension derived only from
+  u_by_patch with unconditional 3 fallback → mislabels 3D when 0/U absent/
+  malformed/missing-front-back-entry. Must degrade to unknown; schema hard-
+  requires dimension int[2,3] (no honest degrade path).
+P2 [_derive_patches desc]: "无 0/U" over-claims absence — the same branch covers
+  unreadable/partial 0/U (exceptions swallowed). Reword to "未识别到该 patch 0/U".
+P2 [_derive_solver reasoning]: legacy constant/turbulenceProperties cases still
+  cite "constant/momentumTransport" — false provenance.
+
+Frontend laminar=None safety: CONFIRMED safe (LeftRailV4 待识别, RightPanelV4
+===true/false→—, KpiStrip uses steady_state only).
+
+RESOLUTION (commit ed310c7, R2):
+  P1 → dimension emitted only when 0/U read AND covers every patch, else None;
+       schema dimension Optional[int]; frontend dimension optional + guards.
+  P2 → desc "未识别到该面的 0/U"; reasoning cites mt_name (actual file read).
+  +2 tests (dimension-None-when-incomplete; legacy-turbulenceProperties name).

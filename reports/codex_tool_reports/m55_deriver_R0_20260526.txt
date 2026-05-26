@@ -1,0 +1,38 @@
+Codex R0 governance review — DEC-V61-206 manifest→WorkbenchBasics deriver + solver streamline removal
+Relay: 86gs gpt-5.4 (xhigh) · code-only diff (commit 1f9512f) · tokens 301,471
+Date: 2026-05-26
+
+VERDICT: CHANGES_REQUIRED (2 P1 + 2 P2)
+
+P1-1 [deriver.py _role_from_u / _derive_patches; route; ModeRendererBoundary]:
+  when 0/U is missing/unreadable, _role_from_u fell back to patch-NAME guesses
+  (inlet/outlet/wall/empty) and still emitted a "派生自算例" patch list claiming
+  data came from polyMesh/boundary + 0/U. A new false claim — guessing boundary
+  semantics instead of omitting them. Breaks the never-guess contract.
+
+P1-2 [deriver.py _derive_solver]: laminar defaulted True before reading
+  constant/momentumTransport; if that file is missing/unparseable the solver
+  still claims 层流 and reasoning_zh asserts "momentumTransport 为 laminar".
+  Not a faithful mirror — should degrade to unknown/omitted.
+
+P2-3 [deriver.py _patch_blocks vs bc_setup_from_stl_patches _PATCH_RE]: field
+  parser accepted names with . / - but the reused polyMesh reader only matches
+  \w+. Dotted/dashed names silently lost, or a real case falls through to the
+  route's 404. Broken mirror / misleading result.
+
+P2-4 [deriver.py _derive_geometry / orchestrator; CaseFrame]: geometry.shape=
+  "imported" and dimension=3 hardcoded, not read from disk. /learn skips the
+  honest 待识别 fallback whenever polyMesh/points exists, and any 2D imported
+  case is mislabeled 3D.
+
+Brief: no blocker in the streamline removal; no ReDoS/crash in the parsers;
+provenance default + geometry?: frontend guards backward-compatible. All
+blockers are semantic truthfulness in fallback/default paths.
+
+RESOLUTION (commit db1c220, R1):
+  P1-1 → no U BC ⇒ role "unknown"; per-patch desc "无 0/U，类型未识别"; no name guess.
+  P1-2 → laminar Optional[bool]=None when momentumTransport unread; reasoning
+         cites it only when parsed; frontend laminar optional + "湍流模型待识别".
+  P2-3 → _patch_blocks regex aligned to \w+ (dotted names = shared-reader limit).
+  P2-4 → dimension derived from `empty` U BC marker (2D) else 3D.
+  +3 deriver tests pin the faithful behaviors.
