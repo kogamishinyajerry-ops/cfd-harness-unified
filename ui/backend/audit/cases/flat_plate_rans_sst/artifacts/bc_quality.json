@@ -45,11 +45,8 @@
           "type": "empty"
         },
         "inlet": {
-          "params": {
-            "intensity": 0.01
-          },
-          "type": "turbulentIntensityKineticEnergyInlet",
-          "value_scalar": 0.135
+          "type": "fixedValue",
+          "value_scalar": 0.0002025
         },
         "outlet": {
           "type": "zeroGradient"
@@ -101,11 +98,8 @@
           "type": "empty"
         },
         "inlet": {
-          "params": {
-            "mixingLength": 0.01
-          },
-          "type": "turbulentMixingLengthFrequencyInlet",
-          "value_scalar": 67.0
+          "type": "fixedValue",
+          "value_scalar": 3750.0
         },
         "outlet": {
           "type": "zeroGradient"
@@ -118,7 +112,7 @@
         },
         "wall": {
           "type": "omegaWallFunction",
-          "value_scalar": 67.0
+          "value_scalar": 3750.0
         }
       }
     },

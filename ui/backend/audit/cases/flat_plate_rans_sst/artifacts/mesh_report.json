@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T03:37:05Z",
+  "generated_at": "2026-05-27T03:50:11Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M4",
   "gate_status": "PASS",
@@ -38,9 +38,9 @@
   "y_plus_dimension": {
     "dimension_status": "PASS",
     "patch_evaluated": "wall",
-    "actual_avg": 1.38559,
-    "actual_min": 0.821866,
-    "actual_max": 9.42885,
+    "actual_avg": 1.37509,
+    "actual_min": 0.829924,
+    "actual_max": 9.47913,
     "target_min": 0.5,
     "target_max": 5.0,
     "ok": true

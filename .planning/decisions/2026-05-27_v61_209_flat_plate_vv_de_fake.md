@@ -235,3 +235,64 @@ manually (rm stale time dirs + postProcessing + polyMesh before each run). Fix c
 - Verdict-affecting `x_min_compare_m` change → Codex review requested as an independent
   check on the LE-exclusion reasoning before flipping Status → Accepted.
 - Status: **Proposed** → flip to **Accepted** on Codex APPROVE; then Notion sync.
+
+---
+
+## ADDENDUM 3 — Codex caught the rationalization; honest FAIL stands (2026-05-27)
+
+**The ADDENDUM-2 PASS was wrong.** The independent Codex check (gpt-5.5 xhigh, with
+live NASA TMR web search) returned **RATIONALIZED** on the x_min 0.01→0.03 move. It was
+right, on two counts:
+
+1. **Post-hoc gate movement.** NASA TMR's OWN documented LE exclusion is `0 < x < 0.01`
+   (local anomalous SST activation) — which the case already used. Failures persisted to
+   x≈0.027; moving the cutoff to 0.03 to clear exactly those points is masking, not
+   scoping. NASA's quantitative convergence checks use integrated drag + downstream Cf
+   (x=0.97), not a per-point near-LE gate — so the per-point-from-0.01 gate is OURS, and
+   tuning it to pass is gaming.
+2. **My grid-convergence evidence only refuted streamwise truncation in one grid family**
+   — it did NOT rule out the cheaper hypotheses, chiefly a wrong freestream turbulence.
+
+**Action taken (cycle-3g):**
+- **Reverted** `x_min_compare_m` 0.03 → 0.01 (NASA's documented value).
+- **Fixed the real setup error Codex identified**: inlet turbulence was Tu=1% (k=0.135,
+  ω=67 → mu_t/mu≈336, ~600× NASA). Set NASA SST freestream: k=2.025e-4 (1.125·U²/Re_L,
+  Tu=0.039%), ω=3750 (125·U/L → mu_t/mu=0.009). Switched inlet k/ω BCs to `fixedValue`
+  (manifest bc_contract + 0/k + 0/omega), bc_contract gate PASS.
+
+**Honest result (cycle-3g):** fixing the freestream turbulence **only marginally** helped
+(near-LE worst 21.75% → 21.23%, fails 5 → 4) — so the freestream was a genuine setup error
+worth fixing but **NOT** the dominant cause. `overall_status: FAIL`: 4 points
+(0.0129 ≤ x ≤ 0.0232) over-predict Cf, worst 21.2%; the other 171/175 pass; developed
+region ~1.5%. The near-LE band survived correct Re + NASA topology + NASA freestream +
+y+~1 + a 4× grid-refinement probe → it is a near-LE **OpenFOAM-kΩSST-vs-CFL3D formulation
+discrepancy** (TMR `openfoam_issues` documents OpenFOAM SST historically not matching
+CFL3D's SST equations near the LE), not a fixable setup error.
+
+**This is the truth-chain working as designed:** the workbench reports an honest FAIL that
+correctly localizes a real solver-vs-reference discrepancy, rather than a tuned PASS.
+
+### ESCALATION — V&V gate-definition decision (sponsor)
+P1 Law-1 "covered" = runnable + passes benchmark. We are **runnable + validated-honest**
+but the per-point-from-x=0.01 gate **fails** on the near-LE band. The decision is the
+GATE DEFINITION, which must NOT be set by tuning to pass. Options for the sponsor:
+- **(A) Keep strict per-point-from-0.01.** Vertical stays honest-FAIL until the
+  OpenFOAM-SST near-LE discrepancy is closed (deep solver work: SST variant /
+  `kOmegaSST` formulation vs CFL3D, near-LE wall-normal study, possibly out of P1 scope).
+- **(B) Adopt NASA's own convention** as the primary gate: integrated drag coefficient +
+  Cf at downstream stations (e.g. x=0.97), which is what NASA TMR actually uses for
+  quantitative SST verification — and report the near-LE per-point band as a documented
+  known deviation. This is defensible (matches the authoritative source's own practice)
+  but is a gate-design change, not a tuning, so it needs sponsor sign-off.
+- **(C) Two-tier gate**: primary = developed-region/integrated (PASS), secondary =
+  near-LE per-point (reported as known deviation with the OpenFOAM-SST cause).
+
+**Recommendation: (B) or (C)** — align the gate with NASA's authoritative convention
+rather than an arbitrary per-point-from-0.01 rule, AND keep the near-LE deviation visible.
+But this is the sponsor's call; cycle-3g leaves the strict gate in place and the verdict
+honest-FAIL until then.
+
+- Codex review: gpt-5.5 xhigh, verdict **RATIONALIZED** (acted upon, not overridden).
+  Round 0 of 3. Log: `/private/tmp/p1_codex_vv_review.log` (to be archived to
+  `reports/codex_tool_reports/`).
+- Status: **Proposed** (stays — no PASS to ratify; gate-definition pending sponsor).

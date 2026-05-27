@@ -1,8 +1,8 @@
 /*--------------------------------*- C++ -*----------------------------------*\
-| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
-| omega = sqrt(k) / (C_mu^0.25 * L_t)                                        |
-|       = sqrt(0.135) / (0.5477 * 0.01) ≈ 67                                |
-|   per manifest.bc_contract.inlet.omega.mixingLength = 0.01                 |
+| AI-CFD-V2 Phase 1 | OpenFOAM 11 | flat_plate_rans_sst                       |
+| NASA TMR SST freestream (cycle-3g): omega = 125 * U / L = 125*30/1 = 3750   |
+|   gives mu_t/mu = k/(omega*nu) = 2.025e-4/(3750*6e-6) = 0.009 (NASA).       |
+|   replaces prior omega=67 (mixingLength 0.01, mu_t/mu~336). See DEC-209.    |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -15,15 +15,15 @@ FoamFile
 
 dimensions      [0 0 -1 0 0 0 0];
 
-internalField   uniform 67;
+internalField   uniform 3750;
 
 boundaryField
 {
     inlet
     {
-        type            turbulentMixingLengthFrequencyInlet;
-        mixingLength    0.01;          // matches manifest
-        value           uniform 67;
+        // NASA TMR SST freestream omega (matches manifest fixedValue 3750)
+        type            fixedValue;
+        value           uniform 3750;
     }
     outlet
     {
@@ -33,7 +33,7 @@ boundaryField
     {
         // matches manifest.bc_contract.wall.omega.type = omegaWallFunction
         type            omegaWallFunction;
-        value           uniform 67;
+        value           uniform 3750;
     }
     top
     {

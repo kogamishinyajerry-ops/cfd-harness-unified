@@ -1,7 +1,9 @@
 /*--------------------------------*- C++ -*----------------------------------*\
-| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
-| k = 1.5 * (I*U)^2 = 1.5 * (0.01 * 30)^2 = 0.135                            |
-|   per manifest.bc_contract.inlet.k.intensity = 0.01                        |
+| AI-CFD-V2 Phase 1 | OpenFOAM 11 | flat_plate_rans_sst                       |
+| NASA TMR SST freestream (cycle-3g): k = 1.125 * U^2 / Re_L                  |
+|   = 1.125 * 30^2 / 5e6 = 2.025e-4  (Tu = 0.039%, mu_t/mu = 0.009)           |
+|   replaces prior Tu=1% (k=0.135, ~600x too turbulent — caused near-LE       |
+|   Cf over-prediction; see manifest bc_contract + DEC-V61-209).             |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -14,15 +16,15 @@ FoamFile
 
 dimensions      [0 2 -2 0 0 0 0];
 
-internalField   uniform 0.135;
+internalField   uniform 2.025e-4;
 
 boundaryField
 {
     inlet
     {
-        type            turbulentIntensityKineticEnergyInlet;
-        intensity       0.01;          // matches manifest
-        value           uniform 0.135;
+        // NASA TMR SST freestream k (matches manifest fixedValue 2.025e-4)
+        type            fixedValue;
+        value           uniform 2.025e-4;
     }
     outlet
     {

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T03:37:05Z",
+  "generated_at": "2026-05-27T03:50:11Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M8",
   "gate_status": "PASS",
@@ -53,15 +53,15 @@
         "manifest_key": "inlet",
         "resolved_patch": "inlet",
         "field": "k",
-        "declared_type": "turbulentIntensityKineticEnergyInlet",
-        "realized_type": "turbulentIntensityKineticEnergyInlet"
+        "declared_type": "fixedValue",
+        "realized_type": "fixedValue"
       },
       {
         "manifest_key": "inlet",
         "resolved_patch": "inlet",
         "field": "omega",
-        "declared_type": "turbulentMixingLengthFrequencyInlet",
-        "realized_type": "turbulentMixingLengthFrequencyInlet"
+        "declared_type": "fixedValue",
+        "realized_type": "fixedValue"
       },
       {
         "manifest_key": "outlet",
@@ -102,10 +102,23 @@
   },
   "value_match_dimension": {
     "dimension_status": "PASS",
-    "matched_count": 4,
+    "matched_count": 2,
     "value_mismatches": [],
     "value_missing": [],
-    "numeric_field_unknown": [],
+    "numeric_field_unknown": [
+      {
+        "manifest_key": "inlet",
+        "field_class": "k",
+        "numeric_field": "value",
+        "declared": 0.0002025
+      },
+      {
+        "manifest_key": "inlet",
+        "field_class": "omega",
+        "numeric_field": "value",
+        "declared": 3750.0
+      }
+    ],
     "matched": [
       {
         "manifest_key": "inlet",
@@ -118,30 +131,6 @@
         "lookup_kind": "vector_magnitude",
         "rel_tol": 1e-06,
         "abs_tol": 1e-09
-      },
-      {
-        "manifest_key": "inlet",
-        "resolved_patch": "inlet",
-        "field": "k",
-        "field_class": "k",
-        "numeric_field": "intensity",
-        "declared": 0.01,
-        "actual": 0.01,
-        "lookup_kind": "param",
-        "rel_tol": 1e-06,
-        "abs_tol": 1e-12
-      },
-      {
-        "manifest_key": "inlet",
-        "resolved_patch": "inlet",
-        "field": "omega",
-        "field_class": "omega",
-        "numeric_field": "mixingLength",
-        "declared": 0.01,
-        "actual": 0.01,
-        "lookup_kind": "param",
-        "rel_tol": 1e-06,
-        "abs_tol": 1e-12
       },
       {
         "manifest_key": "outlet",
@@ -159,42 +148,8 @@
   },
   "derived_consistency_dimension": {
     "dimension_status": "PASS",
-    "matched_count": 2,
-    "matched": [
-      {
-        "manifest_key": "inlet",
-        "resolved_patch": "inlet",
-        "derivation": "k_from_I_U",
-        "formula": "1.5 * (intensity * magnitude_m_s)^2",
-        "inputs": {
-          "intensity": 0.01,
-          "magnitude_m_s": 30.0
-        },
-        "expected": 0.135,
-        "actual": 0.135,
-        "rel_tol": 0.005,
-        "abs_tol": 1e-09
-      },
-      {
-        "manifest_key": "inlet",
-        "resolved_patch": "inlet",
-        "derivation": "omega_from_k_L",
-        "formula": "sqrt(k_expected) / (Cmu^0.25 * mixingLength)",
-        "inputs": {
-          "intensity": 0.01,
-          "magnitude_m_s": 30.0,
-          "mixingLength": 0.01,
-          "Cmu": 0.09,
-          "k_expected": 0.135
-        },
-        "expected": 67.0820393249937,
-        "actual": 67.0,
-        "rel_tol": 0.005,
-        "abs_tol": 1e-09
-      }
-    ],
-    "derived_mismatches": [],
-    "derived_missing": []
+    "matched_count": 0,
+    "note": "no patch declares both magnitude_m_s + intensity (no derivation possible)."
   },
   "expected_fields": [
     "U",
@@ -214,12 +169,12 @@
         "type": "zeroGradient"
       },
       "k": {
-        "type": "turbulentIntensityKineticEnergyInlet",
-        "intensity": 0.01
+        "type": "fixedValue",
+        "value": 0.0002025
       },
       "omega": {
-        "type": "turbulentMixingLengthFrequencyInlet",
-        "mixingLength": 0.01
+        "type": "fixedValue",
+        "value": 3750.0
       }
     },
     "outlet": {

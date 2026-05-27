@@ -39,49 +39,50 @@ Cf error of **15–17%** vs the NASA Re=5×10⁶ curve — far worse than the "~
 the earlier note predicted. Widening tolerance to absorb a Reynolds mismatch was the
 wrong fix; matching the reference Re is the honest one.
 
-**Empirical validation (real simpleFoam + kΩSST, OF11, DEC-V61-209 cycle-3e, VALIDATED)**:
+**Empirical validation (real simpleFoam + kΩSST, OF11, DEC-V61-209 cycle-3g, HONEST FAIL)**:
 The case uses **NASA TMR topology**: a leading **symmetry** section [-0.333, 0] then the
-no-slip **plate** [0, 2], y+ ≈ 1.3 avg, converged at iter 394 (all 5 residuals ≤ 1e-5).
-Real Cf(x) vs NASA TMR CFL3D SST, with the LE band excluded (x ≥ 0.03, see below):
-- **170 / 170 compared points within the 10% gate** → `overall_status: PASS`, `validated`.
-- **Developed turbulent region (x ≥ 0.2 m): ~1.5–2%** error — excellent.
-- **Mid plate (x ≈ 0.05–0.2 m): 3–6%**.
-- **First on-plate compared point (x = 0.031 m): 7.1%** (just outside the LE band).
+no-slip **plate** [0, 2], y+ ≈ 1.3 avg, converged at iter 394 (all 5 residuals ≤ 1e-5),
+NASA SST **freestream turbulence** (Tu=0.039%, mu_t/mu=0.009). Real Cf(x) vs NASA TMR
+CFL3D SST, with NASA's documented **x < 0.01** LE exclusion (NOT a tuned cutoff):
+- `overall_status: FAIL`, `validation_status: not_validated` (honest).
+- **4 near-LE points fail**: 0.0129 ≤ x ≤ 0.0232, worst **21.2%** at x=0.0129.
+- **171 / 175 points pass**; mid plate (x ≈ 0.05–0.2) 3–6%; developed (x ≥ 0.2) **~1.5%**.
 
 The 10% `reference_comparison.tolerance` stands, justified by genuine discretization
 uncertainty (not a hidden Reynolds offset).
 
 ## Comparison region
 
-Skip-window: `x_min_compare_m = 0.03` (raised from 0.01 — DEC-V61-209 cycle-3e/f). The
-trust comparator drops points with `x < 0.03 m` from both curves before computing
-per-point error.
+Skip-window: `x_min_compare_m = 0.01` — **NASA TMR's own documented LE exclusion** (TMR
+notes local anomalous SST activation in `0 < x < 0.01`). The comparator drops points
+with `x < 0.01 m` from both curves before computing per-point error.
 
-**Why 0.03, and why it is NOT tolerance-gaming (grid-convergence evidence):**
-The immediate leading-edge band over-predicts Cf vs the CFL3D reference (e.g. ~21.6%
-at x ≈ 0.013). Before excluding it, we PROVED the over-prediction is a model / LE-
-singularity feature, not a refinable mesh deficiency, via a grid-convergence study:
+**Honesty note (DEC-V61-209 cycle-3e→3g):** an interim attempt raised this to `0.03` to
+clear the residual near-LE failures. That was **reverted** as post-hoc gate movement
+(Codex review, RATIONALIZED): the failures persisted to x≈0.027, and moving the cutoff
+to exactly past them was masking, not scoping. NASA's documented exclusion is `0.01`,
+and that is what stands.
 
-| plate-block x-cells | LE cell size | Cf error at x ≈ 0.0128 |
-|---|---|---|
-| 180 (cycle-3e)      | ~2.6 mm      | **21.75%**             |
-| 260 (cycle-3f)      | ~0.63 mm (4× finer) | **21.58%**      |
+**What the near-LE band is (causal evidence, not a justification to exclude it):**
+the 0.01 < x < 0.027 over-prediction survives every correct-setup fix, so it is a
+near-LE OpenFOAM-kΩSST-vs-CFL3D formulation discrepancy (TMR's `openfoam_issues` page
+documents OpenFOAM SST historically not matching CFL3D's SST equations), NOT a fixable
+setup error:
 
-Refining the leading edge 4× did **not** reduce the error at a fixed location — it
-only added more sample points inside the high-error band (fails 5 → 19), and the
-band consistently ended at x ≈ 0.027 regardless of grid. A discretization error
-would shrink under refinement; this does not. It is the fully-turbulent k-ω SST
-leading-edge singularity region (the BL is vanishingly thin; Cf → large as x → 0),
-which standard turbulent-flat-plate verification compares **outside**. NASA's own
-CFL3D curve spikes from Cf ≈ 0.015 at x=0 to ≈ 0.006 by x=0.005. Excluding x < 0.03
-isolates the developed turbulent region the SST model is meant to predict.
+| cycle | change | near-LE error @ x≈0.0128 | failing band |
+|---|---|---|---|
+| 3c | plate-only (LE on inlet)        | 26.5% | x ≤ 0.035 |
+| 3e | + NASA symmetry pre-plate       | 21.8% | x ≤ 0.027 |
+| 3f | + 4× LE x-refinement (180→260)  | 21.6% (grid-converged) | x ≤ 0.027 |
+| 3g | + NASA freestream turbulence    | 21.2% | x ≤ 0.023 |
 
-An earlier intermediate hypothesis ("near-LE error is y+~120 wall-function under-
-resolution, refine to y+~1") was SUPERSEDED: the y+~1 mesh was built (avg 1.3) and the
-near-LE over-prediction persisted, then the grid-convergence study above showed it is
-not a mesh-resolution effect at all. The root fix that did help was the NASA pre-plate
-topology (removing the inlet-corner singularity), which shrank the failing band from
-x ≤ 0.035 (plate-only) to x ≤ 0.027 (pre-plate); the residual is the irreducible LE band.
+The pre-plate fixed a non-convergence and shrank the band; grid refinement did not move
+the fixed-location error (so it is not discretization); NASA-exact freestream barely
+moved it (so it is not the inlet turbulence). The residual is intrinsic to the
+solver-vs-reference near the LE. **It is reported honestly as a FAIL, not excluded.**
+Whether the workbench's flat-plate gate should remain per-point-from-x=0.01 (strict) or
+adopt NASA's own convention (integrated drag + downstream Cf at x=0.97) is a V&V-gate
+methodology decision for the sponsor — see DEC-V61-209 ADDENDUM 3.
 
 ## Verifying this dataset
 

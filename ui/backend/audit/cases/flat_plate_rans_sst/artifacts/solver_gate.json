@@ -1,17 +1,17 @@
 {
   "status": "PASS",
-  "summary": "simpleFoam converged at iter 394 (all 5 field residuals \u2264 target).",
+  "summary": "simpleFoam converged at iter 405 (all 5 field residuals \u2264 target).",
   "details": {
     "execution": "real",
     "real_solver_invoked": true,
-    "final_iter": 394,
+    "final_iter": 405,
     "max_iter": 500,
     "final_residuals": {
-      "Ux": 6.88555e-07,
-      "Uy": 9.83966e-06,
-      "p": 3.59722e-06,
-      "omega": 1.05108e-07,
-      "k": 1.49044e-06
+      "Ux": 4.82943e-07,
+      "Uy": 9.81232e-06,
+      "p": 3.37761e-06,
+      "omega": 9.35572e-08,
+      "k": 1.18643e-06
     },
     "checked_fields": [
       "Ux",
@@ -22,9 +22,9 @@
     ],
     "y_plus": {
       "wall": {
-        "min": 0.821866,
-        "max": 9.42885,
-        "avg": 1.38559
+        "min": 0.829924,
+        "max": 9.47913,
+        "avg": 1.37509
       }
     },
     "image": "openfoam/openfoam11-paraview510:latest",
