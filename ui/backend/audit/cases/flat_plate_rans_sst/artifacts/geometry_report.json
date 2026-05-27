@@ -1,9 +1,37 @@
 {
-  "generated_at": "2026-05-21T08:13:26Z",
+  "generated_at": "2026-05-27T02:35:24Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M5",
-  "gate_status": "MOCKED",
-  "polymesh_inspected": false,
+  "gate_status": "PASS",
+  "polymesh_inspected": true,
+  "realized_patches": {
+    "frontAndBack": {
+      "nFaces": 32400,
+      "startFace": 32670,
+      "type": "empty"
+    },
+    "inlet": {
+      "nFaces": 90,
+      "startFace": 32130,
+      "type": "patch"
+    },
+    "outlet": {
+      "nFaces": 90,
+      "startFace": 32220,
+      "type": "patch"
+    },
+    "top": {
+      "nFaces": 180,
+      "startFace": 32490,
+      "type": "symmetryPlane"
+    },
+    "wall": {
+      "nFaces": 180,
+      "startFace": 32310,
+      "type": "wall"
+    }
+  },
+  "realized_patch_count": 5,
   "declared_required_patches": [
     "inlet",
     "outlet",
@@ -12,8 +40,25 @@
     "frontAndBack"
   ],
   "declared_dimensionality": "2.5D",
-  "notes": [
-    "solver_backend=mocked; blockMesh was not invoked.",
-    "Geometry cannot be validated without a real backend run."
-  ]
+  "presence_dimension": {
+    "dimension_status": "PASS",
+    "missing": [],
+    "present": [
+      "frontAndBack",
+      "inlet",
+      "outlet",
+      "top",
+      "wall"
+    ],
+    "extras": []
+  },
+  "dimensionality_dimension": {
+    "dimension_status": "PASS",
+    "declared": "2.5D",
+    "empty_patches": [
+      "frontAndBack"
+    ],
+    "reason": null
+  },
+  "boundary_file": "constant/polyMesh/boundary"
 }

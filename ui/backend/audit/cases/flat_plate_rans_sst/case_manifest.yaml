@@ -3,10 +3,13 @@
 
 case_id: flat_plate_rans_sst
 case_family: canonical_rans_verification
-# Phase 0 honesty (Red Team F-04): declare mocked while the OpenFOAM adapter
-# is not yet implemented. Flip back to `openfoam` when Phase 1 lands
-# src/cfdtrust/backends/openfoam.py.
-solver_backend: mocked
+# DEC-V61-209 (2026-05-27): flipped mocked -> openfoam. The OpenFOAM backend
+# (cfdtrust/backends/openfoam.py) is implemented and proven by
+# channel_flow_rans_sst (overall=PASS, real, validated). This re-routes
+# solver.execute() to the real Docker simpleFoam path AND unlocks the real
+# NASA TMR Cf(x) reference comparison (qoi.py:118 gate). The verdict is now
+# the honest V&V signal, not a Phase-0 mock.
+solver_backend: openfoam
 solver: simpleFoam
 
 physics:

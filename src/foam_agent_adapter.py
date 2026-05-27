@@ -9686,12 +9686,10 @@ mergePatchPairs
             return key_quantities
 
         import inspect
+        import re as _re
         import warnings
-        Re = float(task_spec.Re or 50000)
-        nu_val = 1.0 / Re
-        U_ref = 1.0
 
-        # 保持现有签名不变：从调用方恢复可选的 Cz/nut 数据用于 2D 薄层网格回退。
+        # 保持现有签名不变：从调用方恢复可选的 Cz/nut/latest_dir 数据。
         caller_frame = inspect.currentframe()
         caller_locals = caller_frame.f_back.f_locals if caller_frame and caller_frame.f_back else {}
         czs = caller_locals.get("czs")
@@ -9706,6 +9704,51 @@ mergePatchPairs
                 if len(nut_candidate) == len(cxs):
                     nut_vals = nut_candidate
         del caller_frame
+
+        # P1 cycle-2 (DEC-V61-209): use the REAL dimensional reference velocity
+        # and kinematic viscosity from the solution the solver actually ran —
+        # never the nondimensional hard-codes (U_ref=1.0, nu=1/Re). Those made
+        # Cf = tau_w / (0.5·U_ref²) wrong by ~U_inf² and forced the Spalding
+        # fallback to fire on every run (the bit-identical 0.007600365…). For a
+        # ZPG flat plate the freestream speed is max|Ux| in the field; nu is the
+        # value written into constant/{physicalProperties,transportProperties}.
+        u_streamwise = [abs(u[0]) for u in u_vecs if u and len(u) >= 1]
+        U_ref = max(u_streamwise) if u_streamwise else 0.0
+        if U_ref <= 1e-9:
+            key_quantities["cf_extraction_failed"] = True
+            key_quantities["cf_extraction_failure_reason"] = (
+                "freestream U_ref ~ 0 in extracted velocity field"
+            )
+            return key_quantities
+
+        nu_val: Optional[float] = None
+        if isinstance(latest_dir, Path):
+            case_const = latest_dir.parent / "constant"
+            for fname in ("physicalProperties", "transportProperties"):
+                fpath = case_const / fname
+                if not fpath.exists():
+                    continue
+                m = _re.search(
+                    r"\bnu\b\s*(?:\[[^\]]*\])?\s*([0-9.eE+-]+)\s*;",
+                    fpath.read_text(encoding="utf-8", errors="ignore"),
+                )
+                if m:
+                    try:
+                        nu_val = float(m.group(1))
+                    except ValueError:
+                        nu_val = None
+                if nu_val is not None:
+                    key_quantities["cf_nu_source"] = f"case_constant/{fname}"
+                    break
+        if nu_val is None or nu_val <= 0.0:
+            # No case viscosity readable → fail honestly rather than fabricate.
+            # (Deliberately NOT defaulting to 1/Re: that re-introduces the
+            # nondimensional assumption this fix removes.)
+            key_quantities["cf_extraction_failed"] = True
+            key_quantities["cf_extraction_failure_reason"] = (
+                "could not read kinematic viscosity nu from case constant/ dicts"
+            )
+            return key_quantities
 
         def _compute_wall_gradient(
             samples: List[Tuple[float, float, float]], tol: float = 1e-10
@@ -9749,7 +9792,7 @@ mergePatchPairs
                 x_groups[round(cxs[i], 5)].append((cys[i], cz_val, u_vecs[i][0], nut_val))
 
         cf_values = []
-        cf_spalding_fallback_count = 0
+        cf_unreliable: List[float] = []  # raw Cf > physical cap — diagnostics only, never reported as measured
         sign_corrected = False
         for x_pos, cy_u_pairs in x_groups.items():
             grad_data = _compute_wall_gradient(
@@ -9773,14 +9816,16 @@ mergePatchPairs
                     if Cf < 0.0:
                         sign_corrected = True
                         Cf = abs(Cf)
-                    # Cap Cf at physically reasonable max (~0.01 for flat plates).
-                    # Spalding: Cf ≈ 0.0576/Re_x^0.2; at Re_x=25000 (x=0.5,Re=50000)→Cf≈0.0076.
-                    # If extraction gives >0.01, the cell-centre gradient is unreliable — use formula.
+                    # P1 cycle-2 (DEC-V61-209): Cf > 0.01 is physically implausible
+                    # for a flat plate → the cell-centre gradient is unreliable.
+                    # The OLD path SUBSTITUTED a Spalding formula (0.0576/Re_x^0.2)
+                    # and reported it as a measured Cf — a fabrication that masked
+                    # extraction failure and produced the bit-identical 0.0076.
+                    # Now: record the raw value as a diagnostic and EXCLUDE it;
+                    # never emit a closed-form value as a measurement.
                     if Cf > 0.01:
-                        x_local = x_target / U_ref  # physical x position
-                        Re_x = U_ref * x_local / nu_val
-                        Cf = 0.0576 / (Re_x**0.2) if Re_x > 0 else Cf
-                        cf_spalding_fallback_count += 1
+                        cf_unreliable.append(Cf)
+                        continue
                     cf_values.append(Cf)
 
         if cf_values:
@@ -9794,8 +9839,24 @@ mergePatchPairs
             Cf_mean = sum(cf_values) / len(cf_values)
             key_quantities["cf_skin_friction"] = Cf_mean
             key_quantities["cf_location_x"] = x_target
-            key_quantities["cf_spalding_fallback_count"] = cf_spalding_fallback_count
-            key_quantities["cf_spalding_fallback_activated"] = cf_spalding_fallback_count > 0
+            key_quantities["cf_u_ref"] = U_ref
+            key_quantities["cf_nu"] = nu_val
+            key_quantities["cf_sample_count"] = len(cf_values)
+            key_quantities["cf_unreliable_count"] = len(cf_unreliable)
+            # Spalding fabrication removed (DEC-V61-209): never substituted now.
+            key_quantities["cf_spalding_fallback_activated"] = False
+        else:
+            # No physically-plausible Cf was extracted. Report honest failure
+            # with the raw diagnostics — do NOT fabricate a value.
+            key_quantities["cf_extraction_failed"] = True
+            key_quantities["cf_extraction_failure_reason"] = (
+                f"no plausible Cf at x≈{x_target} "
+                f"(U_ref={U_ref:.4g}, nu={nu_val:.4g}, "
+                f"unreliable_samples={len(cf_unreliable)}"
+                + (f", raw_cf_max={max(cf_unreliable):.4g}" if cf_unreliable else "")
+                + ")"
+            )
+            key_quantities["cf_spalding_fallback_activated"] = False
 
         return key_quantities
 

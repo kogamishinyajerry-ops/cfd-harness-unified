@@ -1,14 +1,35 @@
 {
-  "status": "MOCKED",
-  "summary": "Synthetic solver log with 500 pseudo-iterations. No real CFD executed.",
-  "artifact": "artifacts/solver.log",
+  "status": "PASS",
+  "summary": "simpleFoam converged at iter 397 (all 5 field residuals \u2264 target).",
   "details": {
-    "execution": "mocked",
+    "execution": "real",
+    "real_solver_invoked": true,
+    "final_iter": 397,
+    "max_iter": 500,
+    "final_residuals": {
+      "Ux": 5.21762e-07,
+      "Uy": 9.85221e-06,
+      "p": 3.23984e-06,
+      "omega": 9.48131e-08,
+      "k": 1.27426e-06
+    },
+    "checked_fields": [
+      "Ux",
+      "Uy",
+      "p",
+      "k",
+      "omega"
+    ],
+    "y_plus": {
+      "wall": {
+        "min": 0.838945,
+        "max": 8.95032,
+        "avg": 1.43599
+      }
+    },
+    "image": "openfoam/openfoam11-paraview510:latest",
     "log": "artifacts/solver.log",
-    "residuals_csv": "artifacts/residuals.csv",
-    "iterations": 500,
-    "generated_at": "2026-05-21T03:38:06Z",
-    "real_solver_invoked": false,
-    "warning": "No CFD solver was executed. This does not constitute validation."
-  }
+    "residuals_csv": "artifacts/residuals.csv"
+  },
+  "artifact": "artifacts/solver.log"
 }

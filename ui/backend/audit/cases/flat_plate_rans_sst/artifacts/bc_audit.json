@@ -1,10 +1,210 @@
 {
-  "generated_at": "2026-05-21T08:13:26Z",
+  "generated_at": "2026-05-27T02:35:24Z",
   "case_id": "flat_plate_rans_sst",
-  "phase": "M6",
-  "gate_status": "MOCKED",
-  "zero_dir_inspected": false,
-  "declared_sections": {
+  "phase": "M8",
+  "gate_status": "PASS",
+  "zero_dir_inspected": true,
+  "file_presence_dimension": {
+    "dimension_status": "PASS",
+    "present": [
+      "U",
+      "k",
+      "nut",
+      "omega",
+      "p"
+    ],
+    "missing_files": [],
+    "unparseable_files": []
+  },
+  "patch_coverage_dimension": {
+    "dimension_status": "PASS",
+    "checked_fields": [
+      "U",
+      "k",
+      "nut",
+      "omega",
+      "p"
+    ],
+    "polymesh_patch_count": 5,
+    "gaps_by_field": {}
+  },
+  "type_match_dimension": {
+    "dimension_status": "PASS",
+    "checked_count": 9,
+    "unresolvable_keys": [],
+    "field_class_missing": [],
+    "type_mismatches": [],
+    "checked": [
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "U",
+        "declared_type": "fixedValue",
+        "realized_type": "fixedValue"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "p",
+        "declared_type": "zeroGradient",
+        "realized_type": "zeroGradient"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "k",
+        "declared_type": "turbulentIntensityKineticEnergyInlet",
+        "realized_type": "turbulentIntensityKineticEnergyInlet"
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "omega",
+        "declared_type": "turbulentMixingLengthFrequencyInlet",
+        "realized_type": "turbulentMixingLengthFrequencyInlet"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "p",
+        "declared_type": "fixedValue",
+        "realized_type": "fixedValue"
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "U",
+        "declared_type": "zeroGradient",
+        "realized_type": "zeroGradient"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "wall",
+        "field": "U",
+        "declared_type": "noSlip",
+        "realized_type": "noSlip"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "wall",
+        "field": "k",
+        "declared_type": "kqRWallFunction",
+        "realized_type": "kqRWallFunction"
+      },
+      {
+        "manifest_key": "wall",
+        "resolved_patch": "wall",
+        "field": "omega",
+        "declared_type": "omegaWallFunction",
+        "realized_type": "omegaWallFunction"
+      }
+    ]
+  },
+  "value_match_dimension": {
+    "dimension_status": "PASS",
+    "matched_count": 4,
+    "value_mismatches": [],
+    "value_missing": [],
+    "numeric_field_unknown": [],
+    "matched": [
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "U",
+        "field_class": "velocity",
+        "numeric_field": "magnitude_m_s",
+        "declared": 30.0,
+        "actual": 30.0,
+        "lookup_kind": "vector_magnitude",
+        "rel_tol": 1e-06,
+        "abs_tol": 1e-09
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "k",
+        "field_class": "k",
+        "numeric_field": "intensity",
+        "declared": 0.01,
+        "actual": 0.01,
+        "lookup_kind": "param",
+        "rel_tol": 1e-06,
+        "abs_tol": 1e-12
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "field": "omega",
+        "field_class": "omega",
+        "numeric_field": "mixingLength",
+        "declared": 0.01,
+        "actual": 0.01,
+        "lookup_kind": "param",
+        "rel_tol": 1e-06,
+        "abs_tol": 1e-12
+      },
+      {
+        "manifest_key": "outlet",
+        "resolved_patch": "outlet",
+        "field": "p",
+        "field_class": "pressure",
+        "numeric_field": "value_Pa",
+        "declared": 0.0,
+        "actual": 0.0,
+        "lookup_kind": "value_scalar",
+        "rel_tol": 1e-06,
+        "abs_tol": 1e-09
+      }
+    ]
+  },
+  "derived_consistency_dimension": {
+    "dimension_status": "PASS",
+    "matched_count": 2,
+    "matched": [
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "derivation": "k_from_I_U",
+        "formula": "1.5 * (intensity * magnitude_m_s)^2",
+        "inputs": {
+          "intensity": 0.01,
+          "magnitude_m_s": 30.0
+        },
+        "expected": 0.135,
+        "actual": 0.135,
+        "rel_tol": 0.005,
+        "abs_tol": 1e-09
+      },
+      {
+        "manifest_key": "inlet",
+        "resolved_patch": "inlet",
+        "derivation": "omega_from_k_L",
+        "formula": "sqrt(k_expected) / (Cmu^0.25 * mixingLength)",
+        "inputs": {
+          "intensity": 0.01,
+          "magnitude_m_s": 30.0,
+          "mixingLength": 0.01,
+          "Cmu": 0.09,
+          "k_expected": 0.135
+        },
+        "expected": 67.0820393249937,
+        "actual": 67.0,
+        "rel_tol": 0.005,
+        "abs_tol": 1e-09
+      }
+    ],
+    "derived_mismatches": [],
+    "derived_missing": []
+  },
+  "expected_fields": [
+    "U",
+    "p",
+    "k",
+    "omega",
+    "nut"
+  ],
+  "realized_patch_count": 5,
+  "declared_bc_contract": {
     "inlet": {
       "velocity": {
         "type": "fixedValue",
@@ -47,9 +247,5 @@
       "omega",
       "nut"
     ]
-  },
-  "notes": [
-    "solver_backend=mocked; 0/ files were not parsed by the backend.",
-    "BC validation requires a real-backend run."
-  ]
+  }
 }

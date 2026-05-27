@@ -1,0 +1,144 @@
+{
+  "bc_parsing_status": "ok",
+  "expected_fields": [
+    "U",
+    "p",
+    "k",
+    "omega",
+    "nut"
+  ],
+  "fields": {
+    "U": {
+      "file": "0/U",
+      "parsed": true,
+      "patches": {
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "fixedValue",
+          "value_vector": [
+            30.0,
+            0.0,
+            0.0
+          ]
+        },
+        "outlet": {
+          "type": "zeroGradient"
+        },
+        "top": {
+          "type": "symmetryPlane"
+        },
+        "wall": {
+          "type": "noSlip"
+        }
+      }
+    },
+    "k": {
+      "file": "0/k",
+      "parsed": true,
+      "patches": {
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "params": {
+            "intensity": 0.01
+          },
+          "type": "turbulentIntensityKineticEnergyInlet",
+          "value_scalar": 0.135
+        },
+        "outlet": {
+          "type": "zeroGradient"
+        },
+        "top": {
+          "type": "symmetryPlane"
+        },
+        "wall": {
+          "type": "kqRWallFunction",
+          "value_scalar": 1e-12
+        }
+      }
+    },
+    "nut": {
+      "file": "0/nut",
+      "parsed": true,
+      "patches": {
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "calculated",
+          "value_scalar": 0.0
+        },
+        "outlet": {
+          "type": "calculated",
+          "value_scalar": 0.0
+        },
+        "top": {
+          "type": "symmetryPlane"
+        },
+        "wall": {
+          "type": "nutkWallFunction",
+          "value_scalar": 0.0
+        }
+      }
+    },
+    "omega": {
+      "file": "0/omega",
+      "parsed": true,
+      "patches": {
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "params": {
+            "mixingLength": 0.01
+          },
+          "type": "turbulentMixingLengthFrequencyInlet",
+          "value_scalar": 67.0
+        },
+        "outlet": {
+          "type": "zeroGradient"
+        },
+        "top": {
+          "type": "symmetryPlane"
+        },
+        "wall": {
+          "type": "omegaWallFunction",
+          "value_scalar": 67.0
+        }
+      }
+    },
+    "p": {
+      "file": "0/p",
+      "parsed": true,
+      "patches": {
+        "frontAndBack": {
+          "type": "empty"
+        },
+        "inlet": {
+          "type": "zeroGradient"
+        },
+        "outlet": {
+          "type": "fixedValue",
+          "value_scalar": 0.0
+        },
+        "top": {
+          "type": "symmetryPlane"
+        },
+        "wall": {
+          "type": "zeroGradient"
+        }
+      }
+    }
+  },
+  "fields_missing": [],
+  "fields_present": [
+    "U",
+    "k",
+    "nut",
+    "omega",
+    "p"
+  ]
+}

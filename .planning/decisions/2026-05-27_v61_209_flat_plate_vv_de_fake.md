@@ -118,3 +118,62 @@ converge + validate (so `trust_report` flips MOCKED→real PASS):
 - Correctness-critical V&V change → **Codex review required before commit** (deferred
   until the coupled fix is validatable on a converged case).
 - Driven autonomously by `cfd-chief-engineer` at L2 (DEC-V61-208); guardrails intact.
+
+---
+
+## ADDENDUM — cycle-3b/3c: MOCKED→real flipped, honest FAIL verdict (2026-05-27)
+
+The coupled fix is now validatable on a **converged real run through the cfdtrust
+pipeline** (not just a manual side-run). Three things landed:
+
+1. **Case Re coherence** (committed `bde7cae`): `transportProperties` ν 1.5e-5→6e-6
+   ⇒ Re/unit = U/ν = 30/6e-6 = 5×10⁶ = NASA TMR canonical. Provenance + manifest
+   updated honestly.
+2. **y+~1 mesh** (`system/blockMeshDict`): `hex (100 60 1) simpleGrading (1 50 1)` →
+   `(180 90 1)` with LE-clustered x (multiGrading bounds max aspect ratio at 260.9 <
+   1000 manifest cap) + y-grading 1724 for y+~1. **checkMesh-clean** (the manifest
+   declares `checkmesh_required: true`, so a fail-checkMesh grid was not acceptable).
+3. **Backend flip** (`case_manifest.yaml`): `solver_backend: mocked → openfoam`. This
+   re-routes `solver.execute()` to the real Docker simpleFoam path (proven by
+   `channel_flow_rans_sst`, real PASS) **and** unlocks the real NASA TMR Cf(x)
+   comparison at `qoi.py:118` (SHA-gated, x<0.01 LE-excluded). No new comparator code
+   was needed — `flat_plate_cf.compare_against_reference` already does per-x
+   interpolation vs `reference/cf_reference.csv`.
+
+**Real-run result (OpenFOAM, converged @ iter 397, y+ avg 1.31):** the
+`trust_report` now carries the **honest V&V signal**, and that signal is
+**`overall_status: FAIL`** — not a mock, not a fabrication:
+- developed band (x ≥ 0.2): **3.17%** error — inside the 10% gate ✅
+- near-LE on-plate (x ≥ 0.05): **5.56%** error — inside gate ✅
+- **leading-edge singularity band (7 points, x = 0.0129–0.0352): 10–26% error** ❌
+  — these are within `x_min_compare_m = 0.01` so the gate (correctly) counts them,
+  and they fail. This is the laminar-LE / mesh-under-resolution band where a steady
+  SST RANS on this topology cannot match the CFL3D curve.
+
+**The de-fake is honest and complete; the verdict is a real FAIL on the LE band.**
+The P1 sub-goal "flip MOCKED→real" is achieved. The further sub-goal "real PASS" is
+**not** achieved and **must not be forced silently**.
+
+4. **Stale tests rewritten** (this commit): the 2 tests in
+   `tests/test_foam_agent_adapter.py` that pinned the removed Spalding contract
+   (`cf_spalding_fallback_activated is True`, `cf == 0.0576/Re_x^0.2`,
+   `cf == 4e-05`) are replaced by (a) an honest-failure test (asserts
+   `cf_extraction_failed` when ν is unreadable; no fabricated `cf_skin_friction`)
+   and (b) a positive test exercising the real success branch (ν read from
+   `constant/transportProperties`, U_ref = max|Ux|, physically-plausible Cf). This
+   resolves Codex R0's sole P1 blocker.
+
+### PENDING — Chief Engineer / sponsor decision: the →PASS path (do NOT do silently)
+
+To move the verdict from honest-FAIL to PASS, exactly one of:
+- **(a) Document the LE-singularity exclusion**: raise `x_min_compare_m` 0.01 → ~0.05
+  *with* a provenance + DEC note citing NASA TMR's own LE-exclusion practice. This is
+  legitimate V&V scoping (the LE singularity is a known, standard exclusion) **only**
+  when documented; doing it to "make the number pass" without the physical rationale
+  would be tolerance-gaming and is forbidden by the standing guardrail.
+- **(b) Add a leading symmetry pre-plate** (NASA TMR topology) so the boundary layer
+  develops before x=0 — more faithful to the reference setup, more work, no tolerance
+  change.
+
+This addendum commits the **honest real-FAIL baseline**. Status stays **Proposed**
+until the →PASS path is chosen and validated (then Accepted + Notion sync).

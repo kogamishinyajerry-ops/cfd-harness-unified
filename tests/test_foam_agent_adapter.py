@@ -432,7 +432,11 @@ class TestFoamAgentExecutor:
         assert result["pressure_coefficient_x"] == pytest.approx([0.1, 0.3, 0.7], abs=1e-3)
         assert result["pressure_coefficient"] == pytest.approx([1.0, -0.5, 0.0], abs=1e-6)
 
-    def test_extract_flat_plate_cf_records_spalding_fallback_activation(self):
+    def test_extract_flat_plate_cf_fails_honestly_when_nu_unreadable(self):
+        # DEC-V61-209: the Spalding fabrication (Cf := 0.0576/Re_x^0.2 reported
+        # as a measurement) was REMOVED. When the kinematic viscosity cannot be
+        # read from the case (no latest_dir / constant dict in the caller frame),
+        # the extractor must fail honestly — never substitute a closed-form value.
         task = TaskSpec(
             name="Turbulent Flat Plate (Zero Pressure Gradient)",
             geometry_type=GeometryType.SIMPLE_GRID,
@@ -450,13 +454,30 @@ class TestFoamAgentExecutor:
             key_quantities={},
         )
 
-        expected_cf = 0.0576 / (50000**0.2)
-        assert result["cf_spalding_fallback_activated"] is True
-        assert result["cf_spalding_fallback_count"] >= 1
-        assert result["cf_skin_friction"] == pytest.approx(expected_cf)
-        assert result["cf_skin_friction"] == pytest.approx(expected_cf, rel=0.0, abs=1e-12)
+        assert result["cf_extraction_failed"] is True
+        assert "viscosity" in result["cf_extraction_failure_reason"]
+        # No fabricated measurement, and the dead Spalding contract is gone.
+        assert "cf_skin_friction" not in result
+        assert result.get("cf_spalding_fallback_activated") is not True
+        assert "cf_spalding_fallback_count" not in result
 
-    def test_extract_flat_plate_cf_no_fallback_when_cf_below_threshold(self):
+    def test_extract_flat_plate_cf_extracts_real_cf_from_case(self, tmp_path):
+        # DEC-V61-209 success branch: with a real dimensional case (nu read from
+        # constant/transportProperties, freestream U_ref = max|Ux| in the field),
+        # the extractor computes a physically-plausible Cf from the wall-normal
+        # velocity gradient — no closed-form substitution.
+        const_dir = tmp_path / "constant"
+        const_dir.mkdir()
+        (const_dir / "transportProperties").write_text(
+            "transportModel  Newtonian;\n"
+            "nu              [0 2 -1 0 0 0 0] 6e-06;\n",
+            encoding="utf-8",
+        )
+        # The extractor recovers `latest_dir` (and optional `czs`) from the
+        # caller frame; `latest_dir.parent / constant` is where nu lives.
+        latest_dir = tmp_path / "100"
+        latest_dir.mkdir()
+
         task = TaskSpec(
             name="Turbulent Flat Plate (Zero Pressure Gradient)",
             geometry_type=GeometryType.SIMPLE_GRID,
@@ -466,17 +487,31 @@ class TestFoamAgentExecutor:
             Re=100000,
         )
 
+        # Wall (u=0) + two near-wall interior cells giving du/dy = 2.25/1e-5 =
+        # 2.25e5, plus a freestream cell fixing U_ref = 30. With nu = 6e-6:
+        #   tau_w = nu·du/dy = 6e-6 · 2.25e5 = 1.35
+        #   Cf    = tau_w / (0.5·U_ref²) = 1.35 / 450 = 0.003
         result = FoamAgentExecutor._extract_flat_plate_cf(
-            cxs=[0.5, 0.5, 0.5],
-            cys=[0.0, 0.01, 0.02],
-            u_vecs=[(0.0, 0.0, 0.0), (0.01, 0.0, 0.0), (0.03, 0.0, 0.0)],
+            cxs=[0.5, 0.5, 0.5, 0.5],
+            cys=[0.0, 1e-5, 2e-5, 1.0],
+            u_vecs=[
+                (0.0, 0.0, 0.0),
+                (2.25, 0.0, 0.0),
+                (4.5, 0.0, 0.0),
+                (30.0, 0.0, 0.0),
+            ],
             task_spec=task,
             key_quantities={},
         )
 
+        assert "cf_extraction_failed" not in result
+        assert result["cf_skin_friction"] == pytest.approx(0.003, rel=1e-6)
+        assert result["cf_u_ref"] == pytest.approx(30.0)
+        assert result["cf_nu"] == pytest.approx(6e-6)
+        assert result["cf_sample_count"] == 1
+        assert result["cf_unreliable_count"] == 0
         assert result["cf_spalding_fallback_activated"] is False
-        assert result["cf_spalding_fallback_count"] == 0
-        assert result["cf_skin_friction"] == pytest.approx(4e-05)
+        assert result["cf_nu_source"].endswith("transportProperties")
 
     # ------------------------------------------------------------------
     # _generate_lid_driven_cavity() tests
