@@ -42,7 +42,7 @@ export function RightPanelV3({
   failmodeActive = false,
   postRunRunId = null,
   postRunMatches = [],
-  postRunRulesetVersion = "v9.0.0",
+  postRunRulesetVersion = "v9.1.0",
 }: RightPanelV3Props) {
   return (
     <div

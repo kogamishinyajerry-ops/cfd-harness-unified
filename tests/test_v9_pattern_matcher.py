@@ -174,6 +174,19 @@ class TestPositiveCases:
         matches = match_advisor_patterns(_converged_healthy(), V9_ADVISOR_RULES)
         assert any(m.rule_id == "HEALTHY_CONVERGENCE_V9_R8" for m in matches)
 
+    def test_r9_residual_divergence(self):
+        # P2 W2.1: p residual climbing monotonically AND crossing O(1) →
+        # diverging (blow-up). Distilled from V3/V6/V7 solver-divergence rows.
+        diverging = [0.5, 2.0, 10.0, 50.0]
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "convergence_stats": ConvergenceStats(
+                   final_iter=3, max_iters_reached=False, converged=False, elapsed_seconds=1.5),
+               "residuals": {**_converged_healthy().residuals, "p": diverging}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
+
 
 # ---------------------------------------------------------------------------
 # Negative cases — clean run does NOT trigger false positives
@@ -250,6 +263,24 @@ class TestNegativeCases:
         )
         matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
         assert not any(m.rule_id == "HEALTHY_CONVERGENCE_V9_R8" for m in matches)
+
+    def test_r9_negative_climbing_but_below_unity_floor(self):
+        # P2 W2.1: monotonically INCREASING but staying below 1.0 — an early
+        # transient bump in an otherwise-small residual, NOT a blow-up → must
+        # NOT match R9 (pins the >1.0 normalized-residual divergence floor).
+        climbing_small = [1e-4, 2e-4, 4e-4, 8e-4]  # increasing, final 8e-4 < 1.0
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "residuals": {**_converged_healthy().residuals, "p": climbing_small}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
+
+    def test_r9_negative_healthy_decreasing_not_divergence(self):
+        # The clean converged run (p monotonically DECREASING) is the opposite
+        # of divergence → must NOT match R9.
+        matches = match_advisor_patterns(_converged_healthy(), V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +463,7 @@ class TestJSONSsotCanonical:
         assert raw == expected, "JSON SSOT must be canonical (RS#37)"
 
     def test_python_loads_same_rules_as_ts_corpus(self):
-        # Side proof: 8 rules with expected IDs
+        # Side proof: rules load in JSON order with matching IDs (9 since R9)
         raw = self.JSON_PATH.read_text(encoding="utf-8")
         data = json.loads(raw)
         assert data["version"] == V9_RULESET_VERSION

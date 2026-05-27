@@ -47,7 +47,13 @@
       "id": "HEALTHY_CONVERGENCE_V9_R8",
       "provenance": "Versteeg & Malalasekera · An Introduction to CFD · §11.3",
       "severity": "info"
+    },
+    {
+      "commentary": "The pressure residual has climbed monotonically over the last several iterations and crossed O(1) — the solution is diverging, not converging. Because OpenFOAM residuals are normalized to roughly 1.0 at startup, a residual that grows past its starting value means the outer iteration is unstable. Common roots: a Courant number / timestep that is too aggressive, zero turbulence initial conditions (k-ωSST divides by √k, so near-zero wall k sends ω toward infinity — V3), an unbounded mass-flow or velocity inlet on a zero initial field (V6), or a thermophysical bound violation such as negative density in compressible flow (V7). Reduce relaxation/timestep, warm-start from potentialFoam or a laminar pass, and confirm the IC/BC are physical before re-running. Reference: Ferziger & Perić §8.7 on iterative stability.",
+      "id": "RESIDUAL_DIVERGENCE_V9_R9",
+      "provenance": "docs/openfoam_corpus/industrial_solver_findings_v_series.md · V3 (kOmegaSST ω blowup) · V6 (mass-flow zero-IC divergence) · V7 (compressible ρ negative) · Ferziger & Perić §8.7",
+      "severity": "advise"
     }
   ],
-  "version": "v9.0.0"
+  "version": "v9.1.0"
 }

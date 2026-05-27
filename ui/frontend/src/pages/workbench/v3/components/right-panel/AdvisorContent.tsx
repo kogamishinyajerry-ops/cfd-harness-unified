@@ -205,7 +205,7 @@ export function AdvisorContent({
   failmodeActive = false,
   postRunRunId = null,
   postRunMatches = [],
-  postRunRulesetVersion = "v9.0.0",
+  postRunRulesetVersion = "v9.1.0",
 }: AdvisorContentProps) {
   const [mode, setMode] = useState<AdvisorMode>("review");
   // V73.1 · pre-flight check · is this a whitelist (gold-reference) case?

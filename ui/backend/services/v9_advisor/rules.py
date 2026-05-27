@@ -54,6 +54,15 @@ def _is_monotonically_decreasing(values: List[float]) -> bool:
     return True
 
 
+def _is_monotonically_increasing(values: List[float]) -> bool:
+    if len(values) < 2:
+        return False
+    for i in range(1, len(values)):
+        if values[i] <= values[i - 1]:
+            return False
+    return True
+
+
 def _sign(x: float) -> int:
     if x > 0:
         return 1
@@ -179,6 +188,32 @@ def _pred_healthy_convergence(slice_: RunArtifactSlice) -> Optional[MatchSite]:
     return MatchSite(matched_at="healthy_convergence_p")
 
 
+def _pred_residual_divergence(slice_: RunArtifactSlice) -> Optional[MatchSite]:
+    # Divergence (blow-up): the p residual climbing monotonically AND crossing
+    # O(1). OpenFOAM residuals are normalized (initial ~1.0, converging ones
+    # fall to <<1), so a residual that increases past 1.0 is unambiguously
+    # diverging — distinct from R1 (oscillation), R7 (plateau), R2 (max-iters)
+    # and R3 (nonzero-exit crash; divergence can occur WITHOUT a crash, e.g. a
+    # run that hits maxIters with climbing residuals or whose blow-up is mid-
+    # flight). Short 4-window: blow-ups are fast (V3 iter 3, V6 first-iter), so
+    # a long window would miss divergence that crashes before 8 points exist.
+    # The >1.0 floor keeps an early transient bump in an otherwise-converging
+    # run from false-firing. Provenance: V3/V6/V7 + Ferziger & Perić §8.7.
+    last4 = _recent_residuals(slice_, "p", 4)
+    if len(last4) < 4:
+        return None
+    if not _is_monotonically_increasing(last4):
+        return None
+    if last4[-1] <= 1.0:
+        return None
+    final_iter = (
+        slice_.convergence_stats.final_iter
+        if slice_.convergence_stats is not None
+        else len(last4)
+    )
+    return MatchSite(matched_at=f"iter_{final_iter}_p_divergence")
+
+
 _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] = {
     "RESIDUAL_OSCILLATION_P_V9_R1": _pred_residual_oscillation_p,
     "MAX_ITERS_REACHED_V9_R2": _pred_max_iters_reached,
@@ -188,6 +223,7 @@ _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] 
     "SLOW_CONVERGENCE_V9_R6": _pred_slow_convergence,
     "RESIDUAL_PLATEAU_U_V9_R7": _pred_residual_plateau_u,
     "HEALTHY_CONVERGENCE_V9_R8": _pred_healthy_convergence,
+    "RESIDUAL_DIVERGENCE_V9_R9": _pred_residual_divergence,
 }
 
 

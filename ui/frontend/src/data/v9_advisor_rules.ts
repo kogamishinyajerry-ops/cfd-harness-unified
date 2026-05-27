@@ -62,6 +62,14 @@ function isMonotonicallyDecreasing(values: number[]): boolean {
   return true;
 }
 
+function isMonotonicallyIncreasing(values: number[]): boolean {
+  if (values.length < 2) return false;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i] <= values[i - 1]) return false;
+  }
+  return true;
+}
+
 function isOscillating(values: number[], thresholdRatio: number): boolean {
   if (values.length < 4) return false;
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
@@ -155,6 +163,22 @@ const PREDICATES_BY_ID: Record<string, PredicateFn> = {
     if (last8.length < 8) return null;
     if (!isMonotonicallyDecreasing(last8)) return null;
     return { matched_at: "healthy_convergence_p" };
+  },
+
+  // Divergence (blow-up): p residual climbing monotonically AND past O(1).
+  // Normalized residuals start ~1.0 and fall when converging, so a residual
+  // increasing past 1.0 is unambiguous divergence. Distinct from R1
+  // (oscillation) / R7 (plateau) / R2 (max-iters) / R3 (nonzero-exit crash —
+  // divergence can happen without a crash). Short 4-window: blow-ups are fast
+  // (V3 iter 3, V6 first-iter). Mirrors Python _pred_residual_divergence.
+  RESIDUAL_DIVERGENCE_V9_R9: (slice) => {
+    const last4 = recentResiduals(slice, "p", 4);
+    if (last4.length < 4) return null;
+    if (!isMonotonicallyIncreasing(last4)) return null;
+    if (last4[last4.length - 1] <= 1.0) return null;
+    return {
+      matched_at: `iter_${(slice.convergence_stats?.final_iter ?? last4.length).toString()}_p_divergence`,
+    };
   },
 };
 
