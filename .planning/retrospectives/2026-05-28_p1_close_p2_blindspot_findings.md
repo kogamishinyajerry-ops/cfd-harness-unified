@@ -111,7 +111,24 @@ honest, gated, real-solve PASS over cycles 3b→3i:
    the real artifact encodes what it *is*. For any parser over
    solver-authored files, one test must feed a verbatim slice of a real file.
 
-4. **Meta: the scalar-rule space is saturating.** R9 (divergence) genuinely
+4. **A prose claim can contradict the machine-readable artifact — only a review
+   that reads BOTH catches it (86gs reconciliation, ADDENDUM 6).** When the
+   relays recovered, the 86gs re-review of the DEC-209 gate (which the 2026-05-27
+   *local* fallback had APPROVE'd) surfaced a P2 the local pass missed: the
+   manifest `notes` claimed "PASS, validated" while the committed
+   `trust_report.json` honestly says MOCKED, and `tools/cwos_status.py` derives
+   the cockpit from the latter — so the dashboards report the case as
+   *unvalidated*. The MOCKED readout is *correct* (committed artifacts are mock
+   by the pollution-guard convention; real solve output is never committed). The
+   contradiction lived only in the prose. **Lesson**: same class as findings 1-3
+   (an unverified claim is trusted by default), now between a human-readable
+   field and a machine-readable one. The fix is prose, not a committed VALIDATED
+   report — committing solve output would break the convention tests and make
+   the dashboard *lie*. Also a concrete win for the "reconcile local-review
+   provenance when relays recover" rule: the canonical baseline caught what the
+   emergency fallback didn't.
+
+5. **Meta: the scalar-rule space is saturating.** R9 (divergence) genuinely
    fit the scalar `RunArtifactSlice` (residuals/forces/convergence_stats), but
    most remaining V-series death-modes are *spatial* (field gradients, y+ maps,
    recirculation) and don't map onto the current scalar artifact. Further
@@ -128,17 +145,22 @@ honest, gated, real-solve PASS over cycles 3b→3i:
 | Truth-chain | ✅ honest FAIL kept over rationalized PASS (3g); known_deviations reported not hidden; fabricated provenance repaired (finding 2); refused to ship circular theater (finding 1) |
 | Gate-gaming guard | ✅ x_min_compare_m held at NASA's 0.01, tolerance held at 0.10 — neither moved to mask the LE band; sponsor convention is NASA's own, not tuned-to-pass |
 | Codex round cap=3 | ✅ DEC-209 closed within cap (R0 caveat → ADDENDUM 5) |
-| Codex relay | ⚠️ 86gs + CRS both 503 this session → DEC-209 review on LOCAL `codex exec` (frontmatter `codex_review_relay: local`); P2 advisory/distillation commits non-verdict + non-security → not mandatory sync-triggers (v2.3) |
+| Codex relay | ✅ RECONCILED — relays recovered mid-session; DEC-209 verdict-affecting guard re-reviewed on canonical 86gs gpt-5.4 xhigh (was local fallback on 2026-05-27): APPROVE_WITH_COMMENTS, guard sound, 1 P2 (truth-chain consistency) addressed inline. P2 advisory/distillation commits non-verdict + non-security → not mandatory sync-triggers (v2.3) |
 | Test pollution | ✅ source case dir kept clean (polyMesh=.gitkeep, artifacts=MOCK placeholders); live solver output is verification proof, never committed (`git checkout HEAD -- artifacts/` + remove generated time/polyMesh dirs ×3) |
 | Cross-language parity | ✅ R9 Python + TS predicates green against shared fixture |
 | confidence | high (DEC-209 real-solve validated; W1.0′/R9 pure-fn + tests; findings are durable methodology, not code risk) |
 
 ## 下一步 / 风险 (next / risks)
 
-- **13 commits local & unpushed** — push needs **explicit per-push user
-  confirmation** (L2 autonomy). Codex relays were 503; DEC-209 carries a
-  local-review provenance flag that should be reconciled (re-review on 86gs
-  when relays recover) before/at push if the user wants the canonical trailer.
+- **~18 commits local & unpushed** — push needs **explicit per-push user
+  confirmation** (L2 autonomy). DEC-209's local-review provenance is now
+  RECONCILED on 86gs (ADDENDUM 6), so the eventual push carries a clean
+  canonical-baseline trail.
+- **Deferred design question (separate DEC, queued)**: should a V&V-grade
+  *validated reference* case commit a real `trust_report.json` as canonical
+  evidence, superseding the mock-placeholder convention for that class? It
+  would change the pollution guard + two convention tests — out of scope for
+  the DEC-209 gate fix; needs its own DEC + user input.
 - **Session-end Notion sync** — Accepted DECs V61-206/207/208/209/210 to push
   to Decisions DB (only Status=Accepted; not this retro, not drafts).
 - **W1.1′** (advisory Re-coherence → hard pre-run gate) is verdict-affecting →
