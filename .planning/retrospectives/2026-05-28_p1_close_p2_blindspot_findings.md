@@ -147,9 +147,10 @@ honest, gated, real-solve PASS over cycles 3b→3i:
 - **W2.2** — only distill V-rows that genuinely map to the scalar
   `RunArtifactSlice`; per finding 4, prefer extending the artifact (spatial
   gold-delta) over squeezing the saturated scalar space.
-- **Provenance-validity test** (finding 2) — add a guard that every v9 rule's
-  citation resolves to a real corpus path/row or is an explicit
-  non-fake-specific textbook reference. RETRO-queued methodology patch.
+- **Provenance-validity test** (finding 2) — ✅ DONE this session
+  (`tests/test_v9_provenance_validity.py`, commit `e05e63c`): enforces that any
+  repo-path / V-row citation resolves; textbook §-numbers deliberately not
+  faked; adversarially self-verified non-vacuous; full v9 suite 89 green.
 - **PRODUCT backlog (non-blocking)**: `cfdtrust run` should clean stale time
   dirs before solving (it currently relies on a clean checkout).
 - **P3 (CHT end-to-end)** is the next Blueprint v4 phase after P2 signal/ruleset
