@@ -192,6 +192,65 @@ class TestNegativeCases:
         matches = match_advisor_patterns(_converged_healthy(), V9_ADVISOR_RULES)
         assert not any(m.rule_id == "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4" for m in matches)
 
+    # --- P2 W2.0: boundary true-negatives for R1/R5/R6/R7/R8 (close the
+    # per-predicate test-debt; each pins the exact threshold so a future
+    # predicate edit that loosens a comparator is caught). ---
+
+    def test_r1_negative_amplitude_below_oscillation_threshold(self):
+        # Alternating about the mean (>=2 sign flips) BUT amplitude ratio 0.2,
+        # just under the 0.3 _is_oscillating threshold → must NOT match R1.
+        sub_threshold = [1.2e-3, 0.8e-3, 1.2e-3, 0.8e-3, 1.2e-3, 0.8e-3, 1.2e-3, 0.8e-3]
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "residuals": {**_converged_healthy().residuals, "p": sub_threshold}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "RESIDUAL_OSCILLATION_P_V9_R1" for m in matches)
+
+    def test_r5_negative_force_drift_just_under_one_pct(self):
+        # One 1.01 outlier among 1.00 → ~0.9% max drift, just under the 1%
+        # threshold → must NOT match R5.
+        forces = [ForcesEntry(iteration=i, Cd=1.0, Cl=0.0, Cm=0.0) for i in range(9)]
+        forces.append(ForcesEntry(iteration=9, Cd=1.01, Cl=0.0, Cm=0.0))
+        slice_ = RunArtifactSlice(**{**_converged_healthy().__dict__, "forces": forces})
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "FORCES_NOT_CONVERGED_V9_R5" for m in matches)
+
+    def test_r6_negative_converged_just_under_5000_iters(self):
+        # Converged at iter 4999 — one below the >=5000 slow-convergence
+        # boundary → must NOT match R6.
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__, "convergence_stats": ConvergenceStats(
+                final_iter=4999, max_iters_reached=False, converged=True, elapsed_seconds=200.0
+            )}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "SLOW_CONVERGENCE_V9_R6" for m in matches)
+
+    def test_r7_negative_low_plateau_below_1e4_floor(self):
+        # A flat U history (variation <2%) but parked at ~5e-5, below the
+        # 1e-4 mean-magnitude floor → a healthily-low residual, NOT a stuck
+        # plateau → must NOT match R7.
+        low_plateau = [5e-5 + (i % 3 - 1) * 1e-8 for i in range(20)]
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "residuals": {**_converged_healthy().residuals, "U": low_plateau}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "RESIDUAL_PLATEAU_U_V9_R7" for m in matches)
+
+    def test_r8_negative_converged_but_non_monotonic_p(self):
+        # Converged, but the last-8 p history has a bump (not strictly
+        # decreasing) → the "healthy" signature requires monotonic decrease,
+        # so R8 must NOT match.
+        bumpy = [1e-2, 5e-3, 6e-3, 1e-3, 5e-4, 2.5e-4, 1e-4, 5e-5]
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "residuals": {**_converged_healthy().residuals, "p": bumpy}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "HEALTHY_CONVERGENCE_V9_R8" for m in matches)
+
 
 # ---------------------------------------------------------------------------
 # Graceful degrade (V90 carry · V9 reverse-stop #4)
