@@ -1,0 +1,43 @@
+# Codex review — DEC-V61-209 NASA-convention V&V gate logic
+# Date: 2026-05-27
+# Reviewer: Codex (LOCAL fallback — both relays 86gs + CRS returned 503 on gpt-5.4 and gpt-5.5)
+# Backend note: per ~/CLAUDE.md "两个 relay 同时 503 → 应急可临时回本地 codex exec".
+#   Relay outage: 86gs gpt-5.4 503, CRS gpt-5.4 503 (no channel), 86gs gpt-5.5 503 (after ping OK),
+#   CRS gpt-5.5 503. Local codex (~/.codex/, ChatGPT-tier) pinged LOCAL-OK → used as emergency fallback.
+# Payload: cfdtrust/qoi/flat_plate_cf.py evaluate_nasa_convention + cfdtrust/audit/qoi.py branch (143 LOC)
+# Verdict: APPROVE_WITH_COMMENTS
+# Verification command run by Codex: python3 -m pytest ui/backend/audit/cfdtrust_tests/test_qoi_flat_plate.py -q  → 41 passed
+
+VERDICT: APPROVE_WITH_COMMENTS
+
+No blocking correctness issue found.
+
+`evaluate_nasa_convention` correctly reuses `compare_against_reference`, integrates run/ref
+over the same interpolated comparison rows with trapezoid, blocks on `<2` points / zero ref
+integral / unavailable station, and requires both integrated drag and downstream Cf to pass.
+The call-site keeps `per_point` as default and makes `nasa_integrated` opt-in.
+
+Safety caveat: this gate will not pass a simple global offset, but it can pass a shape-wrong
+curve whose positive/negative area errors cancel and happens to match at `x=0.97008`. If the
+intended claim is exactly "NASA TMR convention," that is acceptable; if the product claim is
+broader developed-region shape correctness, add a third developed-region per-point or
+max-error guard.
+
+Transparency is mostly good: `details.rows` are preserved and `reference_comparison.csv`
+still writes per-point failures. Minor correction: the summary says "near-LE deviation(s),"
+but `known_deviations` includes any out-of-tolerance point, so that wording can understate
+non-LE deviations.
+
+---
+# DISPOSITION (Claude Code, round 1 — well within round cap=3):
+# Both comments ADDRESSED (not merely accepted):
+#  - Comment 1 (shape-correctness hole): added `developed_region_min_m` guard — a THIRD PASS
+#    condition requiring every compared point at x>=0.1 m to be within tolerance. Strictly
+#    STRICTER (adds a fail condition), not gate-gaming. Closes the canceling-area pathology.
+#    New test `test_nasa_convention_developed_region_guard_catches_shape_error` proves a
+#    +20% developed-region spike that passes drag+station is now FAILed by the guard.
+#  - Comment 2 (wording): `known_deviations` is now SCOPED to x < developed_region_min_m, so
+#    it genuinely contains only near-LE deviations; developed-region out-of-tol points are
+#    real FAILs, not demoted. Summary wording corrected to "demoted near-LE deviation(s)".
+# Re-validated real run (OF11, iter 405): PASS — drag 0.83%, station 1.28%,
+#   developed region 157 pts max 2.13% 0 failures, 4 known_deviations all at x<=0.0232.

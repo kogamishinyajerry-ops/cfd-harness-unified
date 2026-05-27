@@ -1,14 +1,16 @@
 ---
 decision_id: DEC-V61-209
 title: P1 cycle-2 — flat-plate V&V de-fake (remove Spalding-fabrication; real U_ref/nu extraction) + exposed non-convergence blocker
-status: Proposed
+status: Accepted
 parent_dec: DEC-V61-207 (Blueprint v4 P1) · DEC-V61-208 (Chief Engineer / L2)
 phase: Blueprint v4 · P1 · cycle-2 (RANS-aero vertical V&V loop)
-notion_sync_status: not_applicable (Proposed — not synced until Accepted)
+notion_sync_status: pending (Accepted 2026-05-27 — sync at session-end)
 autonomous_governance: true
-confidence: med
+confidence: high
 date: 2026-05-27
-ratified_by: pending (work-in-progress; extraction fix uncommitted, coupled cycle-3 + Codex review outstanding)
+ratified_by: Codex APPROVE_WITH_COMMENTS (local fallback, both relays 503) — 2 comments ADDRESSED round 1 (developed-region shape guard + known_deviations scoping); re-validated real run PASS
+codex_tool_report_path: reports/codex_tool_reports/dec209_nasa_convention_gate_APPROVE_WITH_COMMENTS_20260527.txt
+codex_review_relay: local (effort=ChatGPT-tier, emergency fallback — 86gs + CRS both 503 on gpt-5.4/5.5)
 ---
 
 # DEC-V61-209 · P1 cycle-2 — flat-plate V&V de-fake + non-convergence exposure
@@ -346,3 +348,67 @@ cfdtrust_tests + adapter + error_attributor.
 
 - Status: **Proposed** → flip to **Accepted** on Codex APPROVE of the shared-code change;
   then Notion sync (DEC-V61-206/207/208 Accepted + this one).
+
+## ADDENDUM 5 — Codex review APPROVE_WITH_COMMENTS → developed-region guard added → Accepted (2026-05-27)
+
+**Codex verdict (gate logic):** `APPROVE_WITH_COMMENTS`. No blocking correctness issue.
+Codex confirmed `evaluate_nasa_convention` correctly reuses `compare_against_reference`,
+integrates run/ref over the same interpolated rows, blocks honestly on <2 pts / zero ref
+integral / unavailable station, requires BOTH integrated drag and station to pass, and keeps
+`per_point` as the default (opt-in `nasa_integrated`).
+
+**Relay outage / fallback:** both relays returned 503 on the actual payload (86gs gpt-5.4
+503, CRS gpt-5.4 503-no-channel, 86gs gpt-5.5 503 after an OK ping, CRS gpt-5.5 503). Per
+`~/CLAUDE.md` ("两个 relay 同时 503 → 应急可临时回本地 codex exec"), the review ran on the
+LOCAL codex (ChatGPT-tier). Archived: `reports/codex_tool_reports/
+dec209_nasa_convention_gate_APPROVE_WITH_COMMENTS_20260527.txt`. Frontmatter flags the
+effort downgrade (`codex_review_relay: local`).
+
+**2 comments — both ADDRESSED in round 1 (round cap=3, well within):**
+
+1. **Shape-correctness hole (the substantive one).** Integral-drag + a single station cannot,
+   on their own, reject a curve whose +/− area errors cancel in the integral AND happens to
+   match at x=0.97008. Codex: "acceptable if the claim is exactly NASA convention; add a
+   developed-region per-point or max-error guard if claiming broader shape correctness."
+   → **Added `developed_region_min_m` (0.1 m) — a THIRD PASS condition:** every compared point
+   at x ≥ 0.1 m must be within tolerance. This is strictly **stricter** (an added fail
+   condition), the opposite of gate-gaming. 0.1 m is principled, NOT tuned to the failures:
+   an order of magnitude past NASA's documented LE exclusion (x<0.01) and ~4× past the
+   empirically-characterized near-LE formulation band (x≤0.023, cycle-3g). Only deviations
+   BELOW the floor are demotable; an out-of-tolerance point at x≥0.1 m is a real FAIL.
+
+2. **Wording.** `known_deviations` previously held ANY out-of-tolerance point, so calling
+   them "near-LE" understated the general case. → Now `known_deviations` is **scoped to
+   x < developed_region_min_m**, so it genuinely contains only the near-LE band; developed-
+   region out-of-tol points are surfaced as real FAILs (`developed_region.failures`), not
+   laundered. Summary reworded to "demoted near-LE deviation(s)".
+
+**Implementation (additive, opt-in, correctness-critical):**
+- `cfdtrust/qoi/flat_plate_cf.py`: `evaluate_nasa_convention` gains `developed_region_min_m`
+  param; PASS iff `drag_ok AND station_ok AND developed_ok`. BLOCKs if the floor leaves no
+  developed-region points (`no_points_in_developed_region`).
+- `cfdtrust/audit/qoi.py`: reads `developed_region_min_m` from the manifest, passes it through.
+- `case_manifest.yaml`: `developed_region_min_m: 0.1` (documented rationale inline).
+- `schemas/case_manifest.schema.json`: new optional `developed_region_min_m` field documented.
+- 3 new unit tests: guard-catches-shape-error (proves a +20% developed spike that passes
+  drag+station is FAILed by the guard), guard-still-demotes-near-LE-below-floor,
+  guard-blocks-when-developed-region-empty.
+
+**Re-validated REAL run (OF11, Docker simpleFoam, converged iter 405, NASA topology +
+NASA freestream) WITH the strengthened gate:**
+- `overall_status: **PASS**`, `validation_status: **validated**`, `solver_execution: real`.
+- integrated-Cf drag **0.83%** ✓ · Cf@x=0.97008 **1.28%** ✓.
+- **developed region (157 pts, x≥0.1 m): max rel error 2.13%, 0 failures** ✓ — the new guard
+  passes robustly (margin to the 10% tolerance is ~5×).
+- 4 `known_deviations` at x ∈ {0.0129, 0.0162, 0.0196, 0.0232}, all below the 0.1 floor,
+  correctly demoted; **no out-of-tolerance point anywhere in the developed region.**
+
+**Regression:** 658 passed / 1 skipped / 0 failed (cfdtrust_tests + adapter). Process note
+honored: `cfdtrust_tests/` is now in the standard sweep (the cycle-3c gap). The real solve
+was run in a working copy; the source case dir was restored to its committed clean-placeholder
+state (polyMesh = `.gitkeep` only, artifacts = MOCKED placeholders) — live solver output is
+verification proof, never committed (enforced by `test_*_polymesh_dir_stays_empty_in_source`).
+
+- Status: **Proposed → Accepted.** P1 flat-plate V&V loop closes on an honest, independently
+  reviewed, empirically re-validated PASS gated on NASA TMR's own convention + a developed-
+  region shape guard. Notion sync (DEC-V61-206/207/208 + this) at session-end.

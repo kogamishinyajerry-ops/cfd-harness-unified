@@ -288,9 +288,11 @@ def _attempt_real_comparison(
     gate_mode = str(ref_block.get("gate_mode", "per_point"))
     if gate_mode == "nasa_integrated":
         station = float(ref_block.get("verification_station_m", 0.97008))
+        dev_min_raw = ref_block.get("developed_region_min_m")
+        dev_min = float(dev_min_raw) if dev_min_raw is not None else None
         gate = flat_plate_cf.evaluate_nasa_convention(
             measured, reference, tolerance=tolerance, x_min_compare=x_min,
-            verification_station_m=station,
+            verification_station_m=station, developed_region_min_m=dev_min,
         )
     else:
         gate = flat_plate_cf.compare_against_reference(

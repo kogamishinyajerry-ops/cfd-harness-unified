@@ -558,6 +558,11 @@
           "type": "number",
           "minimum": 0,
           "description": "Downstream x-station (m) for the Cf verification check when gate_mode=nasa_integrated. NASA TMR reports x=0.97008 for the flat plate."
+        },
+        "developed_region_min_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Lower x-bound (m) of the developed boundary-layer region for the per-point shape guard when gate_mode=nasa_integrated (DEC-V61-209 ADDENDUM 5). Every compared point at x>=this value must be within tolerance; only deviations BELOW it (the documented near-LE formulation band) are demotable to known_deviations. Closes the shape-correctness hole that integral-drag + a single station leave open."
         }
       }
     },

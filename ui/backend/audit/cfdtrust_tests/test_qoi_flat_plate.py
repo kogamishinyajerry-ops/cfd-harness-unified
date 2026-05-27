@@ -187,6 +187,74 @@ def test_nasa_convention_blocks_when_station_outside_range():
     assert gate["details"]["reason"] == "verification_station_unavailable"
 
 
+def test_nasa_convention_developed_region_guard_catches_shape_error():
+    """DEC-V61-209 ADDENDUM 5 (Codex R0 caveat): integral drag + a single
+    station cannot, on their own, reject a curve that is shape-wrong in the
+    developed region but whose integral and station still match. The
+    developed-region per-point guard closes that hole — a >tolerance point at
+    x >= developed_region_min_m is a real FAIL, not a demotable deviation."""
+    ref = [(0.05, 4.0e-3), (0.1, 3.8e-3), (0.2, 3.5e-3), (0.3, 3.3e-3),
+           (0.4, 3.2e-3), (0.5, 3.1e-3), (0.97008, 2.7e-3), (1.5, 2.5e-3)]
+    # A single +20% spike at x=0.3 (well inside the developed region). Its
+    # trapezoid contribution is ~1.5% of the integral and it is far from the
+    # station, so integrated-drag and station both stay within tolerance.
+    measured = [(x, cf * 1.20 if x == 0.3 else cf) for (x, cf) in ref]
+
+    # WITHOUT the guard: passes (the exact hole Codex flagged).
+    no_guard = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008,
+    )
+    assert no_guard["status"] == "PASS"
+    assert no_guard["details"]["integrated_drag"]["within_tolerance"] is True
+    assert no_guard["details"]["verification_station"]["within_tolerance"] is True
+
+    # WITH the guard: the developed-region shape error FAILs the gate.
+    guarded = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008, developed_region_min_m=0.1,
+    )
+    assert guarded["status"] == "FAIL", guarded["summary"]
+    dev = guarded["details"]["developed_region"]
+    assert dev["within_tolerance"] is False
+    assert dev["n_failures"] == 1
+    assert dev["failures"][0]["x_m"] == pytest.approx(0.3)
+    # A developed-region failure is NOT laundered into known_deviations.
+    assert guarded["details"]["n_known_deviations"] == 0
+
+
+def test_nasa_convention_guard_still_demotes_near_le_below_floor():
+    """With the developed-region guard active, a deviation BELOW the floor (the
+    documented near-LE band) is still demoted to known_deviations and the gate
+    PASSes when the developed region is clean — the guard only adds a fail
+    condition for the developed region, it does not un-demote the near-LE."""
+    ref = [(0.0129, 5.3e-3), (0.02, 5.0e-3), (0.05, 4.3e-3), (0.1, 3.8e-3),
+           (0.2, 3.4e-3), (0.5, 3.0e-3), (0.97008, 2.69e-3), (1.98, 2.44e-3)]
+    measured = [(0.0129, 5.3e-3 * 1.22)] + ref[1:]  # +22% near-LE only
+    gate = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008, developed_region_min_m=0.1,
+    )
+    assert gate["status"] == "PASS", gate["summary"]
+    assert gate["details"]["developed_region"]["within_tolerance"] is True
+    assert gate["details"]["n_known_deviations"] == 1
+    assert gate["details"]["known_deviations"][0]["x_m"] == pytest.approx(0.0129)
+
+
+def test_nasa_convention_guard_blocks_when_developed_region_empty():
+    """A developed_region_min_m past the last compared point leaves nothing to
+    shape-check — the gate BLOCKs rather than silently passing on drag+station
+    alone (mirrors the station-unavailable BLOCK)."""
+    ref = [(0.02, 5.0e-3), (0.05, 4.3e-3), (0.97008, 2.69e-3)]
+    measured = list(ref)
+    gate = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008, developed_region_min_m=1.5,  # past max x
+    )
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "no_points_in_developed_region"
+
+
 def test_write_reference_comparison_csv_shape(tmp_path: Path):
     ref = [(0.5, 3e-3)]
     measured = [(0.5, 3.05e-3)]

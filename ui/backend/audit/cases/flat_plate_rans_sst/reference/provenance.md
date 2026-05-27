@@ -61,11 +61,21 @@ uncertainty (not a hidden Reynolds offset).
 Skip-window: `x_min_compare_m = 0.01` — **NASA TMR's own documented LE exclusion** (TMR
 notes local anomalous SST activation in `0 < x < 0.01`). UNCHANGED.
 
-Gate: `gate_mode: nasa_integrated` (sponsor-approved, DEC-V61-209 ADDENDUM 4) — PASS iff
-integrated-Cf drag AND Cf@x=0.97008 are both within tolerance. This is NASA TMR's own
-quantitative SST verification convention (integral drag + downstream station), which is
-robust to a localized near-LE singularity. The near-LE band contributes only ~1.45% of
-the integrated drag.
+Gate: `gate_mode: nasa_integrated` (sponsor-approved, DEC-V61-209 ADDENDUM 4; strengthened
+ADDENDUM 5) — PASS iff integrated-Cf drag AND Cf@x=0.97008 AND the developed-region per-point
+shape guard (`developed_region_min_m: 0.1` — every compared point at x ≥ 0.1 m within
+tolerance) are ALL satisfied. The first two are NASA TMR's own quantitative SST verification
+convention (integral drag + downstream station), robust to a localized near-LE singularity
+(the near-LE band contributes only ~1.45% of the integrated drag). The developed-region guard
+(Codex R0 caveat) closes the residual hole that integral+station leave open — a shape-wrong
+curve whose +/− area errors cancel and matches at the station would still FAIL the per-point
+developed-region check. 0.1 m is an order of magnitude past NASA's x<0.01 LE exclusion and
+~4× past the characterized near-LE band (x≤0.023), so it is the genuinely developed BL, not a
+value tuned to the failures.
+
+Empirically (cycle-3i, real OF11 re-run with the guard): developed region = 157 pts, max rel
+error 2.13%, 0 failures — passes with ~5× margin. The 4 near-LE deviations (x ≤ 0.0232) sit
+below the floor and are demoted to `known_deviations` (still in reference_comparison.csv).
 
 **Honesty trail (DEC-V61-209 cycle-3e→3h):** an interim attempt instead raised
 `x_min_compare_m` 0.01→0.03 to clear the near-LE failures. That was **reverted** as

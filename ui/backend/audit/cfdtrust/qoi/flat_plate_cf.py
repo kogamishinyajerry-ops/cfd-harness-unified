@@ -260,16 +260,18 @@ def evaluate_nasa_convention(
     tolerance: float,
     x_min_compare: float = 0.0,
     verification_station_m: float,
+    developed_region_min_m: float | None = None,
 ) -> Dict[str, Any]:
-    """NASA-TMR-convention gate for the flat plate (DEC-V61-209 ADDENDUM 3).
+    """NASA-TMR-convention gate for the flat plate (DEC-V61-209 ADDENDUM 3/5).
 
     NASA's quantitative SST flat-plate verification keys off the INTEGRATED
     skin-friction drag and the Cf at a downstream station (x=0.97008) — NOT a
     per-point near-leading-edge gate. This evaluator makes those two the PASS
-    criteria and DEMOTES per-point deviations (chiefly the OpenFOAM-kΩSST
-    near-LE over-prediction vs CFL3D) to an informational `known_deviations`
-    list: they are still computed, written to reference_comparison.csv, and
-    reported — but they do not by themselves fail the gate.
+    criteria and DEMOTES per-point deviations BELOW `developed_region_min_m`
+    (chiefly the OpenFOAM-kΩSST near-LE over-prediction vs CFL3D) to an
+    informational `known_deviations` list: they are still computed, written to
+    reference_comparison.csv, and reported — but they do not by themselves fail
+    the gate.
 
     This is NOT tolerance-gaming: the tolerance is unchanged, the per-point
     deviations stay visible, and the gate is aligned to the AUTHORITATIVE
@@ -278,10 +280,21 @@ def evaluate_nasa_convention(
     A prior attempt that instead moved x_min_compare to clear the failures was
     reverted as post-hoc gate movement (Codex review, RATIONALIZED).
 
-    PASS iff BOTH:
+    PASS iff ALL THREE:
       - integrated-Cf drag rel error <= tolerance (trapezoidal over the
         compared x-range, same range for run and reference), AND
-      - Cf at verification_station_m rel error <= tolerance.
+      - Cf at verification_station_m rel error <= tolerance, AND
+      - (if `developed_region_min_m` is set) EVERY per-point deviation at
+        x >= developed_region_min_m is within tolerance.
+
+    The developed-region guard (DEC-V61-209 ADDENDUM 5, Codex R0 caveat) closes
+    the shape-correctness hole that integral-drag + a single station otherwise
+    leave open: a curve whose positive/negative area errors cancel and happens
+    to match at the station can pass drag+station but NOT a per-point check over
+    the developed boundary layer. Only deviations BELOW the developed-region
+    floor (the documented near-LE formulation band) are demotable; an
+    out-of-tolerance point in the developed region is a real FAIL, not a
+    `known_deviation`.
 
     Reuses `compare_against_reference` for the per-point rows so the CSV /
     transparency contract is unchanged; only the verdict logic differs.
@@ -350,13 +363,59 @@ def evaluate_nasa_convention(
     station_rel = abs(cf_run_st - cf_ref_st) / abs(cf_ref_st)
     station_ok = station_rel <= tolerance
 
-    known_deviations = [r for r in rows if not r["within_tolerance"]]
-    status = "PASS" if (drag_ok and station_ok) else "FAIL"
+    # --- developed-region per-point shape guard (Codex R0 caveat) ---
+    # Only deviations BELOW the developed-region floor are demotable to
+    # `known_deviations`; an out-of-tolerance point in the developed boundary
+    # layer is a real FAIL (catches a shape-wrong curve whose +/- area errors
+    # cancel in the integral but mis-predict the developed-region shape).
+    out_of_tol = [r for r in rows if not r["within_tolerance"]]
+    if developed_region_min_m is None:
+        known_deviations = out_of_tol
+        developed_failures: List[Dict[str, Any]] = []
+        developed_ok = True
+        developed_summary = ""
+        developed_detail: Dict[str, Any] | None = None
+    else:
+        developed_rows = [r for r in rows if r["x_m"] >= developed_region_min_m]
+        if not developed_rows:
+            return {
+                "status": "BLOCKED",
+                "summary": (
+                    f"developed_region_min_m={developed_region_min_m} m leaves no "
+                    "compared points to shape-check — cannot evaluate the "
+                    "developed-region guard."
+                ),
+                "details": {
+                    "reason": "no_points_in_developed_region",
+                    "developed_region_min_m": developed_region_min_m,
+                    "run_x_range": [xs[0], xs[-1]],
+                    "tolerance": tolerance,
+                },
+            }
+        known_deviations = [r for r in out_of_tol if r["x_m"] < developed_region_min_m]
+        developed_failures = [r for r in out_of_tol if r["x_m"] >= developed_region_min_m]
+        developed_ok = not developed_failures
+        dev_max = max((r["rel_error"] for r in developed_rows), default=0.0)
+        developed_summary = (
+            f"; developed region (x>={developed_region_min_m} m) "
+            f"{'OK' if developed_ok else f'{len(developed_failures)} FAIL'} "
+            f"(max {dev_max * 100:.2f}%)"
+        )
+        developed_detail = {
+            "developed_region_min_m": developed_region_min_m,
+            "n_points": len(developed_rows),
+            "max_rel_error": dev_max,
+            "within_tolerance": developed_ok,
+            "n_failures": len(developed_failures),
+            "failures": developed_failures,
+        }
+
+    status = "PASS" if (drag_ok and station_ok and developed_ok) else "FAIL"
     summary = (
         f"NASA-convention gate: integrated-Cf drag error {drag_rel * 100:.2f}%, "
         f"Cf@x={verification_station_m:.5f} error {station_rel * 100:.2f}% "
-        f"(tolerance {tolerance * 100:.1f}%); "
-        f"{len(known_deviations)} per-point near-LE deviation(s) reported (informational)."
+        f"(tolerance {tolerance * 100:.1f}%){developed_summary}; "
+        f"{len(known_deviations)} demoted near-LE deviation(s) reported (informational)."
     )
 
     details = dict(base["details"])  # keep rows / max_rel_error / n_compared
@@ -381,6 +440,8 @@ def evaluate_nasa_convention(
         "known_deviations": known_deviations,
         "n_known_deviations": len(known_deviations),
     })
+    if developed_detail is not None:
+        details["developed_region"] = developed_detail
     return {"status": status, "summary": summary, "details": details}
 
 
