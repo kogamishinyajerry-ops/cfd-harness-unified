@@ -1,15 +1,15 @@
 {
   "rules": [
     {
-      "commentary": "Pressure residual is oscillating rather than decreasing monotonically — the last few iterations show alternating amplitude > 30% of the mean. This commonly indicates the pressure-relaxation factor is too aggressive for the case's coupling strength. Consider lowering `relaxationFactors.p` in system/fvSolution (e.g., 0.3 → 0.2) and re-running. If oscillation persists, check the under-relaxation on the momentum equation as well. Reference: V32 residual-oscillation playbook.",
+      "commentary": "Pressure residual is oscillating rather than decreasing monotonically — the last few iterations show alternating amplitude > 30% of the mean. This commonly indicates the pressure-relaxation factor is too aggressive for the case's coupling strength. Consider lowering `relaxationFactors.p` in system/fvSolution (e.g., 0.3 → 0.2) and re-running. If oscillation persists, check the under-relaxation on the momentum equation as well. Reference: Ferziger & Perić, Computational Methods for Fluid Dynamics — under-relaxation and iterative-convergence stability.",
       "id": "RESIDUAL_OSCILLATION_P_V9_R1",
-      "provenance": ".planning/intel/v_series/V32_residual_oscillation.md",
+      "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · under-relaxation & iterative-convergence stability",
       "severity": "warn"
     },
     {
-      "commentary": "Solver reached its iteration cap (maxIters from system/fvSolution → solvers section) WITHOUT meeting the convergence tolerance. The case is technically not finished — the residuals at the final iter represent the best the solver achieved in the budget. Three common causes: (1) under-relaxation too aggressive (lower the values), (2) mesh quality issue creating an ill-conditioned linear system (run checkMesh and look at maxNonOrtho / maxSkewness), (3) BC/IC inconsistency producing an unsolvable steady state. Inspect the residual trajectory: if it was still decreasing at termination, simply increase maxIters. If it had plateaued, root-cause one of the three above. Reference: V18 max-iters-reached playbook.",
+      "commentary": "Solver reached its iteration cap (maxIters from system/fvSolution → solvers section) WITHOUT meeting the convergence tolerance. The case is technically not finished — the residuals at the final iter represent the best the solver achieved in the budget. Three common causes: (1) under-relaxation too aggressive (lower the values), (2) mesh quality issue creating an ill-conditioned linear system (run checkMesh and look at maxNonOrtho / maxSkewness), (3) BC/IC inconsistency producing an unsolvable steady state. Inspect the residual trajectory: if it was still decreasing at termination, simply increase maxIters. If it had plateaued, root-cause one of the three above. Reference: Versteeg & Malalasekera, An Introduction to CFD — iterative convergence and termination criteria.",
       "id": "MAX_ITERS_REACHED_V9_R2",
-      "provenance": ".planning/intel/v_series/V18_max_iters.md",
+      "provenance": "Versteeg & Malalasekera · An Introduction to CFD · iterative convergence & termination criteria",
       "severity": "advise"
     },
     {
@@ -19,9 +19,9 @@
       "severity": "advise"
     },
     {
-      "commentary": "Maximum absolute deviation from the gold-standard reference exceeds 5%. For canonical cases (Ghia 1982 lid-driven cavity, etc.), agreement within 1-3% is the expected bar. Drift of this magnitude usually points to: (1) mesh too coarse near the wall (yPlus too high — try refining boundary layers), (2) wrong turbulence model selection for the Reynolds regime, (3) compressibility/incompressibility mismatch (check whether the case is actually low-Mach). Cross-check the case profile in `.planning/case_profiles/` for the canonical solver/mesh choices that match the gold reference. Reference: V46 gold-delta-drift catalog.",
+      "commentary": "Maximum absolute deviation from the gold-standard reference exceeds 5%. For canonical cases (Ghia 1982 lid-driven cavity, etc.), agreement within 1-3% is the expected bar. Drift of this magnitude usually points to: (1) mesh too coarse near the wall (yPlus too high — try refining boundary layers), (2) wrong turbulence model selection for the Reynolds regime, (3) compressibility/incompressibility mismatch (check whether the case is actually low-Mach). Cross-check the case profile in `.planning/case_profiles/` for the canonical solver/mesh choices that match the gold reference. Reference: Roache, Verification and Validation in Computational Science and Engineering — validation against reference data.",
       "id": "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4",
-      "provenance": ".planning/intel/v_series/V46_gold_delta_drift.md",
+      "provenance": "Roache · Verification and Validation in Computational Science and Engineering · solution validation against reference data",
       "severity": "warn"
     },
     {
@@ -31,15 +31,15 @@
       "severity": "warn"
     },
     {
-      "commentary": "Run took 5000+ iterations to converge — the case worked, but at the long end of typical effort. This is often a hint that (a) the initial guess (potentialFoam pre-step, or zero initialization) was far from the final state, or (b) the under-relaxation is conservative enough that you're trading robustness for speed. If you're iterating on this case, consider warmer starts (use the previous run's final fields as IC) or slightly more aggressive relaxation factors. Reference: V25 startup-speedup notes.",
+      "commentary": "Run took 5000+ iterations to converge — the case worked, but at the long end of typical effort. This is often a hint that (a) the initial guess (potentialFoam pre-step, or zero initialization) was far from the final state, or (b) the under-relaxation is conservative enough that you're trading robustness for speed. If you're iterating on this case, consider warmer starts (use the previous run's final fields as IC) or slightly more aggressive relaxation factors. Reference: Versteeg & Malalasekera, An Introduction to CFD — convergence acceleration.",
       "id": "SLOW_CONVERGENCE_V9_R6",
-      "provenance": ".planning/intel/v_series/V25_startup_speedup.md",
+      "provenance": "Versteeg & Malalasekera · An Introduction to CFD · convergence acceleration",
       "severity": "info"
     },
     {
-      "commentary": "Velocity residual has plateaued (last 20 iterations show variation <2% but value is still 10× above the convergence tolerance). The solver isn't going to improve from here without intervention. Likely causes: (1) under-relaxation too conservative for this regime — try increasing relaxationFactors.U from 0.7 → 0.85, (2) the linear-solver tolerance (in fvSolution → solvers → U) is set too loose so each outer iteration leaves residual behind, (3) the boundary conditions are over-constraining the system (e.g., velocity prescribed on too many patches without a free outlet). Reference: V37 residual-plateau triage.",
+      "commentary": "Velocity residual has plateaued (last 20 iterations show variation <2% but value is still 10× above the convergence tolerance). The solver isn't going to improve from here without intervention. Likely causes: (1) under-relaxation too conservative for this regime — try increasing relaxationFactors.U from 0.7 → 0.85, (2) the linear-solver tolerance (in fvSolution → solvers → U) is set too loose so each outer iteration leaves residual behind, (3) the boundary conditions are over-constraining the system (e.g., velocity prescribed on too many patches without a free outlet). Reference: Ferziger & Perić, Computational Methods for Fluid Dynamics — residual stalling and iterative convergence.",
       "id": "RESIDUAL_PLATEAU_U_V9_R7",
-      "provenance": ".planning/intel/v_series/V37_residual_plateau.md",
+      "provenance": "Ferziger & Perić · Computational Methods for Fluid Dynamics · residual stalling & iterative convergence",
       "severity": "warn"
     },
     {
