@@ -8,9 +8,9 @@ notion_sync_status: pending (Accepted 2026-05-27 — sync at session-end)
 autonomous_governance: true
 confidence: high
 date: 2026-05-27
-ratified_by: Codex APPROVE_WITH_COMMENTS (local fallback, both relays 503) — 2 comments ADDRESSED round 1 (developed-region shape guard + known_deviations scoping); re-validated real run PASS
-codex_tool_report_path: reports/codex_tool_reports/dec209_nasa_convention_gate_APPROVE_WITH_COMMENTS_20260527.txt
-codex_review_relay: local (effort=ChatGPT-tier, emergency fallback — 86gs + CRS both 503 on gpt-5.4/5.5)
+ratified_by: Codex APPROVE_WITH_COMMENTS (local fallback, both relays 503) — 2 comments ADDRESSED round 1 (developed-region shape guard + known_deviations scoping); re-validated real run PASS. RECONCILED 2026-05-28 on 86gs gpt-5.4 xhigh (relays recovered) — re-review APPROVE_WITH_COMMENTS, guard logic confirmed sound; 1 new P2 (manifest-vs-trust_report truth-chain consistency) ADDRESSED inline (dual-state prose).
+codex_tool_report_path: reports/codex_tool_reports/dec209_nasa_convention_gate_APPROVE_WITH_COMMENTS_20260527.txt; reports/codex_tool_reports/dec209_b6007ee_86gs_rereview_APPROVE_WITH_COMMENTS_20260528.txt
+codex_review_relay: 86gs (gpt-5.4, effort=xhigh — 2026-05-28 reconciliation of the 2026-05-27 local emergency fallback when 86gs+CRS were both 503)
 ---
 
 # DEC-V61-209 · P1 cycle-2 — flat-plate V&V de-fake + non-convergence exposure
@@ -412,3 +412,47 @@ verification proof, never committed (enforced by `test_*_polymesh_dir_stays_empt
 - Status: **Proposed → Accepted.** P1 flat-plate V&V loop closes on an honest, independently
   reviewed, empirically re-validated PASS gated on NASA TMR's own convention + a developed-
   region shape guard. Notion sync (DEC-V61-206/207/208 + this) at session-end.
+
+## ADDENDUM 6 — 86gs governance reconciliation of the local fallback; truth-chain P2 fixed inline (2026-05-28)
+
+ADDENDUM 5's APPROVE_WITH_COMMENTS ran on a **local `codex exec` emergency
+fallback** because both relays (86gs + CRS) were 503 on 2026-05-27. The relays
+recovered on 2026-05-28; per the project rule ("reconcile local-review
+provenance when relays recover"), the verdict-affecting developed-region guard
+commit (`b6007ee`) was re-reviewed on the canonical **86gs gpt-5.4 xhigh**
+governance baseline.
+
+**Verdict: APPROVE_WITH_COMMENTS.** "The new guard logic itself looks sound" —
+the third PASS condition (every compared point at x≥0.1 m within tolerance) is
+confirmed a legitimate, strictly-stricter correctness gate. Report archived:
+`reports/codex_tool_reports/dec209_b6007ee_86gs_rereview_APPROVE_WITH_COMMENTS_20260528.txt`.
+
+**One new P2 (truth-chain consistency), ADDRESSED inline:** the manifest `notes`
+claimed "PASS, validated", but the committed `artifacts/trust_report.json` says
+`overall_status: MOCKED` / `validation_status: unknown`, and
+`tools/cwos_status.py` derives cockpit/status from that file — so the dashboards
+honestly report the case as UNVALIDATED, contradicting the manifest's bare
+"validated" claim.
+
+**Why the fix is prose, not a committed VALIDATED report.** The MOCKED readout
+is *correct*: the committed solver artifacts are MOCK placeholders by source
+convention (real solve output is verification proof, never committed — pollution
+guard, enforced by `test_cwos_status_counts_mocked_solver_report` +
+`test_cockpit_shows_mocked_when_report_is_mocked`). A fresh `cmd_report` on the
+committed case still returns MOCKED (verified on a throwaway copy — no source
+pollution). Committing a VALIDATED report would (a) commit solve output, (b)
+break those two convention tests, and (c) make the dashboard *lie*. So the
+contradiction lives only in the manifest prose. Fixed: the verdict is now
+qualified as the result of a REAL local solve, with an explicit CHECKED-IN STATE
+clause explaining the expected-MOCKED dashboard and the exact `cfdtrust run` +
+`report` reproduction command. Prose-only / non-verdict → no new Codex round
+(round cap untouched).
+
+**Deferred design question (separate DEC):** whether a V&V-grade *validated
+reference* case SHOULD commit a real `trust_report.json` as canonical evidence —
+superseding the mock-placeholder convention for this class of case — is a
+genuine convention change (touches the pollution guard + two tests) and is out
+of scope for the DEC-209 gate fix. Queued, not decided unilaterally.
+
+Status unchanged: **Accepted** (the reconciliation confirms the verdict; the P2
+was a documentation-consistency fix, not a logic change).

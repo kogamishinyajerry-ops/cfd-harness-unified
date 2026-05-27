@@ -1,0 +1,31 @@
+Codex governance re-review — DEC-V61-209 verdict-affecting developed-region guard
+==================================================================================
+Target commit : b6007ee (P1 cycle-3i: developed-region shape guard → DEC-209 Accepted)
+Relay/backend : 86gs (~/.codex-relay), gpt-5.4, reasoning effort xhigh
+Date          : 2026-05-28
+Purpose       : Reconcile DEC-209's LOCAL-fallback review (relays were 503 on
+                2026-05-27) → upgrade to canonical 86gs governance baseline.
+Session id    : 019e6a68-d367-7011-a8ee-40df632d9c4f
+Full trace    : (313KB xhigh reasoning) tool-results/br2rqo4n3.txt
+
+VERDICT: APPROVE_WITH_COMMENTS
+  "The new guard logic itself looks sound" — the developed-region shape guard
+  (third PASS condition: every compared point at x>=0.1 m within tolerance) is
+  accepted as a legitimate, strictly-stricter correctness gate.
+
+FINDINGS (1 × P2):
+  [P2] Regenerate trust artifacts before marking flat_plate validated
+       — case_manifest.yaml:155-156
+       The new `PASS, validated` notes are NOT backed by the checked-in
+       evidence the rest of the repo reads. tools/cwos_status.py discovers case
+       status from cases/*/artifacts/trust_report.json, and
+       cases/flat_plate_rans_sst/artifacts/trust_report.json still says
+       overall_status:"MOCKED" / validation_status:"unknown" — so the cockpit
+       and status snapshots will continue to report this case as UNVALIDATED
+       after this commit. Either check in the updated flat-plate report (and
+       derived status files) or avoid landing the validated claim yet.
+
+DISPOSITION: see follow-up commit + RETRO addendum (truth-chain consistency:
+  committed machine-readable artifact must not contradict the manifest's prose
+  verdict). Round cap: this is an R0 re-review of an already-Accepted DEC; the
+  single P2 is addressed inline (non-verdict consistency fix), not a new arc.
