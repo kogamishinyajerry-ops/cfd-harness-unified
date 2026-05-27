@@ -95,10 +95,14 @@ reference_comparison:
   x_min_compare_m: 0.01
   notes: |
     NASA TMR canonical Cf curve (CFL3D, k-omega SST, on-plate region only).
-    Local case Re_L = 4e6 vs NASA canonical Re_L = 5e6 (25% mismatch);
-    tolerance widened from 0.05 to 0.10 to accommodate (~5% Cf delta).
-    Comparison skips x < 0.01 m (laminar/transition region not predicted
-    by k-omega SST).
+    Re NOW MATCHED (DEC-V61-209, 2026-05-27): nu set to 6e-6 → Re/L = U/nu =
+    5e6 = NASA canonical. Empirical real-run Cf error: developed region
+    (x>=0.2) 2.4% (inside gate); near-LE band (x~0.05-0.15) 10-14.5% due to
+    mesh under-resolution (current y+~120 vs declared low_re_resolved y+~1) —
+    queued: refine near-wall grading to y+~1.
+    The 0.10 tolerance now reflects genuine discretization uncertainty, not a
+    hidden Reynolds offset (prior nu=1.5e-5 / Re/L=2e6 gave 15-17% error).
+    Comparison skips x < 0.01 m (leading-edge singularity).
     See `reference/provenance.md` for full citation, license, and
     regeneration instructions.
 

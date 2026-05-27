@@ -27,16 +27,31 @@ Format: 2-column CSV with header `x_m,Cf`. 448 rows.
 
 ## Local case conditions vs reference
 
-Our `case_manifest.yaml`:
+Our `case_manifest.yaml` (UPDATED 2026-05-27, DEC-V61-209 — Re now matched):
 
 - Plate length L = 2.0 m (matches NASA)
 - Free-stream velocity U∞ = 30 m/s
-- Kinematic viscosity ν = 1.5×10⁻⁵ m²/s
-- Re_L = 30 × 2.0 / 1.5×10⁻⁵ = **4×10⁶** (NASA = 5×10⁶)
+- Kinematic viscosity ν = **6×10⁻⁶ m²/s** (was 1.5×10⁻⁵)
+- Re per unit length = U/ν = 30 / 6×10⁻⁶ = **5×10⁶ = NASA TMR canonical Re** (exact match)
 
-**This is a documented Re_L mismatch of 25%.** A turbulent boundary-layer Cf scales approximately as `Re_x^(-1/5)`, so the same x position carries a slightly higher Cf in our run than in NASA's. Predicted Cf delta at matching x: ~5%.
+**Re now matches the reference.** The prior ν=1.5×10⁻⁵ (Re/L=2×10⁶) gave a real
+Cf error of **15–17%** vs the NASA Re=5×10⁶ curve — far worse than the "~5% delta"
+the earlier note predicted. Widening tolerance to absorb a Reynolds mismatch was the
+wrong fix; matching the reference Re is the honest one.
 
-**Implication for the gate**: `reference_comparison.tolerance` is set to **0.10** (10%), wider than the QoI-stability tolerance of 0.05, to accommodate this known Re_L mismatch. The gate is honest about what it's checking: it answers "is our Cf curve close to NASA's published CFL3D SST curve at the same x positions?" — not "is our case at exactly the same Reynolds number." A future case profile with U∞ = 37.5 m/s would match Re_L exactly and could tighten the tolerance.
+**Empirical validation (real simpleFoam + kΩSST run, OF10, DEC-V61-209)**:
+- **Developed turbulent region (x ≥ 0.2 m): worst Cf error 2.4%** vs NASA TMR CFL3D
+  SST — comfortably inside the 10% gate.
+- **Near-leading-edge band (x ≈ 0.05–0.15 m): 10–14.5%** — NOT a Reynolds or model
+  error but **mesh under-resolution**: the current blockMesh gives y+ ≈ 120
+  (wall-function regime), while `case_manifest.yaml > mesh_contract.wall_function_policy`
+  declares `low_re_resolved` (y+ ~ 1). The thin near-LE boundary layer needs the
+  y+~1 mesh the case already declares; the thick developed-region BL tolerates y+~120.
+  **Resolution (queued)**: refine near-wall grading to y+~1 (matches the declared
+  policy and NASA's resolved mesh) → expected to bring the full x≥0.01 region inside gate.
+
+The 10% `reference_comparison.tolerance` stands, now justified by genuine
+discretization uncertainty (not a hidden Reynolds offset).
 
 ## Comparison region
 

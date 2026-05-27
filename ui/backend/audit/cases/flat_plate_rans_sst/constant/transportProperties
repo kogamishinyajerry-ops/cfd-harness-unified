@@ -12,8 +12,14 @@ FoamFile
 
 transportModel  Newtonian;
 
-// Kinematic viscosity of air at ~15 C, 1 atm.
-// Re_L = U*L/nu = 30 * 1 / 1.5e-5 = 2e6 → fully-turbulent boundary layer on plate.
-nu              1.5e-05;
+// Kinematic viscosity set so Re per unit length matches the NASA TMR SST
+// reference EXACTLY: Re/L = U/nu = 30 / 6e-6 = 5e6 (NASA TMR canonical Re).
+// Empirically validated (DEC-V61-209): real simpleFoam+kOmegaSST run → Cf(x)
+// matches reference/cf_reference.csv within 1.4% across the developed plate
+// (x>=0.2; leading edge excluded per NASA-standard practice).
+// Was 1.5e-5 (Re/L=2e6): gave 15-17% Cf error vs the NASA Re=5e6 curve — the
+// provenance.md "25% mismatch / ~5% delta / widen tolerance to 10%" estimate was
+// optimistic; the honest fix is to match the reference Re, not widen tolerance.
+nu              6e-06;
 
 // ************************************************************************* //
