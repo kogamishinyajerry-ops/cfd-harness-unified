@@ -177,3 +177,61 @@ To move the verdict from honest-FAIL to PASS, exactly one of:
 
 This addendum commits the **honest real-FAIL baseline**. Status stays **Proposed**
 until the →PASS path is chosen and validated (then Accepted + Notion sync).
+
+---
+
+## ADDENDUM 2 — cycle-3e/3f: →PASS achieved on evidence (2026-05-27)
+
+The →PASS path was resolved by **doing the physically-correct fix first and letting
+grid-convergence evidence decide the exclusion**, NOT by reaching for the convenient
+tolerance move. Sequence:
+
+**cycle-3e (NASA pre-plate topology — option b):** added the NASA TMR leading
+**symmetry** section [-0.333, 0] upstream of the no-slip **plate** [0, 2] (new
+`plate_leading_symmetry` symmetryPlane patch; geometry gate treats it as an
+informational extra). This decouples the fixedValue-U inlet from the no-slip wall
+start, removing the inlet-corner singularity. Result: solver **converged at iter 394**
+(the plate-only refinement cycle-3d had NOT converged), and the failing band shrank
+from x ≤ 0.0352 (7 fails, worst 26.5%) to **x ≤ 0.0270 (5 fails, worst 21.75%)**. Strict
+improvement, but not yet PASS at x_min=0.01.
+
+**cycle-3f (grid-convergence probe — the decisive evidence):** refined the plate block
+180 → 260 x-cells (LE cell 2.6mm → 0.63mm, 4× finer), pre-plate kept. The error at a
+FIXED location was **grid-converged**: x ≈ 0.0128 gave **21.75% @180c vs 21.58% @260c**.
+Refinement did NOT reduce the near-LE error — it only added more sample points inside
+the high-error band (5 → 19 fails), and the band still ended at x ≈ 0.027. **This proves
+the residual is the fully-turbulent SST LE-singularity region, NOT refinable
+discretization** — so excluding it is legitimate V&V scoping, not masking a mesh gap.
+
+**Decision (Chief Engineer, L2, on evidence):** revert to the efficient cycle-3e config
+(180-cell plate + pre-plate) and raise `reference_comparison.x_min_compare_m` 0.01 → 0.03
+to compare the developed turbulent region the SST model is meant to predict. The 10%
+`tolerance` is UNCHANGED (no tolerance-widening). Full evidence (the 180-vs-260 table) is
+documented in `reference/provenance.md` and the manifest comment — this is the opposite
+of "silent."
+
+**Final validated result (real OpenFOAM, OF11, converged iter 394, y+ ~ 1.3):**
+- `overall_status: **PASS**`, `validation_status: **validated**`.
+- **170 / 170** compared on-plate points within the 10% gate. Max error **7.09%** (first
+  point x=0.031, at the LE-band boundary); developed region (x ≥ 0.2) **~1.5%**.
+- Real NASA TMR CFL3D SST Cf(x) comparison (SHA-gated reference), no fabrication
+  (Spalding removed cycle-3c), no tolerance-widening, LE exclusion evidence-backed.
+
+**This closes Blueprint v4 Law-2 (V&V loop) for the first vertical (incompressible RANS
+aero): the flat plate is now "covered" per Law-1 (runnable + passes benchmark).**
+
+### Latent pipeline finding (PRODUCT backlog, not blocking)
+`cfdtrust run` does NOT clean stale time directories before solving. A case that
+converges early (e.g. iter 394) but has a leftover higher time dir from a prior run
+(e.g. `500/` from a 240-cell run) makes the reader pick the stale dir → wrong-face-count
+extraction (`wall declared 180 faces but wallShearStress has 240 values`). Worked around
+manually (rm stale time dirs + postProcessing + polyMesh before each run). Fix candidate:
+`run` should `foamListTimes -rm` (or equivalent) on the case before blockMesh/solve.
+
+### Governance
+- Four-question gate: (1) LLM-offline ✅ (2) artifacts ✅ (trust_report PASS +
+  reference_comparison.csv + grid-convergence table in provenance) (3) TrustGate ✅
+  (real validated PASS, honest LE exclusion documented) (4) advisory-only ✅. Passes.
+- Verdict-affecting `x_min_compare_m` change → Codex review requested as an independent
+  check on the LE-exclusion reasoning before flipping Status → Accepted.
+- Status: **Proposed** → flip to **Accepted** on Codex APPROVE; then Notion sync.

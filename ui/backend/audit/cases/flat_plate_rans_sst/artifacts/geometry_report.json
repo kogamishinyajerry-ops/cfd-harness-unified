@@ -1,37 +1,42 @@
 {
-  "generated_at": "2026-05-27T02:35:24Z",
+  "generated_at": "2026-05-27T03:37:05Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M5",
   "gate_status": "PASS",
   "polymesh_inspected": true,
   "realized_patches": {
     "frontAndBack": {
-      "nFaces": 32400,
-      "startFace": 32670,
+      "nFaces": 38880,
+      "startFace": 39186,
       "type": "empty"
     },
     "inlet": {
       "nFaces": 90,
-      "startFace": 32130,
+      "startFace": 38574,
       "type": "patch"
     },
     "outlet": {
       "nFaces": 90,
-      "startFace": 32220,
+      "startFace": 38664,
       "type": "patch"
     },
+    "plate_leading_symmetry": {
+      "nFaces": 36,
+      "startFace": 38934,
+      "type": "symmetryPlane"
+    },
     "top": {
-      "nFaces": 180,
-      "startFace": 32490,
+      "nFaces": 216,
+      "startFace": 38970,
       "type": "symmetryPlane"
     },
     "wall": {
       "nFaces": 180,
-      "startFace": 32310,
+      "startFace": 38754,
       "type": "wall"
     }
   },
-  "realized_patch_count": 5,
+  "realized_patch_count": 6,
   "declared_required_patches": [
     "inlet",
     "outlet",
@@ -50,7 +55,9 @@
       "top",
       "wall"
     ],
-    "extras": []
+    "extras": [
+      "plate_leading_symmetry"
+    ]
   },
   "dimensionality_dimension": {
     "dimension_status": "PASS",

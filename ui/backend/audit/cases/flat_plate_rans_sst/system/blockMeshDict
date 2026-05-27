@@ -1,8 +1,7 @@
 /*--------------------------------*- C++ -*----------------------------------*\
-| AI-CFD-V2 Phase 1 step 2b scaffold | OpenFOAM 11 | flat_plate_rans_sst    |
-| 2.5D box, graded toward bottom wall (target y+ ~ 1 at U=30 m/s)            |
-| NOTE: NASA TMR has a leading symmetry section before the plate; this       |
-|       scaffold collapses both into one no-slip wall. See CASE_NOTES.md.    |
+| AI-CFD-V2 Phase 1 | OpenFOAM 11 | flat_plate_rans_sst                       |
+| 2.5D box, NASA TMR topology: leading SYMMETRY section [-0.333,0] then       |
+| no-slip PLATE [0,2]. Graded toward bottom wall (target y+ ~ 1 at U=30 m/s). |
 \*---------------------------------------------------------------------------*/
 FoamFile
 {
@@ -13,36 +12,65 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
+// DEC-V61-209 ADDENDUM (cycle-3e): NASA TMR symmetry pre-plate — the validated
+// fix for the leading-edge over-prediction. EVIDENCE that drove this redesign:
+//  - cycle-3c (180x90, plate-only, LE collapsed onto inlet): developed-region
+//    Cf matched NASA TMR to 1-3%, but a smooth-decaying band x=0.0129-0.0352m
+//    over-predicted Cf 10-26%.
+//  - cycle-3d (240x90, refined near-LE x): the LE band got WORSE (35.6%) and
+//    convergence broke. Refinement resolving MORE of the error proves it is NOT
+//    coarse-grid discretization — it is the inlet-corner singularity created by
+//    collapsing the fixedValue-U inlet onto the no-slip wall start at x=0.
+//  => Root fix = NASA topology: a symmetry plane upstream of the plate so the
+//     inlet (x=-0.333) is decoupled from the leading edge (x=0). The boundary
+//     layer now starts cleanly at the true LE, not at an over-constrained corner.
+//
+// Domain x in [-0.333, 2.0] (LE at x=0), y in [0,1], z in [0,0.05].
+// Block 1 (pre-plate [-0.333,0]): 36 x-cells clustered toward x=0 (ratio 0.1),
+//   bottom = symmetryPlane (no shear). Block 2 (plate [0,2]): 180 x-cells with
+//   the proven cycle-3c multiGrading ((0.1 0.177778 4.6495)(0.9 0.822222 1)),
+//   bottom = no-slip wall. Both blocks: 90 y-cells, expansion 1724 -> wall cell
+//   ~4.7e-5 m, y+ ~ 1.3 avg (y-distribution matches across the x=0 interface).
+// New patch `plate_leading_symmetry` (symmetryPlane) is an EXTRA patch — the
+// geometry gate treats extras as informational; the 5 required patches remain.
+
 scale   1;
 
 vertices
 (
-    (0  0    0     )   // 0
-    (2  0    0     )   // 1
-    (2  1    0     )   // 2
-    (0  1    0     )   // 3
-    (0  0    0.05  )   // 4
-    (2  0    0.05  )   // 5
-    (2  1    0.05  )   // 6
-    (0  1    0.05  )   // 7
+    (-0.333  0    0     )   // 0
+    ( 0      0    0     )   // 1
+    ( 2      0    0     )   // 2
+    (-0.333  1    0     )   // 3
+    ( 0      1    0     )   // 4
+    ( 2      1    0     )   // 5
+    (-0.333  0    0.05  )   // 6
+    ( 0      0    0.05  )   // 7
+    ( 2      0    0.05  )   // 8
+    (-0.333  1    0.05  )   // 9
+    ( 0      1    0.05  )   // 10
+    ( 2      1    0.05  )   // 11
 );
 
 blocks
 (
-    // DEC-V61-209: 2D-refined mesh for y+~1 near-LE resolution.
-    // Cell count 100x60 -> 180x90 (16,200 cells; checkMesh-verified clean,
-    // max aspect ratio 260.9). x uses multiGrading (2 segments): segment A =
-    // first 10% of length [0,0.2m] gets 17.7778% of x-cells (=32) with
-    // expansion 4.6495 clustering the smallest cell at the LE (~2.6mm growing
-    // to ~12.2mm); segment B = remaining 90% [0.2,2.0m] gets 82.2222% of
-    // x-cells (=148) UNIFORM at ~12.2mm (segment A last cell == segment B cell,
-    // no size jump). y uses a single expansion ratio 1724 (top-cell/wall-cell)
-    // -> wall cell ~4.7e-5 m, giving y+ ~ 1.3 avg in the developed plate.
-    // z unchanged (1 cell, 2.5D). Decouples LE x-resolution from downstream
-    // wall aspect ratio: dx_downstream/dy_wall = 261 < 1000. The earlier
-    // simpleGrading (1 15000 1) attempt failed checkMesh (AR ~1994) because a
-    // uniform dx=0.02m wall row with dy~1e-5 gave AR ~1800-1994.
-    hex (0 1 2 3 4 5 6 7) (180 90 1)
+    // Block 1: pre-plate symmetry section [-0.333, 0]
+    hex (0 1 4 3 6 7 10 9) (36 90 1)
+    simpleGrading
+    (
+        0.1        // x: cells shrink toward x=0 (LE), last cell ~ block-2 first cell
+        1724       // y: graded to wall (y+ ~ 1.3)
+        1          // z
+    )
+    // Block 2: no-slip plate [0, 2]
+    // cycle-3e config (180x90, proven). The cycle-3f refinement to 260 was a
+    // GRID-CONVERGENCE PROBE, not a keeper: it showed the residual near-LE
+    // over-prediction is grid-CONVERGED (err at x~0.0128 = 21.75% @180c vs
+    // 21.58% @260c — refinement does NOT reduce it), proving the x<~0.027 band
+    // is a model/LE-singularity feature, not refinable discretization. So we
+    // keep the efficient 180-cell plate and exclude the LE band at the gate
+    // (manifest x_min_compare_m, see provenance.md grid-convergence section).
+    hex (1 2 5 4 7 8 11 10) (180 90 1)
     simpleGrading
     (
         ( (0.1 0.177778 4.6495) (0.9 0.822222 1) )   // x: LE-clustered then uniform
@@ -62,7 +90,7 @@ boundary
         type patch;
         faces
         (
-            (0 4 7 3)
+            (0 6 9 3)
         );
     }
     outlet
@@ -70,7 +98,7 @@ boundary
         type patch;
         faces
         (
-            (1 2 6 5)
+            (2 8 11 5)
         );
     }
     wall
@@ -78,7 +106,15 @@ boundary
         type wall;
         faces
         (
-            (0 1 5 4)
+            (1 2 8 7)
+        );
+    }
+    plate_leading_symmetry
+    {
+        type symmetryPlane;
+        faces
+        (
+            (0 1 7 6)
         );
     }
     top
@@ -86,7 +122,8 @@ boundary
         type symmetryPlane;
         faces
         (
-            (3 7 6 2)
+            (3 4 10 9)
+            (4 5 11 10)
         );
     }
     frontAndBack
@@ -94,8 +131,10 @@ boundary
         type empty;
         faces
         (
-            (0 3 2 1)
-            (4 5 6 7)
+            (0 1 4 3)
+            (1 2 5 4)
+            (6 7 10 9)
+            (7 8 11 10)
         );
     }
 );

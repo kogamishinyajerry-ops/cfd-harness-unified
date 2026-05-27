@@ -26,6 +26,9 @@
         "outlet": {
           "type": "zeroGradient"
         },
+        "plate_leading_symmetry": {
+          "type": "symmetryPlane"
+        },
         "top": {
           "type": "symmetryPlane"
         },
@@ -51,6 +54,9 @@
         "outlet": {
           "type": "zeroGradient"
         },
+        "plate_leading_symmetry": {
+          "type": "symmetryPlane"
+        },
         "top": {
           "type": "symmetryPlane"
         },
@@ -74,6 +80,9 @@
         "outlet": {
           "type": "calculated",
           "value_scalar": 0.0
+        },
+        "plate_leading_symmetry": {
+          "type": "symmetryPlane"
         },
         "top": {
           "type": "symmetryPlane"
@@ -101,6 +110,9 @@
         "outlet": {
           "type": "zeroGradient"
         },
+        "plate_leading_symmetry": {
+          "type": "symmetryPlane"
+        },
         "top": {
           "type": "symmetryPlane"
         },
@@ -123,6 +135,9 @@
         "outlet": {
           "type": "fixedValue",
           "value_scalar": 0.0
+        },
+        "plate_leading_symmetry": {
+          "type": "symmetryPlane"
         },
         "top": {
           "type": "symmetryPlane"

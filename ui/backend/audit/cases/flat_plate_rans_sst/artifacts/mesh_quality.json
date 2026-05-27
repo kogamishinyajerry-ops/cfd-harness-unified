@@ -5,7 +5,7 @@
   "failed_checks_count": 0,
   "geometry": {
     "avg_non_orthogonality": 0.0,
-    "max_aspect_ratio": 260.895,
+    "max_aspect_ratio": 501.806,
     "max_cell_openness": 1.64468e-16,
     "max_non_orthogonality": 0.0,
     "max_skewness": 1.4152e-13
@@ -13,10 +13,10 @@
   "log": "artifacts/mesh_quality.log",
   "overall_mesh_ok": true,
   "stats": {
-    "boundary_patches": 5,
-    "cells": 16200,
-    "faces": 65070,
-    "internal_faces": 32130,
-    "points": 32942
+    "boundary_patches": 6,
+    "cells": 19440,
+    "faces": 78066,
+    "internal_faces": 38574,
+    "points": 39494
   }
 }

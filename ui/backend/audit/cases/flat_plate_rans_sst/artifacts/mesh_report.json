@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T02:35:24Z",
+  "generated_at": "2026-05-27T03:37:05Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M4",
   "gate_status": "PASS",
@@ -7,11 +7,11 @@
   "checkmesh_overall_ok": true,
   "checkmesh_failed_count": 0,
   "stats": {
-    "boundary_patches": 5,
-    "cells": 16200,
-    "faces": 65070,
-    "internal_faces": 32130,
-    "points": 32942
+    "boundary_patches": 6,
+    "cells": 19440,
+    "faces": 78066,
+    "internal_faces": 38574,
+    "points": 39494
   },
   "quality_dimension": {
     "dimension_status": "PASS",
@@ -27,7 +27,7 @@
         "ok": true
       },
       "max_aspect_ratio": {
-        "actual": 260.895,
+        "actual": 501.806,
         "threshold": 1000.0,
         "ok": true
       }
@@ -38,9 +38,9 @@
   "y_plus_dimension": {
     "dimension_status": "PASS",
     "patch_evaluated": "wall",
-    "actual_avg": 1.43599,
-    "actual_min": 0.838945,
-    "actual_max": 8.95032,
+    "actual_avg": 1.38559,
+    "actual_min": 0.821866,
+    "actual_max": 9.42885,
     "target_min": 0.5,
     "target_max": 5.0,
     "ok": true

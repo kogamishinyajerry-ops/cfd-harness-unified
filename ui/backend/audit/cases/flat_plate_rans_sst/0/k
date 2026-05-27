@@ -38,6 +38,10 @@ boundaryField
     {
         type            symmetryPlane;
     }
+    plate_leading_symmetry
+    {
+        type            symmetryPlane;
+    }
     frontAndBack
     {
         type            empty;

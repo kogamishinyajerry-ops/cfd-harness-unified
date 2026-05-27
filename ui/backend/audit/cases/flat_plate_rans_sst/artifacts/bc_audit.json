@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-27T02:35:24Z",
+  "generated_at": "2026-05-27T03:37:05Z",
   "case_id": "flat_plate_rans_sst",
   "phase": "M8",
   "gate_status": "PASS",
@@ -25,7 +25,7 @@
       "omega",
       "p"
     ],
-    "polymesh_patch_count": 5,
+    "polymesh_patch_count": 6,
     "gaps_by_field": {}
   },
   "type_match_dimension": {
@@ -203,7 +203,7 @@
     "omega",
     "nut"
   ],
-  "realized_patch_count": 5,
+  "realized_patch_count": 6,
   "declared_bc_contract": {
     "inlet": {
       "velocity": {
