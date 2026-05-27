@@ -18,6 +18,16 @@ physics:
   turbulence_model: kOmegaSST
   compressible: false
   steady: true
+  # Independently-sourced canonical Reynolds number per unit length (Re/L = U/nu)
+  # from the authoritative benchmark — NASA TMR 2D flat plate, Re/unit = 5e6
+  # (https://tmbwg.github.io/turbmodels/flatplate_sst.html). NOT derived from
+  # this case's U/nu; it is the fixed reference the case must match. The
+  # cfdtrust advisory Reynolds-coherence pre-check (DEC-V61-209 follow-up, P2
+  # W1.0') computes Re/L from the case's ACTUAL inlet U + constant/
+  # transportProperties nu and flags (advisory-only) when it drifts from this
+  # value — exactly the ν=1.5e-5 → Re/L=2e6-vs-5e6 mismatch that caused the
+  # cycle-2 15-17% Cf error.
+  canonical_reynolds_per_length: 5.0e+6
 
 geometry_contract:
   required_patches:

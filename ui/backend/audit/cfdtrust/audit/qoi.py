@@ -20,7 +20,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..qoi import flat_plate_cf, wall_shear
+from ..qoi import flat_plate_cf, flow_coherence, wall_shear
 from ..status import ensure_artifacts_dir, mocked_gate, utc_now_iso
 
 
@@ -305,6 +305,18 @@ def _attempt_real_comparison(
     gate["details"]["u_inf_source"] = u_inf_source
     gate["details"]["latest_time"] = latest
     gate["details"]["u_inf_m_s"] = float(u_inf)
+    # DEC-V61-209 follow-up (P2 W1.0'): ADVISORY-ONLY Reynolds-coherence pre-check.
+    # Compares the case's ACTUAL nu (constant/transportProperties) + inlet U
+    # against the manifest's independently-sourced physics.canonical_reynolds_
+    # per_length. Stashed in details — it NEVER changes gate["status"] /
+    # _overall_status. Would have caught the cycle-2 nu=1.5e-5 (Re/L=2e6 vs 5e6)
+    # drift that the gate otherwise attributed to the wrong-Re reference.
+    physics_block = manifest.get("physics", {}) if isinstance(manifest, dict) else {}
+    gate["details"]["reynolds_coherence"] = flow_coherence.evaluate_reynolds_coherence(
+        float(u_inf) if u_inf is not None else None,
+        flow_coherence.read_kinematic_viscosity(case_dir),
+        physics_block.get("canonical_reynolds_per_length"),
+    )
     return gate, measured
 
 

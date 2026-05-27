@@ -68,6 +68,11 @@
         },
         "steady": {
           "type": "boolean"
+        },
+        "canonical_reynolds_per_length": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Independently-sourced canonical Reynolds number per unit length (Re/L = U/nu) from the authoritative benchmark. Used by the cfdtrust advisory Reynolds-coherence pre-check (DEC-V61-209 follow-up) to flag when the case's actual U/nu drifts from the benchmark it is validated against. Advisory-only — never gates the verdict. MUST be cited to its source in a manifest comment, not derived from this case's own U/nu."
         }
       }
     },
