@@ -836,12 +836,18 @@ def test_cmd_audit_does_not_invoke_solver(repo_root: Path, tmp_path: Path):
     """
     F-05 end-to-end: `cfdtrust audit` must not produce solver.log or
     residuals.csv. Those belong to `cfdtrust run`.
+
+    Uses backward_facing_step (a `solver_backend: mocked` exemplar) so the
+    structural gates resolve to MOCKED (rc 0) on an un-run case. flat_plate
+    is no longer suitable: per DEC-V61-209 it became a real `openfoam` case,
+    and auditing a real case before it is run correctly BLOCKs the
+    geometry/mesh/bc gates (no realized polyMesh yet) → rc 1.
     """
     import shutil
     from cfdtrust.cli import cmd_audit
 
-    case_src = repo_root / "cases" / "flat_plate_rans_sst"
-    case_dst = tmp_path / "flat_plate_rans_sst"
+    case_src = repo_root / "cases" / "backward_facing_step"
+    case_dst = tmp_path / "backward_facing_step"
     shutil.copytree(case_src, case_dst)
     # Remove any pre-existing artifacts so we can prove audit doesn't create them
     artifacts = case_dst / "artifacts"

@@ -130,6 +130,63 @@ def test_compare_blocks_when_no_overlapping_x():
     assert gate["details"]["reason"] == "no_overlapping_x_points"
 
 
+def test_nasa_convention_passes_despite_near_le_deviation():
+    """DEC-V61-209 ADDENDUM 3: a measured curve that matches the reference
+    in the developed region (so integrated drag + downstream Cf are within
+    tolerance) PASSES the NASA-convention gate even though a few near-LE points
+    over-predict — those are demoted to informational known_deviations, not a
+    fail, and stay visible in the rows."""
+    # Reference: smooth Cf decaying with x.
+    ref = [(0.0129, 5.3e-3), (0.02, 5.0e-3), (0.05, 4.3e-3),
+           (0.2, 3.4e-3), (0.5, 3.0e-3), (0.97008, 2.69e-3), (1.98, 2.44e-3)]
+    # Measured: identical EXCEPT a +22% spike at the first near-LE point.
+    measured = [(0.0129, 5.3e-3 * 1.22)] + ref[1:]
+    gate = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008,
+    )
+    assert gate["status"] == "PASS", gate["summary"]
+    det = gate["details"]
+    assert det["gate_mode"] == "nasa_integrated"
+    assert det["integrated_drag"]["within_tolerance"] is True
+    assert det["verification_station"]["within_tolerance"] is True
+    # The near-LE over-prediction is REPORTED, not hidden.
+    assert det["n_known_deviations"] == 1
+    assert det["known_deviations"][0]["x_m"] == pytest.approx(0.0129)
+    # Per-point rows are still present (CSV transparency contract unchanged).
+    assert len(det["rows"]) == len(ref)
+
+
+def test_nasa_convention_fails_when_developed_region_off():
+    """If the discrepancy is NOT just near-LE — i.e. the downstream station /
+    integrated drag are off — the NASA-convention gate FAILs. It only forgives
+    LOCALIZED near-LE deviation, not a global offset."""
+    ref = [(0.0129, 5.3e-3), (0.05, 4.3e-3), (0.2, 3.4e-3),
+           (0.5, 3.0e-3), (0.97008, 2.69e-3), (1.98, 2.44e-3)]
+    # +20% everywhere -> integrated drag and station both ~20% off.
+    measured = [(x, cf * 1.20) for (x, cf) in ref]
+    gate = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008,
+    )
+    assert gate["status"] == "FAIL", gate["summary"]
+    assert gate["details"]["integrated_drag"]["within_tolerance"] is False
+    assert gate["details"]["verification_station"]["within_tolerance"] is False
+
+
+def test_nasa_convention_blocks_when_station_outside_range():
+    """If the verification station is outside the compared x-range, the gate
+    BLOCKs (refuses to fabricate a downstream value) rather than passing."""
+    ref = [(0.05, 4.3e-3), (0.2, 3.4e-3), (0.5, 3.0e-3)]
+    measured = list(ref)
+    gate = flat_plate_cf.evaluate_nasa_convention(
+        measured, ref, tolerance=0.10, x_min_compare=0.01,
+        verification_station_m=0.97008,  # beyond max x=0.5
+    )
+    assert gate["status"] == "BLOCKED"
+    assert gate["details"]["reason"] == "verification_station_unavailable"
+
+
 def test_write_reference_comparison_csv_shape(tmp_path: Path):
     ref = [(0.5, 3e-3)]
     measured = [(0.5, 3.05e-3)]

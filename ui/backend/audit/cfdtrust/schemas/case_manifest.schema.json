@@ -19,11 +19,20 @@
   ],
   "additionalProperties": true,
   "properties": {
-    "case_id": { "type": "string", "minLength": 1 },
-    "case_family": { "type": "string", "minLength": 1 },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_family": {
+      "type": "string",
+      "minLength": 1
+    },
     "solver_backend": {
       "type": "string",
-      "enum": ["openfoam", "mocked"]
+      "enum": [
+        "openfoam",
+        "mocked"
+      ]
     },
     "solver_docker_image": {
       "type": "string",
@@ -32,49 +41,92 @@
       "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:/@-]*$",
       "description": "Optional Docker image override for the openfoam backend (DEC-0005). Defaults to openfoam/openfoam11-paraview510:latest if omitted. Must look like a Docker reference: starts with alphanumeric, then alphanumerics + `.` `_` `:` `/` `@` `-`. Disallows leading `-` (would be parsed as a docker flag), whitespace, shell metachars, and any other argv-injection vector (R15-F-03 fix)."
     },
-    "solver": { "type": "string", "minLength": 1 },
+    "solver": {
+      "type": "string",
+      "minLength": 1
+    },
     "physics": {
       "type": "object",
-      "required": ["regime", "fluid", "turbulence_model"],
+      "required": [
+        "regime",
+        "fluid",
+        "turbulence_model"
+      ],
       "additionalProperties": true,
       "properties": {
-        "regime": { "type": "string" },
-        "fluid": { "type": "string" },
-        "turbulence_model": { "type": "string" },
-        "compressible": { "type": "boolean" },
-        "steady": { "type": "boolean" }
+        "regime": {
+          "type": "string"
+        },
+        "fluid": {
+          "type": "string"
+        },
+        "turbulence_model": {
+          "type": "string"
+        },
+        "compressible": {
+          "type": "boolean"
+        },
+        "steady": {
+          "type": "boolean"
+        }
       }
     },
     "geometry_contract": {
       "type": "object",
-      "required": ["required_patches", "dimensionality", "unit_system"],
+      "required": [
+        "required_patches",
+        "dimensionality",
+        "unit_system"
+      ],
       "additionalProperties": true,
       "properties": {
         "required_patches": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "minItems": 1
         },
         "dimensionality": {
           "type": "string",
-          "enum": ["2D", "2.5D", "3D"]
+          "enum": [
+            "2D",
+            "2.5D",
+            "3D"
+          ]
         },
-        "unit_system": { "type": "string" }
+        "unit_system": {
+          "type": "string"
+        }
       }
     },
     "mesh_contract": {
       "type": "object",
-      "required": ["checkmesh_required", "boundary_layer_required", "y_plus_target"],
+      "required": [
+        "checkmesh_required",
+        "boundary_layer_required",
+        "y_plus_target"
+      ],
       "additionalProperties": true,
       "properties": {
-        "checkmesh_required": { "type": "boolean" },
-        "boundary_layer_required": { "type": "boolean" },
+        "checkmesh_required": {
+          "type": "boolean"
+        },
+        "boundary_layer_required": {
+          "type": "boolean"
+        },
         "y_plus_target": {
           "type": "object",
           "properties": {
-            "min": { "type": "number" },
-            "max": { "type": "number" },
-            "wall_function_policy": { "type": "string" }
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "wall_function_policy": {
+              "type": "string"
+            }
           }
         },
         "quality_thresholds": {
@@ -85,24 +137,43 @@
     },
     "bc_contract": {
       "type": "object",
-      "required": ["inlet", "outlet", "wall"],
+      "required": [
+        "inlet",
+        "outlet",
+        "wall"
+      ],
       "additionalProperties": true,
       "properties": {
-        "inlet": { "type": "object", "additionalProperties": true },
-        "outlet": { "type": "object", "additionalProperties": true },
-        "wall": { "type": "object", "additionalProperties": true },
+        "inlet": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "outlet": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "wall": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "turbulence_fields": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         },
         "thermal_fields": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "$comment": "Gap #19 (DEC-V61-201-SUB-INGEST-COMPRESSIBLE-CONTRACT): optional list of thermal/conserved field names whose 0/<field> BC files engine should walk. Defaults to [] for incompressible cases; compressible cases typically declare [T] (sensibleEnthalpy with T solved primary), [T, e] (e also tracked), or [T, e, rho] (density-based). Like turbulence_fields, this is the manifest-author's declaration of what physics the case actually carries — engine doesn't infer."
         },
         "phase_fields": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "$comment": "TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): optional list of multiphase alpha field names whose 0/<field> BC files engine should walk. Defaults to [] for single-phase cases; VOF cases typically declare ['alpha.water'] (interFoam) or ['alpha.water', 'alpha.oil'] (multiphaseInterFoam). When absent + vof_contract.alpha_field_name is set, engine derives [alpha_field_name] automatically. Same sentinel-filter as turbulence_fields/thermal_fields."
         }
       }
@@ -110,18 +181,29 @@
     "vof_contract": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["phases"],
+      "required": [
+        "phases"
+      ],
       "$comment": "TBD-3 (DEC-V61-201-SUB-INGEST-VOF-CONTRACT): optional top-level contract for cases carrying real multiphase VOF physics (interFoam, compressibleInterFoam, multiphaseInterFoam, etc.). Absent = single-phase (the default before this DEC). When present, `phases` is REQUIRED so downstream checks know which 0/alpha.<phase> files to walk. Engine cross-check against constant/transportProperties is a separate follow-up.",
       "properties": {
         "phases": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "minItems": 2
         },
         "interface_method": {
           "type": "string",
-          "enum": ["VOF", "level_set", "MULES", "isoAdvector",
-                   "VOF_MULES", "VOF_isoAdvector", "compressibleVOF"]
+          "enum": [
+            "VOF",
+            "level_set",
+            "MULES",
+            "isoAdvector",
+            "VOF_MULES",
+            "VOF_isoAdvector",
+            "compressibleVOF"
+          ]
         },
         "alpha_field_name": {
           "type": "string",
@@ -132,7 +214,10 @@
           "minLength": 1,
           "$comment": "Codex R0 P1: interFoam / compressibleInterFoam ships 0/p_rgh (hydrostatic-decomposed pressure), NOT 0/p. When vof_contract is present and this field is absent, engine defaults to p_rgh. Explicit override only when authors use a non-canonical pressure name."
         },
-        "surface_tension_N_per_m": { "type": "number", "minimum": 0 },
+        "surface_tension_N_per_m": {
+          "type": "number",
+          "minimum": 0
+        },
         "interface_compression_coeff": {
           "type": "number",
           "minimum": 0,
@@ -142,14 +227,20 @@
           "type": "object",
           "additionalProperties": true,
           "patternProperties": {
-            "^[a-zA-Z][a-zA-Z0-9_]*$": { "type": "number", "exclusiveMinimum": 0 }
+            "^[a-zA-Z][a-zA-Z0-9_]*$": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
           }
         },
         "viscosity_pair": {
           "type": "object",
           "additionalProperties": true,
           "patternProperties": {
-            "^[a-zA-Z][a-zA-Z0-9_]*$": { "type": "number", "exclusiveMinimum": 0 }
+            "^[a-zA-Z][a-zA-Z0-9_]*$": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
           }
         },
         "mules_correctors": {
@@ -162,37 +253,70 @@
     "les_contract": {
       "type": "object",
       "additionalProperties": true,
-      "required": ["simulation_type"],
+      "required": [
+        "simulation_type"
+      ],
       "$comment": "Gap #28 (DEC-V61-201-SUB-INGEST-LES-CONTRACT): optional top-level contract for cases carrying real LES / DES / DDES / IDDES turbulence modeling. Absent = laminar or RAS (the default before this DEC). When present, simulation_type is REQUIRED (Codex R0 P3) so downstream checks can distinguish LES vs DES vs stray metadata. `transported_fields` is INFORMATIONAL ONLY — it describes what the SGS model itself transports (e.g. WALE → [], kEqn → [k]), NOT a substitute for the BC-side turbulence_fields. Algebraic-SGS cases (WALE) still need 0/nut on disk because the solver writes nut as a derived field — BC expectations come from Gap #31 _turb_fields_from_model regardless of transported_fields (Codex R0 P1). Engine cross-check between SGS model declaration and on-disk constant/turbulenceProperties is a separate follow-up.",
       "properties": {
         "simulation_type": {
           "type": "string",
-          "enum": ["LES", "RAS", "DES", "DDES", "IDDES", "laminar"]
+          "enum": [
+            "LES",
+            "RAS",
+            "DES",
+            "DDES",
+            "IDDES",
+            "laminar"
+          ]
         },
         "les_model": {
           "type": "string",
-          "enum": ["WALE", "Smagorinsky", "dynamicSmagorinsky",
-                   "kEqn", "dynamicKEqn",
-                   "kOmegaSSTDES", "kOmegaSSTDDES", "kOmegaSSTIDDES",
-                   "SpalartAllmaras", "SpalartAllmarasDES",
-                   "SpalartAllmarasDDES", "SpalartAllmarasIDDES",
-                   "deardorffDiffStress"]
+          "enum": [
+            "WALE",
+            "Smagorinsky",
+            "dynamicSmagorinsky",
+            "kEqn",
+            "dynamicKEqn",
+            "kOmegaSSTDES",
+            "kOmegaSSTDDES",
+            "kOmegaSSTIDDES",
+            "SpalartAllmaras",
+            "SpalartAllmarasDES",
+            "SpalartAllmarasDDES",
+            "SpalartAllmarasIDDES",
+            "deardorffDiffStress"
+          ]
         },
         "delta": {
           "type": "string",
-          "enum": ["cubeRootVol", "vanDriest", "smooth", "Prandtl",
-                   "maxDeltaxyz", "IDDESDelta"]
+          "enum": [
+            "cubeRootVol",
+            "vanDriest",
+            "smooth",
+            "Prandtl",
+            "maxDeltaxyz",
+            "IDDESDelta"
+          ]
         },
-        "delta_coeff": { "type": "number", "exclusiveMinimum": 0 },
+        "delta_coeff": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
         "sgs_wall_function": {
           "type": "string",
-          "enum": ["nutUSpaldingWallFunction", "nutkWallFunction",
-                   "nutUWallFunction", "nutLowReWallFunction",
-                   "calculated"]
+          "enum": [
+            "nutUSpaldingWallFunction",
+            "nutkWallFunction",
+            "nutUWallFunction",
+            "nutLowReWallFunction",
+            "calculated"
+          ]
         },
         "transported_fields": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "$comment": "Auxiliary: which fields the LES/DES model itself transports. WALE/Smagorinsky → []; kEqn/dynamicKEqn → ['k']; deardorffDiffStress → ['R'] (Reynolds stress tensor); kOmegaSST* hybrid → ['k', 'omega']. Engine's Gap #31 _turb_fields_from_model prefers this explicit list over heuristic derivation when present."
         }
       }
@@ -204,70 +328,136 @@
       "properties": {
         "thermophysical_model": {
           "type": "string",
-          "enum": ["hePsiThermo", "heRhoThermo", "hRhoThermo", "ePsiThermo",
-                   "eRhoThermo", "hConstThermo", "psiThermo", "rhoThermo",
-                   "hPsiThermo"]
+          "enum": [
+            "hePsiThermo",
+            "heRhoThermo",
+            "hRhoThermo",
+            "ePsiThermo",
+            "eRhoThermo",
+            "hConstThermo",
+            "psiThermo",
+            "rhoThermo",
+            "hPsiThermo"
+          ]
         },
         "mixture_model": {
           "type": "string",
-          "enum": ["pureMixture", "multiComponentMixture", "reactingMixture",
-                   "singleStepReactingMixture", "homogeneousMixture"]
+          "enum": [
+            "pureMixture",
+            "multiComponentMixture",
+            "reactingMixture",
+            "singleStepReactingMixture",
+            "homogeneousMixture"
+          ]
         },
         "transport_model": {
           "type": "string",
-          "enum": ["const", "sutherland", "polynomial", "logPolynomial",
-                   "icoPolynomial", "WLFTransport"]
+          "enum": [
+            "const",
+            "sutherland",
+            "polynomial",
+            "logPolynomial",
+            "icoPolynomial",
+            "WLFTransport"
+          ]
         },
         "thermo_model": {
           "type": "string",
-          "enum": ["hConst", "eConst", "hPolynomial", "ePolynomial",
-                   "janaf", "janafThermo", "hTabulatedThermo",
-                   "eTabulatedThermo"]
+          "enum": [
+            "hConst",
+            "eConst",
+            "hPolynomial",
+            "ePolynomial",
+            "janaf",
+            "janafThermo",
+            "hTabulatedThermo",
+            "eTabulatedThermo"
+          ]
         },
         "equation_of_state": {
           "type": "string",
-          "enum": ["perfectGas", "incompressiblePerfectGas", "PengRobinsonGas",
-                   "rhoConst", "perfectFluid", "Boussinesq", "rPolynomial",
-                   "adiabaticPerfectFluid", "linear"]
+          "enum": [
+            "perfectGas",
+            "incompressiblePerfectGas",
+            "PengRobinsonGas",
+            "rhoConst",
+            "perfectFluid",
+            "Boussinesq",
+            "rPolynomial",
+            "adiabaticPerfectFluid",
+            "linear"
+          ]
         },
         "energy": {
           "type": "string",
-          "enum": ["sensibleEnthalpy", "sensibleInternalEnergy",
-                   "absoluteEnthalpy", "absoluteInternalEnergy"]
+          "enum": [
+            "sensibleEnthalpy",
+            "sensibleInternalEnergy",
+            "absoluteEnthalpy",
+            "absoluteInternalEnergy"
+          ]
         },
         "freestream": {
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "p_Pa": { "type": "number", "minimum": 0 },
-            "T_K": { "type": "number", "minimum": 0 },
+            "p_Pa": {
+              "type": "number",
+              "minimum": 0
+            },
+            "T_K": {
+              "type": "number",
+              "minimum": 0
+            },
             "U_ms": {
               "type": "array",
-              "items": { "type": "number" },
+              "items": {
+                "type": "number"
+              },
               "minItems": 3,
               "maxItems": 3
             },
-            "Mach": { "type": "number", "minimum": 0 },
-            "Re_chord": { "type": "number", "minimum": 0 }
+            "Mach": {
+              "type": "number",
+              "minimum": 0
+            },
+            "Re_chord": {
+              "type": "number",
+              "minimum": 0
+            }
           }
         }
       }
     },
     "solver_contract": {
       "type": "object",
-      "required": ["residual_targets", "max_iterations", "qoi_stability"],
+      "required": [
+        "residual_targets",
+        "max_iterations",
+        "qoi_stability"
+      ],
       "additionalProperties": true,
       "properties": {
         "residual_targets": {
           "type": "object",
-          "additionalProperties": { "type": "number" }
+          "additionalProperties": {
+            "type": "number"
+          }
         },
-        "max_iterations": { "type": "integer", "minimum": 1 },
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1
+        },
         "qoi_stability": {
           "type": "object",
           "properties": {
-            "window_iterations": { "type": "integer", "minimum": 1 },
-            "relative_drift_tolerance": { "type": "number" }
+            "window_iterations": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "relative_drift_tolerance": {
+              "type": "number"
+            }
           }
         }
       }
@@ -277,50 +467,105 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "kind"],
+        "required": [
+          "name",
+          "kind"
+        ],
         "additionalProperties": true,
         "properties": {
-          "name": { "type": "string" },
-          "kind": { "type": "string" },
-          "units": { "type": "string" },
-          "tolerance": { "type": "number" }
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "units": {
+            "type": "string"
+          },
+          "tolerance": {
+            "type": "number"
+          }
         }
       }
     },
     "reference_comparison": {
       "type": "object",
-      "required": ["status"],
+      "required": [
+        "status"
+      ],
       "additionalProperties": true,
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["finalized", "placeholder", "not_finalized", "missing"]
+          "enum": [
+            "finalized",
+            "placeholder",
+            "not_finalized",
+            "missing"
+          ]
         },
-        "source": { "type": "string" },
-        "source_url": { "type": "string", "format": "uri" },
-        "source_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+        "source": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
         "reference_csv": {
           "type": "string",
           "minLength": 1,
           "$comment": "Path relative to case_dir; runtime check (audit/qoi.py) refuses absolute and ..-traversing paths (R16-F-05).",
           "pattern": "^[^/].*"
         },
-        "reference_csv_sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
-        "qoi": { "type": "string", "minLength": 1 },
+        "reference_csv_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "qoi": {
+          "type": "string",
+          "minLength": 1
+        },
         "wall_patch": {
           "type": "string",
           "minLength": 1,
           "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
           "$comment": "Name of the polyMesh boundary patch from which to extract wall shear stress for Cf comparison. M2.3b: makes the previously-hardcoded 'wall' name case-declarable so harness works across cases with different patch naming conventions."
         },
-        "tolerance": { "type": "number", "exclusiveMinimum": 0 },
-        "x_min_compare_m": { "type": "number", "minimum": 0 },
-        "notes": { "type": "string" }
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "x_min_compare_m": {
+          "type": "number",
+          "minimum": 0
+        },
+        "notes": {
+          "type": "string"
+        },
+        "gate_mode": {
+          "type": "string",
+          "enum": [
+            "per_point",
+            "nasa_integrated"
+          ],
+          "description": "Verdict logic for the reference comparison. 'per_point' (default): every compared point must be within tolerance. 'nasa_integrated' (DEC-V61-209 ADDENDUM 3): gate on integrated skin-friction drag + Cf at verification_station_m (NASA TMR's own convention); per-point deviations demoted to informational known_deviations."
+        },
+        "verification_station_m": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Downstream x-station (m) for the Cf verification check when gate_mode=nasa_integrated. NASA TMR reports x=0.97008 for the flat plate."
+        }
       }
     },
     "required_artifacts": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "minItems": 1
     }
   }

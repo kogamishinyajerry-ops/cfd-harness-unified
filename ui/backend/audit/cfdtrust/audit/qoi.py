@@ -281,9 +281,21 @@ def _attempt_real_comparison(
     tolerance = float(ref_block.get("tolerance", 0.10))
     x_min = float(ref_block.get("x_min_compare_m", 0.0))
 
-    gate = flat_plate_cf.compare_against_reference(
-        measured, reference, tolerance=tolerance, x_min_compare=x_min,
-    )
+    # DEC-V61-209 ADDENDUM 3: opt-in NASA-TMR-convention gate (integrated drag
+    # + downstream Cf station as PASS criteria; per-point near-LE deviations
+    # demoted to informational known_deviations). Default stays per-point so
+    # other cases are unaffected.
+    gate_mode = str(ref_block.get("gate_mode", "per_point"))
+    if gate_mode == "nasa_integrated":
+        station = float(ref_block.get("verification_station_m", 0.97008))
+        gate = flat_plate_cf.evaluate_nasa_convention(
+            measured, reference, tolerance=tolerance, x_min_compare=x_min,
+            verification_station_m=station,
+        )
+    else:
+        gate = flat_plate_cf.compare_against_reference(
+            measured, reference, tolerance=tolerance, x_min_compare=x_min,
+        )
     gate["details"]["reference_status"] = "finalized"
     gate["details"]["reference_source"] = ref_block.get("source", "unknown")
     gate["details"]["reference_csv"] = ref_csv_rel

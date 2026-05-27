@@ -296,3 +296,53 @@ honest-FAIL until then.
   Round 0 of 3. Log: `/private/tmp/p1_codex_vv_review.log` (to be archived to
   `reports/codex_tool_reports/`).
 - Status: **Proposed** (stays — no PASS to ratify; gate-definition pending sponsor).
+
+---
+
+## ADDENDUM 4 — sponsor chose option B; NASA-convention gate implemented → honest PASS (2026-05-27)
+
+Sponsor selected **(B)**: gate on NASA TMR's own verification convention (integrated
+skin-friction drag + Cf at the downstream station x=0.97008), with the near-LE per-point
+deviations demoted to a documented, still-visible known-deviation list.
+
+**Implementation (shared, correctness-critical → Codex-reviewed):**
+- `cfdtrust/qoi/flat_plate_cf.py`: new pure `evaluate_nasa_convention(...)`. Reuses
+  `compare_against_reference` for the per-point rows (CSV/transparency contract
+  unchanged), then computes (a) integrated-Cf drag via trapezoidal integral over the
+  compared x-range (same range + method for run and reference so discretization bias
+  cancels in the ratio) and (b) Cf at `verification_station_m`. PASS iff BOTH within
+  `tolerance`. Per-point failures → `known_deviations` (informational, non-blocking).
+  BLOCKs honestly on <2 points, zero reference integral, or station out of range.
+- `cfdtrust/audit/qoi.py`: opt-in branch on `reference_comparison.gate_mode`
+  (`per_point` default preserved → other cases unaffected; `nasa_integrated` → new path).
+- `case_manifest.yaml`: `gate_mode: nasa_integrated`, `verification_station_m: 0.97008`.
+  `tolerance` UNCHANGED (0.10); `x_min_compare_m` UNCHANGED (0.01, NASA's value).
+- `schemas/case_manifest.schema.json`: documented the two new optional fields.
+- 3 new unit tests (`test_qoi_flat_plate.py`): PASS-despite-near-LE,
+  FAIL-when-developed-region-off (only forgives LOCALIZED deviation), BLOCK-when-station-
+  out-of-range.
+
+**Result (real OpenFOAM, OF11, converged iter 405, NASA topology + NASA freestream):**
+- `overall_status: **PASS**`, `validation_status: **validated**`.
+- NASA-convention gate: integrated-Cf drag error **0.83%**, Cf@x=0.97008 error **1.28%**
+  (tolerance 10%). **4 near-LE per-point deviations reported** as `known_deviations`
+  (still written to reference_comparison.csv — visible, not hidden, not excluded).
+- The near-LE band contributes only ~1.45% of the integrated drag, so the integral
+  metric is robust to it (exactly why NASA uses it).
+
+**Why this is NOT the reverted cycle-3e gaming:** cycle-3e MOVED `x_min_compare_m` to
+clear the failing points (post-hoc, masking — Codex RATIONALIZED). Option B changes the
+gate PHILOSOPHY to the authoritative source's own convention, keeps `x_min`/`tolerance`
+untouched, and keeps every deviation visible. Sponsor-approved gate-design change, not a
+tuning to pass.
+
+**Test regressions found + fixed (process gap noted):** the cycle-3c MOCKED→openfoam flip
+broke 2 tests in `cfdtrust_tests/` that assumed flat_plate was the mocked exemplar /
+hard-coded the old blockMeshDict `top` block — missed because `cfdtrust_tests/` was not in
+the earlier regression runs. Fixed: `test_doctor_detects_blockmesh_missing_required_patch`
+(regex-based `top`-block strip, format-robust) and `test_cmd_audit_does_not_invoke_solver`
+(switched to the `backward_facing_step` mocked exemplar). 674 passed / 1 skipped across
+cfdtrust_tests + adapter + error_attributor.
+
+- Status: **Proposed** → flip to **Accepted** on Codex APPROVE of the shared-code change;
+  then Notion sync (DEC-V61-206/207/208 Accepted + this one).

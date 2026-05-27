@@ -39,31 +39,42 @@ Cf error of **15–17%** vs the NASA Re=5×10⁶ curve — far worse than the "~
 the earlier note predicted. Widening tolerance to absorb a Reynolds mismatch was the
 wrong fix; matching the reference Re is the honest one.
 
-**Empirical validation (real simpleFoam + kΩSST, OF11, DEC-V61-209 cycle-3g, HONEST FAIL)**:
+**Empirical validation (real simpleFoam + kΩSST, OF11, DEC-V61-209 cycle-3h, VALIDATED)**:
 The case uses **NASA TMR topology**: a leading **symmetry** section [-0.333, 0] then the
-no-slip **plate** [0, 2], y+ ≈ 1.3 avg, converged at iter 394 (all 5 residuals ≤ 1e-5),
-NASA SST **freestream turbulence** (Tu=0.039%, mu_t/mu=0.009). Real Cf(x) vs NASA TMR
-CFL3D SST, with NASA's documented **x < 0.01** LE exclusion (NOT a tuned cutoff):
-- `overall_status: FAIL`, `validation_status: not_validated` (honest).
-- **4 near-LE points fail**: 0.0129 ≤ x ≤ 0.0232, worst **21.2%** at x=0.0129.
-- **171 / 175 points pass**; mid plate (x ≈ 0.05–0.2) 3–6%; developed (x ≥ 0.2) **~1.5%**.
+no-slip **plate** [0, 2], y+ ≈ 1.3 avg, converged at iter ~405 (all 5 residuals ≤ 1e-5),
+NASA SST **freestream turbulence** (Tu=0.039%, mu_t/mu=0.009). Gated on NASA TMR's OWN
+verification convention (`gate_mode: nasa_integrated`):
+- `overall_status: PASS`, `validation_status: validated`.
+- **Integrated skin-friction drag** (trapezoidal ∫Cf dx, run vs CFL3D reference):
+  **0.83%** error — within the 10% tolerance.
+- **Cf at the downstream station x=0.97008** (NASA's reported verification point):
+  **1.28%** error — within tolerance. Developed region (x ≥ 0.2) ~1.5%.
+- **4 near-LE per-point deviations (0.0129 ≤ x ≤ 0.0232, worst 21.2%) are REPORTED as
+  `known_deviations`** — still written to reference_comparison.csv, demoted to
+  informational (they do not fail the gate), NOT excluded and NOT hidden.
 
 The 10% `reference_comparison.tolerance` stands, justified by genuine discretization
 uncertainty (not a hidden Reynolds offset).
 
-## Comparison region
+## Comparison region & gate
 
 Skip-window: `x_min_compare_m = 0.01` — **NASA TMR's own documented LE exclusion** (TMR
-notes local anomalous SST activation in `0 < x < 0.01`). The comparator drops points
-with `x < 0.01 m` from both curves before computing per-point error.
+notes local anomalous SST activation in `0 < x < 0.01`). UNCHANGED.
 
-**Honesty note (DEC-V61-209 cycle-3e→3g):** an interim attempt raised this to `0.03` to
-clear the residual near-LE failures. That was **reverted** as post-hoc gate movement
-(Codex review, RATIONALIZED): the failures persisted to x≈0.027, and moving the cutoff
-to exactly past them was masking, not scoping. NASA's documented exclusion is `0.01`,
-and that is what stands.
+Gate: `gate_mode: nasa_integrated` (sponsor-approved, DEC-V61-209 ADDENDUM 4) — PASS iff
+integrated-Cf drag AND Cf@x=0.97008 are both within tolerance. This is NASA TMR's own
+quantitative SST verification convention (integral drag + downstream station), which is
+robust to a localized near-LE singularity. The near-LE band contributes only ~1.45% of
+the integrated drag.
 
-**What the near-LE band is (causal evidence, not a justification to exclude it):**
+**Honesty trail (DEC-V61-209 cycle-3e→3h):** an interim attempt instead raised
+`x_min_compare_m` 0.01→0.03 to clear the near-LE failures. That was **reverted** as
+post-hoc gate movement (Codex review, RATIONALIZED): failures persisted to x≈0.027 and
+moving the cutoff past them was masking. The adopted fix changes the gate PHILOSOPHY to
+NASA's own convention with `x_min`/`tolerance` untouched and the deviations still visible
+— not a tuning to pass.
+
+**What the near-LE band is (causal evidence — characterized, not swept under the gate):**
 the 0.01 < x < 0.027 over-prediction survives every correct-setup fix, so it is a
 near-LE OpenFOAM-kΩSST-vs-CFL3D formulation discrepancy (TMR's `openfoam_issues` page
 documents OpenFOAM SST historically not matching CFL3D's SST equations), NOT a fixable
@@ -79,10 +90,8 @@ setup error:
 The pre-plate fixed a non-convergence and shrank the band; grid refinement did not move
 the fixed-location error (so it is not discretization); NASA-exact freestream barely
 moved it (so it is not the inlet turbulence). The residual is intrinsic to the
-solver-vs-reference near the LE. **It is reported honestly as a FAIL, not excluded.**
-Whether the workbench's flat-plate gate should remain per-point-from-x=0.01 (strict) or
-adopt NASA's own convention (integrated drag + downstream Cf at x=0.97) is a V&V-gate
-methodology decision for the sponsor — see DEC-V61-209 ADDENDUM 3.
+solver-vs-reference near the LE, reported as a `known_deviation` under the NASA-convention
+gate. See DEC-V61-209 ADDENDUM 3 (decision) + ADDENDUM 4 (implementation).
 
 ## Verifying this dataset
 

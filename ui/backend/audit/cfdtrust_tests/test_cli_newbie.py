@@ -281,13 +281,21 @@ def test_doctor_detects_blockmesh_missing_required_patch(tmp_path: Path, repo_ro
     shutil.copytree(repo_root / "cases" / "flat_plate_rans_sst", case)
     # Remove the `top` patch block from blockMeshDict so the patch list
     # disagrees with manifest.required_patches.
+    import re as _re
     bm = case / "system" / "blockMeshDict"
     text = bm.read_text()
-    text = text.replace(
-        "    top\n    {\n        type symmetryPlane;\n        faces\n        (\n            (3 7 6 2)\n        );\n    }\n",
+    # Strip the `top` boundary block. Regex-based so it is robust to the
+    # block's face-list contents (the flat_plate blockMeshDict gained a NASA
+    # pre-plate topology in DEC-V61-209, changing `top` from one face to two).
+    stripped = _re.sub(
+        r"^[ \t]*top[ \t]*\n[ \t]*\{.*?\n[ \t]*\}[ \t]*\n",
         "",
+        text,
+        count=1,
+        flags=_re.DOTALL | _re.MULTILINE,
     )
-    bm.write_text(text)
+    assert stripped != text, "test setup failed to strip the `top` patch block"
+    bm.write_text(stripped)
     rc = cmd_doctor(str(case))
     assert rc == 1
 

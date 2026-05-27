@@ -116,6 +116,15 @@ reference_comparison:
   # gate-definition question (per-point-from-0.01 vs NASA's own integrated-drag
   # / downstream-Cf convention) is escalated to the sponsor — NOT tuned to pass.
   x_min_compare_m: 0.01
+  # DEC-V61-209 ADDENDUM 3 (sponsor-approved gate definition, option B):
+  # gate on NASA TMR's OWN verification convention — integrated skin-friction
+  # drag + Cf at the downstream station x=0.97008 — instead of an arbitrary
+  # per-point-from-x=0.01 rule. The per-point near-LE deviations (the
+  # OpenFOAM-kΩSST-vs-CFL3D leading-edge discrepancy) are still computed,
+  # written to reference_comparison.csv, and reported as known_deviations —
+  # demoted to informational, NOT excluded and NOT hidden.
+  gate_mode: nasa_integrated
+  verification_station_m: 0.97008
   notes: |
     NASA TMR canonical Cf curve (CFL3D, k-omega SST, on-plate region only).
     Re MATCHED (DEC-V61-209, 2026-05-27): nu = 6e-6 → Re/L = U/nu = 5e6 = NASA
