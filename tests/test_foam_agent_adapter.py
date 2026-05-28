@@ -944,10 +944,15 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         )
         # Flat-plate extractor NOT called → no cf_skin_friction published.
         assert "cf_skin_friction" not in result
-        # Producer flag set for downstream audit. Round-8 rename:
-        # duct_flow_extractor_missing → duct_flow_extractor_pending so the
-        # flag reads as "planned-but-unimplemented" rather than "malformed".
-        assert result.get("duct_flow_extractor_pending") is True
+        # DEC-V61-066 A.2: duct dispatch now invokes the real extractor
+        # (replaced the old duct_flow_extractor_pending stub). Synthetic
+        # input has only 1 cell at x=0.5 (outside the x_target=2.5 band)
+        # so the extractor honestly reports insufficient_cells_at_x=2.5.
+        # Either path (success or error) signals duct dispatch took.
+        assert (
+            "duct_flow_extractor_path" in result
+            or "duct_flow_extractor_error" in result
+        )
         assert result.get("duct_flow_hydraulic_diameter") == 0.1
         assert "duct_flow_hydraulic_diameter_missing" not in result
 
@@ -986,8 +991,9 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         # Dispatch still fires for flat plate.
         assert called["yes"] is True
         assert result["cf_skin_friction"] == pytest.approx(0.0076)
-        # No duct producer flag on flat plate.
-        assert "duct_flow_extractor_pending" not in result
+        # No duct dispatch on flat plate (DEC-V61-066 A.2 audit keys absent).
+        assert "duct_flow_extractor_path" not in result
+        assert "duct_flow_extractor_error" not in result
         assert "duct_flow_extractor_missing" not in result
 
     def test_parse_writeobjects_fields_routes_duct_by_name_without_hydraulic_diameter(
@@ -1030,7 +1036,13 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
             tmp_path, "simpleFoam", duct_task_no_bc, {}
         )
         assert "cf_skin_friction" not in result
-        assert result.get("duct_flow_extractor_pending") is True
+        # DEC-V61-066 A.2: duct dispatch now produces real extractor audit
+        # keys. With only 1 synthetic cell at x=0.5 (outside x_target=2.5
+        # band), the extractor reports insufficient_cells_at_x=2.5.
+        assert (
+            "duct_flow_extractor_path" in result
+            or "duct_flow_extractor_error" in result
+        )
         assert result.get("duct_flow_hydraulic_diameter_missing") is True
 
     def test_is_duct_flow_case_integrates_with_knowledge_db(self):

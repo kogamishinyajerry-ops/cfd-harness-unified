@@ -1,0 +1,8 @@
+[audit] commit: 0060c4a · cases: ['duct_flow']
+[audit] duct_flow → start
+[audit] [WARN] field artifact dir missing, skipping manifest: /Users/Zhuanz/Desktop/cfd-s3-pc/reports/phase5_fields/duct_flow/20260425T190602Z
+[audit] [WARN] verdict recompute failed on duct_flow: ModuleNotFoundError("No module named 'pydantic'")
+[audit] duct_flow → FAIL · 0.0s · audit_real_run_measurement.yaml
+
+=== SUMMARY ===
+duct_flow                              FAIL  0.0s
