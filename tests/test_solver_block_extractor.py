@@ -20,8 +20,12 @@ from pathlib import Path
 import pytest
 
 from ui.backend.services.case_extractors import extract_solver_block_snapshot
-from ui.backend.services.geometry_ingest.solver_block_advisor import (
-    SolverBlockSnapshot,
+# Codex R0 P1: do NOT import SolverBlockSnapshot from geometry_ingest at
+# module top — that chain pulls trimesh and breaks `.[ui]`-only test
+# environments. The local mirror in case_extractors covers shape needs.
+from ui.backend.services.case_extractors.solver_block_extractor import (
+    SolverBlockSnapshot as _MirroredSnapshot,
+    _DENSITY_BASED_AT_RISK_SOLVERS as _LOCAL_AT_RISK,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -235,9 +239,16 @@ def test_adjusttimestep_bool_tokens(
     assert snap is not None and snap.adjust_time_step is expected
 
 
-def test_adjusttimestep_unknown_token_yields_none(tmp_path: Path) -> None:
-    """An unrecognized token (e.g. a `$macro`, a typo) yields None for the
-    flag — NOT a guessed bool. Truth-chain: omission over fabrication.
+def test_adjusttimestep_unknown_token_on_non_density_based_yields_none_flag(
+    tmp_path: Path,
+) -> None:
+    """For a NON-density-based solver, an unparseable adjustTimeStep
+    yields `adjust_time_step=None` on a still-valid snapshot.
+
+    simpleFoam does NOT route through `check_solver_block`'s V27 dispatch
+    (advisor's `_DENSITY_BASED_SYMMETRIC_SOLVERS` is currently just
+    rhoCentralFoam), so a `None` here is unambiguous — the downstream
+    advisor will not synthesize a false finding from it.
     """
     (tmp_path / "system").mkdir()
     (tmp_path / "system" / "controlDict").write_text(
@@ -248,6 +259,55 @@ def test_adjusttimestep_unknown_token_yields_none(tmp_path: Path) -> None:
     assert snap is not None
     assert snap.solver == "simpleFoam"
     assert snap.adjust_time_step is None
+
+
+def test_adjusttimestep_unknown_token_on_density_based_refuses_snapshot(
+    tmp_path: Path,
+) -> None:
+    """Codex DEC-V61-211 R0 P2(#2) fix: for a DENSITY-BASED solver, an
+    unparseable adjustTimeStep returns None for the WHOLE SNAPSHOT.
+
+    Rationale: `assemble_stack(solver_block_snapshot=snap)` with
+    `snap.adjust_time_step=None` makes the advisor assume the OF default
+    `no` and emit `v27_adjusttimestep_required` — a CRITICAL finding.
+    If the source key was actually a macro (`$myAdjust;`) that might
+    expand to `yes`, that finding is FABRICATED. Truth-chain: honest
+    refusal beats false certainty. Caller sees `None` snapshot and
+    decides what to do (typically: skip the V27 check for this case
+    pending macro resolution).
+    """
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system" / "controlDict").write_text(
+        "application rhoCentralFoam;\nadjustTimeStep $myAdjust;\n",
+        encoding="utf-8",
+    )
+    snap = extract_solver_block_snapshot(tmp_path)
+    assert snap is None, (
+        f"density-based solver with unparseable adjustTimeStep must yield "
+        f"None snapshot (Codex R0 P2#2); got snapshot={snap!r}"
+    )
+
+
+def test_density_based_unknown_token_with_other_density_solvers_allows_snapshot(
+    tmp_path: Path,
+) -> None:
+    """Only solvers in `_DENSITY_BASED_AT_RISK_SOLVERS` trigger the
+    refusal; other rho-prefix solvers (rhoSimpleFoam / rhoPimpleFoam) do
+    NOT route through V27 in today's advisor → unparseable adjust is fine.
+
+    Pins the scope-locking of the refusal — a future expansion of the
+    upstream V27 dispatch set (rhoCentralDyMFoam etc.) requires updating
+    the local mirror AND this test together.
+    """
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system" / "controlDict").write_text(
+        "application rhoPimpleFoam;\nadjustTimeStep $myMacro;\n",
+        encoding="utf-8",
+    )
+    snap = extract_solver_block_snapshot(tmp_path)
+    assert snap is not None
+    assert snap.solver == "rhoPimpleFoam"
+    assert snap.adjust_time_step is None  # benign for non-at-risk solvers
 
 
 def test_deltat_scientific_notation_parses(tmp_path: Path) -> None:
@@ -300,13 +360,107 @@ def test_preconditioners_v01_always_empty(tmp_path: Path) -> None:
     assert snap.preconditioners == {}
 
 
-def test_snapshot_is_the_advisor_dataclass(tmp_path: Path) -> None:
-    """Sanity: extractor returns the exact dataclass `check_solver_block`
-    consumes — no shape drift.
+def test_snapshot_is_the_local_mirror_dataclass(tmp_path: Path) -> None:
+    """Sanity: extractor returns a `_MirroredSnapshot` (local mirror).
+
+    The advisor's `check_solver_block` accesses fields by name (duck-typed)
+    so the mirror works in production; isinstance against the upstream
+    class is asserted separately in `test_local_mirror_matches_upstream`
+    (skip-if-no-trimesh).
     """
     (tmp_path / "system").mkdir()
     (tmp_path / "system" / "controlDict").write_text(
         "application simpleFoam;\n", encoding="utf-8"
     )
     snap = extract_solver_block_snapshot(tmp_path)
-    assert isinstance(snap, SolverBlockSnapshot)
+    assert isinstance(snap, _MirroredSnapshot)
+
+
+def test_local_mirror_matches_upstream() -> None:
+    """Codex R0 P1 fix: the local mirror dataclass must have the same
+    field set as the upstream `solver_block_advisor.SolverBlockSnapshot`.
+
+    Skipped when trimesh isn't installed (the `.[ui]`-only env that
+    motivated the mirror in the first place); strict otherwise. This
+    catches the drift mode: upstream adds a field, mirror falls behind,
+    extractor silently emits incomplete snapshots in workbench env.
+    """
+    try:
+        from ui.backend.services.geometry_ingest.solver_block_advisor import (
+            SolverBlockSnapshot as _Upstream,
+        )
+    except ImportError as exc:
+        pytest.skip(f"upstream unavailable (likely trimesh missing): {exc}")
+    import dataclasses
+    mirror_fields = {f.name for f in dataclasses.fields(_MirroredSnapshot)}
+    upstream_fields = {f.name for f in dataclasses.fields(_Upstream)}
+    assert mirror_fields == upstream_fields, (
+        f"local mirror field-set drifted from upstream.\n"
+        f"  mirror   : {sorted(mirror_fields)}\n"
+        f"  upstream : {sorted(upstream_fields)}\n"
+        f"  missing  : {sorted(upstream_fields - mirror_fields)}\n"
+        f"  extra    : {sorted(mirror_fields - upstream_fields)}"
+    )
+
+
+def test_density_based_at_risk_mirror_parity() -> None:
+    """The local `_DENSITY_BASED_AT_RISK_SOLVERS` constant must match the
+    upstream advisor's V27 dispatch set.
+
+    Drift mode: upstream adds rhoCentralDyMFoam to its set; mirror stays
+    at {rhoCentralFoam} → extractor stops refusing snapshots that would
+    cause false-positive V27 findings on the new solver. This canary
+    pins the parity.
+    """
+    try:
+        from ui.backend.services.geometry_ingest.solver_block_advisor import (
+            _DENSITY_BASED_SYMMETRIC_SOLVERS as _Upstream,
+        )
+    except ImportError as exc:
+        pytest.skip(f"upstream unavailable (likely trimesh missing): {exc}")
+    assert _LOCAL_AT_RISK == _Upstream, (
+        f"local _DENSITY_BASED_AT_RISK_SOLVERS drifted from upstream.\n"
+        f"  local    : {sorted(_LOCAL_AT_RISK)}\n"
+        f"  upstream : {sorted(_Upstream)}"
+    )
+
+
+def test_extractor_module_loads_without_trimesh() -> None:
+    """Codex R0 P1 fix: the extractor module must import even when
+    trimesh is absent (`.[ui]` env without `[workbench]`).
+
+    Pin via subprocess so the test environment's trimesh availability
+    doesn't mask a real regression — the subprocess clears trimesh from
+    sys.modules and stubs the import so the chain is forced to NOT use
+    trimesh, then imports the extractor and checks it works.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        # Mark trimesh as unavailable in the importer's view.
+        "sys.modules['trimesh'] = None\n"
+        "from ui.backend.services.case_extractors import (\n"
+        "    extract_solver_block_snapshot,\n"
+        ")\n"
+        "from ui.backend.services.case_extractors.solver_block_extractor "
+        "import SolverBlockSnapshot\n"
+        "import dataclasses\n"
+        "names = sorted(f.name for f in dataclasses.fields(SolverBlockSnapshot))\n"
+        "assert names == ['adjust_time_step', 'delta_t', 'preconditioners', 'solver'], names\n"
+        "print('OK')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        cwd=str(REPO_ROOT),
+        env={**__import__("os").environ, "PYTHONPATH": str(REPO_ROOT)},
+        timeout=30,
+    )
+    assert result.returncode == 0 and result.stdout.strip() == "OK", (
+        f"extractor failed to import without trimesh.\n"
+        f"  stdout: {result.stdout!r}\n"
+        f"  stderr: {result.stderr!r}"
+    )
