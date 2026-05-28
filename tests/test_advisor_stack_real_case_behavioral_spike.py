@@ -40,15 +40,26 @@ case input), the spike fails — that is the regression protection 2b adds
 beyond the static documentation harness in
 `ui/backend/tests/test_canonical_advisor_eval.py`.
 
-**Follow-on work** (sub-DEC, NOT this spike):
-  - Extend to the other 12 manifest-bearing case_profiles (each needs its
-    own physically-labeled expected set; not snapshot-driven).
-  - Build a `shm_dict` / `thermo_dict` / `step` extractor from the OpenFOAM
-    `system/` / `constant/` dumps to unlock the FULL E-case expected-firing
-    set, not just the parts_manifest subset.
-  - Decide whether the production adapter's `inputs/`-convention should be
-    extended to also discover top-level `parts_manifest.yaml` (the format
-    that case_profiles actually ship).
+**Follow-on work** (extended under DEC-V61-211 + sub-DECs):
+  - **DEC-V61-211 (this session, in flight)**: `solver_block_extractor`
+    v0.1 — extracts `solver`/`adjust_time_step`/`delta_t` from
+    `system/controlDict` so assemble_stack can discriminate density-based
+    vs incompressible cases. Test
+    `test_case_021_and_case_030_solver_block_extension` below feeds the
+    extractor's output into assemble_stack and asserts the case-class
+    discrimination (case_021 simpleFoam → 0 findings; case_030
+    rhoCentralFoam → ≥1 solver_block finding). v0.2 (preconditioners
+    block-parse) deferred to a follow-on sub-DEC.
+  - **Other extractors (each its own sub-DEC)**: `shm_dict`,
+    `thermo_dict`, `step`, `thin_wall_inputs` from the OpenFOAM
+    `system/`/`constant/` dumps to unlock the FULL E-case expected-firing
+    set, not just the parts_manifest+solver_block subset.
+  - **Adapter discovery decision (separate DEC)**: extend production
+    `_autodiscover` to also find top-level `parts_manifest.yaml`
+    (case_profiles' shipped convention).
+  - **Per-case physical labeling** of the other 12 manifest-bearing
+    profiles — only valuable once richer extractors land (a manifest-only
+    eval over 13 cases produces 13 identical-result tests = theater).
 """
 from __future__ import annotations
 
@@ -58,6 +69,7 @@ import pytest
 import yaml
 
 from ui.backend.services.advisor_stack import assemble_stack
+from ui.backend.services.case_extractors import extract_solver_block_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CASE_021_PARTS_MANIFEST = (
@@ -139,6 +151,116 @@ def test_case_021_findings_count_matches_clean_case_expectation() -> None:
         + "\n".join(
             f"  [{f.severity}] {f.advisor_name}: {f.title[:120]}"
             for f in report.findings[:5]
+        )
+    )
+
+
+# ----------------------------------------------------------------------
+# DEC-V61-211 · solver_block_extractor integration — the live case-class
+# discrimination proof. Distinct from the parts_manifest-only spike tests
+# above because parts_manifest alone yields IDENTICAL output for every
+# in-repo case (surveyed 2026-05-28, 13/13 same), while the solver_block
+# extractor surfaces the density-based-vs-incompressible class split that
+# `check_solver_block`'s V27 dispatch actually keys on.
+# ----------------------------------------------------------------------
+
+
+_CASE_021_DIR = (
+    REPO_ROOT
+    / ".planning"
+    / "case_profiles"
+    / "case_021_v65_tbl_2nd_re_dicts"
+)
+# case_030 ships NO parts_manifest.yaml (it's not in the 13-manifest
+# subset) — so this test feeds ONLY the extracted solver_block_snapshot,
+# proving the solver_block path is independently load-bearing for
+# behavioral coverage of density-based cases.
+_CASE_030_DIR = (
+    REPO_ROOT
+    / ".planning"
+    / "case_profiles"
+    / "case_030_v65_wedge15ma5_v106_2nd_witness_dicts"
+)
+
+
+def test_case_021_and_case_030_solver_block_extension() -> None:
+    """Extractor + assemble_stack produce case-class-distinct findings.
+
+    case_021 (simpleFoam, incompressible, clean validated NASA TMR):
+    `check_solver_block` skips density-based dispatch → 0 findings from
+    solver_block_advisor; the parts_manifest still drives face_orientation
+    + inlet_outlet dispatch (both clean → 0 findings overall).
+
+    case_030 (rhoCentralFoam, density-based, adjustTimeStep=False,
+    deltaT=1e-4): density-based + adjustTimeStep≠true triggers V27 → ≥1
+    finding from solver_block_advisor.
+
+    Set comparison: |findings(case_030)| > |findings(case_021)| AND every
+    case_030 finding is sourced from solver_block_advisor. That's the
+    live case-class adjudication unreachable from parts_manifest alone.
+    """
+    if not _CASE_021_DIR.is_dir() or not _CASE_030_DIR.is_dir():
+        pytest.skip("one of the discrimination-pair case dirs is missing")
+
+    # case_021: full kwargs (parts_manifest + solver_block)
+    case_021_pm = yaml.safe_load(
+        (_CASE_021_DIR / "parts_manifest.yaml").read_text(encoding="utf-8")
+    )
+    case_021_snap = extract_solver_block_snapshot(_CASE_021_DIR)
+    assert case_021_snap is not None and case_021_snap.solver == "simpleFoam"
+    r021 = assemble_stack(
+        parts_manifest=case_021_pm,
+        solver_block_snapshot=case_021_snap,
+    )
+
+    # case_030: solver_block only (no parts_manifest in repo)
+    case_030_snap = extract_solver_block_snapshot(_CASE_030_DIR)
+    assert case_030_snap is not None
+    assert case_030_snap.solver == "rhoCentralFoam"
+    # extractor must also have surfaced the V27-relevant fields:
+    assert case_030_snap.adjust_time_step is False, (
+        f"case_030 adjustTimeStep should parse as False (token 'no' in "
+        f"controlDict); got {case_030_snap.adjust_time_step!r}"
+    )
+    r030 = assemble_stack(solver_block_snapshot=case_030_snap)
+
+    # Both runs dispatch solver_block_advisor (the dispatch surface itself
+    # is gated on `solver_block_snapshot is not None`, not on findings).
+    assert "solver_block_advisor" in {
+        c.advisor_name for c in r021.advisor_calls
+    }, "case_021 should dispatch solver_block_advisor with a snapshot supplied"
+    assert "solver_block_advisor" in {
+        c.advisor_name for c in r030.advisor_calls
+    }, "case_030 should dispatch solver_block_advisor with a snapshot supplied"
+
+    # Adjudication: density-based case_030 must yield strictly more
+    # findings than incompressible case_021 (the V27 dispatch differential).
+    assert len(r030.findings) > len(r021.findings), (
+        f"case-class discrimination broken: "
+        f"case_021 (incompressible) findings={len(r021.findings)}, "
+        f"case_030 (density-based) findings={len(r030.findings)} — "
+        f"expected case_030 > case_021 from V27 density-based path."
+    )
+
+    # Every case_030 finding must come from solver_block_advisor — this
+    # pins WHERE the discrimination is happening (V27 path, not a
+    # tangential dispatch from some other advisor that happens to fire).
+    case_030_sources = {f.source_advisor for f in r030.findings}
+    assert case_030_sources == {"solver_block_advisor"}, (
+        f"case_030 findings should ALL be sourced from solver_block_advisor "
+        f"(V27 density-based dispatch); got sources {sorted(case_030_sources)}"
+    )
+
+    # case_021 stays at 0 findings — clean validated benchmark, incompressible
+    # → V27 path not entered. If this regresses, either V27 dispatch logic
+    # widened to fire on incompressible cases (likely a bug), or case_021's
+    # controlDict was modified.
+    assert len(r021.findings) == 0, (
+        f"case_021 (clean validated incompressible) produced "
+        f"{len(r021.findings)} finding(s), expected 0. First:\n"
+        + "\n".join(
+            f"  [{f.severity}] {f.source_advisor}: {f.message[:120]}"
+            for f in r021.findings[:3]
         )
     )
 
