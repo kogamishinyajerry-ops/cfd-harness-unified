@@ -644,6 +644,130 @@ def test_r1_codex_p2_include_directive_variants(tmp_path: Path) -> None:
     ), f"Codex R0 P2 regression: directive leaked as key → {sorted(alc.keys())}"
 
 
+def test_r2_codex_r1_p2_codestream_block_body_not_leaked(tmp_path: Path) -> None:
+    """Codex R1 P2 (DEC-V61-212 R2): `#codeStream { ... }` is a
+    block-form OpenFOAM directive whose `{...}` body contains generated
+    C++ code, NOT addLayersControls settings. R1's "skip directive
+    header line only" fix accidentally let the walker descend into
+    this body and emit `code` (and other inner tokens) as fake keys.
+
+    R2 fix: after the directive header line, if next non-whitespace is
+    `{`, also skip that matching block (preserves R1's `#include`
+    behavior; restores pre-R1's `#codeStream` body-skip behavior;
+    composes cleanly).
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        addLayersControls
+        {
+        #codeStream
+        {
+            code
+            #{
+                nRelaxedIter 5;
+            #};
+        }
+        minMedianAxisAngle 90;
+        expansionRatio 1.2;
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    alc = result["addLayersControls"]
+    # `code` is generated C++ identifier inside #codeStream body — MUST NOT leak.
+    assert "code" not in alc, (
+        f"Codex R1 P2 regression: #codeStream body leaked → {sorted(alc.keys())}"
+    )
+    # `nRelaxedIter` is inside `#{ ... #}` C++ block — MUST NOT leak.
+    assert "nRelaxedIter" not in alc, (
+        f"Codex R1 P2 regression: inner C++ token leaked → {sorted(alc.keys())}"
+    )
+    # Real top-level keys after the directive MUST be captured.
+    assert "minMedianAxisAngle" in alc
+    assert "expansionRatio" in alc
+
+
+def test_r2_codex_r1_p2_if_zero_inactive_body_not_leaked(tmp_path: Path) -> None:
+    """Codex R1 P2 sub-case: `#if 0 ... #endif` is a conditional
+    block whose body is inactive (when condition is 0/false). R1's
+    line-only skip let the walker scan inactive settings and emit
+    them as if active. R2: skip everything between `#if*` and the
+    matching `#endif`.
+
+    Honest trade-off: we also skip `#if 1` active content (we don't
+    evaluate the condition). Better silent omission than silent
+    fabrication of inactive keys.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        addLayersControls
+        {
+        #if 0
+        minMedianAxisAngle 90;
+        #endif
+        expansionRatio 1.2;
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    alc = result["addLayersControls"]
+    # Inside `#if 0`: MUST NOT be in the extracted keys (inactive).
+    assert "minMedianAxisAngle" not in alc, (
+        f"Codex R1 P2 regression: inactive #if 0 body leaked → "
+        f"{sorted(alc.keys())}"
+    )
+    assert "expansionRatio" in alc  # outside #if, kept
+
+
+def test_r2_nested_if_endif_depth_tracking(tmp_path: Path) -> None:
+    """`#if ... #if ... #endif ... #endif` must use depth tracking,
+    not skip to first `#endif` (which would terminate the outer block
+    too early and leak the in-between content).
+
+    Tests the R2 implementation's `depth` counter in the conditional
+    scan.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        addLayersControls
+        {
+        #if 0
+          #if 0
+          foo 1;
+          #endif
+          bar 2;
+        #endif
+        baz 3;
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    alc = result["addLayersControls"]
+    assert "foo" not in alc, "nested #if depth tracking broke (foo leaked)"
+    assert "bar" not in alc, "nested #if depth tracking broke (bar leaked)"
+    assert "baz" in alc, "real key after outer #endif was lost"
+
+
+def test_r2_codex_r1_p1_quote_strip_still_works(tmp_path: Path) -> None:
+    """R2 must NOT regress R1's quote-stripping (Codex R0 P1 fix).
+    Canary: source `name "wing"` still extracts to `wing`."""
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { wing.stl { type triSurfaceMesh; name "wing"; } }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    assert result["geometry"]["wing.stl"]["name"] == "wing"
+
+
 def test_r1_codex_p1_e2e_quoted_alias_no_fabricated_advisor_findings(
     tmp_path: Path,
 ) -> None:

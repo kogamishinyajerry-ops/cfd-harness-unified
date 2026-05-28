@@ -493,21 +493,84 @@ def _parse_addlayerscontrols_keys(body: str) -> dict[str, None] | None:
             i += 1
         if i >= n:
             break
-        # Codex R0 P2 fix (DEC-V61-212 R1): an OpenFOAM directive line
-        # starts with `#` (e.g. `#include "layers.inc"`, `#includeIfPresent`,
-        # `#remove key`, `#inputMode merge`). These are NOT `key value;`
-        # pairs — they have NO terminating semicolon. Before the fix,
-        # the walker treated `include` as a scalar key and consumed the
-        # NEXT real semicolon, silently dropping the first actual setting
-        # after the directive (e.g. `minMedianAxisAngle 90;` — the V52
-        # typo target). Honest fix: when leading char is `#`, skip the
-        # directive's whole line and continue (the module docstring already
-        # advertises includes-are-ignored; this makes it true).
+        # Codex R0 P2 fix (DEC-V61-212 R1) + Codex R1 P2 follow-up (R2):
+        # an OpenFOAM directive line starts with `#`. Three forms exist:
+        #
+        #   (a) single-line (no body): `#include "..."` / `#includeIfPresent`
+        #       / `#remove key` / `#inputMode merge` / `#calc "..."`.
+        #   (b) block-form: `#codeStream { code #{ ... #}; ... }` —
+        #       directive name on one line, BODY in following `{...}` block.
+        #   (c) conditional: `#if 0 ... #endif` / `#ifdef` / `#ifndef` /
+        #       `#ifeq` — directive on one line, BODY of arbitrary lines
+        #       terminated by `#endif`. Conditional content may be active
+        #       (`#if 1`) or inactive (`#if 0`); honest extractor cannot
+        #       evaluate the condition without a preprocessor.
+        #
+        # Pre-R1 behavior was buggy for (a) — `include` was emitted as a
+        # fake key AND the next setting was eaten. R1 fixed (a) by skipping
+        # the directive's whole line, but inadvertently REGRESSED (b)/(c):
+        # the line-only skip resumes scanning inside the directive body,
+        # leaking inactive/generated tokens into the key set. Codex R1 P2
+        # caught this. R2 fix:
+        #
+        #   - (a) single-line: skip the header line (R1 behavior, kept).
+        #   - (b) block-form: header skip THEN skip the following `{...}`
+        #     block (matched-brace, string-literal-aware via
+        #     `_find_matching_close`). For `#codeStream`, the inner
+        #     `#{ ... #}` markers still balance brace-counted (each `#{`
+        #     adds 1 to depth, each `#};` subtracts 1).
+        #   - (c) conditional: scan for matching `#endif` with depth
+        #     tracking so nested `#if ... #endif` doesn't terminate early.
+        #     ALL content between `#if*` and `#endif` is honestly omitted
+        #     (we don't know which branch is active — better to silently
+        #     drop active settings than fabricate inactive ones).
+        #
+        # Honest scope-out: `#else` and `#elif` branches are skipped as
+        # part of the `#if/#endif` body (we never include them). A real
+        # case relying on `#else` would lose those keys; v0.2 sub-DEC
+        # can add condition evaluation if real evidence emerges.
         if body[i] == "#":
+            # Capture directive name BEFORE skipping (need it for #if/#endif
+            # detection and for not leaking it as a key).
+            dn_start = i + 1
+            dn_end = dn_start
+            while dn_end < n and (body[dn_end].isalnum() or body[dn_end] == "_"):
+                dn_end += 1
+            directive = body[dn_start:dn_end].lower()
+            # Skip directive header to EOL.
             nl = body.find("\n", i)
             if nl == -1:
                 break  # directive runs to EOF; nothing more to scan
             i = nl + 1
+            # Form (c): conditional → scan to matching `#endif` (depth-aware).
+            if directive in ("if", "ifdef", "ifndef", "ifeq"):
+                depth = 1
+                cond_re = re.compile(r"(?m)^\s*#(\w+)")
+                while depth > 0 and i < n:
+                    m = cond_re.search(body, i)
+                    if m is None:
+                        i = n  # unmatched #if → consume to EOF (honest)
+                        break
+                    inner = m.group(1).lower()
+                    line_end = body.find("\n", m.end())
+                    if line_end == -1:
+                        line_end = n
+                    if inner in ("if", "ifdef", "ifndef", "ifeq"):
+                        depth += 1
+                    elif inner == "endif":
+                        depth -= 1
+                    i = line_end + 1
+                continue
+            # Form (b): block-form → if next non-ws is `{`, skip block.
+            # (Form (a) falls through: nothing to do after the header line.)
+            k = i
+            while k < n and body[k].isspace():
+                k += 1
+            if k < n and body[k] == "{":
+                close = _find_matching_close(body, k + 1, "{", "}")
+                if close is None:
+                    break  # unmatched block → stop scanning (honest)
+                i = close + 1
             continue
         # Read potential key token (alphanumeric / underscore only;
         # OpenFOAM key idiom).
