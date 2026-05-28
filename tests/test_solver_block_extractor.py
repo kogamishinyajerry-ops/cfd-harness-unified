@@ -288,6 +288,43 @@ def test_adjusttimestep_unknown_token_on_density_based_refuses_snapshot(
     )
 
 
+@pytest.mark.parametrize("solver", ["rhoCentralFoam", "rhoCentralDyMFoam"])
+@pytest.mark.parametrize(
+    "token,expected",
+    [("yes", True), ("true", True), ("on", True),
+     ("no", False), ("false", False), ("off", False)],
+)
+def test_density_based_with_legitimate_bool_token_returns_snapshot(
+    tmp_path: Path, solver: str, token: str, expected: bool,
+) -> None:
+    """Critical safety-path lock (workflow adversarial review
+    wf_24dd66ce-056 finding #4, 2026-05-28): for the at-risk solvers
+    (rhoCentralFoam / rhoCentralDyMFoam), a LEGITIMATE adjustTimeStep
+    token must NOT trigger the refusal — the snapshot must be returned
+    with the parsed bool.
+
+    Without this test, a future broadening of the refusal condition
+    (e.g., `if not adjust_time_step and solver in _AT_RISK`) would
+    silently break V27 detection on every density-based case — the
+    advisor would never see a snapshot to dispatch on. The case_030
+    integration test in the spike covers this transitively, but
+    integration coverage depends on case_profile state being intact;
+    this unit test is the direct lock.
+    """
+    (tmp_path / "system").mkdir()
+    (tmp_path / "system" / "controlDict").write_text(
+        f"application {solver};\nadjustTimeStep {token};\n",
+        encoding="utf-8",
+    )
+    snap = extract_solver_block_snapshot(tmp_path)
+    assert snap is not None, (
+        f"at-risk solver {solver!r} + legitimate token {token!r} should "
+        f"yield a snapshot, NOT the unparseable-token refusal"
+    )
+    assert snap.solver == solver
+    assert snap.adjust_time_step is expected
+
+
 def test_density_based_unknown_token_with_other_density_solvers_allows_snapshot(
     tmp_path: Path,
 ) -> None:
@@ -426,13 +463,23 @@ def test_density_based_at_risk_mirror_parity() -> None:
 
 
 def test_extractor_module_loads_without_trimesh() -> None:
-    """Codex R0 P1 fix: the extractor module must import even when
+    """Codex R0 P1 fix: the extractor MODULE ITSELF imports cleanly when
     trimesh is absent (`.[ui]` env without `[workbench]`).
 
+    Scope (workflow adversarial review wf_24dd66ce-056 finding #1,
+    2026-05-28): this pins what's actually verifiable — `case_extractors.*`
+    is stdlib-only at import time and reachable without trimesh. It does
+    NOT prove `assemble_stack(...)` (the broader downstream consumer)
+    works without trimesh — that surface legitimately requires trimesh
+    for trimesh-dependent advisors (face_orientation needs STL geometry)
+    and is OUT OF SCOPE for the extractor's stdlib-only promise. The
+    promise is "the extractor module is loadable in `.[ui]`"; what the
+    caller does with the snapshot is the caller's import-graph problem.
+
     Pin via subprocess so the test environment's trimesh availability
-    doesn't mask a real regression — the subprocess clears trimesh from
-    sys.modules and stubs the import so the chain is forced to NOT use
-    trimesh, then imports the extractor and checks it works.
+    doesn't mask a real regression — the subprocess stubs `trimesh` to
+    None in sys.modules, then imports the extractor and checks the
+    dataclass shape is intact.
     """
     import subprocess
     import sys

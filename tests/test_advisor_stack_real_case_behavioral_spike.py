@@ -233,18 +233,24 @@ def test_case_021_and_case_030_solver_block_extension() -> None:
         c.advisor_name for c in r030.advisor_calls
     }, "case_030 should dispatch solver_block_advisor with a snapshot supplied"
 
-    # Adjudication: density-based case_030 must yield strictly more
-    # findings than incompressible case_021 (the V27 dispatch differential).
-    assert len(r030.findings) > len(r021.findings), (
-        f"case-class discrimination broken: "
-        f"case_021 (incompressible) findings={len(r021.findings)}, "
-        f"case_030 (density-based) findings={len(r030.findings)} — "
-        f"expected case_030 > case_021 from V27 density-based path."
+    # Adjudication (tightened per workflow adversarial review finding #5,
+    # 2026-05-28 wf_24dd66ce-056): pin EXACTLY one V27 finding with the
+    # exact code, not just "more than zero." The looser `> 0` assertion
+    # would silently pass a future broken state emitting 5 spurious
+    # findings or a wrong-code finding. The DEC-V61-211 narrative is
+    # specifically about V27 discrimination, so the test should pin V27.
+    assert len(r030.findings) == 1, (
+        f"case_030 (density-based) expected exactly 1 finding (the V27 "
+        f"density-based dispatch), got {len(r030.findings)}: "
+        + ", ".join(f"[{f.severity}]{f.code}" for f in r030.findings)
+    )
+    assert r030.findings[0].code == "v27_adjusttimestep_required", (
+        f"case_030 finding code expected 'v27_adjusttimestep_required'; "
+        f"got {r030.findings[0].code!r} from {r030.findings[0].source_advisor!r}"
     )
 
-    # Every case_030 finding must come from solver_block_advisor — this
-    # pins WHERE the discrimination is happening (V27 path, not a
-    # tangential dispatch from some other advisor that happens to fire).
+    # Belt-and-suspenders: also pin source attribution (catches the same
+    # finding code appearing from an unrelated future advisor).
     case_030_sources = {f.source_advisor for f in r030.findings}
     assert case_030_sources == {"solver_block_advisor"}, (
         f"case_030 findings should ALL be sourced from solver_block_advisor "

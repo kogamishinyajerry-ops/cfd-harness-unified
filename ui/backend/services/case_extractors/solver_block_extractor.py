@@ -21,14 +21,32 @@ truth-chain (omission, not fabrication).
   - Preconditioner data (v0.2 / follow-on sub-DEC; intentional omission).
   - `#include`d sub-dicts: a `controlDict` that pulls `application` from
     a separate file via `#includeFunc` is not followed; returns None.
-  - Macro substitution: `application $solverChoice;` — the `$solverChoice`
-    literal would be captured as the solver name (garbage in / garbage out).
-    No real case in `.planning/case_profiles/*_dicts/` uses this pattern
-    today (verified 2026-05-28), and a follow-on sub-DEC can add macro
-    resolution if a real case needs it.
+  - Macro substitution for `application`: `application $solverChoice;` —
+    the `$solverChoice` literal would be captured as the solver name
+    (garbage in / garbage out). No real case in `.planning/case_profiles/
+    *_dicts/` uses this pattern today (verified 2026-05-28), and a
+    follow-on sub-DEC can add macro resolution if a real case needs it.
   - Multi-line/computed `deltaT` (e.g. `#calc "1e-3 * 5"`): the regex
     matches only a single-token value; a `#calc` expression won't match
     and `delta_t` will be left None (honest omission, not wrong number).
+  - **Brace-depth-unawareness** (workflow adversarial review 2026-05-28
+    wf_24dd66ce-056 finding #2, scope-locked here per truth-chain): the
+    three line-anchored regexes match any line at column 0 (after
+    optional whitespace) regardless of brace depth. A malformed /
+    concatenated / copy-pasted controlDict containing `application X;`
+    inside a sub-dict block would false-match. This extractor does NOT
+    track brace depth; v0.1 trusts the source dict is well-formed
+    OpenFOAM. Real cases in `.planning/case_profiles/*_dicts/` are all
+    well-formed (verified 2026-05-28). The duplicate-key refusal below
+    catches one consequence (two top-level `application` lines) but not
+    the deeper case (top-level + sub-dict-buried). Honest scope-out.
+  - **Comment-stripping is string-literal-unaware** (same review,
+    finding #6 nit): `//` and `/* */` inside quoted string values
+    would be stripped, mangling the surrounding text. Safe for v0.1's
+    three keys (none take quoted-string values) but caller must not
+    extend the regex set to include quoted-value keys without first
+    making the comment-stripper string-literal-aware. Scope-out for
+    v0.1.
 
 ## Why line-anchored regex (not a generic OF-dict parser)
 
@@ -173,18 +191,29 @@ def extract(case_dir: Path) -> SolverBlockSnapshot | None:
 
     body = _strip_comments(raw)
 
-    app_match = _APPLICATION_RE.search(body)
-    if not app_match:
+    # Use findall + len-1 refusal across all three keys (workflow
+    # adversarial review wf_24dd66ce-056 finding #3, 2026-05-28). OpenFOAM
+    # errors on duplicate top-level keys; we mirror the spirit of Codex R0
+    # P2(#2)'s honest-refusal-on-ambiguity here: silently picking the
+    # first match when the source is ambiguous would violate the
+    # extractor's truth-chain contract just like fabricating from None did.
+    app_matches = _APPLICATION_RE.findall(body)
+    if len(app_matches) != 1:
+        # 0 → key missing (snapshot meaningless); >1 → source ambiguous.
+        # Both → honest None.
         return None
-    solver = app_match.group(1)
+    solver = app_matches[0]
 
-    adjust_token = _ADJUST_DT_RE.search(body)
-    if adjust_token is None:
+    adjust_tokens = _ADJUST_DT_RE.findall(body)
+    if len(adjust_tokens) > 1:
+        # Duplicate adjustTimeStep → ambiguous source → refuse.
+        return None
+    if not adjust_tokens:
         # Key absent: None encodes "OF default `no`", which the advisor
         # interprets correctly. Unambiguous.
         adjust_time_step: bool | None = None
     else:
-        adjust_time_step = _parse_bool(adjust_token.group(1))
+        adjust_time_step = _parse_bool(adjust_tokens[0])
         if adjust_time_step is None and solver in _DENSITY_BASED_AT_RISK_SOLVERS:
             # Codex R0 P2(#2): key is PRESENT but unparseable (`$macro`,
             # typo, etc.) AND this solver routes through the V27 dispatch
@@ -193,8 +222,11 @@ def extract(case_dir: Path) -> SolverBlockSnapshot | None:
             # rather than risk fabricating a downstream finding.
             return None
 
-    delta_token = _DELTA_T_RE.search(body)
-    delta_t = _parse_float(delta_token.group(1)) if delta_token else None
+    delta_tokens = _DELTA_T_RE.findall(body)
+    if len(delta_tokens) > 1:
+        # Duplicate deltaT → ambiguous source → refuse.
+        return None
+    delta_t = _parse_float(delta_tokens[0]) if delta_tokens else None
 
     return SolverBlockSnapshot(
         solver=solver,
