@@ -93,15 +93,13 @@ The eval layer has **four rungs**; three exist, one is the gap:
 | Unit-behavioral (per-advisor, synthetic input) | `ui/backend/tests/test_advisor_stack.py` (31 tests) | ✅ |
 | Predicate-behavioral (per v9 rule, true/false fixture) | v9 W2.0 (`afeeb4a`) + R9 (`c3435e4`) | ✅ |
 | Case-level **documentation** (frontmatter shape + advisor-name existence + aggregate count) | `ui/backend/tests/test_canonical_advisor_eval.py` | ✅ (explicitly *static* — see its docstring L17–20) |
-| Case-level **behavioral** (run evaluator on real input → assert expected firing set + no false positives) | — | ❌ **GAP** |
+| Case-level **behavioral** (run evaluator on real input → assert expected firing set + no false positives) | `tests/test_v9_ruleset_behavioral_eval.py` (v9 convergence ruleset, `a609f58`) | ✅ for v9; ⚙️ partial for advisor_stack (2b) |
 
 `test_canonical_advisor_eval.py` says it plainly: *"does NOT call `assemble_stack` per case because the canonical eval files document expected behavior … not full case YAML/dict inputs."* So the documented "expected firings" in E01–E30 are **asserted to be well-formed, never executed**. That is finding-5 at the benchmark layer: we can add rules, but nothing adjudicates whether they change a verdict.
 
-**Next-increment candidates (sponsor picks; each = sub-DEC):**
-- **2a · v9 cross-rule behavioral eval** — labeled `RunArtifactSlice` fixtures (drift / crash / plateau / healthy) → run the *full* R1–R9 ruleset → assert the correct rule fires **and the others stay silent**. *Feasible now* (synthetic inputs, pure functions); additive to W2.0 (which tests predicates in isolation, not cross-rule discrimination). Directly realizes "benchmark adjudicates" for the convergence ruleset.
-- **2b · advisor_stack case-behavioral eval** — run `assemble_stack` on a real case dict (start with `flat_plate_rans_sst`, the one case we know has real inputs) → compare to the E-case expected firing set. *Needs fixture-availability verification first* (most `sandbox_path`s are external).
-
-Recommendation: **2a first** (no fixture-availability risk; closes the highest-leverage gap; small).
+**Next-increment candidates:**
+- **2a · v9 cross-rule behavioral eval** — ✅ **LANDED** (`a609f58`, 2026-05-28). 8 fixtures (4 single-rule discrimination + 4 co-firing) assert the *complete* fired set; 10/10 pass; 147-test v9+advisor regression green. Result: v9 ruleset has no cross-rule false-positives on these fixtures; co-firing semantics (R4+R8, R3+R9, R6+R8, R5+R8) now adjudicated.
+- **2b · advisor_stack case-behavioral eval** — run `assemble_stack` on a real case dict (start with `flat_plate_rans_sst`) → compare to the E-case expected firing set. *Needs fixture-availability verification first* (most `sandbox_path`s point at external sandboxes). **This is the next genuine increment** — but it carries a feasibility gate (does a consumable case input exist in-repo?) that 2a did not.
 
 ---
 
