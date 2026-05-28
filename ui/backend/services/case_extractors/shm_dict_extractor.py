@@ -39,6 +39,19 @@ fields (per DEC-V61-212 §Decision table). Numeric values
     ``meshQualityControls { #include "meshQualityDict" }``) — included
     file contents are NOT followed; the include line is silently ignored
     (no extracted key). Typos inside an included file are invisible.
+  - **Same-line block-form `#`-directives**
+    (``#codeStream { ... }`` with ``{`` on the SAME line as the
+    directive name, or any ``#<directive> {`` opening on the directive's
+    header line). The ``addLayersControls`` walker handles next-line form
+    (``#codeStream\\n{ ... }``) cleanly via R2's brace-peek after the
+    header line, but the same-line form leaks the block body's inner
+    tokens into the extracted key set. **v0.1 scope-locks this OUT**:
+    zero in-repo SHM files use this pattern today (verified
+    ``find .planning ui/backend -name snappyHexMeshDict*``, 2026-05-28
+    audit in `.planning/retrospectives/2026-05-28_dec212_codex_round3_overflow.md`).
+    A follow-on v0.2 / sub-DEC can add the ~10 LOC peek-for-same-line-``{``
+    fix when a real case lands the pattern. Codex R2 P2 finding archived
+    per the retro; v2.3 round cap=3 honored.
   - OpenFOAM regex-pattern keys (e.g. ``"(U|k|omega)"``) — captured as a
     literal string key, not expanded. `validate_shm_dict`'s typo
     fuzzy-match has edit-distance > 2 vs every CANONICAL key for these.
