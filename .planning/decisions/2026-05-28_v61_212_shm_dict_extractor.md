@@ -1,10 +1,10 @@
 ---
 decision_id: V61-212
-title: shm_dict extractor (case dir → Mapping[str, Any]) — sub-DEC (DRAFT · Proposed)
-status: Proposed
+title: shm_dict extractor (case dir → Mapping[str, Any]) — sub-DEC
+status: Accepted
 parent_dec: V61-211
 phase: P2 (Blueprint v4)
-notion_sync_status: not_synced (Proposed; per ~/CLAUDE.md only Accepted DECs sync)
+notion_sync_status: pending (sync at session-end batch)
 ---
 
 # DEC-V61-212 · snappyHexMeshDict extractor for case-behavioral eval
@@ -265,18 +265,32 @@ The shm_dict equivalents:
 - If the extractor captures `refinementSurfaces.<surf>` but fails to extract
   the nested `patchInfo.type`, the advisor's path (e) silently skips that
   surface (correct — `stl_face_normals` is None or no measurement; v0.1
-  doesn't supply normals anyway).
+  extractor explicitly DOES NOT supply normals, so path (e) never runs
+  for v0.1-extracted dicts).
 - **However**: a partial extraction where the surface exists but
   `patchInfo` is missing could mask a real `symmetryPlane`-typed surface
-  that callers feeding `stl_face_normals` would want to validate. v0.1
-  must either extract `patchInfo.type` correctly for every
-  `refinementSurfaces` entry, OR refuse the entire extraction
-  (return None) — mirroring DEC-211's density-based refusal.
-- **Recommended v0.1 policy**: extract `patchInfo.type` best-effort; on
-  failure, drop the surface from `refinementSurfaces` entirely (DO NOT
-  emit a surface with absent patchInfo). This prevents a downstream
-  caller from concluding "no constrained-patch type → safe" when the
-  truth is "we couldn't tell."
+  IF a future caller fed `stl_face_normals` from a separate
+  `shm_stl_normals_extractor` (deferred to its own sub-DEC).
+- **v0.1 policy (refined from DRAFT)**: extract `patchInfo.type` best-
+  effort and ALWAYS emit the surface in `refinementSurfaces`, even when
+  patchInfo is unparseable or absent. Rationale: the DRAFT's "drop
+  surface entirely on patchInfo failure" recommendation costs path (b)/
+  (b')/(c) reach (missing_geometry_ref / missing_region_ref /
+  geometry_orphan detection) for ZERO path (e) benefit under v0.1
+  (extractor doesn't supply normals). When path (e) eventually
+  materializes via the separate normals-extractor sub-DEC, that
+  sub-DEC's contract can refuse-on-ambiguity at the normals level
+  without polluting refinementSurfaces here. Three sub-cases:
+  - patchInfo block ABSENT in source ⇒ emit `{<surf>: {}}` (no
+    patchInfo key). Path (e) silently skips. Paths (b)/(c) work.
+  - patchInfo block PRESENT, type parsed (e.g. `wall`, `symmetryPlane`)
+    ⇒ emit `{<surf>: {"patchInfo": {"type": "<token>"}}}`.
+  - patchInfo block PRESENT, type unparseable (malformed / `$macro` /
+    absent inside block) ⇒ emit `{<surf>: {"patchInfo": {}}}`. Path
+    (e) silently skips (no string type in `_CONSTRAINED_PATCH_TYPES`).
+    Paths (b)/(c) still work.
+- **Tests** assert all three sub-cases (canary + tmp_path) and document
+  the deviation from the DRAFT recommendation.
 
 **(R3) `geometry` `name:` alias parsing**:
 - case_028's idiom is `Outer_Surf.stl { type triSurfaceMesh; name Outer_Surf; }`.
@@ -313,9 +327,16 @@ The shm_dict equivalents:
 
 ## Status
 
-Proposed (DRAFT — investigator agent, 2026-05-28). Awaiting cfd-chief-engineer
-ratification under user-approved "α′ extension sub-DEC" route to escalate
-to Accepted.
+Accepted 2026-05-28 by cfd-chief-engineer under user-approved "α′ extension
+sub-DEC" route. DRAFT investigator (workflow `wj0v7usep`, agent #1) wrote
+the original 335-line scoping document; chief-engineer ratification refined
+the R2 mitigation paragraph from "drop surface entirely on patchInfo
+failure" to "always emit surface; tier patchInfo per parse outcome" (the
+DRAFT recommendation cost path-b/c reach for zero path-e benefit in v0.1
+since v0.1 extractor doesn't supply stl_face_normals; the path-e safety
+concern materializes only when the separate `shm_stl_normals_extractor`
+sub-DEC lands, at which point that sub-DEC owns the refuse-on-ambiguity
+contract at the normals level).
 
 ## Out of scope (do NOT do under this DEC; record as follow-on)
 
