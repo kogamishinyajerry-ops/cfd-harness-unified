@@ -107,6 +107,95 @@ class TestRulesetShape:
 
 
 # ---------------------------------------------------------------------------
+# Truth-chain invariants (P2 W2.0.5 · 2026-05-27)
+#
+# The originally-planned P2 W1.1 (flow_coherence pre-flight) was demolished
+# by an ultrawork adversarial workflow that found, among other things, that
+# its provenance included an uncited y+~1 anchor and a wrong V3 line citation
+# — exactly the kind of "borrowed authority" that the truth-chain guardrail
+# forbids. The 9 currently-landed v9 rules carry strong citations (V-row IDs
+# OR named-textbook + section OR DOIs); this class pins that state so a
+# future rule addition cannot slip in an uncited threshold without the test
+# suite catching it. These are SCHEMA invariants on the JSON SSOT, not new
+# behavioral checks — they cost nothing at runtime.
+# ---------------------------------------------------------------------------
+
+import re as _re_truthchain  # local alias to avoid clobbering test-module re imports
+
+
+class TestRulesetTruthChain:
+    # Recognized citation markers (any ONE per provenance string is sufficient).
+    # - V-row IDs: "V3", "V12", "V104" — keyed in industrial_solver_findings_v_series.md
+    # - Named CFD textbooks (the three already used across R1-R9): keep the
+    #   surface-form match-set explicit and small, so adding a new textbook
+    #   is a conscious choice (PR review can surface it) rather than a typo
+    #   silently passing.
+    # - Section references: "§N" (typographic section sign + digit) signals
+    #   a textbook section pointer.
+    # - DOIs: "10.<digits>/<anything>" — the canonical DOI pattern.
+    _V_ROW_RX = _re_truthchain.compile(r"\bV\d+\b")
+    _SECTION_RX = _re_truthchain.compile(r"§\s*\d")
+    _DOI_RX = _re_truthchain.compile(r"\b10\.\d{4,9}/\S+")
+    _TEXTBOOK_AUTHORS = (
+        "Ferziger & Perić",
+        "Versteeg & Malalasekera",
+        "Roache",
+    )
+
+    @classmethod
+    def _has_citation(cls, provenance: str) -> bool:
+        if cls._V_ROW_RX.search(provenance):
+            return True
+        if cls._SECTION_RX.search(provenance):
+            return True
+        if cls._DOI_RX.search(provenance):
+            return True
+        if any(author in provenance for author in cls._TEXTBOOK_AUTHORS):
+            return True
+        return False
+
+    def test_every_provenance_carries_a_real_citation(self):
+        """RS#32-extension: nonempty provenance is necessary but not sufficient;
+        truth-chain requires a *recognizable* citation marker (V-row id,
+        named-textbook author, section reference, or DOI). Prevents a future
+        rule from shipping with provenance like 'industry consensus' or
+        'common knowledge' which carry no auditable source."""
+        offenders = [
+            r.id for r in V9_ADVISOR_RULES if not self._has_citation(r.provenance)
+        ]
+        assert not offenders, (
+            f"v9 rules with provenance lacking a recognized citation marker "
+            f"(V-row id / textbook author / §-section / DOI): {offenders}. "
+            f"Add a V-row reference from "
+            f"docs/openfoam_corpus/industrial_solver_findings_v_series.md "
+            f"or a named textbook with section number."
+        )
+
+    def test_commentary_length_within_band(self):
+        """Bound commentary length: 50 is the existing nonempty floor; 1000 is
+        well above all 9 landed rules (~500-1000 chars). An upper bound stops
+        commentary from drifting into essay territory that loses signal, AND
+        it brushes up against the 240-char excerpt logic in _excerpt() — if
+        a rule's commentary grew past ~2000 chars the excerpt would start to
+        truncate meaningful content. Pinning at 1000 leaves headroom."""
+        for rule in V9_ADVISOR_RULES:
+            n = len(rule.commentary)
+            assert 50 <= n <= 1000, (
+                f"{rule.id}: commentary length {n} outside [50, 1000]"
+            )
+
+    def test_severity_within_allowed_enum(self):
+        """Schema invariant: severity is one of the 3 known tiers. _SEVERITY_RANK
+        in pattern_matcher.py contains exactly these 3; a typo / new tier would
+        crash match_advisor_patterns sort, so guard at the rule-corpus level."""
+        allowed = {"advise", "warn", "info"}
+        for rule in V9_ADVISOR_RULES:
+            assert rule.severity in allowed, (
+                f"{rule.id}: severity {rule.severity!r} not in {sorted(allowed)}"
+            )
+
+
+# ---------------------------------------------------------------------------
 # Positive cases — each rule matches its intended pattern
 # ---------------------------------------------------------------------------
 
