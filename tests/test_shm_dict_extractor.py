@@ -469,6 +469,222 @@ def test_r2_patchinfo_present_no_type_yields_empty_patchinfo(tmp_path: Path) -> 
 
 
 # =====================================================================
+# DEC-V61-212 R1 (Codex R0 findings) truth-chain tests.
+# =====================================================================
+def test_r1_codex_p1_quoted_name_alias_stripped(tmp_path: Path) -> None:
+    """Codex R0 P1 (DEC-V61-212 R1): source `name "wing";` must extract
+    to `wing` (NOT `'"wing"'`).
+
+    Before the R1 fix, `_strip_one_paren_layer` only stripped outer
+    parens — quoted tokens leaked their delimiters through. Downstream
+    `validate_shm_dict` then fabricated `missing_geometry_ref` for
+    every quoted alias because `'wing'` (refinementSurfaces literal
+    key) ≠ `'"wing"'` (extracted alias).
+
+    Renamed to `_strip_quotes_and_parens`; quoted alias now normalizes
+    correctly per the module docstring's longstanding promise.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { wing.stl { type triSurfaceMesh; name "wing"; } }
+        castellatedMeshControls { refinementSurfaces { wing { patchInfo { type wall; } } } }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    entry = result["geometry"]["wing.stl"]
+    assert entry == {"type": "triSurfaceMesh", "name": "wing"}, (
+        f"Codex R0 P1 regression: quoted name leaked → {entry}"
+    )
+
+
+def test_r1_codex_p1_quoted_patch_type_stripped(tmp_path: Path) -> None:
+    """Codex R0 P1 (DEC-V61-212 R1): source `patchInfo { type "symmetryPlane"; }`
+    must extract to `symmetryPlane` (NOT `'"symmetryPlane"'`).
+
+    Before the R1 fix, the quoted type leaked through and
+    `_CONSTRAINED_PATCH_TYPES` membership test in advisor path (e)
+    failed silently (`'"symmetryPlane"'` ∉ the frozenset). A real
+    multi-normal constrained patch would go undetected.
+
+    The check `type in _CONSTRAINED_PATCH_TYPES` only runs when
+    `stl_face_normals` is supplied (v0.1 extractor doesn't supply
+    them), so the operational impact for v0.1 is zero — but truth-chain
+    requires the extracted token match what the source declared.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { wing { type triSurfaceMesh; } }
+        castellatedMeshControls
+        {
+            refinementSurfaces
+            {
+                wing { level (1 2); patchInfo { type "symmetryPlane"; } }
+            }
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    rs = result["castellatedMeshControls"]["refinementSurfaces"]
+    assert rs["wing"] == {"patchInfo": {"type": "symmetryPlane"}}, (
+        f"Codex R0 P1 regression: quoted patch type leaked → {rs['wing']}"
+    )
+
+
+def test_r1_codex_p1_quoted_geometry_type_stripped(tmp_path: Path) -> None:
+    """Same P1 class: `type "triSurfaceMesh"` in geometry entry."""
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { wing.stl { type "triSurfaceMesh"; name wing; } }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    entry = result["geometry"]["wing.stl"]
+    assert entry["type"] == "triSurfaceMesh", (
+        f"Codex R0 P1 regression: quoted geometry type leaked → {entry}"
+    )
+
+
+def test_r1_codex_p1_paren_alias_still_stripped_after_rename(tmp_path: Path) -> None:
+    """Regression canary: when the helper was renamed from
+    `_strip_one_paren_layer` → `_strip_quotes_and_parens`, the
+    existing V100-WIDEN paren-stripping behavior must remain intact.
+    Source `name (region_hot_fluid);` extracts to `region_hot_fluid`
+    (no change from pre-R1 behavior; the V100-WIDEN parens convention
+    in foamDictionary output is still honored).
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { hot.stl { type triSurfaceMesh; name (region_hot_fluid); } }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    entry = result["geometry"]["hot.stl"]
+    assert entry["name"] == "region_hot_fluid", (
+        f"R1 rename broke V100-WIDEN paren stripping: {entry}"
+    )
+
+
+def test_r1_codex_p2_include_does_not_swallow_next_key(tmp_path: Path) -> None:
+    """Codex R0 P2 (DEC-V61-212 R1): an `#include` line inside
+    addLayersControls must NOT consume the next semicolon and silently
+    drop the following key.
+
+    Before the R1 fix:
+      - `#include "layers.inc"` (no trailing `;`)
+      - `_parse_addlayerscontrols_keys` skipped `#` (no progress),
+        read `include` as a key (alnum walk), then took scalar path,
+        called `body.find(";", i)` which jumped past `"layers.inc"`
+        to the `;` after `minMedianAxisAngle 90`.
+      - Net: `include` falsely emitted as a key; `minMedianAxisAngle`
+        (the V52 typo target!) silently dropped.
+
+    R1 fix: when leading char is `#`, skip the directive's whole line.
+    Test asserts: `minMedianAxisAngle` IS in the extracted key set;
+    `include` is NOT.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        addLayersControls
+        {
+        #include "layers.inc"
+        minMedianAxisAngle 90;
+        expansionRatio 1.2;
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    alc = result["addLayersControls"]
+    assert "minMedianAxisAngle" in alc, (
+        "Codex R0 P2 regression: V52 typo target silently dropped after "
+        f"#include — alc keys = {sorted(alc.keys())}"
+    )
+    assert "include" not in alc, (
+        "Codex R0 P2 regression: `include` leaked as a fake key from "
+        f"`#include` directive — alc keys = {sorted(alc.keys())}"
+    )
+    assert "expansionRatio" in alc  # downstream key still present
+
+
+def test_r1_codex_p2_include_directive_variants(tmp_path: Path) -> None:
+    """Same P2 class with other `#`-prefixed directives:
+    `#includeIfPresent`, `#remove`, `#inputMode merge`. None should
+    inject a fake key or eat the next semicolon.
+    """
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        addLayersControls
+        {
+        #includeIfPresent "optional.inc"
+        #inputMode merge
+        firstLayerThickness 1e-5;
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    alc = result["addLayersControls"]
+    assert "firstLayerThickness" in alc, (
+        f"Codex R0 P2 regression on variant: firstLayerThickness "
+        f"dropped — alc keys = {sorted(alc.keys())}"
+    )
+    # Neither `includeIfPresent` nor `inputMode` nor `merge` should leak.
+    assert not any(
+        k in alc for k in ("includeIfPresent", "inputMode", "merge", "remove")
+    ), f"Codex R0 P2 regression: directive leaked as key → {sorted(alc.keys())}"
+
+
+def test_r1_codex_p1_e2e_quoted_alias_no_fabricated_advisor_findings(
+    tmp_path: Path,
+) -> None:
+    """Codex R0 P1 e2e: quoted name `name "wing"` + refinementSurfaces
+    `wing` → fed through `validate_shm_dict` must produce ZERO
+    `missing_geometry_ref` and ZERO `geometry_orphan` findings (the
+    alias resolves correctly).
+
+    Before R1, this same input produced both findings because the
+    extracted alias was `'"wing"'` instead of `'wing'`. Skip-if-trimesh.
+    """
+    pytest.importorskip("trimesh")
+    from ui.backend.services.geometry_ingest.shm_dict_validator import (
+        validate_shm_dict,
+    )
+
+    case_dir = _write_shm(
+        tmp_path,
+        '''
+        geometry { wing.stl { type triSurfaceMesh; name "wing"; } }
+        castellatedMeshControls
+        {
+            refinementSurfaces { wing { patchInfo { type wall; } } }
+        }
+        ''',
+    )
+    result = extract_shm_dict(case_dir)
+    assert result is not None
+    report = validate_shm_dict(dict(result))
+    bad = [
+        f for f in report.findings
+        if f.code in ("missing_geometry_ref", "geometry_orphan")
+    ]
+    assert bad == [], (
+        f"Codex R0 P1 e2e regression: quoted alias caused "
+        f"{len(bad)} fabricated finding(s): "
+        f"{[(f.code, f.location) for f in bad]}"
+    )
+
+
+# =====================================================================
 # DEC R3 truth-chain: case_028 alias preservation (already exercised
 # by test_geometry_alias_form_preserved_case_028; here adds the
 # concrete "no fabricated missing_geometry_ref" e2e assertion).

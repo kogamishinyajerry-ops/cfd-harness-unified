@@ -211,15 +211,30 @@ _FILE_QUOTED_RE = re.compile(r'\bfile\s+"([^"]+)"\s*;')
 _FILE_BARE_RE = re.compile(r'\bfile\s+([^\s;"]+)\s*;')
 
 
-def _strip_one_paren_layer(token: str) -> str:
-    """Mirror ``shm_dict_validator._strip_geometry_alias`` minus advisor coupling.
+def _strip_quotes_and_parens(token: str) -> str:
+    """Strip ONE outer ``"..."`` OR ONE outer ``(...)`` from a captured token.
 
-    Strips one outer ``(...)`` pair so ``name (region)`` parses to ``region``;
-    a no-op for tokens without parens. (Strip is at extraction time so
-    downstream consumers see a clean canonical token.)
+    Source forms the extractor must normalize before emitting (Codex R0 P1
+    finding 2026-05-28, DEC-V61-212 R1):
+      - ``name wing``        → ``wing``  (no-op)
+      - ``name "wing"``      → ``wing``  (outer double-quotes stripped)
+      - ``name (region)``    → ``region`` (V100-WIDEN parens, mirrors
+                                           ``shm_dict_validator._strip_geometry_alias``)
+      - ``type "symmetryPlane"`` → ``symmetryPlane`` (else V99 path (e)
+        would silently skip — ``"symmetryPlane"`` ≠ ``symmetryPlane`` so
+        advisor's ``_CONSTRAINED_PATCH_TYPES`` membership check fails and
+        a real multi-normal constrained patch goes undetected)
+
+    Quotes and parens are NEVER stripped from a token that begins with one
+    but does not end with the matching delimiter (would corrupt the
+    truth-chain promise — better leave a malformed token visible than
+    silently produce something plausible). Empty-after-strip returns
+    ``""`` so the caller can drop the attribute.
     """
     s = token.strip()
-    if len(s) >= 2 and s.startswith("(") and s.endswith(")"):
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        s = s[1:-1].strip()
+    elif len(s) >= 2 and s[0] == "(" and s[-1] == ")":
         s = s[1:-1].strip()
     return s
 
@@ -229,10 +244,10 @@ def _parse_geometry_entry(entry_body: str) -> dict[str, Any]:
     entry: dict[str, Any] = {}
     m_type = _TYPE_KV_RE.search(entry_body)
     if m_type:
-        entry["type"] = _strip_one_paren_layer(m_type.group(1))
+        entry["type"] = _strip_quotes_and_parens(m_type.group(1))
     m_name = _NAME_KV_RE.search(entry_body)
     if m_name:
-        entry["name"] = _strip_one_paren_layer(m_name.group(1))
+        entry["name"] = _strip_quotes_and_parens(m_name.group(1))
     m_file = _FILE_QUOTED_RE.search(entry_body)
     if m_file is None:
         m_file = _FILE_BARE_RE.search(entry_body)
@@ -400,7 +415,7 @@ def _parse_refinement_surfaces(cmc_inner: str) -> dict[str, dict[str, Any]] | No
             surfaces[surf_name] = {"patchInfo": {}}
         else:
             surfaces[surf_name] = {
-                "patchInfo": {"type": _strip_one_paren_layer(m.group(1))}
+                "patchInfo": {"type": _strip_quotes_and_parens(m.group(1))}
             }
     return surfaces
 
@@ -478,6 +493,22 @@ def _parse_addlayerscontrols_keys(body: str) -> dict[str, None] | None:
             i += 1
         if i >= n:
             break
+        # Codex R0 P2 fix (DEC-V61-212 R1): an OpenFOAM directive line
+        # starts with `#` (e.g. `#include "layers.inc"`, `#includeIfPresent`,
+        # `#remove key`, `#inputMode merge`). These are NOT `key value;`
+        # pairs — they have NO terminating semicolon. Before the fix,
+        # the walker treated `include` as a scalar key and consumed the
+        # NEXT real semicolon, silently dropping the first actual setting
+        # after the directive (e.g. `minMedianAxisAngle 90;` — the V52
+        # typo target). Honest fix: when leading char is `#`, skip the
+        # directive's whole line and continue (the module docstring already
+        # advertises includes-are-ignored; this makes it true).
+        if body[i] == "#":
+            nl = body.find("\n", i)
+            if nl == -1:
+                break  # directive runs to EOF; nothing more to scan
+            i = nl + 1
+            continue
         # Read potential key token (alphanumeric / underscore only;
         # OpenFOAM key idiom).
         j = i
