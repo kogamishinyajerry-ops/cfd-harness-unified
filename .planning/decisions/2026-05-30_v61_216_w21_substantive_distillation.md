@@ -5,7 +5,7 @@ status: Accepted
 parent_dec: V61-207
 sibling_decs: V61-215 (W2.0.6 slice extension · data contract this consumes) · V61-209 (P1 RANS-aero V&V loop — citation source for all three rules) · V61-211/212 (P2 W2.0 ruleset infrastructure) · V61-213/214 (DRAFT extractors, independent)
 phase: P2 (Blueprint v4) · workstream W2 · increment W2.1
-notion_sync_status: pending (main session will batch sync after Codex APPROVE)
+notion_sync_status: synced 2026-05-30 (https://www.notion.so/36fc68942bed8162801cd872e7126ce1) · commit 12be0c0 · Codex CRS R0 APPROVE_WITH_COMMENTS R0+R1 atomic
 autonomous_governance: false
 confidence: high
 date: 2026-05-30
