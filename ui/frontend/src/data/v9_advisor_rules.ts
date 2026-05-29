@@ -44,6 +44,14 @@ const corpus = rulesCorpus as JsonCorpus;
 
 export const V9_RULESET_VERSION = corpus.version;
 
+// NASA-convention reference_comparison tolerance per DEC-V61-209
+// ADDENDUM 4 (lines 304-339) — mirrored verbatim in
+// `flat_plate_cf.py::station_rel` gate (`station_rel <= tolerance`).
+// Used by BOTH R10 (station-pass precondition) and R12 (PASS/FAIL XOR
+// boundary) so the literal cannot drift between the two rules.
+// Per Codex CRS R0 W2.1 R1 fix.
+const NASA_TOL_PCT = 10.0;
+
 function recentResiduals(
   slice: RunArtifactSlice,
   quantity: string,
@@ -195,6 +203,120 @@ const PREDICATES_BY_ID: Record<string, PredicateFn> = {
     if (recent[recent.length - 1] <= 1.0) return null;
     return {
       matched_at: `iter_${(slice.convergence_stats?.final_iter ?? recent.length).toString()}_p_divergence`,
+    };
+  },
+
+  // W2.1 · DEC-V61-209 ADDENDUM 5 #2 distillation (DEC-V61-216).
+  //
+  // R10: HONEST KNOWN KNOWN. Fires only when the scalar gold-delta drift
+  // (R4 amplitude floor crossed) is fully explained by the cataloged
+  // near-LE OpenFOAM-kΩSST-vs-CFL3D formulation discrepancy:
+  //   (1) gold_delta.max_abs_pct > 5%
+  //   (2) developed_region_gold_delta.n_failures === 0
+  //   (3) integrated_drag_pct.within_tolerance === true
+  //   (4) reference_comparison_band_summary.n_near_le_deviations > 0
+  //   (5) reference_comparison_band_summary.x_floor_m != null
+  //
+  // Honest None handling (DEC-V61-213/214/215 R1 carry-forward): any
+  // required source field missing/null → return null. NEVER equate
+  // null with 0, false, or empty.
+  //
+  // Inline accessor pattern (DEC-V61-215 R1 carry-forward / W9 helper
+  // early-return guard): read each nested field directly instead of
+  // routing through a helper that could short-circuit on a truthy
+  // check (e.g. a helper returning [] when the array is empty would
+  // mask a populated-but-empty case). Mirrors Python
+  // _pred_known_deviation_pattern_near_le exactly.
+  KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10: (slice) => {
+    const gd = slice.gold_delta;
+    const dr = slice.developed_region_gold_delta;
+    const idp = slice.integrated_drag_pct;
+    const rcs = slice.reference_comparison_band_summary;
+    if (gd == null || dr == null || idp == null || rcs == null) return null;
+
+    if (gd.max_abs_pct == null || gd.max_abs_pct <= 5.0) return null;
+    if (dr.n_failures !== 0) return null;
+    // Codex CRS R0 P2 R1 fix: NASA dual-metric gate is a paired
+    // PASS/PASS contract — both integrated AND station must clear the
+    // NASA_TOL_PCT=10.0 tolerance (inclusive boundary, matches
+    // flat_plate_cf.py `station_rel <= tolerance`). Mirrors Python
+    // `_pred_known_deviation_pattern_near_le`.
+    if (idp.within_tolerance !== true) return null;
+    if (idp.station_pct == null) return null;
+    if (idp.station_pct > NASA_TOL_PCT) return null;
+    if (rcs.n_near_le_deviations <= 0) return null;
+    if (rcs.x_floor_m == null) return null;
+
+    const n = rcs.n_near_le_deviations;
+    const worst = rcs.worst_near_le_pct != null ? rcs.worst_near_le_pct : 0.0;
+    return {
+      matched_at: `near_le_known_dev_n${n}_worst${worst.toFixed(2)}pct`,
+    };
+  },
+
+  // W2.1 · DEC-V61-209 ADDENDUM 5 #1 distillation (DEC-V61-216).
+  //
+  // R11: developed-region per-point FAILURE is qualitatively different
+  // from scalar amplitude drift (R4). ADDENDUM 5 added
+  // developed_region_min_m = 0.1 m as a THIRD-PASS condition because
+  // integral-drag + a single verification station cannot reject a
+  // curve whose +/- area errors cancel in the integral AND happens to
+  // match at the one station.
+  //
+  // Firing predicate (mirrors Python _pred_developed_region_shape_mismatch):
+  //   (1) developed_region_gold_delta is not null
+  //   (2) n_failures > 0
+  //   (3) max_abs_pct > 5.0  (discriminator floor matches R4 scalar)
+  //
+  // Polarity-paired with R10: when R10 short-circuits at
+  // `n_failures !== 0`, R11 picks up the same slice.
+  //
+  // Inline accessor pattern — read fields directly, no helper.
+  DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11: (slice) => {
+    const dr = slice.developed_region_gold_delta;
+    if (dr == null) return null;
+    if (dr.n_failures <= 0) return null;
+    if (dr.max_abs_pct == null || dr.max_abs_pct <= 5.0) return null;
+    return {
+      matched_at:
+        `developed_region_failures_${dr.n_failures}of${dr.n_points}_` +
+        `max${dr.max_abs_pct.toFixed(2)}pct`,
+    };
+  },
+
+  // W2.1 · DEC-V61-209 ADDENDUM 4 distillation (DEC-V61-216).
+  //
+  // R12: NASA-convention dual-metric XOR. When integrated-Cf drag and
+  // Cf@x=0.97008 station DISAGREE on PASS/FAIL at the same 10%
+  // tolerance, the divergence itself is a citable finding pattern —
+  // typically a post-processing / integration-pipeline bug rather
+  // than a CFD issue (DEC-V61-209 lines 226-231: stale time-dir →
+  // station-right, integration-wrong).
+  //
+  // Predicate is strict PASS/FAIL XOR at NASA_TOL_PCT=10.0. The same
+  // literal is mirrored in Python (no config-file indirection;
+  // cross-language parity by construction).
+  //
+  // Inline accessor pattern — read fields directly, no helper.
+  INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12: (slice) => {
+    const idp = slice.integrated_drag_pct;
+    if (idp == null) return null;
+    if (idp.station_pct == null) return null;
+
+    // Codex CRS R0 P3 R1 fix: NASA gate is `<=` not `<` (matches
+    // flat_plate_cf.py `station_rel <= tolerance`). A slice with
+    // station_pct == 10.0 is IN tolerance (PASSES). Module-level
+    // NASA_TOL_PCT shared with R10 so the literal cannot drift.
+    const integratedPasses = Boolean(idp.within_tolerance);
+    const stationPasses = idp.station_pct <= NASA_TOL_PCT;
+
+    // XOR — exactly one metric passes.
+    if (integratedPasses === stationPasses) return null;
+
+    return {
+      matched_at:
+        `integrated_drag_${idp.pct.toFixed(2)}pct_` +
+        `vs_station_${idp.station_pct.toFixed(2)}pct`,
     };
   },
 };

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re as _re_truthchain  # aliased to avoid shadowing inside test functions that locally `import re`
 from pathlib import Path
 from typing import List
 
@@ -29,8 +30,6 @@ from ui.backend.services.v9_advisor import (
     ForcesEntry,
     GoldDelta,
     IntegratedDragPct,
-    MatchedCommentary,
-    MatchSite,
     ReferenceBandSummary,
     RunArtifactSlice,
     V9_ADVISOR_RULES,
@@ -125,9 +124,6 @@ class TestRulesetShape:
 # suite catching it. These are SCHEMA invariants on the JSON SSOT, not new
 # behavioral checks — they cost nothing at runtime.
 # ---------------------------------------------------------------------------
-
-import re as _re_truthchain  # local alias to avoid clobbering test-module re imports
-
 
 class TestRulesetTruthChain:
     # Recognized citation markers (any ONE per provenance string is sufficient).
@@ -698,15 +694,31 @@ class TestW2_0_6_SliceExtensionConstruction:
 
 
 class TestW2_0_6_NoRegressionOnExistingRules:
-    """The new fields are INERT — populating them must not co-fire R1–R9
-    on the labeled ruleset behavioral evals. This catches a future rule
-    author who keys on the wrong field name."""
+    """The new fields do not co-fire R1–R9 on the labeled ruleset
+    behavioral evals — populating them adds at most the W2.1 R10/R11/R12
+    advisories that read those fields, never spuriously triggers an
+    R1–R9 predicate.
+
+    W2.1 update (DEC-V61-216): once R10/R11/R12 land, augmenting a
+    slice with the three new fields may legitimately add R10 (canonical
+    demoted-near-LE pattern), R11 (developed-region shape mismatch),
+    or R12 (NASA dual-metric XOR). The contract enforced here is:
+    augmenting the slice must NOT change which R1–R9 ids fire; the
+    delta is strictly a subset of {R10, R11, R12}.
+    """
+
+    R10_R11_R12_IDS = frozenset({
+        "KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10",
+        "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11",
+        "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12",
+    })
 
     def test_existing_r1_through_r9_unchanged_with_new_fields_populated(self):
-        """Re-run a battery of slices mirroring the
-        TestRulesetBehavioralEval EVAL_CASES (single-rule and co-firing)
-        with the three new fields populated; fired rule sets must remain
-        EXACTLY what the unwidened slices would have fired."""
+        """W2.1 update of the W2.0.6 INERT contract: augmenting a slice
+        with the canonical demoted-near-LE-fingerprint regional fields
+        may add R10/R11/R12 (W2.1 rules consume them) but MUST NOT
+        change which R1–R9 ids fire.
+        """
         dev = DevelopedRegionGoldDelta(
             max_abs_pct=0.95, n_failures=0, n_points=50, min_x_m=0.1
         )
@@ -725,31 +737,61 @@ class TestW2_0_6_NoRegressionOnExistingRules:
                 }
             )
 
-        # Healthy run: R8 only.
-        clean = _converged_healthy()
-        ids_clean = {m.rule_id for m in match_advisor_patterns(_augment(clean), V9_ADVISOR_RULES)}
-        assert ids_clean == {m.rule_id for m in match_advisor_patterns(clean, V9_ADVISOR_RULES)}
+        def _r1_through_r9(ids: set) -> set:
+            return ids - self.R10_R11_R12_IDS
 
-        # Off-gold but converged → R4 + R8.
+        # Healthy run: R8 fires; new fields are the clean-pattern shape
+        # (n_failures=0, within_tolerance=True, integrated/station agree)
+        # so R10/R11/R12 must NOT fire on a clean low-delta slice.
+        clean = _converged_healthy()
+        ids_clean_base = {m.rule_id for m in match_advisor_patterns(clean, V9_ADVISOR_RULES)}
+        ids_clean = {m.rule_id for m in match_advisor_patterns(_augment(clean), V9_ADVISOR_RULES)}
+        # R1–R9 set unchanged.
+        assert _r1_through_r9(ids_clean) == _r1_through_r9(ids_clean_base)
+        # R10/R11/R12 don't fire on clean low-delta slice (gold_delta=0.75 ≤ 5%).
+        assert not (ids_clean & self.R10_R11_R12_IDS), (
+            "Clean low-delta slice must not trip R10/R11/R12 even with "
+            "regional fields populated"
+        )
+
+        # Off-gold but converged → R4 + R8 baseline; augmented carries the
+        # canonical demoted-near-LE fingerprint so R10 LEGITIMATELY fires
+        # here (W2.1 contract). R11 still does not (n_failures=0) and R12
+        # still does not (within_tolerance=True AND station_pct=2.1<10 →
+        # both metrics agree on PASS).
         off_gold = RunArtifactSlice(
             **{**_converged_healthy().__dict__, "gold_delta": GoldDelta(max_abs_pct=8.2)}
         )
+        ids_off_base = {m.rule_id for m in match_advisor_patterns(off_gold, V9_ADVISOR_RULES)}
         ids_off = {m.rule_id for m in match_advisor_patterns(_augment(off_gold), V9_ADVISOR_RULES)}
-        assert ids_off == {m.rule_id for m in match_advisor_patterns(off_gold, V9_ADVISOR_RULES)}
+        # R1–R9 set unchanged.
+        assert _r1_through_r9(ids_off) == _r1_through_r9(ids_off_base)
+        # R4 + R8 still in both.
         assert "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4" in ids_off
         assert "HEALTHY_CONVERGENCE_V9_R8" in ids_off
+        # R10 legitimately fires on the augmented off_gold (W2.1 pattern).
+        assert "KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10" in ids_off
+        # R11 + R12 must NOT fire on this canonical clean-developed-region pattern.
+        assert "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11" not in ids_off
+        assert "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12" not in ids_off
 
-        # Crashed solver → R3 only.
+        # Crashed solver → R3 baseline; augmented gold_delta still ≤ 5%
+        # (from _converged_healthy default 0.75) so R10 short-circuits at
+        # the amplitude floor. R11/R12 also gated off.
         crashed = RunArtifactSlice(
             **{**_converged_healthy().__dict__, "success": False, "exit_code": 1}
         )
+        ids_crashed_base = {
+            m.rule_id for m in match_advisor_patterns(crashed, V9_ADVISOR_RULES)
+        }
         ids_crashed = {
             m.rule_id for m in match_advisor_patterns(_augment(crashed), V9_ADVISOR_RULES)
         }
-        assert ids_crashed == {
-            m.rule_id for m in match_advisor_patterns(crashed, V9_ADVISOR_RULES)
-        }
+        # R1–R9 set unchanged.
+        assert _r1_through_r9(ids_crashed) == _r1_through_r9(ids_crashed_base)
         assert "RUN_FAILED_NONZERO_EXIT_V9_R3" in ids_crashed
+        # No W2.1 rule fires on crashed slice (gold_delta=0.75 < 5% short-circuits R10).
+        assert not (ids_crashed & self.R10_R11_R12_IDS)
 
     def test_empty_artifact_still_no_crash_with_extension(self):
         """V90 RS#34 graceful-empty contract: empty slice (all new fields

@@ -53,7 +53,25 @@
       "id": "RESIDUAL_DIVERGENCE_V9_R9",
       "provenance": "docs/openfoam_corpus/industrial_solver_findings_v_series.md · V3 (kOmegaSST ω blowup) · V6 (mass-flow zero-IC divergence) · V7 (compressible ρ negative) · Ferziger & Perić §8.7",
       "severity": "advise"
+    },
+    {
+      "commentary": "Scalar gold-delta breaches the 5% R4 floor, BUT the developed region (x ≥ developed_region_min_m = 0.1 m, an order of magnitude past NASA TMR's LE exclusion x<0.01) carries ZERO per-point failures AND the NASA-convention dual-metric gate (integrated-Cf drag + Cf@verification_station) is within tolerance. The remaining high pointwise rel_error lives in the near-LE band cataloged as `known_deviations` — the OpenFOAM-kΩSST-vs-CFL3D formulation discrepancy that survived correct Re + NASA topology + freestream + y+~1 + 4× grid refinement (DEC-V61-209 cycle-3g). This is a HONEST KNOWN KNOWN, not a fresh anomaly: scalar max_abs_pct is poisoned by near-LE noise the canonical NASA comparison was never meant to score. Treat as the demoted near-LE deviation pattern; do not re-litigate the scalar drift. Cross-check DEC-V61-209 ADDENDUM 5 #2 and the `reference_comparison.csv known_deviations` block. Reference: DEC-V61-209 ADDENDUM 5 + Roache, V&V — regional vs scalar validation.",
+      "id": "KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10",
+      "provenance": ".planning/decisions/2026-05-27_v61_209_flat_plate_vv_de_fake.md · ADDENDUM 5 #2 (lines 380-404, near-LE known_deviations scope) · ADDENDUM 3 cycle-3g (lines 266-275, OpenFOAM-kΩSST-vs-CFL3D formulation discrepancy) · Roache · V&V §regional vs scalar metrics",
+      "severity": "info"
+    },
+    {
+      "commentary": "The developed region (x ≥ developed_region_min_m = 0.1 m, past NASA TMR's LE exclusion x<0.01) carries one or more per-point failures with max rel_error > 5%. This is qualitatively DIFFERENT from scalar amplitude drift (R4): a per-point shape mismatch past the LE-exclusion floor points to a solver-side bug — wrong turbulence model variant, BC inconsistency producing a localized spike, or post-processing stride bug — NOT discretization or known near-LE formulation discrepancy. DEC-V61-209 ADDENDUM 5 #1 added the developed-region guard because integral-drag + a single verification station cannot reject a curve whose +/- area errors cancel in the integral AND happens to match at the one station. An out-of-tolerance point at x ≥ 0.1 m is a real FAIL, not a `known_deviation` laundering candidate. Cross-check DEC-V61-209 ADDENDUM 5 and `trust_report.json reference_comparison.developed_region.failures`. Reference: Versteeg & Malalasekera §10 on regional vs scalar V&V.",
+      "id": "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11",
+      "provenance": ".planning/decisions/2026-05-27_v61_209_flat_plate_vv_de_fake.md · ADDENDUM 5 #1 (lines 370-385, developed_region_min_m third-pass condition) + lines 397-404 (PASS profile) · Versteeg & Malalasekera · An Introduction to CFD · §10 regional V&V",
+      "severity": "warn"
+    },
+    {
+      "commentary": "The two NASA-canonical metrics DISAGREE on PASS/FAIL: integrated-Cf drag rel_error and Cf@x=0.97008 station rel_error are scored against the same 10% tolerance, but one crosses the boundary while the other does not. Because the same run is graded by two NASA-corroborating methods, divergence itself is a citable finding — typically a post-processing / integration-pipeline bug, not a CFD issue. DEC-V61-209 lines 226-231 document the canonical incident: `cfdtrust run` did NOT clean stale time directories before solving, so the integration arithmetic ran on the wrong field while the station readout happened to be right. Advisory: trust the integrated number, distrust the station post-processing (or vice versa); inspect the case dir for stale time directories, mismatched wall face counts, or a verification_station off the extracted-field grid. Cross-check DEC-V61-209 ADDENDUM 4 + lines 226-231. Reference: Ferziger & Perić §13.6 on integrated vs pointwise V&V.",
+      "id": "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12",
+      "provenance": ".planning/decisions/2026-05-27_v61_209_flat_plate_vv_de_fake.md · ADDENDUM 4 (lines 304-339, NASA-convention dual-metric gate) + lines 226-231 (stale time-dir integration-pipeline bug incident) · Ferziger & Perić §13.6 integrated vs pointwise V&V",
+      "severity": "warn"
     }
   ],
-  "version": "v9.1.0"
+  "version": "v9.2.1"
 }
