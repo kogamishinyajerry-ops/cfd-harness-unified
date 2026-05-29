@@ -4,7 +4,7 @@ title: P1 cycle-2 — flat-plate V&V de-fake (remove Spalding-fabrication; real 
 status: Accepted
 parent_dec: DEC-V61-207 (Blueprint v4 P1) · DEC-V61-208 (Chief Engineer / L2)
 phase: Blueprint v4 · P1 · cycle-2 (RANS-aero vertical V&V loop)
-notion_sync_status: pending (Accepted 2026-05-27 — sync at session-end)
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed81df9cc7f689fb6f3455)
 autonomous_governance: true
 confidence: high
 date: 2026-05-27

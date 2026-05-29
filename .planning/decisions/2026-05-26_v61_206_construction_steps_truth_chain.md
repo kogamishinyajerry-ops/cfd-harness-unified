@@ -4,7 +4,7 @@ title: M5.5 charter — truth-chain extension to the construction steps (de-fake
 status: Accepted
 parent_dec: DEC-V61-205-M5-POST-PROCESSING-DEPTH (M5 Post truth-chain de-fake · COMPLETE)
 phase: M5.5 cycle 1 (charter + surface-scan · continuation session 2026-05-26)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed8182aab6f16b0eb3aa99)
 autonomous_governance: false
 confidence: high
 date: 2026-05-26

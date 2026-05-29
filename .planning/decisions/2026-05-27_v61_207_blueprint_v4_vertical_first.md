@@ -4,7 +4,7 @@ title: Blueprint v4 charter — vertical-first (incompressible RANS aero) + runn
 status: Accepted
 parent_dec: DEC-V61-130 (AI-advisor pivot) · evolves blueprint_v3_2026-05-07 · corrects DEC-V61-198 coverage accounting
 phase: Blueprint v4 (product-blueprint layer · strategy selection)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed81d3a30dc3f37b0fb8df)
 autonomous_governance: false
 confidence: high
 date: 2026-05-27

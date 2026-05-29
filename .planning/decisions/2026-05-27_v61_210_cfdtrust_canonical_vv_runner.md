@@ -4,7 +4,7 @@ title: cfdtrust is the canonical V&V audit runner — P1 flat-plate V&V-loop del
 status: Accepted
 parent_dec: DEC-V61-207 (Blueprint v4 P1) · DEC-V61-208 (Chief Engineer / L2) · DEC-V61-209 (flat-plate V&V de-fake)
 phase: Blueprint v4 · P1 · cycle-4 (scope decision)
-notion_sync_status: pending (Accepted 2026-05-27 — sync at session-end)
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed8122b11ed741f104660c)
 autonomous_governance: true
 confidence: high
 date: 2026-05-27

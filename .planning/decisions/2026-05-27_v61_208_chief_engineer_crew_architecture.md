@@ -4,7 +4,7 @@ title: Chief Engineer (商业-CAE 总工程师) agent + crew architecture v2 + g
 status: Accepted
 parent_dec: DEC-V61-207 (Blueprint v4 charter — the arc this role drives) · DEC-V61-133 (v2.3 governance simplification — anti-over-engineering constraint) · DEC-V61-130 (AI-advisor pivot — the product invariant this role must NOT relax)
 phase: Governance-architecture charter (crew org + autonomy model)
-notion_sync_status: pending
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed817b9413cf3656a9c7bf)
 autonomous_governance: false
 confidence: high
 date: 2026-05-27

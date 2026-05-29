@@ -4,7 +4,7 @@ title: shm_dict extractor (case dir → Mapping[str, Any]) — sub-DEC
 status: Accepted
 parent_dec: V61-211
 phase: P2 (Blueprint v4)
-notion_sync_status: pending (sync at session-end batch)
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed8169813be0e5c9076bf7)
 ---
 
 # DEC-V61-212 · snappyHexMeshDict extractor for case-behavioral eval

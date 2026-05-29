@@ -4,7 +4,7 @@ title: Solver-block extractor (case dir → SolverBlockSnapshot) — sub-DEC
 status: Accepted
 parent_dec: V61-207
 phase: P2 (Blueprint v4)
-notion_sync_status: pending (Accepted at landing — session-end sync)
+notion_sync_status: synced 2026-05-29 (https://www.notion.so/36fc68942bed81a6a0e5d0554597c919)
 ---
 
 # DEC-V61-211 · Solver-block extractor for case-behavioral eval (Stage-2 2b extension)
