@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-05-18T11:14:48",
-  "head_sha": "0de5e89",
+  "generated_at": "2026-05-27T10:39:07",
+  "head_sha": "bde7cae",
   "branch_name": "main",
-  "canonical_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard.html",
-  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard_20260518_111448.html",
-  "manifest_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/contract_status_dashboard_manifest.json",
+  "canonical_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/contract_status_dashboard.html",
+  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/contract_status_dashboard_20260527_103907.html",
+  "manifest_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/contract_status_dashboard_manifest.json",
   "case_count": 10,
   "class_counts": {
     "SATISFIED": 5,
@@ -17,5 +17,5 @@
     "Q-1:.planning/external_gate_queue.md#q-1",
     "Q-2:.planning/external_gate_queue.md#q-2"
   ],
-  "historical_snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/2026-04-18_contract_status_dashboard.md"
+  "historical_snapshot_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/2026-04-18_contract_status_dashboard.md"
 }

@@ -1,11 +1,11 @@
 {
-  "generated_at": "2026-05-18T11:14:50",
-  "head_sha": "0de5e89",
+  "generated_at": "2026-05-27T10:39:10",
+  "head_sha": "bde7cae",
   "branch_name": "main",
-  "canonical_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report.html",
-  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report_20260518_111450.html",
-  "manifest_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/visual_acceptance_report_manifest.json",
-  "package_path": "/Users/Zhuanz/Desktop/cfd-harness-unified/reports/deep_acceptance/20260518_111450_visual_acceptance_package.md",
+  "canonical_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/visual_acceptance_report.html",
+  "snapshot_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/visual_acceptance_report_20260527_103910.html",
+  "manifest_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/visual_acceptance_report_manifest.json",
+  "package_path": "/Users/Zhuanz/Desktop/cfd-audit-merge/reports/deep_acceptance/20260527_103910_visual_acceptance_package.md",
   "case_count": 5,
   "image_panel_count": 15,
   "open_gate_refs": [

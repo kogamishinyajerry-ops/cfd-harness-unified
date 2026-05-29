@@ -1,7 +1,7 @@
 <!doctype html>
 <html><head><meta charset='utf-8'><title>AI-CFD-V2 Cockpit</title><style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:920px;margin:24px auto;padding:0 16px;color:#111}pre{white-space:pre-wrap;background:#0b1020;color:#dbe6ff;padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.5}h1{font-size:22px}.badge{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:13px;margin-left:8px}.green{background:#d2f5dd;color:#0a6b2c}.amber{background:#fff1c2;color:#7a5300}.red{background:#ffd6d6;color:#8a0d0d}</style></head><body><h1>AI-CFD-V2 Cockpit<span class='badge amber'>AMBER</span></h1><pre># AI-CFD-V2 — Project Cockpit
 
-&gt; Generated: `2026-05-24T06:06:17Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+&gt; Generated: `2026-05-29T08:35:17Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
 &gt; All sections below are derived from repo state. No hand-written narrative lives here.
 
 ## Overall Status: 🟡 AMBER
@@ -15,7 +15,7 @@
 
 | case_id | overall | solver | validation | path |
 |---|---|---|---|---|
-| `flat_plate_rans_sst` | 🟡 MOCKED | mocked | not_validated | `cases/flat_plate_rans_sst/artifacts/trust_report.json` |
+| `flat_plate_rans_sst` | 🟡 MOCKED | real | unknown | `cases/flat_plate_rans_sst/artifacts/trust_report.json` |
 | `channel_flow_rans_sst` | 🟢 PASS | real | validated | `cases/channel_flow_rans_sst/artifacts/trust_report.json` |
 | `backward_facing_step` | 🟡 MOCKED | mocked | not_validated | `cases/backward_facing_step/artifacts/trust_report.json` |
 
@@ -61,8 +61,8 @@
 
 - PASS events without evidence: **0** (must be 0)
 - PASS events with phantom evidence (paths do not resolve): **0** (must be 0)
-- mocked solver reports: 2
-- real solver reports:   1
+- mocked solver reports: 1
+- real solver reports:   2
 - agents declared: 13
 - open questions: 3 surfaced (top 3)
 

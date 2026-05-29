@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-24T06:06:17Z",
+  "generated_at": "2026-05-29T08:35:17Z",
   "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
   "git": {
     "branch": "main",
-    "head": "22b29084b55f34fb10d57cfd723ddf20db689819",
+    "head": "46b4ada1015d01840b97c4ffd3f6632804b6bf41",
     "dirty": true
   },
   "overall_status": "AMBER",
@@ -411,8 +411,8 @@
       "case_id": "flat_plate_rans_sst",
       "path": "cases/flat_plate_rans_sst/artifacts/trust_report.json",
       "overall_status": "MOCKED",
-      "solver_execution": "mocked",
-      "validation_status": "not_validated"
+      "solver_execution": "real",
+      "validation_status": "unknown"
     },
     {
       "case_id": "channel_flow_rans_sst",
@@ -431,15 +431,15 @@
   ],
   "metrics": {
     "schema_version": 1,
-    "generated_at": "2026-05-24T06:06:17Z",
+    "generated_at": "2026-05-29T08:35:17Z",
     "total_tasks": 10,
     "completed_tasks": 10,
     "blocked_tasks": 3,
     "tests_passed": 0,
     "tests_failed": 0,
     "trust_reports_found": 3,
-    "mocked_solver_reports": 2,
-    "real_solver_reports": 1,
+    "mocked_solver_reports": 1,
+    "real_solver_reports": 2,
     "notes": "Baseline metrics. Populated by tools/cwos_status.py.",
     "phantom_evidence_pass_events": 0
   }

@@ -1,6 +1,6 @@
 # AI-CFD-V2 — Project Cockpit
 
-> Generated: `2026-05-24T06:06:17Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
+> Generated: `2026-05-29T08:35:17Z`  |  Phase: **Phase 1 — Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)**
 > All sections below are derived from repo state. No hand-written narrative lives here.
 
 ## Overall Status: 🟡 AMBER
@@ -14,7 +14,7 @@
 
 | case_id | overall | solver | validation | path |
 |---|---|---|---|---|
-| `flat_plate_rans_sst` | 🟡 MOCKED | mocked | not_validated | `cases/flat_plate_rans_sst/artifacts/trust_report.json` |
+| `flat_plate_rans_sst` | 🟡 MOCKED | real | unknown | `cases/flat_plate_rans_sst/artifacts/trust_report.json` |
 | `channel_flow_rans_sst` | 🟢 PASS | real | validated | `cases/channel_flow_rans_sst/artifacts/trust_report.json` |
 | `backward_facing_step` | 🟡 MOCKED | mocked | not_validated | `cases/backward_facing_step/artifacts/trust_report.json` |
 
@@ -60,8 +60,8 @@
 
 - PASS events without evidence: **0** (must be 0)
 - PASS events with phantom evidence (paths do not resolve): **0** (must be 0)
-- mocked solver reports: 2
-- real solver reports:   1
+- mocked solver reports: 1
+- real solver reports:   2
 - agents declared: 13
 - open questions: 3 surfaced (top 3)
 
