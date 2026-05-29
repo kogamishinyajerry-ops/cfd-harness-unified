@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-29T08:35:17Z",
+  "generated_at": "2026-05-29T16:37:44Z",
   "repo_root": "/Users/Zhuanz/Desktop/cfd-audit-merge/ui/backend/audit",
   "git": {
     "branch": "main",
-    "head": "46b4ada1015d01840b97c4ffd3f6632804b6bf41",
-    "dirty": true
+    "head": "3673a60ac3c2a6a5ec9449a75f54ebf2a192ba04",
+    "dirty": false
   },
   "overall_status": "AMBER",
   "phase": "Phase 1 \u2014 Trust Harness + Three Validated Canonical Cases (M9.2 channel converged)",
@@ -431,7 +431,7 @@
   ],
   "metrics": {
     "schema_version": 1,
-    "generated_at": "2026-05-29T08:35:17Z",
+    "generated_at": "2026-05-29T16:37:44Z",
     "total_tasks": 10,
     "completed_tasks": 10,
     "blocked_tasks": 3,
