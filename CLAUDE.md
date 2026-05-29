@@ -51,7 +51,8 @@ Schema-invalid → wrapper exits non-zero → review not triggered → fix schem
 
 ## Counter rules (per DEC-V61-087 §5 + RETRO-V61-001)
 
-- `autonomous_governance_counter_v61` continues to be the RETRO-V61-001 telemetry counter
+- `autonomous_governance_counter_v61` continues to be the RETRO-V61-001 telemetry counter (pure telemetry · no STOP threshold; arc-size audit metric only)
+- 每个 `autonomous_governance: true` 的 DEC **+1**；`autonomous_governance: false` 的 DEC（external gate）**不计入**，但 retro counter 表中标 `N/A` 并列出以呈现完整决策弧
 - Kogami review artifacts are **NOT** counted (advisory chain · counter +0)
 - Kogami CHANGES_REQUIRED on a DEC blocks the DEC from advancing to Status=Accepted
 - Kogami INCONCLUSIVE does NOT block but requires entry in next RETRO; 3+ INCONCLUSIVE within counter ≤5 triggers mini-retro
@@ -139,19 +140,105 @@ RETRO follow-up on close-inline-vs-strict-text-validity convention.
 
 ## Inherited rules from `~/CLAUDE.md`
 
-User-level CLAUDE.md governs (v2.3 baseline · 2026-05-07 · DEC-V61-133):
-- Model routing v2.3 (Opus 4.7 主驱动 + Codex 4-model 双引擎 · Kogami opt-in)
+User-level CLAUDE.md is the cross-project baseline. Genuinely inherited (lives in global, this project just follows):
+- Model routing (Opus 4.7 主驱动 + Codex 4-model 双引擎)
 - Subagent 优先原则 (任务 push 主 context ≥35% 才考虑外包 · 1M ctx 校准)
-- Codex 调用 1-sync-trigger (auth / signing / 安全边界) + 2-async-post-merge (byte-repro / E2E ≥3 fail)
-- Codex review round cap = 3
-- DEC scope-driven (charter / 跨 ≥3 模块 / governance-rule-change 才写完整 DEC)
-- Cadence floor THRESHOLD 30
-- Surface-scan trailer (V61-088) optional
-- Counter pure telemetry
-- Notion session-end batch sync
-- Codex relay (86gs xhigh primary, CRS high fallback)
+- **Codex 协作守则** (跨项目通用 · global "Codex 协作守则" 节)：risk-tier 1-sync (auth/signing/安全边界) + 2-async-post-merge (byte-repro / 批量 ≥3 fail) · round cap = 3 · confidence 三档自标 · verbatim exception · "Codex 调用是 Claude Code 的责任"
+- Codex relay (86gs xhigh primary, CRS high fallback · 命令样板 + backend 表在 global)
+- 上下文压缩工作流 · GSD scope-driven 分流 · /goal 通用定位 · Anthropic Agent Canon
 
-This project CLAUDE.md previously added Kogami strategic-layer governance per V61-087.
-Per V133 (2026-05-07), Kogami is now **opt-in only** (user explicitly invokes); the
-manual invocation path remains operational with all contract files (P-1..P-5)
-preserved and Q1 canary verification intact.
+**Project-specific (defined HERE, NOT inherited)** — these were de-cfd-ified out of global on 2026-05-29:
+- DEC scope-driven 完整 DEC 触发 (charter / 跨 ≥3 共享代码路径 / governance-rule-change) · sub-DEC 6-field 最小 schema
+- Cadence floor THRESHOLD 30 · Surface-scan trailer (V61-088, optional) · Pre-implementation surface scan (V61-088)
+- Counter telemetry rules (above) · retrospective cadence · external-gate handling
+- Notion 深度同步规则 + 指挥中枢一致性 (below) · Kogami three-layer governance (above)
+- /goal CFD-specific Patterns A-D (below)
+
+Kogami strategic layer (per V61-087) is **opt-in only** post-V133 (user explicitly invokes); manual
+invocation path operational with all contract files (P-1..P-5) preserved and Q1 canary verification intact.
+
+---
+
+## Project-specific governance detail
+
+> De-cfd-ified out of global `~/CLAUDE.md` on 2026-05-29 — these rules are cfd-harness-unified-only
+> and previously polluted every session. Cross-project rules stay in global (see "Inherited rules" above).
+
+### Notion 深度同步规则（2026-04-21 · 收敛 2026-05-11 仅 Accepted）
+
+本项目用 Notion MCP 作为决策 SSOT。
+
+**同步频率（仅 Accepted）**：
+- **DEC 批量 sync**：session-end 一次性把本会话新增 / 改动且 **Status=Accepted** 的 DEC 同步到 Notion
+- **不 sync**：retro 文件、spike commits、charter draft、Status=Proposed 但未 Accepted 的 DEC（DEC ID 仅在 Accepted 时占用）
+- **会话结束前**：创建/更新 Session Summary 页（Sessions DB 或 Project 根页下）— 只列已 Accepted 决策
+- **每个 Phase 完成后**：创建 Phase Completion Report 页，链接所有相关 Accepted DEC
+
+**同步 checklist（session 结束 / phase 关闭时跑一遍）**：
+1. `.planning/decisions/` 里每个 DEC 的 frontmatter `notion_sync_status` 是否都是 `synced <date> (<url>)`？
+2. STATE.md 最新 timestamp 是否反映最新工作？
+3. `external_gate_queue.md` 标 CLOSED 的项目是否都 strike-through？
+4. `reports/codex_tool_reports/` 新增审查报告是否已链接到对应 DEC frontmatter `codex_tool_report_path`？
+5. Notion Decisions DB 是否有任何 Status=Proposed 的 DEC（需跟进）？
+
+**与 git 关系**：Notion = 人可读决策门户；git = 可验证真值。冲突时以 git 为准，修 Notion。
+
+### Notion 指挥中枢模型分工一致性（硬性 · 2026-05-03）
+
+全局 `~/CLAUDE.md` 顶部 `模型分工` 节 = SSOT。本项目 Notion 指挥中枢里任何"模型分工 / 角色定义"页面只是镜像，必须与全局节一致。检测时机（拉到含模型分工字段的 Notion 内容 / 用户提及指挥中枢 / 调 `notion-sync-cfd-harness` skill / session-end checklist）发现不一致时，用 `notion-update-page` 把 Notion 改写为全局节当前版本 + 页顶标注 `> Synced from local CLAUDE.md on YYYY-MM-DD`，并在主对话告知用户。**绝对禁止反向同步**（Notion 覆盖本地）。唯一例外：用户当前会话显式说"先别动 Notion"。
+
+### v6.1 retrospective cadence + external-gate（RETRO-V61-001）
+
+**Retro 必须落地 `.planning/retrospectives/` 的硬性触发（2 类）**：
+1. 任何 Phase 标记 COMPLETE 时（phase-close retro）
+2. **post-R3 live-run defect** — Codex APPROVE 之后才在 smoke test / live run 发现的 bug。每个 post-R3 defect 写进 RETRO addendum 或 mini-retro，记录：(a) bug 类型（accessor / runtime-emergent）；(b) 为什么 Codex 静态 review 没捕获；(c) 要加进 intake template 的新 risk_flag。
+
+已降级为可选（Opus 自评）：counter ≥ 20 arc-size retro、常规 CHANGES_REQUIRED retro（仅"重复同类型"或"严重盲点"才触发）。
+
+> external-gate DEC 的 counter 处理见上方 "Counter rules" 节。
+
+### /goal CFD-specific Patterns（本项目专用 · 通用 /goal 定位见全局文件）
+
+**Pattern A · phase 执行收口**（最常用 · PLAN.md 在手）：
+```text
+/goal PLAN.md 里每个 Task 同时满足 (a) status: COMPLETED 且 (b) passes: true
+（passes 仅当 E2E smoke / pytest / 手测三选一显式 verify 通过后才设为 true — 防 premature completion）；
+所有 commit 带 confidence:<h/m/l> 标签；pytest -q tests/{phase}/ 全绿；
+scripts/smoke/dogfood_loop.py 至少跑通一遍；
+四问门控（LLM 离线 / artifacts / TrustGate / advisory-only）在对话里逐条 echo 通过；
+或 turn 数 > 25 则停下让我接管。
+```
+
+**Pattern B · Codex review 闭环（round cap=3 自动落地）**：
+```text
+/goal Codex review 状态 = APPROVE，或 round 数达到 3
+（达到 3 轮则把剩余 findings 写入 .planning/retrospectives/codex_round3_overflow_{phase}.md 并停下等我裁决）。
+每轮 = codex-review-relay --base origin/main 完整输出粘入对话 → fix commit → 重新 push → 下一轮 review。
+```
+
+**Pattern C · spike-class 单 commit 闭环**：
+```text
+/goal 改动 ≤30 LOC（git diff --stat 证明）；新增 1 个测试且通过；commit message 含 confidence:<h/m/l>；
+不触发 DEC / Codex / Kogami / Notion sync（这些路径必须 echo "skipped: spike-class" 入对话）；
+或 turn 数 > 5 则停下检查是否其实是 sub-DEC 误判。
+```
+
+**Pattern D · V-series 工件提取**：
+```text
+/goal V20+ 工件全部 LANDED 到 .planning/intel/v_series/：（清单 1..N）。
+每个工件 = codebase 路径引用 + ≥1 case 证据片段 + 跨 case 复用建议；V-series index 更新；
+source session RESUME.md 标记 arc CLOSED；或 20 turn 后停下让我审视是否过度抽象。
+```
+
+**CFD-specific /goal 注意点**：
+1. **OpenFOAM solver 分钟级**：评估器每 turn 触发，turn 数会被收敛过程吃掉。**总在条件里写 turn cap**。
+2. **评估器只看对话**：让 Claude 把 `checkMesh` / `pytest` stdout 粘进 transcript，每 turn 末 echo 进度摘要。
+3. **四问门控不能省**（advisor-not-driver SSOT）：condition 里包含「每个新文件/PR 把四问回答写入 commit body 或 PR description」。
+4. **/goal 不触发 Kogami opt-in**。若命中 charter trigger（≥3 共享代码路径 / governance-rule-change），加 `若命中 charter trigger 立即 /goal clear 并报告`。
+5. **Notion 不能并入 /goal**：仅 sync Status=Accepted 的 DEC，session-end 批量。
+
+### 项目专用子代理（建议沉淀到 `.claude/agents/`）
+
+- **cfd-physics-reviewer**：验证 OpenFOAM 物理/边界条件正确性
+- **notion-sync-worker**：批量把 DEC 文件同步到 Notion Decisions DB
+- **v61-counter-auditor**：检查 v6.1 autonomous_governance counter
