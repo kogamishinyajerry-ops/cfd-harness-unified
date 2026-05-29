@@ -4,7 +4,7 @@ title: STEP-path extractor (case dir → StepArtifacts) — sub-DEC
 status: Accepted
 parent_dec: V61-211
 phase: P2 (Blueprint v4)
-notion_sync_status: not-yet (Accepted pending main-session ratification; sync on next batch per v2.3)
+notion_sync_status: synced 2026-05-30 (https://www.notion.so/36fc68942bed8128837bd617b6a28271) · commit ded415b
 ---
 
 # DEC-V61-214 · STEP-path extractor for case-behavioral eval (Stage-2 2b extension)
