@@ -4,7 +4,7 @@ title: thermo_dict extractor (case dir → Mapping[str, Any]) — sub-DEC
 status: Accepted
 parent_dec: V61-211
 phase: P2 (Blueprint v4)
-notion_sync_status: not synced (sync at session-end per Notion batch convention)
+notion_sync_status: synced 2026-05-30 (https://www.notion.so/36fc68942bed8167a825d46059874a7e)
 ---
 
 # DEC-V61-213 · thermo_dict extractor for case-behavioral eval (Stage-2 2c)
