@@ -21,8 +21,11 @@ import pytest
 
 from ui.backend.services.v9_advisor import (
     ConvergenceStats,
+    DevelopedRegionGoldDelta,
     ForcesEntry,
     GoldDelta,
+    IntegratedDragPct,
+    ReferenceBandSummary,
     RunArtifactSlice,
     V9_ADVISOR_RULES,
     match_advisor_patterns,
@@ -43,6 +46,22 @@ def _hydrate_slice(d: Dict[str, Any]) -> RunArtifactSlice:
     gold_delta = None
     if d.get("gold_delta") is not None:
         gold_delta = GoldDelta(**d["gold_delta"])
+    # W2.0.6 · DEC-V61-209 NASA-convention regional structured fields.
+    # Each field is None when absent OR explicitly null in fixture JSON
+    # (per_point gate cases) — only the nasa_integrated fixture populates
+    # all three. _hydrate_slice pipes them through so a round-trip
+    # dataclasses.asdict(slice) byte-equals the fixture dict.
+    developed_region_gold_delta = None
+    if d.get("developed_region_gold_delta") is not None:
+        developed_region_gold_delta = DevelopedRegionGoldDelta(**d["developed_region_gold_delta"])
+    integrated_drag_pct = None
+    if d.get("integrated_drag_pct") is not None:
+        integrated_drag_pct = IntegratedDragPct(**d["integrated_drag_pct"])
+    reference_comparison_band_summary = None
+    if d.get("reference_comparison_band_summary") is not None:
+        reference_comparison_band_summary = ReferenceBandSummary(
+            **d["reference_comparison_band_summary"]
+        )
     return RunArtifactSlice(
         run_id=d["run_id"],
         case_id=d["case_id"],
@@ -52,6 +71,9 @@ def _hydrate_slice(d: Dict[str, Any]) -> RunArtifactSlice:
         forces=forces,
         convergence_stats=convergence_stats,
         gold_delta=gold_delta,
+        developed_region_gold_delta=developed_region_gold_delta,
+        integrated_drag_pct=integrated_drag_pct,
+        reference_comparison_band_summary=reference_comparison_band_summary,
     )
 
 
@@ -90,3 +112,51 @@ def test_fixture_covers_all_rules():
     assert not missing, (
         f"V91.2 parity fixtures incomplete · missing rules: {sorted(missing)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# W2.0.6 · DEC-V61-209 NASA-convention slice extension parity
+# ---------------------------------------------------------------------------
+
+
+def test_hydrate_slice_pipes_new_fields_through():
+    """W2.0.6: _hydrate_slice must round-trip the three new structured fields
+    through the dataclass constructor — the dec209_known_deviation_pattern
+    fixture exercises the populated path; all three fields' nested dicts
+    must byte-equal the fixture dict via dataclasses.asdict.
+    """
+    fixtures = {fx["name"]: fx for fx in _load_fixtures()}
+    assert "dec209_known_deviation_pattern" in fixtures, (
+        "W2.0.6: dec209_known_deviation_pattern fixture must exist"
+    )
+    fx = fixtures["dec209_known_deviation_pattern"]
+    slice_ = _hydrate_slice(fx["slice"])
+
+    # All three new fields must round-trip cleanly via dataclasses.asdict.
+    assert slice_.developed_region_gold_delta is not None
+    assert slice_.integrated_drag_pct is not None
+    assert slice_.reference_comparison_band_summary is not None
+
+    assert dataclasses.asdict(slice_.developed_region_gold_delta) == (
+        fx["slice"]["developed_region_gold_delta"]
+    )
+    assert dataclasses.asdict(slice_.integrated_drag_pct) == (
+        fx["slice"]["integrated_drag_pct"]
+    )
+    assert dataclasses.asdict(slice_.reference_comparison_band_summary) == (
+        fx["slice"]["reference_comparison_band_summary"]
+    )
+
+
+def test_per_point_fixture_leaves_new_fields_none():
+    """W2.0.6: per_point gate fixture must hydrate to None for all three new
+    fields (graceful scope-out, not partial). Pins the data-shape contract
+    so a future hydration regression that defaulted to {} instead of None
+    would surface here."""
+    fixtures = {fx["name"]: fx for fx in _load_fixtures()}
+    assert "dec209_developed_region_clean_per_point_mode" in fixtures
+    fx = fixtures["dec209_developed_region_clean_per_point_mode"]
+    slice_ = _hydrate_slice(fx["slice"])
+    assert slice_.developed_region_gold_delta is None
+    assert slice_.integrated_drag_pct is None
+    assert slice_.reference_comparison_band_summary is None

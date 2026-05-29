@@ -25,14 +25,20 @@ import pytest
 from ui.backend.services.v9_advisor import (
     AdvisorRule,
     ConvergenceStats,
+    DevelopedRegionGoldDelta,
     ForcesEntry,
     GoldDelta,
+    IntegratedDragPct,
     MatchedCommentary,
     MatchSite,
+    ReferenceBandSummary,
     RunArtifactSlice,
     V9_ADVISOR_RULES,
     V9_RULESET_VERSION,
     match_advisor_patterns,
+)
+from ui.backend.services.v9_advisor.manifest_adapter import (
+    derive_slice_from_manifest,
 )
 from ui.backend.services.v9_advisor.pattern_matcher import (
     js_to_exponential,
@@ -594,3 +600,393 @@ class TestJSONSsotCanonical:
         loaded_ids = [r["id"] for r in data["rules"]]
         python_ids = [r.id for r in V9_ADVISOR_RULES]
         assert loaded_ids == python_ids, "Python join must preserve JSON order"
+
+
+# ---------------------------------------------------------------------------
+# W2.0.6 · DEC-V61-209 NASA-convention slice extension
+#
+# Three new structured fields on RunArtifactSlice (data-shape only — no
+# new predicates ship in W2.0.6; W2.1 will distill rules consuming them):
+#   - developed_region_gold_delta  (DevelopedRegionGoldDelta)
+#   - integrated_drag_pct          (IntegratedDragPct · paired w/ verification_station)
+#   - reference_comparison_band_summary  (ReferenceBandSummary · near-LE rollup)
+#
+# These tests pin:
+#   - additive-non-breaking construction contract (legacy sites unchanged)
+#   - dataclasses.asdict round-trip on all three nested dataclasses
+#   - no false co-fire on R1–R9 when the new fields are populated
+#   - deriver populates fields ONLY when gate_mode == 'nasa_integrated'
+#   - graceful-empty / malformed-trust_report contract (V90 RS#34 extension)
+#   - new dataclass exports on the package surface
+# ---------------------------------------------------------------------------
+
+
+class TestW2_0_6_SliceExtensionConstruction:
+    """Additive-non-breaking construction contract for the three new fields."""
+
+    def test_runartifactslice_constructs_without_new_fields(self):
+        """The ~100+ legacy instantiation sites must keep working — every
+        new field defaults to None so callers that have not been updated
+        construct exactly the same slice as before W2.0.6."""
+        s = RunArtifactSlice(run_id="R", case_id="C", success=True, exit_code=0)
+        assert s.developed_region_gold_delta is None
+        assert s.integrated_drag_pct is None
+        assert s.reference_comparison_band_summary is None
+
+    def test_runartifactslice_constructs_with_new_fields(self):
+        """All three nested dataclasses construct cleanly and round-trip via
+        dataclasses.asdict (the canonical-JSON serializer relies on this)."""
+        dev = DevelopedRegionGoldDelta(
+            max_abs_pct=0.95, n_failures=0, n_points=50, min_x_m=0.1
+        )
+        idr = IntegratedDragPct(pct=1.8, within_tolerance=True, station_pct=2.1)
+        band = ReferenceBandSummary(
+            n_near_le_deviations=6, worst_near_le_pct=14.7, x_floor_m=0.1
+        )
+        s = RunArtifactSlice(
+            run_id="R-W206",
+            case_id="flat_plate_rans_sst",
+            success=True,
+            exit_code=0,
+            developed_region_gold_delta=dev,
+            integrated_drag_pct=idr,
+            reference_comparison_band_summary=band,
+        )
+        # Frozen: types/values preserved.
+        assert s.developed_region_gold_delta is dev
+        assert s.integrated_drag_pct is idr
+        assert s.reference_comparison_band_summary is band
+        # Field types: int vs float discrimination matters (TS will see
+        # these via JSON; canonical-form sort_keys output must match).
+        assert isinstance(s.developed_region_gold_delta.n_failures, int)
+        assert isinstance(s.developed_region_gold_delta.min_x_m, float)
+        assert isinstance(s.integrated_drag_pct.within_tolerance, bool)
+        # Round-trip via dataclasses.asdict — equality to source dicts.
+        import dataclasses as _dc
+        assert _dc.asdict(s.developed_region_gold_delta) == {
+            "max_abs_pct": 0.95,
+            "n_failures": 0,
+            "n_points": 50,
+            "min_x_m": 0.1,
+        }
+        assert _dc.asdict(s.integrated_drag_pct) == {
+            "pct": 1.8,
+            "within_tolerance": True,
+            "station_pct": 2.1,
+        }
+        assert _dc.asdict(s.reference_comparison_band_summary) == {
+            "n_near_le_deviations": 6,
+            "worst_near_le_pct": 14.7,
+            "x_floor_m": 0.1,
+        }
+
+    def test_integrated_drag_station_pct_defaults_none(self):
+        """station_pct is Optional — absent verification_station block leaves
+        it None. Per_point gate cases that grow an integrated_drag block but
+        no station block (defensive future-proofing) must still construct."""
+        idr = IntegratedDragPct(pct=1.8, within_tolerance=True)
+        assert idr.station_pct is None
+
+    def test_band_summary_worst_pct_can_be_none(self):
+        """Honest scope-out: n_known_deviations == 0 → no worst → None.
+        Pins the no-fabrication discipline (don't invent a worst when there
+        is none) at the construction boundary."""
+        band = ReferenceBandSummary(
+            n_near_le_deviations=0, worst_near_le_pct=None, x_floor_m=0.1
+        )
+        assert band.worst_near_le_pct is None
+
+
+class TestW2_0_6_NoRegressionOnExistingRules:
+    """The new fields are INERT — populating them must not co-fire R1–R9
+    on the labeled ruleset behavioral evals. This catches a future rule
+    author who keys on the wrong field name."""
+
+    def test_existing_r1_through_r9_unchanged_with_new_fields_populated(self):
+        """Re-run a battery of slices mirroring the
+        TestRulesetBehavioralEval EVAL_CASES (single-rule and co-firing)
+        with the three new fields populated; fired rule sets must remain
+        EXACTLY what the unwidened slices would have fired."""
+        dev = DevelopedRegionGoldDelta(
+            max_abs_pct=0.95, n_failures=0, n_points=50, min_x_m=0.1
+        )
+        idr = IntegratedDragPct(pct=1.8, within_tolerance=True, station_pct=2.1)
+        band = ReferenceBandSummary(
+            n_near_le_deviations=6, worst_near_le_pct=14.7, x_floor_m=0.1
+        )
+
+        def _augment(s: RunArtifactSlice) -> RunArtifactSlice:
+            return RunArtifactSlice(
+                **{
+                    **s.__dict__,
+                    "developed_region_gold_delta": dev,
+                    "integrated_drag_pct": idr,
+                    "reference_comparison_band_summary": band,
+                }
+            )
+
+        # Healthy run: R8 only.
+        clean = _converged_healthy()
+        ids_clean = {m.rule_id for m in match_advisor_patterns(_augment(clean), V9_ADVISOR_RULES)}
+        assert ids_clean == {m.rule_id for m in match_advisor_patterns(clean, V9_ADVISOR_RULES)}
+
+        # Off-gold but converged → R4 + R8.
+        off_gold = RunArtifactSlice(
+            **{**_converged_healthy().__dict__, "gold_delta": GoldDelta(max_abs_pct=8.2)}
+        )
+        ids_off = {m.rule_id for m in match_advisor_patterns(_augment(off_gold), V9_ADVISOR_RULES)}
+        assert ids_off == {m.rule_id for m in match_advisor_patterns(off_gold, V9_ADVISOR_RULES)}
+        assert "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4" in ids_off
+        assert "HEALTHY_CONVERGENCE_V9_R8" in ids_off
+
+        # Crashed solver → R3 only.
+        crashed = RunArtifactSlice(
+            **{**_converged_healthy().__dict__, "success": False, "exit_code": 1}
+        )
+        ids_crashed = {
+            m.rule_id for m in match_advisor_patterns(_augment(crashed), V9_ADVISOR_RULES)
+        }
+        assert ids_crashed == {
+            m.rule_id for m in match_advisor_patterns(crashed, V9_ADVISOR_RULES)
+        }
+        assert "RUN_FAILED_NONZERO_EXIT_V9_R3" in ids_crashed
+
+    def test_empty_artifact_still_no_crash_with_extension(self):
+        """V90 RS#34 graceful-empty contract: empty slice (all new fields
+        default None) returns [] without crash."""
+        empty = RunArtifactSlice(run_id="R-empty", case_id="x", success=True, exit_code=0)
+        matches = match_advisor_patterns(empty, V9_ADVISOR_RULES)
+        assert matches == []
+
+
+class TestW2_0_6_ManifestDeriverBranch:
+    """Deriver branch: trust_report.gates.reference_comparison.details. Only
+    populates the three new fields when gate_mode == 'nasa_integrated'."""
+
+    def _nasa_manifest(self) -> dict:
+        """Minimal manifest dict with a nasa_integrated trust_report block."""
+        return {
+            "case": {"id": "flat_plate_rans_sst"},
+            "run": {"run_id": "R-NASA-1"},
+            "measurement": {},
+            "trust_report": {
+                "gates": {
+                    "reference_comparison": {
+                        "details": {
+                            "gate_mode": "nasa_integrated",
+                            "developed_region": {
+                                "max_rel_error": 0.0095,
+                                "n_failures": 0,
+                                "n_points": 50,
+                                "developed_region_min_m": 0.1,
+                                "within_tolerance": True,
+                            },
+                            "integrated_drag": {
+                                "rel_error": 0.018,
+                                "within_tolerance": True,
+                            },
+                            "verification_station": {"rel_error": 0.021},
+                            "n_known_deviations": 6,
+                            "known_deviations": [
+                                {"rel_error": 0.147},
+                                {"rel_error": 0.082},
+                                {"rel_error": 0.043},
+                                {"rel_error": 0.027},
+                                {"rel_error": 0.019},
+                                {"rel_error": 0.011},
+                            ],
+                        }
+                    }
+                }
+            },
+        }
+
+    def test_derive_slice_nasa_integrated_populates_three_fields(self):
+        """All three new fields populated · float conversions tracked
+        verbatim from trust_report.json keys (rel_error × 100 for %)."""
+        s = derive_slice_from_manifest(self._nasa_manifest())
+
+        assert s.developed_region_gold_delta is not None
+        assert s.developed_region_gold_delta.max_abs_pct == pytest.approx(0.95)
+        assert s.developed_region_gold_delta.n_failures == 0
+        assert s.developed_region_gold_delta.n_points == 50
+        assert s.developed_region_gold_delta.min_x_m == pytest.approx(0.1)
+
+        assert s.integrated_drag_pct is not None
+        assert s.integrated_drag_pct.pct == pytest.approx(1.8)
+        assert s.integrated_drag_pct.within_tolerance is True
+        assert s.integrated_drag_pct.station_pct == pytest.approx(2.1)
+
+        assert s.reference_comparison_band_summary is not None
+        assert s.reference_comparison_band_summary.n_near_le_deviations == 6
+        assert s.reference_comparison_band_summary.worst_near_le_pct == pytest.approx(14.7)
+        assert s.reference_comparison_band_summary.x_floor_m == pytest.approx(0.1)
+
+    def test_derive_slice_per_point_gate_leaves_new_fields_none(self):
+        """per_point gate_mode → honest scope-out: all three new fields None."""
+        m = self._nasa_manifest()
+        m["trust_report"]["gates"]["reference_comparison"]["details"]["gate_mode"] = "per_point"
+        s = derive_slice_from_manifest(m)
+        assert s.developed_region_gold_delta is None
+        assert s.integrated_drag_pct is None
+        assert s.reference_comparison_band_summary is None
+
+    def test_derive_slice_missing_gate_mode_leaves_new_fields_none(self):
+        """gate_mode absent → identical scope-out to per_point. Pins the
+        default-to-None branch against any future heuristic that tries to
+        infer gate_mode from sibling keys."""
+        m = self._nasa_manifest()
+        m["trust_report"]["gates"]["reference_comparison"]["details"].pop("gate_mode")
+        s = derive_slice_from_manifest(m)
+        assert s.developed_region_gold_delta is None
+        assert s.integrated_drag_pct is None
+        assert s.reference_comparison_band_summary is None
+
+    def test_derive_slice_legacy_manifest_without_trust_report_still_works(self):
+        """Backward-compat hardstop: legacy V91-era manifests without a
+        trust_report key still derive a valid slice — three new fields None,
+        existing gold_delta pathway untouched."""
+        m = {
+            "case": {
+                "id": "legacy_case",
+                "gold_standard": {
+                    "observables": [
+                        {"name": "friction_factor", "ref_value": 0.0185},
+                    ],
+                },
+            },
+            "run": {
+                "run_id": "R-LEGACY-1",
+                "outputs": {
+                    "solver_log_tail": "Time = 800\nSIMPLE solution converged in 800 iterations\n",
+                },
+            },
+            "measurement": {
+                "key_quantities": {
+                    "quantity": "friction_factor",
+                    "value": 0.0187,
+                    "solver_success": True,
+                },
+                "comparator_verdict": "PASS",
+            },
+        }
+        s = derive_slice_from_manifest(m)
+        # Three new fields untouched.
+        assert s.developed_region_gold_delta is None
+        assert s.integrated_drag_pct is None
+        assert s.reference_comparison_band_summary is None
+        # Scalar gold_delta still computed from observables × key_quantities.
+        assert s.gold_delta is not None
+        assert s.gold_delta.max_abs_pct < 1.5
+
+    def test_derive_slice_malformed_trust_report_does_not_crash(self):
+        """V90 RS#34 graceful-empty extends to W2.0.6. Malformed sub-dicts
+        (non-dict integrated_drag · string rel_error · missing fields)
+        yield None for that field, never a crash. Each defensive branch
+        tested independently so a regression that loosens one without
+        breaking another is caught."""
+        m = self._nasa_manifest()
+        # integrated_drag is a string instead of dict → integrated_drag_pct
+        # stays None, but the other two fields still populate.
+        m["trust_report"]["gates"]["reference_comparison"]["details"]["integrated_drag"] = (
+            "not_a_dict"
+        )
+        s = derive_slice_from_manifest(m)
+        assert s.integrated_drag_pct is None
+        assert s.developed_region_gold_delta is not None
+        assert s.reference_comparison_band_summary is not None
+
+        # integrated_drag.rel_error is a string instead of numeric.
+        m2 = self._nasa_manifest()
+        m2["trust_report"]["gates"]["reference_comparison"]["details"]["integrated_drag"] = {
+            "rel_error": "NaN_string",
+            "within_tolerance": True,
+        }
+        s2 = derive_slice_from_manifest(m2)
+        assert s2.integrated_drag_pct is None
+
+    def test_derive_slice_band_summary_falls_back_to_case_manifest_x_floor(self):
+        """When details.developed_region.developed_region_min_m is missing
+        but the manifest has been pre-injected with case_manifest
+        reference_comparison.developed_region_min_m, x_floor_m falls back to
+        that (caller injects pre-parsed yaml dict — RS#35 forbids yaml load
+        inside the deriver)."""
+        m = self._nasa_manifest()
+        # Drop developed_region.developed_region_min_m so the fallback path runs.
+        m["trust_report"]["gates"]["reference_comparison"]["details"][
+            "developed_region"
+        ].pop("developed_region_min_m")
+        m["case_manifest"] = {"reference_comparison": {"developed_region_min_m": 0.07}}
+        s = derive_slice_from_manifest(m)
+        # band_summary still populated via the case_manifest fallback.
+        assert s.reference_comparison_band_summary is not None
+        assert s.reference_comparison_band_summary.x_floor_m == pytest.approx(0.07)
+        # developed_region_gold_delta itself depends on dev_min_m too — having
+        # dropped that key, the dev branch leaves the field None (honest
+        # scope-out: when a required key is missing, do not fabricate).
+        assert s.developed_region_gold_delta is None
+
+    def test_derive_slice_band_summary_zero_deviations_yields_none_worst(self):
+        """n_known_deviations == 0 + empty known_deviations[] → worst is None
+        (no fabrication discipline). x_floor_m still populates from the
+        developed_region block."""
+        m = self._nasa_manifest()
+        m["trust_report"]["gates"]["reference_comparison"]["details"]["n_known_deviations"] = 0
+        m["trust_report"]["gates"]["reference_comparison"]["details"]["known_deviations"] = []
+        s = derive_slice_from_manifest(m)
+        assert s.reference_comparison_band_summary is not None
+        assert s.reference_comparison_band_summary.n_near_le_deviations == 0
+        assert s.reference_comparison_band_summary.worst_near_le_pct is None
+        assert s.reference_comparison_band_summary.x_floor_m == pytest.approx(0.1)
+
+    def test_derive_slice_band_summary_x_floor_absent_stays_none_not_zero(self):
+        """Cadence Codex R1 (2026-05-30 · CRS P2 #2) pin: when BOTH
+        developed_region.developed_region_min_m AND the case_manifest
+        reference_comparison.developed_region_min_m fallback are absent,
+        x_floor_m must stay None — NEVER fabricated as 0.0. Substituting
+        0.0 would silently relabel 'cutoff unknown' as 'cutoff at the
+        leading edge', misleading any future near-LE rule/UI consumer
+        (truth-chain violation). Honest absence is the correct answer.
+        The rest of the band summary (n_near_le_deviations + worst_pct)
+        is still meaningful and stays populated."""
+        m = self._nasa_manifest()
+        # Drop developed_region.developed_region_min_m so the primary path
+        # fails, AND do NOT inject a case_manifest fallback. The deriver
+        # must leave x_floor_m as None instead of fabricating 0.0.
+        m["trust_report"]["gates"]["reference_comparison"]["details"][
+            "developed_region"
+        ].pop("developed_region_min_m")
+        # No case_manifest key at all (legitimate scenario: no developed-
+        # region guard configured for this case).
+        m.pop("case_manifest", None)
+        s = derive_slice_from_manifest(m)
+        assert s.reference_comparison_band_summary is not None, (
+            "band summary must still construct (n_known_deviations + worst "
+            "remain meaningful even without a cutoff value)"
+        )
+        assert s.reference_comparison_band_summary.x_floor_m is None, (
+            "x_floor_m must be None when both source paths fail — never "
+            "fabricated as 0.0 (truth-chain: absence is the honest answer)"
+        )
+        # Other band fields still populated from the primary trust_report.
+        assert s.reference_comparison_band_summary.n_near_le_deviations == 6
+        assert s.reference_comparison_band_summary.worst_near_le_pct == pytest.approx(14.7)
+
+
+class TestW2_0_6_PackageExports:
+    """The three new dataclasses must be importable from the package surface
+    so downstream test code + parity tests can hydrate them without
+    reaching into the private pattern_matcher module."""
+
+    def test_package_exports_new_dataclasses(self):
+        from ui.backend.services import v9_advisor as pkg
+
+        assert hasattr(pkg, "DevelopedRegionGoldDelta")
+        assert hasattr(pkg, "IntegratedDragPct")
+        assert hasattr(pkg, "ReferenceBandSummary")
+        for name in (
+            "DevelopedRegionGoldDelta",
+            "IntegratedDragPct",
+            "ReferenceBandSummary",
+        ):
+            assert name in pkg.__all__, f"{name} missing from v9_advisor.__all__"

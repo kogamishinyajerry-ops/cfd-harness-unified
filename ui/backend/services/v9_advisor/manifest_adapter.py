@@ -14,6 +14,60 @@ Inputs read from manifest:
         → convergence_stats.max_iters_reached (regex "reached.*maxIter" or "Maximum iter")
         → convergence_stats.final_iter (last "Time = N" or "Iteration N")
 
+W2.0.6 (DEC-V61-209 NASA-convention regional fields · 2026-05-29):
+    - manifest["trust_report"]["gates"]["reference_comparison"]["details"]
+        Discriminated by ``details.gate_mode == 'nasa_integrated'``.
+        Per_point or absent gate_mode → all three new fields stay None
+        (honest scope-out: per_point cases have no regional payload to
+        truthfully expose).
+
+        → developed_region_gold_delta (from details.developed_region.{
+            max_rel_error, n_failures, n_points, developed_region_min_m})
+            W2.1 candidate rule:
+            DEVELOPED_REGION_GOLD_DELTA_EXCEEDS_THRESHOLD (regional-warn
+            complement to scalar R4 GOLD_DELTA_EXCEEDS_5PCT_V9_R4).
+
+        → integrated_drag_pct (from details.integrated_drag.{rel_error,
+            within_tolerance} + details.verification_station.rel_error)
+            W2.1 candidate rule: INTEGRATED_DRAG_OUT_OF_TOLERANCE
+            (advisory mirror of ADDENDUM-4 gate verdict).
+
+        → reference_comparison_band_summary (from details.{
+            n_known_deviations, known_deviations[].rel_error} +
+            details.developed_region.developed_region_min_m fallback to
+            manifest case_manifest reference_comparison.developed_region_min_m)
+            W2.1 candidate rule: NEAR_LE_KNOWN_DEVIATION_PATTERN
+            (info-severity advisory).
+
+    Defensive contract: malformed trust_report sub-dicts (non-dict
+    entries · non-numeric rel_error · missing keys) yield None for the
+    affected field — never a crash (V90 RS#34 graceful-empty extends to
+    W2.0.6). Pure dict-in / dataclass-out — RS#35 import allowlist
+    unchanged ({__future__, math, json, dataclasses, typing, pathlib, re}).
+
+    Production-wiring status (cadence Codex R1 · 2026-05-30 CRS P2 #1):
+    The production audit-package builder ``src/audit_package/manifest.py
+    build_manifest()`` does NOT currently inject a top-level
+    ``trust_report`` key into the manifest dict it produces. The
+    nasa_integrated branch above is therefore exercised end-to-end ONLY
+    by synthetic test fixtures (test_v9_pattern_matcher.py
+    TestW2_0_6_Deriver). On real audit-package builds, all three new
+    slice fields stay None and the slice degrades gracefully to the
+    pre-W2.0.6 shape (R1-R9 predicates unchanged · `gold_delta` scalar
+    still derived from `case.gold_standard.observables` + measurement
+    pathway).
+
+    W2.0.7 (deliberately NOT in W2.0.6 scope · separate sub-DEC) will
+    wire `build_manifest()` to inject the trust_report subset the deriver
+    expects (read from `<case_dir>/artifacts/trust_report.json` when it
+    exists; absent → manifest has no trust_report key; deriver leaves
+    new fields None — graceful-degrade-by-design). W2.0.6 deliberately
+    lands the data contract first so W2.0.7 wiring + W2.1 rule
+    distillation are scoped to their own sub-DECs (sub-DEC scope-driven
+    per CLAUDE.md v2.3). DO NOT add yaml/json file IO to this module
+    to "close the gap" — RS#35 allowlist forbids and any IO belongs in
+    the builder, not the pure deriver.
+
 NOT derived (history-array data absent from manifest schema):
     - residuals (per-iter history)
     - forces (per-iter history)
@@ -33,8 +87,11 @@ from typing import Any, Dict, List, Optional
 
 from .pattern_matcher import (
     ConvergenceStats,
+    DevelopedRegionGoldDelta,
     GoldDelta,
+    IntegratedDragPct,
     MatchedCommentary,
+    ReferenceBandSummary,
     RunArtifactSlice,
     match_advisor_patterns,
 )
@@ -183,6 +240,136 @@ def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
                 elapsed_seconds=0.0,  # not in manifest yet
             )
 
+    # ------------------------------------------------------------------
+    # W2.0.6 · DEC-V61-209 NASA-convention regional structured fields.
+    # Discriminated by gate_mode == 'nasa_integrated'. Per_point or
+    # absent gate_mode → all three fields stay None (honest scope-out).
+    # All branches defensive-guard with isinstance + try/except float
+    # conversion — malformed sub-dicts return None for that field, not a
+    # crash (V90 RS#34 graceful-empty contract extends to W2.0.6).
+    # ------------------------------------------------------------------
+    developed_region_gold_delta: Optional[DevelopedRegionGoldDelta] = None
+    integrated_drag_pct: Optional[IntegratedDragPct] = None
+    reference_comparison_band_summary: Optional[ReferenceBandSummary] = None
+
+    trust_report = manifest.get("trust_report")
+    if isinstance(trust_report, dict):
+        gates = trust_report.get("gates")
+        ref_block = gates.get("reference_comparison") if isinstance(gates, dict) else None
+        details = ref_block.get("details") if isinstance(ref_block, dict) else None
+        if not isinstance(details, dict):
+            details = {}
+        gate_mode = details.get("gate_mode")
+
+        if gate_mode == "nasa_integrated":
+            # (1) developed_region branch
+            dev = details.get("developed_region")
+            if isinstance(dev, dict):
+                try:
+                    max_rel = dev.get("max_rel_error")
+                    n_fail = dev.get("n_failures")
+                    n_pts = dev.get("n_points")
+                    dev_min_m = dev.get("developed_region_min_m")
+                    if (
+                        isinstance(max_rel, (int, float))
+                        and isinstance(n_fail, int)
+                        and isinstance(n_pts, int)
+                        and isinstance(dev_min_m, (int, float))
+                    ):
+                        developed_region_gold_delta = DevelopedRegionGoldDelta(
+                            max_abs_pct=float(max_rel) * 100.0,
+                            n_failures=int(n_fail),
+                            n_points=int(n_pts),
+                            min_x_m=float(dev_min_m),
+                        )
+                except (TypeError, ValueError):
+                    developed_region_gold_delta = None
+
+            # (2) integrated_drag branch (paired with verification_station)
+            idr = details.get("integrated_drag")
+            if isinstance(idr, dict):
+                try:
+                    rel_err = idr.get("rel_error")
+                    within = idr.get("within_tolerance")
+                    if isinstance(rel_err, (int, float)) and isinstance(within, bool):
+                        station = details.get("verification_station")
+                        station_pct: Optional[float] = None
+                        if isinstance(station, dict):
+                            st_rel = station.get("rel_error")
+                            if isinstance(st_rel, (int, float)):
+                                try:
+                                    station_pct = float(st_rel) * 100.0
+                                except (TypeError, ValueError):
+                                    station_pct = None
+                        integrated_drag_pct = IntegratedDragPct(
+                            pct=float(rel_err) * 100.0,
+                            within_tolerance=bool(within),
+                            station_pct=station_pct,
+                        )
+                except (TypeError, ValueError):
+                    integrated_drag_pct = None
+
+            # (3) band_summary branch (near-LE known-deviation rollup)
+            n_dev = details.get("n_known_deviations")
+            if isinstance(n_dev, int):
+                try:
+                    kd = details.get("known_deviations")
+                    if not isinstance(kd, list):
+                        kd = []
+                    rel_errors: List[float] = []
+                    for row in kd:
+                        if not isinstance(row, dict):
+                            continue
+                        v = row.get("rel_error")
+                        if isinstance(v, (int, float)):
+                            try:
+                                rel_errors.append(float(v))
+                            except (TypeError, ValueError):
+                                continue
+                    worst_pct: Optional[float] = (
+                        max(rel_errors) * 100.0 if rel_errors else None
+                    )
+                    # x_floor_m: prefer details.developed_region.developed_region_min_m,
+                    # fall back to manifest case_manifest reference_comparison
+                    # (callers must inject pre-parsed). Final fallback 0.0
+                    # only if both absent — defensive default.
+                    x_floor: Optional[float] = None
+                    if isinstance(dev, dict):
+                        dev_min_m = dev.get("developed_region_min_m")
+                        if isinstance(dev_min_m, (int, float)):
+                            try:
+                                x_floor = float(dev_min_m)
+                            except (TypeError, ValueError):
+                                x_floor = None
+                    if x_floor is None:
+                        case_manifest = manifest.get("case_manifest")
+                        if isinstance(case_manifest, dict):
+                            ref_cm = case_manifest.get("reference_comparison")
+                            if isinstance(ref_cm, dict):
+                                cm_floor = ref_cm.get("developed_region_min_m")
+                                if isinstance(cm_floor, (int, float)):
+                                    try:
+                                        x_floor = float(cm_floor)
+                                    except (TypeError, ValueError):
+                                        x_floor = None
+                    # Cadence Codex R1 (2026-05-30 · CRS P2 #2): do NOT
+                    # fabricate x_floor=0.0 when both source paths fail.
+                    # The NASA-integrated gate schema does not require
+                    # developed_region_min_m; flat_plate_cf.py omits
+                    # details.developed_region entirely when no developed-
+                    # region guard is configured. Substituting 0.0 silently
+                    # relabels "cutoff unknown" as "cutoff at the leading
+                    # edge", which would mislead a future near-LE rule
+                    # consumer (truth-chain violation). x_floor_m is
+                    # Optional now; absence is the honest answer.
+                    reference_comparison_band_summary = ReferenceBandSummary(
+                        n_near_le_deviations=int(n_dev),
+                        worst_near_le_pct=worst_pct,
+                        x_floor_m=x_floor,
+                    )
+                except (TypeError, ValueError):
+                    reference_comparison_band_summary = None
+
     return RunArtifactSlice(
         run_id=run_id,
         case_id=case_id,
@@ -191,6 +378,10 @@ def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
         # residuals + forces dormant in V91 scope — see module docstring
         convergence_stats=convergence_stats,
         gold_delta=gold_delta,
+        # W2.0.6 · DEC-V61-209 NASA-convention regional structured fields
+        developed_region_gold_delta=developed_region_gold_delta,
+        integrated_drag_pct=integrated_drag_pct,
+        reference_comparison_band_summary=reference_comparison_band_summary,
     )
 
 

@@ -19,10 +19,13 @@ from .manifest_adapter import (
 from .pattern_matcher import (
     AdvisorRule,
     ConvergenceStats,
+    DevelopedRegionGoldDelta,
     ForcesEntry,
     GoldDelta,
+    IntegratedDragPct,
     MatchedCommentary,
     MatchSite,
+    ReferenceBandSummary,
     RunArtifactSlice,
     match_advisor_patterns,
 )
@@ -31,10 +34,13 @@ from .rules import V9_ADVISOR_RULES, V9_RULESET_VERSION
 __all__ = [
     "AdvisorRule",
     "ConvergenceStats",
+    "DevelopedRegionGoldDelta",
     "ForcesEntry",
     "GoldDelta",
+    "IntegratedDragPct",
     "MatchedCommentary",
     "MatchSite",
+    "ReferenceBandSummary",
     "RunArtifactSlice",
     "V9_ADVISOR_RULES",
     "V9_RULESET_VERSION",

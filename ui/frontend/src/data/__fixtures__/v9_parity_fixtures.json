@@ -19,6 +19,7 @@
           "final_iter": 800,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": [
           {
@@ -145,6 +146,8 @@
         "gold_delta": {
           "max_abs_pct": 0.75
         },
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": {
           "U": [
             0.01,
@@ -197,11 +200,14 @@
           "final_iter": 5000,
           "max_iters_reached": true
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": {
           "max_abs_pct": 8.2
         },
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": null,
         "run_id": "R-MAX-1",
         "success": true
@@ -221,9 +227,12 @@
       "slice": {
         "case_id": "lid_driven_cavity",
         "convergence_stats": null,
+        "developed_region_gold_delta": null,
         "exit_code": 137,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": null,
         "run_id": "R-FAIL-1",
         "success": false
@@ -235,9 +244,12 @@
       "slice": {
         "case_id": "x",
         "convergence_stats": null,
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": null,
         "run_id": "R-empty",
         "success": true
@@ -269,6 +281,7 @@
           "final_iter": 7500,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": [
           {
@@ -393,6 +406,8 @@
           }
         ],
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": null,
         "run_id": "R-DRIFT-1",
         "success": true
@@ -424,9 +439,12 @@
           "final_iter": 2000,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": {
           "U": [
             0.0014990000000000001,
@@ -484,9 +502,12 @@
           "final_iter": 3,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": {
           "p": [
             0.5,
@@ -518,9 +539,12 @@
           "final_iter": 3,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": {
           "p": [
             0.5,
@@ -543,15 +567,116 @@
           "final_iter": 1,
           "max_iters_reached": false
         },
+        "developed_region_gold_delta": null,
         "exit_code": 0,
         "forces": null,
         "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
         "residuals": {
           "p": [
             50.0
           ]
         },
         "run_id": "R-DIVERGE-V6-1SAMPLE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Maximum absolute deviation from the gold-standard reference exceeds 5%. For canonical cases (Ghia 1982 lid-driven cavity, etc.), agreement within 1-3% is the expected bar. Drift of this magnitude usually points to: (1) mesh too coarse ne…",
+          "matched_at": "gold_delta_8.20pct",
+          "provenance": "Roache · Verification and Validation in Computational Science and Engineering · solution validation against reference data",
+          "rule_id": "GOLD_DELTA_EXCEEDS_5_PCT_V9_R4",
+          "severity": "warn"
+        }
+      ],
+      "name": "dec209_known_deviation_pattern",
+      "slice": {
+        "case_id": "flat_plate_rans_sst",
+        "convergence_stats": {
+          "converged": true,
+          "elapsed_seconds": 90.0,
+          "final_iter": 2000,
+          "max_iters_reached": false
+        },
+        "developed_region_gold_delta": {
+          "max_abs_pct": 0.95,
+          "min_x_m": 0.1,
+          "n_failures": 0,
+          "n_points": 50
+        },
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": {
+          "max_abs_pct": 8.2
+        },
+        "integrated_drag_pct": {
+          "pct": 1.8,
+          "station_pct": 2.1,
+          "within_tolerance": true
+        },
+        "reference_comparison_band_summary": {
+          "n_near_le_deviations": 6,
+          "worst_near_le_pct": 14.7,
+          "x_floor_m": 0.1
+        },
+        "residuals": null,
+        "run_id": "R-DEC209-KD-1",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Pressure residual decreased monotonically over the last 8 iterations and the run converged within budget — this is the textbook \"things going right\" pattern. No action needed. If you're tuning this case for a parameter sweep, this is a g…",
+          "matched_at": "healthy_convergence_p",
+          "provenance": "Versteeg & Malalasekera · An Introduction to CFD · §11.3",
+          "rule_id": "HEALTHY_CONVERGENCE_V9_R8",
+          "severity": "info"
+        }
+      ],
+      "name": "dec209_developed_region_clean_per_point_mode",
+      "slice": {
+        "case_id": "flat_plate_rans_sst",
+        "convergence_stats": {
+          "converged": true,
+          "elapsed_seconds": 32.0,
+          "final_iter": 1200,
+          "max_iters_reached": false
+        },
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": {
+          "max_abs_pct": 0.75
+        },
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "residuals": {
+          "U": [
+            0.01,
+            0.005,
+            0.0025,
+            0.001,
+            0.0005,
+            0.00025,
+            0.0001,
+            5e-05
+          ],
+          "p": [
+            0.01,
+            0.005,
+            0.0025,
+            0.001,
+            0.0005,
+            0.00025,
+            0.0001,
+            5e-05
+          ]
+        },
+        "run_id": "R-DEC209-PP-1",
         "success": true
       }
     }
