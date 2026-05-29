@@ -169,15 +169,32 @@ const PREDICATES_BY_ID: Record<string, PredicateFn> = {
   // Normalized residuals start ~1.0 and fall when converging, so a residual
   // increasing past 1.0 is unambiguous divergence. Distinct from R1
   // (oscillation) / R7 (plateau) / R2 (max-iters) / R3 (nonzero-exit crash —
-  // divergence can happen without a crash). Short 4-window: blow-ups are fast
-  // (V3 iter 3, V6 first-iter). Mirrors Python _pred_residual_divergence.
+  // divergence can happen without a crash).
+  //
+  // Window: opportunistic up to 4 samples — fires as soon as ≥2 consecutive
+  // samples exist and the pattern holds. Cadence Codex 2026-05-29 (CRS) caught
+  // that the prior strict-4 requirement missed the V3-class fast blow-up the
+  // docstring claimed to cover (V3 iter-3 = 3 samples; strict-4 never fired on
+  // its own target). Relaxed to ≥2 + monotonic + final>1.0; >1.0 floor still
+  // guards startup transients.
+  //
+  // KNOWN-GAP: V6 first-iter mass-flow-zero-IC = 1 sample only; a single
+  // residual at O(1) cannot be told apart from a normal startup transient.
+  // R3 (nonzero-exit) catches V6 when the case dies; remaining V6 gap is
+  // tracked in retro 2026-05-29 cadence_codex_r1 (slice-extension follow-up).
+  //
+  // Mirrors Python _pred_residual_divergence. Both bindings inline the history
+  // access (the shared recentResiduals helper returns [] when length<count,
+  // which is the prior bug; do NOT route this rule through that helper).
   RESIDUAL_DIVERGENCE_V9_R9: (slice) => {
-    const last4 = recentResiduals(slice, "p", 4);
-    if (last4.length < 4) return null;
-    if (!isMonotonicallyIncreasing(last4)) return null;
-    if (last4[last4.length - 1] <= 1.0) return null;
+    const history = slice.residuals?.["p"];
+    if (!Array.isArray(history)) return null;
+    const recent = history.slice(-4);
+    if (recent.length < 2) return null;
+    if (!isMonotonicallyIncreasing(recent)) return null;
+    if (recent[recent.length - 1] <= 1.0) return null;
     return {
-      matched_at: `iter_${(slice.convergence_stats?.final_iter ?? last4.length).toString()}_p_divergence`,
+      matched_at: `iter_${(slice.convergence_stats?.final_iter ?? recent.length).toString()}_p_divergence`,
     };
   },
 };

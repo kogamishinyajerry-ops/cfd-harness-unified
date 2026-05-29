@@ -498,6 +498,62 @@
         "run_id": "R-DIVERGE-1",
         "success": true
       }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "The pressure residual has climbed monotonically over the last several iterations and crossed O(1) — the solution is diverging, not converging. Because OpenFOAM residuals are normalized to roughly 1.0 at startup, a residual that grows pas…",
+          "matched_at": "iter_3_p_divergence",
+          "provenance": "docs/openfoam_corpus/industrial_solver_findings_v_series.md · V3 (kOmegaSST ω blowup) · V6 (mass-flow zero-IC divergence) · V7 (compressible ρ negative) · Ferziger & Perić §8.7",
+          "rule_id": "RESIDUAL_DIVERGENCE_V9_R9",
+          "severity": "advise"
+        }
+      ],
+      "name": "residual_divergence_v3_class_3sample",
+      "slice": {
+        "case_id": "kosst_omega_blowup",
+        "convergence_stats": {
+          "converged": false,
+          "elapsed_seconds": 0.9,
+          "final_iter": 3,
+          "max_iters_reached": false
+        },
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "residuals": {
+          "p": [
+            0.5,
+            5.0,
+            50.0
+          ]
+        },
+        "run_id": "R-DIVERGE-V3-3SAMPLE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [],
+      "name": "residual_divergence_v6_first_iter_known_gap",
+      "slice": {
+        "case_id": "mass_flow_zero_ic",
+        "convergence_stats": {
+          "converged": false,
+          "elapsed_seconds": 0.3,
+          "final_iter": 1,
+          "max_iters_reached": false
+        },
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "residuals": {
+          "p": [
+            50.0
+          ]
+        },
+        "run_id": "R-DIVERGE-V6-1SAMPLE",
+        "success": true
+      }
     }
   ],
   "version": "v9.1.0"

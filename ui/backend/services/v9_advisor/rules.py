@@ -195,21 +195,42 @@ def _pred_residual_divergence(slice_: RunArtifactSlice) -> Optional[MatchSite]:
     # diverging — distinct from R1 (oscillation), R7 (plateau), R2 (max-iters)
     # and R3 (nonzero-exit crash; divergence can occur WITHOUT a crash, e.g. a
     # run that hits maxIters with climbing residuals or whose blow-up is mid-
-    # flight). Short 4-window: blow-ups are fast (V3 iter 3, V6 first-iter), so
-    # a long window would miss divergence that crashes before 8 points exist.
-    # The >1.0 floor keeps an early transient bump in an otherwise-converging
-    # run from false-firing. Provenance: V3/V6/V7 + Ferziger & Perić §8.7.
-    last4 = _recent_residuals(slice_, "p", 4)
-    if len(last4) < 4:
+    # flight).
+    #
+    # Window: opportunistic up to 4 samples — fires as soon as ≥2 consecutive
+    # samples exist and the pattern holds. Cadence Codex review 2026-05-29
+    # (CRS gpt-5.4 high) caught that the prior strict-4 requirement missed the
+    # V3-class fast blow-up the rule's own docstring claimed to cover (V3 iter-3
+    # = 3 samples; the strict-4 rule never fired on its own target). Relaxed to
+    # ≥2 + monotonic + final>1.0. The >1.0 floor keeps an early transient bump
+    # in an otherwise-converging run from false-firing — same guard.
+    #
+    # KNOWN-GAP (honest scope-out): V6 first-iter mass-flow-zero-IC blow-up
+    # produces only 1 residual sample. A single residual at O(1) cannot be
+    # distinguished from a normal startup transient without a much higher
+    # single-sample threshold that would shadow the >1.0 floor's false-positive
+    # guard for typical first-iter values. R3 (nonzero-exit) catches V6 when
+    # the case dies; if V6 leaves a clean exit with no recovery, that gap is
+    # tracked for a future slice-extension rule (see retro 2026-05-29
+    # cadence_codex_r1).
+    #
+    # Provenance: V3 / V7 + Ferziger & Perić §8.7 (V6 is the known-gap above).
+    if slice_.residuals is None:
         return None
-    if not _is_monotonically_increasing(last4):
+    p_history = slice_.residuals.get("p")
+    if p_history is None:
         return None
-    if last4[-1] <= 1.0:
+    recent = list(p_history[-4:])  # opportunistic — take what's available
+    if len(recent) < 2:
+        return None
+    if not _is_monotonically_increasing(recent):
+        return None
+    if recent[-1] <= 1.0:
         return None
     final_iter = (
         slice_.convergence_stats.final_iter
         if slice_.convergence_stats is not None
-        else len(last4)
+        else len(recent)
     )
     return MatchSite(matched_at=f"iter_{final_iter}_p_divergence")
 

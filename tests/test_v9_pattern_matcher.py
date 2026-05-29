@@ -276,6 +276,23 @@ class TestPositiveCases:
         matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
         assert any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
 
+    def test_r9_v3_class_3sample_divergence_fires(self):
+        # Cadence Codex R1 (2026-05-29, CRS gpt-5.4 high) caught that R9's
+        # docstring claimed to cover V3 (iter-3 kΩSST ω blow-up) but the prior
+        # strict-4-sample requirement made it silent on its own target — V3
+        # with 3 samples never matched. Relaxed to ≥2 samples + monotonic
+        # + final>1.0. This pins the V3-class 3-sample firing: [0.5, 5.0, 50.0]
+        # must now match R9 (was the gap the cadence review flagged).
+        diverging_3sample = [0.5, 5.0, 50.0]
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "convergence_stats": ConvergenceStats(
+                   final_iter=3, max_iters_reached=False, converged=False, elapsed_seconds=0.9),
+               "residuals": {**_converged_healthy().residuals, "p": diverging_3sample}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
+        assert any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
+
 
 # ---------------------------------------------------------------------------
 # Negative cases — clean run does NOT trigger false positives
@@ -369,6 +386,24 @@ class TestNegativeCases:
         # The clean converged run (p monotonically DECREASING) is the opposite
         # of divergence → must NOT match R9.
         matches = match_advisor_patterns(_converged_healthy(), V9_ADVISOR_RULES)
+        assert not any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
+
+    def test_r9_negative_v6_first_iter_single_sample_known_gap(self):
+        # Cadence Codex R1 (2026-05-29): V6 first-iter mass-flow-zero-IC blow-up
+        # produces only 1 residual sample. A single residual at O(1) cannot be
+        # distinguished from a normal startup transient without a much higher
+        # single-sample threshold that would shadow the >1.0 floor's false-
+        # positive guard. R9 KNOWN-GAP: single-sample histories must NOT fire
+        # R9. R3 (nonzero-exit) catches V6 when the case dies; any remaining V6
+        # gap is tracked in retro cadence_codex_r1 (slice-extension follow-up).
+        single_sample = [50.0]  # > 1.0 but no monotonic history to confirm direction
+        slice_ = RunArtifactSlice(
+            **{**_converged_healthy().__dict__,
+               "convergence_stats": ConvergenceStats(
+                   final_iter=1, max_iters_reached=False, converged=False, elapsed_seconds=0.3),
+               "residuals": {**_converged_healthy().residuals, "p": single_sample}}
+        )
+        matches = match_advisor_patterns(slice_, V9_ADVISOR_RULES)
         assert not any(m.rule_id == "RESIDUAL_DIVERGENCE_V9_R9" for m in matches)
 
 
