@@ -1,5 +1,35 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
+> ## ⏩ MOST RECENT — P3 W3.0 LANDED (2026-05-30 · read this first)
+>
+> **Status**: `P3_IN_PROGRESS`. HEAD = `7cdb870`. P3 CHT charter `DEC-V61-217`
+> Accepted; **W3.0 (DEC-V61-218 · `regionProperties` reader) now LANDED** —
+> the first executable P3 item and the PIVOT for all region-aware work.
+>
+> **What shipped**: `ui/backend/services/case_extractors/region_properties_reader.py`
+> (stdlib-only `extract(case_dir) -> RegionPropertiesSnapshot(fluid_regions,
+> solid_regions)`) + `tests/p3/test_region_properties_reader.py` (35 tests) +
+> package re-export. Top-level structural parser; honest-refusal (None) on all
+> malformed input. Built via workflow (understand → `backend-engineer` →
+> `test-red-team`); red-team caught a P1 fabrication bug fixed pre-Codex.
+> Codex chain **R0→R1→R2 = APPROVE** (all 3 findings P2 honest-refusal edge
+> cases). Chain report `reports/codex_tool_reports/v61_218_chain_report.md`.
+>
+> **NEXT P3 work items** (charter dependency order · W3.0 unblocks all three):
+> - **W3.0.1** — `shm_dict_extractor` multi-region variant (consumes Snapshot)
+> - **W3.0.2** — `thermo_dict_extractor` multi-region variant (per-region)
+> - **W3.0.3** — `solver_block_extractor` CHT regression (SPIKE, zero code change)
+> - then **W3.0.6** — multi-region `RunArtifactSlice` (MUST precede W3.1 distillation)
+> Each parallelizable; same workflow→Codex→commit loop as W3.0. Per-workstream
+> Codex review mandatory (new OpenFOAM dict parsers). Surveying ALL real CHT-case
+> dict forms BEFORE writing is the P2-close carry-forward lesson (and the W3.0
+> calibration: structured parsers have a ~3-round honest-refusal floor unless all
+> malformed-input classes are enumerated up front).
+>
+> **Notion**: DEC-V61-218 `notion_sync_status: pending_accepted` — session-end batch.
+>
+> ---
+>
 > **Generated**: 2026-05-24T20:30 local (session-end checkpoint)
 > **Last DEC commit**: `1ccb4b3` (M32 cycle 3 DEC close)
 > **Updated**: 2026-05-25T11:10 — **M3.2 → M3.8 SEVEN MILESTONES CLOSED** in one continuous run.
