@@ -1,32 +1,50 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.0 LANDED (2026-05-30 · read this first)
+> ## ⏩ MOST RECENT — P3 W3.0.1 LANDED (2026-05-30 · read this first)
 >
-> **Status**: `P3_IN_PROGRESS`. HEAD = `7cdb870`. P3 CHT charter `DEC-V61-217`
-> Accepted; **W3.0 (DEC-V61-218 · `regionProperties` reader) now LANDED** —
-> the first executable P3 item and the PIVOT for all region-aware work.
+> **Status**: `P3_IN_PROGRESS`. HEAD = `781c335`. P3 CHT charter `DEC-V61-217`
+> Accepted; W3.0 (`regionProperties` reader, DEC-V61-218) LANDED;
+> **W3.0.1 (DEC-V61-219 · `shm_dict` multi-region reader) now LANDED** — the
+> second executable P3 item, region-aware snappyHexMeshDict consuming W3.0's
+> Snapshot.
 >
-> **What shipped**: `ui/backend/services/case_extractors/region_properties_reader.py`
-> (stdlib-only `extract(case_dir) -> RegionPropertiesSnapshot(fluid_regions,
-> solid_regions)`) + `tests/p3/test_region_properties_reader.py` (35 tests) +
-> package re-export. Top-level structural parser; honest-refusal (None) on all
-> malformed input. Built via workflow (understand → `backend-engineer` →
-> `test-red-team`); red-team caught a P1 fabrication bug fixed pre-Codex.
-> Codex chain **R0→R1→R2 = APPROVE** (all 3 findings P2 honest-refusal edge
-> cases). Chain report `reports/codex_tool_reports/v61_218_chain_report.md`.
+> **What shipped**: `ui/backend/services/case_extractors/shm_dict_multi_region.py`
+> (stdlib-only `extract(case_dir, region_snapshot) -> Mapping[str, RegionShmSnapshot
+> | None] | None`, keyed by every region) + `tests/p3/test_shm_dict_multi_region.py`
+> + `..._redteam.py` (73 p3-new tests) + package re-export (FIVE→SIX). Reuses
+> `shm_dict_extractor` block helpers (no new OF-dict parser).
+> **Resolved the charter's design fork = master-sHM cellZone-derived**: real
+> chtMultiRegionSimpleFoam uses ONE `system/snappyHexMeshDict`; per-region tagging
+> via `refinementSurfaces` `cellZone` TOKEN + `locationsInMesh`(V90)/`locationInMesh`
+> (legacy) seeds — no per-region sHM files exist. Region found by **cellZone token
+> not surface entry name** (anti-circularity); honest `None` for any region without
+> cellZone/seed evidence (extruded solids, duplicate cellZone, duplicate/malformed
+> seed) — never fabricates.
 >
-> **NEXT P3 work items** (charter dependency order · W3.0 unblocks all three):
-> - **W3.0.1** — `shm_dict_extractor` multi-region variant (consumes Snapshot)
-> - **W3.0.2** — `thermo_dict_extractor` multi-region variant (per-region)
-> - **W3.0.3** — `solver_block_extractor` CHT regression (SPIKE, zero code change)
-> - then **W3.0.6** — multi-region `RunArtifactSlice` (MUST precede W3.1 distillation)
-> Each parallelizable; same workflow→Codex→commit loop as W3.0. Per-workstream
-> Codex review mandatory (new OpenFOAM dict parsers). Surveying ALL real CHT-case
-> dict forms BEFORE writing is the P2-close carry-forward lesson (and the W3.0
-> calibration: structured parsers have a ~3-round honest-refusal floor unless all
-> malformed-input classes are enumerated up front).
+> **Governance**: 2-lens `test-red-team` caught a **P1 circular-fixture /
+> surface-name-keying fabrication** (synthetic fixtures had entry-name==cellZone==
+> region, masking the bug) fixed pre-Codex. Codex chain **R0→R1→R2 cap=3** on
+> **CRS gpt-5.4 high** (86gs 502×2 fallback, effort xhigh→high logged) — ALL
+> findings P2/P3, NO P1; R0+R1 (6) fixed+verified, R2 (2: seed-only V90 gate +
+> malformed locationsInMesh refusal) fixed at cap per overflow discipline (no
+> spiral). Chain report `reports/codex_tool_reports/v61_219_chain_report.md`;
+> overflow `.planning/retrospectives/codex_round3_overflow_w301.md`. confidence:med.
 >
-> **Notion**: DEC-V61-218 `notion_sync_status: pending_accepted` — session-end batch.
+> **NEXT P3 work items** (charter dependency order):
+> - **W3.0.2** — `thermo_dict_extractor` multi-region variant (per-region
+>   `constant/<region>/thermophysicalProperties`; DEC-V61-213 key-presence). NEXT.
+> - **W3.0.3** — `solver_block_extractor` CHT regression (SPIKE, zero code change,
+>   ≤30 LOC test-only: confirm chtMultiRegionSimpleFoam reported from
+>   case_002b/case_011 controlDicts).
+> - then **W3.0.6** — multi-region `RunArtifactSlice` (MUST precede W3.1 distillation).
+> Same workflow→Codex→commit loop. Per-workstream Codex review mandatory (new
+> OF-dict parsers). **W3.0.1 carry-forward checklist** (compress the ~3-round
+> floor): enumerate UP FRONT the (a) malformed-input, (b) ambiguous/duplicate-source,
+> (c) nesting-depth (line-anchored vs true brace-depth-aware) classes — every Codex
+> round across W3.0/W3.0.1 hit one of these. For association parsers, ≥1 fixture
+> where join key (cellZone) ≠ entry key (surface name), else the test is circular.
+>
+> **Notion**: DEC-V61-218 + DEC-V61-219 both `pending_accepted` — session-end batch.
 >
 > ---
 >
