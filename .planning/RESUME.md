@@ -1,12 +1,32 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.0.2 LANDED (2026-05-30 · read this first)
+> ## ⏩ MOST RECENT — P3 W3.0.1/.2/.3 ARC COMPLETE (2026-05-30 · read this first)
 >
-> **Status**: `P3_IN_PROGRESS`. HEAD = `e733fae`. P3 CHT charter `DEC-V61-217`
-> Accepted; W3.0 (`regionProperties`, DEC-V61-218) + W3.0.1 (`shm_dict` multi-region,
-> DEC-V61-219) LANDED; **W3.0.2 (DEC-V61-220 · `thermo_dict` multi-region reader)
-> now LANDED** — the third executable P3 item, per-region fluid+solid
-> thermophysicalProperties consuming W3.0's Snapshot.
+> **Status**: `P3_IN_PROGRESS`. HEAD = `a03e4ec`. P3 CHT charter `DEC-V61-217`
+> Accepted. **The user's explicit "continue W3.0.1/.2/.3" mandate is COMPLETE** —
+> all three landed this session:
+> - **W3.0.1** `shm_dict` multi-region (DEC-V61-219, `781c335`) — master-sHM
+>   cellZone-derived; region found by cellZone TOKEN not surface name.
+> - **W3.0.2** `thermo_dict` multi-region (DEC-V61-220, `e733fae`) — per-region
+>   fluid+solid; EXTENDED for solid thermo; Contract A required-field refusal.
+> - **W3.0.3** `solver_block` CHT regression (SPIKE, `a03e4ec`) — zero extractor
+>   change; confirms chtMultiRegionSimpleFoam reported; W3.0.3↔W3.2 seam pinned.
+>
+> **NEXT (bigger · load-bearing · surfaced for user greenlight)**: **W3.0.6** —
+> multi-region `RunArtifactSlice` (extends DEC-V61-215 with `regions:
+> list[RegionSlice]`, 3+ nested dataclasses; `RegionSlice = (name, kind,
+> thermo_type, coupled_patches, sHM_snapshot_ref, thermo_snapshot_ref)`). All four
+> deps {W3.0, W3.0.1, W3.0.2, W3.0.3} are now met. **MUST land BEFORE W3.1 CHT
+> rule distillation** (P1-close blindspot #5). Bigger than the W3.0.x extractors
+> (a schema contract W3.1 consumes) — worth a brief target/plan checkpoint before
+> diving in.
+>
+> **Pending session-end**: Notion sync of Accepted DECs `V61-219` + `V61-220`
+> (verify `V61-218` already synced) — `notion_sync_status: pending_accepted`.
+>
+> ---
+>
+> ### Earlier this session — W3.0.2 detail
 >
 > **What shipped (W3.0.2)**: `ui/backend/services/case_extractors/thermo_dict_multi_region.py`
 > (`extract(case_dir, region_snapshot) -> Mapping[str, RegionThermoSnapshot | None] | None`,
