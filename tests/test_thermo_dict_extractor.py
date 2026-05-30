@@ -998,3 +998,64 @@ def test_hf_macro_refuses_snapshot(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert extract_thermo_dict_snapshot(tmp_path) is None
+
+
+# ---------------------------------------------------------------------------
+# Nesting-depth regression (W3.0.2 red-team carry-back, 2026-05-30).
+#
+# The leaf-block scalar scanners (_extract_thermo_model_tags / _extract_specie_
+# block / _extract_transport_block / _extract_thermodynamics_block) were hardened
+# to strip nested ``{ ... }`` sub-blocks (``_strip_nested_blocks``) before
+# matching, so a token declared ONLY inside a nested sub-block of a leaf block
+# (adversarial / malformed input) does NOT leak to the parent scope. These pins
+# lock that behaviour on the SINGLE-region path too (it shared the latent leak).
+# ---------------------------------------------------------------------------
+
+def test_nested_thermotype_type_decoy_does_not_satisfy_discriminator(tmp_path: Path) -> None:
+    """thermoType.type ONLY inside a nested ``decoy { type ...; }`` → snapshot None.
+
+    The parent thermoType has every OTHER token but no own ``type``; a nested
+    decoy must NOT satisfy the REQUIRED discriminator (it would fabricate the
+    whole snapshot from a leaked token).
+    """
+    (tmp_path / "constant").mkdir()
+    (tmp_path / "constant" / "thermophysicalProperties").write_text(
+        "FoamFile { version 2.0; format ascii; class dictionary; "
+        'object thermophysicalProperties; }\n'
+        "thermoType\n{\n"
+        "    mixture pureMixture; transport const; thermo hConst;\n"
+        "    equationOfState perfectGas; specie specie; energy sensibleEnthalpy;\n"
+        "    decoy { type hePsiThermo; }\n"  # nested-only 'type' — must NOT leak
+        "}\n"
+        "mixture\n{\n"
+        "    specie { molWeight 28.96; }\n"
+        "    thermodynamics { Cp 1004.5; Hf 0; }\n"
+        "    transport { mu 1.8e-5; Pr 0.713; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert extract_thermo_dict_snapshot(tmp_path) is None
+
+
+def test_nested_molweight_decoy_does_not_fabricate(tmp_path: Path) -> None:
+    """molWeight ONLY inside a nested ``specie { sub { molWeight ... } }`` → None.
+
+    molWeight is a REQUIRED key for the snapshot; absent at the specie depth-0
+    scope (only present nested) ⇒ honest snapshot None, not a fabricated value.
+    """
+    (tmp_path / "constant").mkdir()
+    (tmp_path / "constant" / "thermophysicalProperties").write_text(
+        "FoamFile { version 2.0; format ascii; class dictionary; "
+        'object thermophysicalProperties; }\n'
+        "thermoType\n{\n"
+        "    type hePsiThermo; mixture pureMixture; transport const; thermo hConst;\n"
+        "    equationOfState perfectGas; specie specie; energy sensibleEnthalpy;\n"
+        "}\n"
+        "mixture\n{\n"
+        "    specie { sub { molWeight 999.0; } }\n"  # nested-only molWeight
+        "    thermodynamics { Cp 1004.5; Hf 0; }\n"
+        "    transport { mu 1.8e-5; Pr 0.713; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    assert extract_thermo_dict_snapshot(tmp_path) is None

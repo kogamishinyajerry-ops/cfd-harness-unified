@@ -351,8 +351,39 @@ def _single_match_or_none(regex: re.Pattern[str], body: str) -> str | None:
     return matches[0]
 
 
+def _strip_nested_blocks(body: str) -> str:
+    """Return *body* with every balanced ``{ ... }`` sub-block removed.
+
+    Only depth-0 characters survive (those NOT enclosed in any ``{`` / ``}``
+    pair). Applied before scanning a located leaf block (thermoType / specie /
+    transport / thermodynamics) for scalar ``key value;`` pairs, so that a token
+    declared inside a NESTED sub-block — adversarial / malformed input; valid OF
+    leaf blocks contain no sub-dicts — cannot leak into the parent-block scan
+    and be accepted as the parent value. Closes the recurring
+    "line-anchored vs brace-depth" fabrication class (W3.0.2 red-team 2026-05-30;
+    single-region shared the latent leak, hardened here for both paths).
+    """
+    out: list[str] = []
+    depth = 0
+    for ch in body:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+        elif depth == 0:
+            out.append(ch)
+    return "".join(out)
+
+
 def _extract_thermo_model_tags(thermotype_inner: str) -> ThermoModelTags | None:
-    """Pull the six ``thermoType`` block tokens; None if any missing/ambiguous."""
+    """Pull the six ``thermoType`` block tokens; None if any missing/ambiguous.
+
+    Depth-0 scan only: a token declared inside a nested sub-block of thermoType
+    (not valid OF; adversarial input) must NOT satisfy a REQUIRED token —
+    notably the load-bearing ``type`` discriminator (W3.0.2 red-team P1).
+    """
+    thermotype_inner = _strip_nested_blocks(thermotype_inner)
     type_tok = _single_match_or_none(_THERMOTYPE_TYPE_RE, thermotype_inner)
     mixture_tok = _single_match_or_none(_THERMOTYPE_MIXTURE_RE, thermotype_inner)
     transport_tok = _single_match_or_none(_THERMOTYPE_TRANSPORT_RE, thermotype_inner)
@@ -403,7 +434,7 @@ def _extract_specie_block(mixture_inner: str) -> dict[str, Any] | None:
     span = _find_nested_block(mixture_inner, "specie")
     if span is None:
         return None
-    body = mixture_inner[span[0]:span[1]]
+    body = _strip_nested_blocks(mixture_inner[span[0]:span[1]])
     mw_token = _single_match_or_none(_MOL_WEIGHT_RE, body)
     if mw_token is None:
         return None
@@ -439,7 +470,7 @@ def _extract_thermodynamics_block(
     span = _find_nested_block(mixture_inner, "thermodynamics")
     if span is None:
         return None
-    body = mixture_inner[span[0]:span[1]]
+    body = _strip_nested_blocks(mixture_inner[span[0]:span[1]])
     cp_token = _single_match_or_none(_CP_RE, body)
     if cp_token is None:
         return None
@@ -493,7 +524,7 @@ def _extract_transport_block(
     span = _find_nested_block(mixture_inner, "transport")
     if span is None:
         return None
-    body = mixture_inner[span[0]:span[1]]
+    body = _strip_nested_blocks(mixture_inner[span[0]:span[1]])
 
     if transport_kind == "sutherland":
         as_token = _single_match_or_none(_AS_RE, body)

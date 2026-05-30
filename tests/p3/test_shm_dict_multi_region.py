@@ -912,17 +912,19 @@ def test_package_reexport_is_module_extract() -> None:
     assert extract_shm_dict_multi_region is shm_dict_multi_region.extract
 
 
-def test_all_now_has_six_extractors() -> None:
-    """J. ``case_extractors.__all__`` must list SIX extractors (FIVE→SIX).
+def test_all_now_has_seven_extractors() -> None:
+    """J. ``case_extractors.__all__`` must list SEVEN extractors (SIX→SEVEN after W3.0.2).
 
     Drift canary on the ``__init__`` edit: if a future re-export is added or
     removed without updating ``__all__``, this test breaks.
+    Updated from SIX→SEVEN when ``thermo_dict_multi_region`` was added (W3.0.2).
     """
     import ui.backend.services.case_extractors as pkg
-    assert len(pkg.__all__) == 6, (
-        f"Expected 6 extractors in __all__, got {len(pkg.__all__)}: {pkg.__all__}"
+    assert len(pkg.__all__) == 7, (
+        f"Expected 7 extractors in __all__, got {len(pkg.__all__)}: {pkg.__all__}"
     )
     assert "extract_shm_dict_multi_region" in pkg.__all__
+    assert "extract_thermo_dict_multi_region" in pkg.__all__
 
 
 def test_region_shm_snapshot_is_frozen_dataclass() -> None:
