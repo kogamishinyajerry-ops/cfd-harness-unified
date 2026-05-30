@@ -1,50 +1,58 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.0.1 LANDED (2026-05-30 · read this first)
+> ## ⏩ MOST RECENT — P3 W3.0.2 LANDED (2026-05-30 · read this first)
 >
-> **Status**: `P3_IN_PROGRESS`. HEAD = `781c335`. P3 CHT charter `DEC-V61-217`
-> Accepted; W3.0 (`regionProperties` reader, DEC-V61-218) LANDED;
-> **W3.0.1 (DEC-V61-219 · `shm_dict` multi-region reader) now LANDED** — the
-> second executable P3 item, region-aware snappyHexMeshDict consuming W3.0's
-> Snapshot.
+> **Status**: `P3_IN_PROGRESS`. HEAD = `e733fae`. P3 CHT charter `DEC-V61-217`
+> Accepted; W3.0 (`regionProperties`, DEC-V61-218) + W3.0.1 (`shm_dict` multi-region,
+> DEC-V61-219) LANDED; **W3.0.2 (DEC-V61-220 · `thermo_dict` multi-region reader)
+> now LANDED** — the third executable P3 item, per-region fluid+solid
+> thermophysicalProperties consuming W3.0's Snapshot.
 >
-> **What shipped**: `ui/backend/services/case_extractors/shm_dict_multi_region.py`
-> (stdlib-only `extract(case_dir, region_snapshot) -> Mapping[str, RegionShmSnapshot
-> | None] | None`, keyed by every region) + `tests/p3/test_shm_dict_multi_region.py`
-> + `..._redteam.py` (73 p3-new tests) + package re-export (FIVE→SIX). Reuses
-> `shm_dict_extractor` block helpers (no new OF-dict parser).
-> **Resolved the charter's design fork = master-sHM cellZone-derived**: real
-> chtMultiRegionSimpleFoam uses ONE `system/snappyHexMeshDict`; per-region tagging
-> via `refinementSurfaces` `cellZone` TOKEN + `locationsInMesh`(V90)/`locationInMesh`
-> (legacy) seeds — no per-region sHM files exist. Region found by **cellZone token
-> not surface entry name** (anti-circularity); honest `None` for any region without
-> cellZone/seed evidence (extruded solids, duplicate cellZone, duplicate/malformed
-> seed) — never fabricates.
+> **What shipped (W3.0.2)**: `ui/backend/services/case_extractors/thermo_dict_multi_region.py`
+> (`extract(case_dir, region_snapshot) -> Mapping[str, RegionThermoSnapshot | None] | None`,
+> keyed by every UNIQUE region) + 3 p3 test files + 1 single-region regression pin +
+> `__init__` re-export (SIX→SEVEN). **EXTENDED for solid thermo** (heSolidThermo/
+> constIso kappa/rhoConst rho), not a fluid-only wrapper. Two invariants: kind from
+> snapshot membership ONLY (never name inference) + **Contract A** (required-field-
+> absent → region None, symmetric with single-region; required = molWeight+Cp+complete
+> fluid transport; solid kappa/rho optional). The reused single-region leaf scanners
+> were **hardened at root** (`_strip_nested_blocks` — fixes a latent nested-
+> `thermoType.type`-leak fabrication that affected single-region too;
+> `tests/test_thermo_dict_extractor.py` +2 regression pins).
 >
-> **Governance**: 2-lens `test-red-team` caught a **P1 circular-fixture /
-> surface-name-keying fabrication** (synthetic fixtures had entry-name==cellZone==
-> region, masking the bug) fixed pre-Codex. Codex chain **R0→R1→R2 cap=3** on
-> **CRS gpt-5.4 high** (86gs 502×2 fallback, effort xhigh→high logged) — ALL
-> findings P2/P3, NO P1; R0+R1 (6) fixed+verified, R2 (2: seed-only V90 gate +
-> malformed locationsInMesh refusal) fixed at cap per overflow discipline (no
-> spiral). Chain report `reports/codex_tool_reports/v61_219_chain_report.md`;
-> overflow `.planning/retrospectives/codex_round3_overflow_w301.md`. confidence:med.
+> **Governance (W3.0.2)**: 2-lens `test-red-team` caught **P1×3** (solid-kappa
+> gating + nesting-depth discriminator leak ×2) fixed pre-Codex. Codex chain
+> **R0(2×P2)→R1(2×P1)→R2(1×P1) cap=3** on 86gs xhigh(R0) then **CRS gpt-5.4 high**
+> (86gs stream-failed mid-R1, effort xhigh→high logged) — all findings fixed+pinned;
+> R2 fixed at cap (consult tool errored twice; W3.0.1 precedent). Chain report
+> `reports/codex_tool_reports/v61_220_chain_report.md`; overflow
+> `.planning/retrospectives/codex_round3_overflow_w302.md`. confidence:med. 153
+> p3+single-region green; 308 case-extractor surface pass — no regression.
+>
+> **Prior (W3.0 + W3.0.1)**: `region_properties_reader.py` (DEC-V61-218, the PIVOT
+> snapshot) + `shm_dict_multi_region.py` (DEC-V61-219, master-sHM cellZone-derived,
+> region found by cellZone TOKEN not surface entry name — anti-circularity). Both
+> Accepted, stdlib-only, honest-refusal. See ANCHOR-26/27 in STATE.md.
 >
 > **NEXT P3 work items** (charter dependency order):
-> - **W3.0.2** — `thermo_dict_extractor` multi-region variant (per-region
->   `constant/<region>/thermophysicalProperties`; DEC-V61-213 key-presence). NEXT.
-> - **W3.0.3** — `solver_block_extractor` CHT regression (SPIKE, zero code change,
->   ≤30 LOC test-only: confirm chtMultiRegionSimpleFoam reported from
->   case_002b/case_011 controlDicts).
-> - then **W3.0.6** — multi-region `RunArtifactSlice` (MUST precede W3.1 distillation).
-> Same workflow→Codex→commit loop. Per-workstream Codex review mandatory (new
-> OF-dict parsers). **W3.0.1 carry-forward checklist** (compress the ~3-round
-> floor): enumerate UP FRONT the (a) malformed-input, (b) ambiguous/duplicate-source,
-> (c) nesting-depth (line-anchored vs true brace-depth-aware) classes — every Codex
-> round across W3.0/W3.0.1 hit one of these. For association parsers, ≥1 fixture
-> where join key (cellZone) ≠ entry key (surface name), else the test is circular.
+> - **W3.0.3** — `solver_block_extractor` CHT regression (SPIKE · zero code change ·
+>   ≤30 LOC test-only): confirm `chtMultiRegionSimpleFoam` is reported from
+>   case_002b/case_011-shaped controlDicts. **NEXT.** Likely spike-class (/goal
+>   Pattern C): if truly test-only ≤30 LOC, skip DEC/Codex/Kogami/Notion (echo
+>   "skipped: spike-class") — but if it surfaces a real `solver_block_extractor`
+>   gap (a missing CHT solver token), it escalates to a sub-DEC + Codex.
+> - then **W3.0.6** — multi-region `RunArtifactSlice` (3+ nested dataclasses;
+>   `regions: list[RegionSlice]`) — **MUST precede W3.1 CHT rule distillation**.
+> Same workflow→Codex→commit loop. **Carry-forward checklist** (compress the
+> ~3-round Codex floor — every W3.0/W3.0.1/W3.0.2 round hit one of these): enumerate
+> UP FRONT (a) malformed-input, (b) ambiguous/duplicate-source, (c) nesting-depth
+> (line-anchored vs brace-depth), (d) **NEW from W3.0.2** — *wrapper refusal-bar
+> parity* (does the wrapper's required-field bar match the wrapped extractor's?
+> pin a region-None test per required field) + *map-key uniqueness* (dedup names
+> drawn from ≥2 source lists). For association parsers, ≥1 fixture where the join
+> key ≠ the entry key, else the test is circular.
 >
-> **Notion**: DEC-V61-218 + DEC-V61-219 both `pending_accepted` — session-end batch.
+> **Notion**: DEC-V61-218 + V61-219 + V61-220 all `pending_accepted` — session-end batch.
 >
 > ---
 >
