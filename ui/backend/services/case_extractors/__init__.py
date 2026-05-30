@@ -6,7 +6,7 @@ inputs `assemble_stack` consumes (`SolverBlockSnapshot`, `shm_dict`,
 `thermo_dict`, `step_path`, etc.) from on-disk OpenFOAM case
 directories.
 
-v0.1 + V61-212 + V61-213 + V61-214 ships FOUR extractors:
+v0.1 + V61-212 + V61-213 + V61-214 + V61-217-W3.0 ships FIVE extractors:
   - `solver_block_extractor.extract` → `SolverBlockSnapshot | None`
     (DEC-V61-211 — `system/controlDict`)
   - `shm_dict_extractor.extract`     → `Mapping[str, Any] | None`
@@ -15,6 +15,8 @@ v0.1 + V61-212 + V61-213 + V61-214 ships FOUR extractors:
     (DEC-V61-213 — `constant/thermophysicalProperties`)
   - `step_extractor.extract`         → `StepArtifacts | None`
     (DEC-V61-214 — `*.step` / `cad/bbox.json` / `manifest.json` discovery)
+  - `region_properties_reader.extract` → `RegionPropertiesSnapshot | None`
+    (DEC-V61-217 W3.0 — `constant/regionProperties`)
 
 Other extractors are deferred to follow-on sub-DECs (see DEC-V61-211
 "Out of scope") — adding to this package later is additive.
@@ -33,12 +35,14 @@ All extractors are:
     more than is implemented.
 """
 
+from .region_properties_reader import extract as extract_region_properties_snapshot
 from .shm_dict_extractor import extract as extract_shm_dict
 from .solver_block_extractor import extract as extract_solver_block_snapshot
 from .step_extractor import extract as extract_step_path_snapshot
 from .thermo_dict_extractor import extract as extract_thermo_dict_snapshot
 
 __all__ = [
+    "extract_region_properties_snapshot",
     "extract_shm_dict",
     "extract_solver_block_snapshot",
     "extract_step_path_snapshot",
