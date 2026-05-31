@@ -19,7 +19,9 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from .pattern_matcher import (
     AdvisorRule,
+    CoupledPatch,
     MatchSite,
+    RegionSlice,
     RunArtifactSlice,
     js_to_exponential,
     js_to_fixed,
@@ -456,6 +458,228 @@ def _pred_residual_divergence(slice_: RunArtifactSlice) -> Optional[MatchSite]:
     return MatchSite(matched_at=f"iter_{final_iter}_p_divergence")
 
 
+# ---------------------------------------------------------------------------
+# W3.1 CHT predicates — R13, R14, R15, R16
+# ---------------------------------------------------------------------------
+
+
+def _pred_coupled_interface_dangling_ref(slice_: RunArtifactSlice) -> Optional[MatchSite]:
+    # W3.1 · R13 COUPLED_INTERFACE_DANGLING_REF_V9_R13
+    #
+    # Detects a dangling coupled-interface reference at the region-inventory
+    # level: a coupled boundary patch on a region declares a neighbour_region
+    # that is NOT present in the assembled multi-region inventory.
+    #
+    # This is the SLICE-LEVEL SHADOW of the V94 death-chain: a coupled-patch
+    # BC referencing a counterpart that does not resolve in the per-region
+    # polyMesh → solver FATAL 'Cannot find patchField entry for
+    # region_hot_fluid_to_domain0'. This predicate WOULD fire on V94's
+    # dangling-reference shape (unlike the old WALL_COUPLING_MISMATCH
+    # case-wide family heuristic, which could not detect single-family
+    # dangling refs).
+    #
+    # Logic: build the set of region names from slice_.regions. For each
+    # region's coupled_patches (skip if None or empty), for each CoupledPatch
+    # cp: if cp.neighbour_region is not None AND cp.neighbour_region is NOT in
+    # the region-name set → FIRE (dangling reference).
+    # matched_at = f"dangling_coupled_ref:{region.name}.{cp.patch_name}->{cp.neighbour_region}"
+    #
+    # KNOWN-GAP (signal-vs-noise discipline · W3.1 R13 negative contract):
+    # R13 will NOT fire when:
+    #   (a) regions is None — legacy/non-CHT scalar slice (graceful-skip).
+    #   (b) regions == [] — region list present but empty; no inventory to check.
+    #   (c) a region's coupled_patches is None — coupling not extracted;
+    #       cannot detect dangling ref without the payload (honest None handling).
+    #   (d) a region's coupled_patches == () — extraction ran, zero patches.
+    #   (e) cp.neighbour_region is None — neighbour not extracted; cannot judge
+    #       dangling-ness without knowing the declared neighbour.
+    #   (f) a HEALTHY case where every cp.neighbour_region resolves to a region
+    #       in the inventory — all refs resolve → silent.
+    #   (g) the previously-false-firing two-independent-consistent-interfaces
+    #       case: if each interface's neighbour regions are all present in the
+    #       inventory, the rule stays silent regardless of coupling_type family.
+    # Note: guard with 'is not None' membership check; do NOT raise on
+    # cp.neighbour_region being non-str — the dataclass caller is the validator.
+    if slice_.regions is None:
+        return None
+    if len(slice_.regions) == 0:
+        return None
+
+    # Build the region-name inventory set for O(1) membership checks.
+    region_names: set[str] = {r.name for r in slice_.regions}
+
+    for region in slice_.regions:
+        if region.coupled_patches is None:
+            continue  # not extracted — skip
+        if len(region.coupled_patches) == 0:
+            continue  # extraction ran, zero patches — skip
+        for cp in region.coupled_patches:
+            if cp.neighbour_region is not None:
+                if cp.neighbour_region not in region_names:
+                    return MatchSite(
+                        matched_at=(
+                            f"dangling_coupled_ref:{region.name}."
+                            f"{cp.patch_name}->{cp.neighbour_region}"
+                        )
+                    )
+
+    return None
+
+
+def _pred_per_region_thermo_missing(slice_: RunArtifactSlice) -> Optional[MatchSite]:
+    # W3.1 · R14 PER_REGION_THERMO_MISSING_V9_R14
+    #
+    # A region is listed in the CHT region inventory but carries NO per-region
+    # thermophysical model payload: BOTH thermo_type AND thermo_snapshot_ref
+    # are None for the same region.
+    #
+    # V14 death-chain: chtMultiRegionSimpleFoam crashed mid-Time=1 (radiation
+    # setup), no time directory beyond 0/ was written, post-processor reading
+    # solid-region T fields hit the OpenFOAM missing-field sentinel ±1e+300 —
+    # payload never produced, masquerading as catastrophic divergence.
+    # V92 structural twin: region_solid 0 cells, absent from final polyMesh,
+    # region listed in regionProperties had no resolvable thermo/field payload
+    # (mesh_summary FAIL: only 2/3 expected regions present; missing region_solid).
+    #
+    # KNOWN-GAP (signal-vs-noise discipline · W3.1 R14 negative contract):
+    # R14 will NOT fire when:
+    #   (a) regions is None — legacy/scalar slice (graceful-skip).
+    #   (b) regions == [] — no regions to check.
+    #   (c) a region has thermo_type present (any non-None string) — a populated
+    #       thermo_type means the payload was extracted; thermo_snapshot_ref
+    #       being None in that case is a decoupling artifact, NOT missing model.
+    #       Rule does NOT validate that refs resolve (pattern_matcher.py:77-78).
+    # Fires ONLY when BOTH thermo_type AND thermo_snapshot_ref are None for a
+    # listed region (DEC-V61-213 presence-vs-payload split).
+    if slice_.regions is None:
+        return None
+    if len(slice_.regions) == 0:
+        return None
+
+    for region in slice_.regions:
+        if region.thermo_type is None and region.thermo_snapshot_ref is None:
+            return MatchSite(matched_at=f"region:{region.name}:thermo_missing")
+
+    return None
+
+
+def _pred_conduction_dominance(slice_: RunArtifactSlice) -> Optional[MatchSite]:
+    # W3.1 · R15 CONDUCTION_DOMINANCE_V9_R15
+    #
+    # Detects a ZERO-FLUID region inventory: every classified region in the
+    # CHT slice is solid, so no convection is possible. This fires on the
+    # V92-class fluid-region loss (a fluid region silently got 0 cells and
+    # was dropped from the final polyMesh → the inventory becomes all-solid).
+    # It also fires when the case was always conduction-only (no fluid region
+    # declared at all). In either case, no convective momentum source can
+    # drive inter-region heat exchange.
+    #
+    # V92 faithful death-chain (region silently dropped from polyMesh →
+    # inventory becomes all-solid → R15 fires): .planning/methodology/
+    # industrial_case_solver_findings.md:1360-1370.
+    #
+    # Charter reference: DEC-V61-217 lines 106-110 (case_011 v5b degenerate-
+    # physics conduction-dominated boundary-equilibration — NOTE: the BC-driven
+    # v5b degeneracy described there has 2 fluid + 1 solid, which R15 does NOT
+    # detect because n_fluid=2 > 0; that scenario is documented as a known gap
+    # below).
+    #
+    # KNOWN-GAP (honest disclosed gap · W3.1 R15 negative contract):
+    # R15 will NOT fire when:
+    #   (a) regions is None — legacy/scalar slice (graceful-skip).
+    #   (b) regions == [] — no classified regions to count.
+    #   (c) a region's kind is None — ambiguous classification (DEC-V61-213
+    #       honest None); MUST be SKIPPED from the count, never guessed.
+    #   (d) n_fluid >= 1 after skipping None-kind regions — at least one fluid
+    #       region with a real flow regime present.
+    #   (e) BC-DRIVEN DEGENERACY (disclosed known gap): the V94 case_011 v5b
+    #       scenario — fluid regions ARE present in the inventory (n_fluid=2)
+    #       but are kinematically dead (all-walls fixedValue (0,0,0), no mass
+    #       flow → pure-conduction collapse at iter 200). This is NOT detectable
+    #       from the current slice schema: no kinematic-BC / mass-flow field
+    #       exists on RegionSlice. R15 detects only the zero-fluid-topology
+    #       case, not the BC-driven kinematically-dead-fluid case.
+    # The deterministic FIRE condition is the unambiguous n_fluid == 0 case
+    # where at least one solid region exists (pure-conduction degeneracy).
+    if slice_.regions is None:
+        return None
+    if len(slice_.regions) == 0:
+        return None
+
+    n_fluid = 0
+    n_solid = 0
+    for region in slice_.regions:
+        if region.kind is None:
+            continue  # ambiguous — skip, never guess
+        if region.kind == "fluid":
+            n_fluid += 1
+        elif region.kind == "solid":
+            n_solid += 1
+
+    # Only fire if we have at least one classifiable region AND zero fluids.
+    if n_fluid == 0 and n_solid >= 1:
+        return MatchSite(matched_at=f"n_fluid=0_n_solid={n_solid}")
+
+    return None
+
+
+def _pred_face_zone_loss(slice_: RunArtifactSlice) -> Optional[MatchSite]:
+    # W3.1 · R16 FACE_ZONE_LOSS_V9_R16
+    #
+    # Face-zone / region-mesh loss XOR (CHT mirror of R12 PASS/FAIL XOR):
+    # a region is declared in the CHT inventory (regions[].name present) but
+    # its snappyHexMesh face-zone/cellZone output reference is absent
+    # (shm_snapshot_ref is None) — the two signals disagree.
+    #
+    # Four orthogonal V-row death-chains:
+    #   V94: STL face-zone labels absent → one undifferentiated patch per
+    #        region pair; named patches never materialise.
+    #   V85: solid insidePoint inside hot-fluid layer + 0.8mm sub-cell plates →
+    #        cellZone walk leaks → region_hot_fluid absent from final polyMesh.
+    #   V90: modern locationsInMesh syntax on separate-STL multi-region →
+    #        empty named cellZones; only 1 of 3 populated.
+    #   V92: cellZoneInside inside on fuse_many void-bearing STL → region_solid
+    #        0 cells, missing from polyMesh.
+    #
+    # Mirror of R12 shape: requires at least ONE region WITH a populated
+    # shm_snapshot_ref before flagging the ones WITHOUT. This distinguishes
+    # 'shm stage skipped entirely' (all refs None → uniform absence, graceful
+    # skip) from 'this specific region lost its face-zone' (some refs present,
+    # one absent → XOR disagreement).
+    #
+    # KNOWN-GAP (signal-vs-noise discipline · W3.1 R16 negative contract):
+    # R16 will NOT fire when:
+    #   (a) regions is None — legacy/scalar slice (graceful-skip).
+    #   (b) regions == [] — no regions to cross-check.
+    #   (c) shm_snapshot_ref is present (non-None) for a region — no XOR
+    #       disagreement for that region.
+    #   (d) NO region in the slice has any shm_snapshot_ref at all (all None) —
+    #       shm stage skipped entirely; cannot distinguish from face-zone loss;
+    #       graceful skip, not per-region finding. The rule refuses to fire on
+    #       half-data (mirrors R12's 'station_pct is None → skip' discipline).
+    if slice_.regions is None:
+        return None
+    if len(slice_.regions) == 0:
+        return None
+
+    # Require at least one region WITH a ref before flagging any without.
+    # (R12 mirror: refuse to fire on half-data / uniform absence.)
+    any_ref_present = any(
+        r.shm_snapshot_ref is not None for r in slice_.regions
+    )
+    if not any_ref_present:
+        return None
+
+    # XOR: find first region that is declared (has a name) but has no ref.
+    for region in slice_.regions:
+        if region.shm_snapshot_ref is None:
+            return MatchSite(
+                matched_at=f"region:{region.name}:declared_no_shm_snapshot"
+            )
+
+    return None
+
+
 _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] = {
     "RESIDUAL_OSCILLATION_P_V9_R1": _pred_residual_oscillation_p,
     "MAX_ITERS_REACHED_V9_R2": _pred_max_iters_reached,
@@ -469,6 +693,11 @@ _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] 
     "KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10": _pred_known_deviation_pattern_near_le,
     "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11": _pred_developed_region_shape_mismatch,
     "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12": _pred_integrated_vs_station_discrepancy,
+    # W3.1 CHT rules
+    "COUPLED_INTERFACE_DANGLING_REF_V9_R13": _pred_coupled_interface_dangling_ref,
+    "PER_REGION_THERMO_MISSING_V9_R14": _pred_per_region_thermo_missing,
+    "CONDUCTION_DOMINANCE_V9_R15": _pred_conduction_dominance,
+    "FACE_ZONE_LOSS_V9_R16": _pred_face_zone_loss,
 }
 
 

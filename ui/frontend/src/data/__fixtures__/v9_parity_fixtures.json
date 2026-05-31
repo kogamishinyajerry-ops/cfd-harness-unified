@@ -872,7 +872,278 @@
         "run_id": "R-DEC209-AGREE-1",
         "success": true
       }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Dangling coupled-interface reference detected at the region-inventory level: a coupled boundary patch on a region declares a neighbour_region that is absent from the assembled multi-region inventory. This is the slice-level shadow of the…",
+          "matched_at": "dangling_coupled_ref:region_hot_fluid.region_hot_fluid_to_domain0->domain0",
+          "provenance": ".planning/methodology/industrial_case_solver_findings.md:1384-1394 (V94 death-chain: 0.orig BC files reference coupled patches that do not exist in the actual per-region polyMesh/boundary; FATAL Cannot find patchField entry for region_hot_fluid_to_domain0) · ui/backend/services/v9_advisor/pattern_matcher.py:207-236 (CoupledPatch.neighbour_region frozen W3.0.6 field — this predicate reads neighbour_region for dangling-ref detection) · .planning/decisions/2026-05-30_v61_217_p3_cht_charter.md:164 (W3.1 names R13)",
+          "rule_id": "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
+          "severity": "warn"
+        }
+      ],
+      "name": "cht_coupled_interface_dangling_ref_r13",
+      "slice": {
+        "case_id": "cht_v94_dangling_ref",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [
+              {
+                "coupling_type": "compressible::turbulentTemperatureCoupledBaffleMixed",
+                "neighbour_region": "domain0",
+                "patch_name": "region_hot_fluid_to_domain0"
+              },
+              {
+                "coupling_type": "compressible::turbulentTemperatureCoupledBaffleMixed",
+                "neighbour_region": "region_solid",
+                "patch_name": "region_hot_fluid_to_region_solid"
+              }
+            ],
+            "kind": "fluid",
+            "name": "region_hot_fluid",
+            "shm_snapshot_ref": "shm_hot",
+            "thermo_snapshot_ref": "snap_hot",
+            "thermo_type": "heRhoThermo"
+          },
+          {
+            "coupled_patches": [
+              {
+                "coupling_type": "compressible::turbulentTemperatureCoupledBaffleMixed",
+                "neighbour_region": "region_hot_fluid",
+                "patch_name": "region_solid_to_hot"
+              }
+            ],
+            "kind": "solid",
+            "name": "region_solid",
+            "shm_snapshot_ref": "shm_solid",
+            "thermo_snapshot_ref": "snap_solid",
+            "thermo_type": "heSolidThermo"
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R13-FIRE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [],
+      "name": "cht_coupled_interface_all_refs_resolve_r13_negative",
+      "slice": {
+        "case_id": "cht_healthy_coupled_refs",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [
+              {
+                "coupling_type": "compressible::turbulentTemperatureRadCoupledMixed",
+                "neighbour_region": "heater",
+                "patch_name": "fluid_to_heater"
+              }
+            ],
+            "kind": "fluid",
+            "name": "fluid",
+            "shm_snapshot_ref": "shm_fluid",
+            "thermo_snapshot_ref": "snap_fluid",
+            "thermo_type": "heRhoThermo"
+          },
+          {
+            "coupled_patches": [
+              {
+                "coupling_type": "compressible::turbulentTemperatureRadCoupledMixed",
+                "neighbour_region": "fluid",
+                "patch_name": "heater_to_fluid"
+              }
+            ],
+            "kind": "solid",
+            "name": "heater",
+            "shm_snapshot_ref": "shm_heater",
+            "thermo_snapshot_ref": "snap_heater",
+            "thermo_type": "heSolidThermo"
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R13-SILENT",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "A region is listed in the CHT region inventory but carries NO per-region thermophysical model payload (both thermo_type and thermo_snapshot_ref are absent/None). V14 death-chain: chtMultiRegionSimpleFoam crashed mid-Time=1 (radiation set…",
+          "matched_at": "region:solid_plate:thermo_missing",
+          "provenance": ".planning/methodology/industrial_case_solver_findings.md:307-317 (V14 death-chain: solver crashed mid-Time=1, no time directories written, missing-field sentinel ±1e+300 returned for unread solid-region fields) · :1360-1370 (V92: region_solid 0 cells, region absent from final polyMesh, mesh_summary FAIL only 2/3 expected regions present; missing region_solid) · ui/backend/services/v9_advisor/pattern_matcher.py:267-272,287-290 (RegionSlice.thermo_type + thermo_snapshot_ref fields; R14 PER_REGION_THERMO_MISSING reads thermo_type/thermo_snapshot_ref) · .planning/decisions/2026-05-30_v61_217_p3_cht_charter.md:161,164 (W3.0.2 row: per-region thermo; W3.1 names R14 per-region-thermo-missing) · .planning/case_profiles/case_011_plate_fin_compact_hx.md:38,47 (case_011 = 3 regions w/ distinct thermophysicalProperties templates — every region must carry its own thermo)",
+          "rule_id": "PER_REGION_THERMO_MISSING_V9_R14",
+          "severity": "warn"
+        }
+      ],
+      "name": "cht_per_region_thermo_missing_r14",
+      "slice": {
+        "case_id": "cht_missing_thermo",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [],
+            "kind": "fluid",
+            "name": "fluid_hot",
+            "shm_snapshot_ref": "shm_fluid_hot",
+            "thermo_snapshot_ref": "snap_fluid_hot",
+            "thermo_type": "heRhoThermo"
+          },
+          {
+            "coupled_patches": [],
+            "kind": "solid",
+            "name": "solid_plate",
+            "shm_snapshot_ref": "shm_solid_plate",
+            "thermo_snapshot_ref": null,
+            "thermo_type": null
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R14-FIRE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Zero-fluid region inventory detected: every classified region in the CHT slice is solid, so no convective momentum source can drive inter-region heat exchange. Fires on V92-class fluid-region loss (fluid region silently got 0 cells, drop…",
+          "matched_at": "n_fluid=0_n_solid=2",
+          "provenance": ".planning/methodology/industrial_case_solver_findings.md:1360-1370 (V92: region_solid 0 cells, region absent from final polyMesh — if the FLUID region is the one that drops, the inventory becomes all-solid and R15 fires) · .planning/decisions/2026-05-30_v61_217_p3_cht_charter.md:106-110,164 (case_011 v5b V94 degenerate-physics conduction-dominated boundary-equilibration; W3.1 names R15 — NOTE: the v5b BC-driven scenario is a disclosed known gap for R15, not a detected case) · ui/backend/services/v9_advisor/pattern_matcher.py:253-266 (RegionSlice.kind Literal fluid/solid|None; None == ambiguous; R15 reads this)",
+          "rule_id": "CONDUCTION_DOMINANCE_V9_R15",
+          "severity": "warn"
+        }
+      ],
+      "name": "cht_conduction_dominance_all_solid_r15",
+      "slice": {
+        "case_id": "cht_all_solid",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [],
+            "kind": "solid",
+            "name": "plate_1",
+            "shm_snapshot_ref": "shm_plate_1",
+            "thermo_snapshot_ref": "snap_plate_1",
+            "thermo_type": "heSolidThermo"
+          },
+          {
+            "coupled_patches": [],
+            "kind": "solid",
+            "name": "plate_2",
+            "shm_snapshot_ref": "shm_plate_2",
+            "thermo_snapshot_ref": "snap_plate_2",
+            "thermo_type": "heSolidThermo"
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R15-FIRE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [
+        {
+          "commentary_excerpt": "Face-zone / region-mesh loss XOR (CHT mirror of R12 PASS/FAIL XOR): a region is declared in the CHT region inventory but its snappyHexMesh face-zone/cellZone output reference is absent — declared vs produced DISAGREE. Four V-row death-ch…",
+          "matched_at": "region:solid_lost:declared_no_shm_snapshot",
+          "provenance": ".planning/methodology/industrial_case_solver_findings.md:1384-1394 (V94: STL face-zone label loss → one undifferentiated patch per region pair; named patches absent from per-region polyMesh/boundary) · :1161-1171 (V85: cellZone walk leaks across 0.8mm sub-cell plates → region_hot_fluid absent from final polyMesh) · :1336-1346 (V90: modern locationsInMesh syntax → empty named cellZones, splitMeshRegions 152 regions only 1 of 3 cellZones populated) · :1360-1370 (V92: cellZoneInside inside on fuse_many void STL → region_solid 0 cells, missing from polyMesh) · ui/backend/services/v9_advisor/pattern_matcher.py:281-285,296 (RegionSlice.shm_snapshot_ref opaque string; R16 FACE_ZONE_LOSS reads this ref) · .planning/ARC-GOAL-V63-A-CLOSED.md:64 (D11 stl_face_label_validator LANDED for V94 face-label-loss class) · .planning/decisions/2026-05-30_v61_217_p3_cht_charter.md:164 (W3.1 names R16 face-zone-loss XOR detector mirroring R12 shape)",
+          "rule_id": "FACE_ZONE_LOSS_V9_R16",
+          "severity": "warn"
+        }
+      ],
+      "name": "cht_face_zone_loss_xor_r16",
+      "slice": {
+        "case_id": "cht_face_zone_loss",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [],
+            "kind": "fluid",
+            "name": "fluid",
+            "shm_snapshot_ref": "shm_fluid",
+            "thermo_snapshot_ref": "snap_fluid",
+            "thermo_type": "heRhoThermo"
+          },
+          {
+            "coupled_patches": [],
+            "kind": "solid",
+            "name": "solid_lost",
+            "shm_snapshot_ref": null,
+            "thermo_snapshot_ref": "snap_solid",
+            "thermo_type": "heSolidThermo"
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R16-FIRE",
+        "success": true
+      }
+    },
+    {
+      "expected_matches": [],
+      "name": "cht_face_zone_all_refs_absent_r16_negative",
+      "slice": {
+        "case_id": "cht_shm_stage_skipped",
+        "convergence_stats": null,
+        "developed_region_gold_delta": null,
+        "exit_code": 0,
+        "forces": null,
+        "gold_delta": null,
+        "integrated_drag_pct": null,
+        "reference_comparison_band_summary": null,
+        "regions": [
+          {
+            "coupled_patches": [],
+            "kind": "fluid",
+            "name": "fluid",
+            "shm_snapshot_ref": null,
+            "thermo_snapshot_ref": "snap_fluid",
+            "thermo_type": "heRhoThermo"
+          },
+          {
+            "coupled_patches": [],
+            "kind": "solid",
+            "name": "solid",
+            "shm_snapshot_ref": null,
+            "thermo_snapshot_ref": "snap_solid",
+            "thermo_type": "heSolidThermo"
+          }
+        ],
+        "residuals": null,
+        "run_id": "R-R16-ALLNONE",
+        "success": true
+      }
     }
   ],
-  "version": "v9.2.0"
+  "version": "v9.3.1"
 }

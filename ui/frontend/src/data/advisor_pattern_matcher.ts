@@ -19,7 +19,7 @@
 // RS#38 cross-language contract: this TS mirror MUST track the Python dataclasses
 // field-for-field. Additive-non-breaking: `regions` is optional, so every
 // pre-W3.0.6 RunArtifactSlice literal still type-checks. The frozen contract
-// feeds W3.1 CHT rules (R13 coupled_patches[].coupling_type · R14 thermo_type /
+// feeds W3.1 CHT rules (R13 coupled_patches[*].neighbour_region · R14 thermo_type /
 // thermo_snapshot_ref · R15 kind · R16 shm_snapshot_ref).
 //
 // Three-state (DEC-V61-213 presence-vs-payload): for `regions` and

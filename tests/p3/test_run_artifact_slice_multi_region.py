@@ -426,7 +426,9 @@ class TestPresenceVsPayload:
     # --- per-FIELD presence-vs-payload (red-team lens-2 P2#1) ---
     # The DEC-V61-213 three-state contract applies at the coupled_patches field
     # too — None (coupling not extracted) vs () (extracted, zero patches) vs
-    # populated. W3.1 R13 WALL_COUPLING_MISMATCH branches on exactly this axis.
+    # populated. W3.1 R13 COUPLED_INTERFACE_DANGLING_REF skips coupled_patches
+    # None/() and checks neighbour_region on populated patches — branching on
+    # exactly this presence-vs-payload axis.
 
     def test_coupled_patches_none_vs_empty_tuple_distinct(self):
         """coupled_patches=None (not extracted) != () (extracted, zero patches)."""
@@ -619,14 +621,19 @@ class TestByteReproducibilitySidecar:
 
     def test_regions_field_does_not_affect_matched_json_bytes(self):
         """RS#36 byte-invariance — exercised through the REAL matcher + serializer
-        (Codex R1 P3#1). Run ``match_advisor_patterns`` on a slice WITH regions
-        vs an otherwise-identical slice WITHOUT regions, serialize each matched-
-        commentary list with the REAL ``_canonical_json``, and assert byte-
-        identical output. No shipped V9 rule (R1–R9) reads ``regions``, so the
-        matched commentary — the only thing the sidecar serializes — cannot
-        differ. This genuinely fences a future leak of ``regions`` into the
-        serialized output (the prior version serialized one synthetic dict twice
-        — a tautology that fenced nothing).
+        (Codex R1 P3#1). Run ``match_advisor_patterns`` on a slice carrying
+        HEALTHY regions (every region fully populated so NO W3.1 rule R13–R16
+        fires) vs an otherwise-identical slice WITHOUT regions, serialize each
+        matched-commentary list with the REAL ``_canonical_json``, and assert
+        byte-identical output.
+
+        Post-W3.1 premise (updated — W3.1 rules R13–R16 DO read ``regions``):
+        the ``regions`` FIELD itself never serializes into the sidecar (only the
+        matched commentary does), so HEALTHY region data — which triggers no
+        rule — cannot change the bytes. When a region is UNHEALTHY the rules
+        legitimately surface region-derived commentary (different bytes, by
+        design); that determinism is asserted by the sibling test below, and the
+        per-rule fire behaviour is covered in test_v9_cht_rules.py.
         """
         from ui.backend.services.v9_advisor.pattern_matcher import (
             match_advisor_patterns,
@@ -641,9 +648,13 @@ class TestByteReproducibilitySidecar:
             regions=[
                 RegionSlice(name="fluid", kind="fluid", thermo_type="heRhoThermo"),
                 RegionSlice(
-                    name="solid", kind="solid",
+                    name="solid", kind="solid", thermo_type="heSolidThermo",
                     coupled_patches=(
-                        CoupledPatch(patch_name="iface", coupling_type=COUPLED_BAFFLE_MIXED),
+                        CoupledPatch(
+                            patch_name="iface",
+                            coupling_type=COUPLED_BAFFLE_MIXED,
+                            neighbour_region="fluid",  # resolves in inventory → R13 silent
+                        ),
                     ),
                 ),
             ],
@@ -653,7 +664,45 @@ class TestByteReproducibilitySidecar:
             matches = match_advisor_patterns(s, V9_ADVISOR_RULES)
             return _canonical_json([dataclasses.asdict(m) for m in matches])
 
+        # Healthy regions trigger no W3.1 rule → matched commentary is byte-
+        # identical to the no-regions slice (the field itself does not serialize).
         assert matched_bytes(slice_with_regions) == matched_bytes(slice_no_regions)
+
+    def test_region_triggered_commentary_is_deterministic_and_distinct(self):
+        """Post-W3.1 companion to the byte-invariance test. When a region IS
+        unhealthy (here a solid region with no thermo payload → R14
+        PER_REGION_THERMO_MISSING fires), the matched commentary legitimately
+        DIFFERS from a no-regions slice (rules surface region-derived findings —
+        the point of W3.1) AND is byte-reproducible (RS#36: same slice serialized
+        twice → identical bytes). Pins the genuine invariant (determinism), not
+        the now-false 'regions never affects bytes' proxy.
+        """
+        from ui.backend.services.v9_advisor.pattern_matcher import (
+            match_advisor_patterns,
+        )
+        from ui.backend.services.v9_advisor.rules import V9_ADVISOR_RULES
+        from src.audit_package.serialize import _canonical_json
+
+        base = dict(run_id="R-RS36b", case_id="c", success=True, exit_code=0)
+        slice_no_regions = RunArtifactSlice(**base)
+        slice_unhealthy = RunArtifactSlice(
+            **base,
+            regions=[
+                RegionSlice(name="fluid", kind="fluid", thermo_type="heRhoThermo"),
+                # solid with NO thermo_type AND no thermo_snapshot_ref → R14 fires
+                RegionSlice(name="solid", kind="solid"),
+            ],
+        )
+
+        def matched_bytes(s: RunArtifactSlice) -> bytes:
+            matches = match_advisor_patterns(s, V9_ADVISOR_RULES)
+            return _canonical_json([dataclasses.asdict(m) for m in matches])
+
+        # Determinism (RS#36): same unhealthy slice serialized twice → identical.
+        assert matched_bytes(slice_unhealthy) == matched_bytes(slice_unhealthy)
+        # Distinctness: an unhealthy region DOES surface commentary (W3.1 R14),
+        # so it is NOT byte-equal to the no-regions slice — rules legitimately fire.
+        assert matched_bytes(slice_unhealthy) != matched_bytes(slice_no_regions)
 
     def test_regions_field_disjoint_from_commentary(self):
         """The slice dict and the commentary sidecar are disjoint (Codex R1 P3#2).

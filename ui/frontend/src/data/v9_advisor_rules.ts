@@ -284,6 +284,153 @@ const PREDICATES_BY_ID: Record<string, PredicateFn> = {
     };
   },
 
+  // W3.1 · R13 COUPLED_INTERFACE_DANGLING_REF_V9_R13
+  //
+  // Detects a dangling coupled-interface reference at the region-inventory
+  // level: a coupled boundary patch on a region declares a neighbour_region
+  // that is absent from the assembled multi-region inventory.
+  //
+  // This is the slice-level shadow of the V94 death-chain — a coupled-patch
+  // BC referencing a counterpart that does not resolve in the per-region
+  // polyMesh → solver FATAL 'Cannot find patchField entry for
+  // region_hot_fluid_to_domain0'.
+  //
+  // Logic: build the set of region names from slice.regions. For each
+  // region's coupled_patches (skip if null/absent or empty), for each
+  // CoupledPatch cp: if cp.neighbour_region is not null AND cp.neighbour_region
+  // is NOT in the region-name set → FIRE (dangling reference).
+  //
+  // Mirrors Python _pred_coupled_interface_dangling_ref exactly (same field
+  // reads, same branch order, same boundary operators, same matched_at template).
+  //
+  // KNOWN-GAP (negative contract — R13 will NOT fire when):
+  //   (a) regions is null/absent — legacy/non-CHT scalar slice (graceful-skip).
+  //   (b) regions === [] — region list present but empty; no inventory to check.
+  //   (c) a region's coupled_patches is null/absent — not extracted.
+  //   (d) a region's coupled_patches === [] — extraction found zero patches.
+  //   (e) cp.neighbour_region is null/absent — neighbour not extracted; cannot judge.
+  //   (f) a HEALTHY case where every cp.neighbour_region resolves to a region in
+  //       the inventory — all refs resolve → silent.
+  //   (g) the previously-false-firing two-independent-consistent-interfaces case:
+  //       if each interface's neighbour regions are all present → silent.
+  COUPLED_INTERFACE_DANGLING_REF_V9_R13: (slice) => {
+    const regions = slice.regions;
+    if (regions == null) return null;
+    if (regions.length === 0) return null;
+
+    // Build the region-name inventory set for O(1) membership checks.
+    const regionNames = new Set(regions.map((r) => r.name));
+
+    for (const region of regions) {
+      const cps = region.coupled_patches;
+      if (cps == null) continue; // not extracted
+      if (!Array.isArray(cps) || cps.length === 0) continue; // empty
+      for (const cp of cps) {
+        if (cp.neighbour_region != null) {
+          if (!regionNames.has(cp.neighbour_region)) {
+            return {
+              matched_at: `dangling_coupled_ref:${region.name}.${cp.patch_name}->${cp.neighbour_region}`,
+            };
+          }
+        }
+      }
+    }
+    return null;
+  },
+
+  // W3.1 · R14 PER_REGION_THERMO_MISSING_V9_R14
+  //
+  // A region is listed in the CHT inventory but carries NO per-region
+  // thermophysical model payload (both thermo_type and thermo_snapshot_ref
+  // are null/absent for the same region).
+  //
+  // Mirrors Python _pred_per_region_thermo_missing exactly.
+  //
+  // KNOWN-GAP (negative contract — R14 will NOT fire when):
+  //   (a) regions is null/absent — legacy slice (graceful-skip).
+  //   (b) regions === [] — no regions to check.
+  //   (c) thermo_type is present (non-null string) — payload extracted;
+  //       thermo_snapshot_ref being null is a decoupling artifact, not missing.
+  PER_REGION_THERMO_MISSING_V9_R14: (slice) => {
+    const regions = slice.regions;
+    if (regions == null) return null;
+    if (regions.length === 0) return null;
+
+    for (const region of regions) {
+      const ttMissing = region.thermo_type == null;
+      const refMissing = region.thermo_snapshot_ref == null;
+      if (ttMissing && refMissing) {
+        return { matched_at: `region:${region.name}:thermo_missing` };
+      }
+    }
+    return null;
+  },
+
+  // W3.1 · R15 CONDUCTION_DOMINANCE_V9_R15
+  //
+  // Conduction-dominated degenerate-physics topology: the CHT region inventory
+  // contains ZERO resolvable fluid regions (n_fluid == 0, n_solid >= 1).
+  //
+  // Mirrors Python _pred_conduction_dominance exactly.
+  //
+  // KNOWN-GAP (negative contract — R15 will NOT fire when):
+  //   (a) regions is null/absent — legacy slice (graceful-skip).
+  //   (b) regions === [] — no regions to count.
+  //   (c) region.kind === null — ambiguous classification; must be SKIPPED.
+  //   (d) n_fluid >= 1 after skipping null-kind regions — healthy CHT.
+  CONDUCTION_DOMINANCE_V9_R15: (slice) => {
+    const regions = slice.regions;
+    if (regions == null) return null;
+    if (regions.length === 0) return null;
+
+    let nFluid = 0;
+    let nSolid = 0;
+    for (const region of regions) {
+      if (region.kind === null) continue; // ambiguous — skip, never guess
+      if (region.kind === "fluid") nFluid++;
+      else if (region.kind === "solid") nSolid++;
+    }
+
+    if (nFluid === 0 && nSolid >= 1) {
+      return { matched_at: `n_fluid=0_n_solid=${nSolid}` };
+    }
+    return null;
+  },
+
+  // W3.1 · R16 FACE_ZONE_LOSS_V9_R16
+  //
+  // Face-zone / region-mesh loss XOR (CHT mirror of R12 PASS/FAIL XOR):
+  // a region is declared (name present) but its sHM face-zone output ref
+  // is absent (shm_snapshot_ref is null). Requires at least one region
+  // WITH a ref before flagging those without (R12 half-data discipline).
+  //
+  // Mirrors Python _pred_face_zone_loss exactly.
+  //
+  // KNOWN-GAP (negative contract — R16 will NOT fire when):
+  //   (a) regions is null/absent — legacy slice (graceful-skip).
+  //   (b) regions === [] — no regions to cross-check.
+  //   (c) shm_snapshot_ref is non-null — no XOR disagreement.
+  //   (d) NO region has any shm ref (all null) — sHM stage skipped entirely;
+  //       cannot distinguish from face-zone loss; graceful skip.
+  FACE_ZONE_LOSS_V9_R16: (slice) => {
+    const regions = slice.regions;
+    if (regions == null) return null;
+    if (regions.length === 0) return null;
+
+    // Require at least one region WITH a ref before flagging any without.
+    const anyRefPresent = regions.some((r) => r.shm_snapshot_ref != null);
+    if (!anyRefPresent) return null;
+
+    for (const region of regions) {
+      if (region.shm_snapshot_ref == null) {
+        return {
+          matched_at: `region:${region.name}:declared_no_shm_snapshot`,
+        };
+      }
+    }
+    return null;
+  },
+
   // W2.1 · DEC-V61-209 ADDENDUM 4 distillation (DEC-V61-216).
   //
   // R12: NASA-convention dual-metric XOR. When integrated-Cf drag and

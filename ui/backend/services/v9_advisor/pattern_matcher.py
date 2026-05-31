@@ -58,8 +58,8 @@ sites stay unchanged because regions defaults None. This extension is a
 frozen schema contract for W3.1 CHT rule distillation — no new predicates
 ship here. W3.1 rules that consume these fields:
 
-    - R13 WALL_COUPLING_MISMATCH
-        Reads RegionSlice.coupled_patches[*].coupling_type.
+    - R13 COUPLED_INTERFACE_DANGLING_REF
+        Reads RegionSlice.coupled_patches[*].neighbour_region vs region-name inventory.
 
     - R14 PER_REGION_THERMO_MISSING
         Reads RegionSlice.thermo_type / thermo_snapshot_ref.
@@ -275,8 +275,9 @@ class RegionSlice:
         Tuple of coupled boundary patches for this region. None when
         coupling data was not extracted; empty tuple () when extraction
         ran and found zero coupled patches (presence-vs-payload
-        distinction per DEC-V61-213). W3.1 R13 WALL_COUPLING_MISMATCH
-        reads coupling_type values across paired regions.
+        distinction per DEC-V61-213). W3.1 R13 COUPLED_INTERFACE_DANGLING_REF
+        reads neighbour_region (checked against the region inventory), not
+        coupling_type.
 
     shm_snapshot_ref : Optional[str]
         Opaque string reference to the W3.0.1 RegionShmSnapshot for
@@ -290,10 +291,10 @@ class RegionSlice:
         as shm_snapshot_ref. W3.1 R14 reads this ref.
 
     W3.1 rule→field mapping (frozen contract):
-        R13 WALL_COUPLING_MISMATCH      ← coupled_patches[*].coupling_type
-        R14 PER_REGION_THERMO_MISSING   ← thermo_type, thermo_snapshot_ref
-        R15 CONDUCTION_DOMINANCE        ← kind
-        R16 FACE_ZONE_LOSS              ← shm_snapshot_ref
+        R13 COUPLED_INTERFACE_DANGLING_REF ← coupled_patches[*].neighbour_region (vs region inventory)
+        R14 PER_REGION_THERMO_MISSING      ← thermo_type, thermo_snapshot_ref
+        R15 CONDUCTION_DOMINANCE           ← kind
+        R16 FACE_ZONE_LOSS                 ← shm_snapshot_ref
     """
 
     name: str

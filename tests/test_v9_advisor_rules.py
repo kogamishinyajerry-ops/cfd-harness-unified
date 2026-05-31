@@ -716,9 +716,10 @@ class TestW2_1_RulesetSurface:
         assert "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11" in ids
         assert "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12" in ids
 
-    def test_ruleset_has_12_rules(self):
-        """W2.1 = +3 rules over the 9 landed through R9 → 12 total."""
-        assert len(V9_ADVISOR_RULES) == 12
+    def test_ruleset_has_16_rules(self):
+        """W2.1 = +3 rules over the 9 landed through R9 → 12 total.
+        W3.1 = +4 CHT rules R13–R16 → 16 total."""
+        assert len(V9_ADVISOR_RULES) == 16
 
     @pytest.mark.parametrize(
         "rule_id,expected_severity",
