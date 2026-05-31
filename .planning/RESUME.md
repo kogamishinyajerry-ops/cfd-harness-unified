@@ -1,28 +1,33 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.0.1/.2/.3 ARC COMPLETE (2026-05-30 · read this first)
+> ## ⏩ MOST RECENT — P3-PREP ARC COMPLETE (W3.0/.0.1/.0.2/.0.3/.0.6) (2026-05-30 · read first)
 >
-> **Status**: `P3_IN_PROGRESS`. HEAD = `a03e4ec`. P3 CHT charter `DEC-V61-217`
-> Accepted. **The user's explicit "continue W3.0.1/.2/.3" mandate is COMPLETE** —
-> all three landed this session:
-> - **W3.0.1** `shm_dict` multi-region (DEC-V61-219, `781c335`) — master-sHM
->   cellZone-derived; region found by cellZone TOKEN not surface name.
-> - **W3.0.2** `thermo_dict` multi-region (DEC-V61-220, `e733fae`) — per-region
->   fluid+solid; EXTENDED for solid thermo; Contract A required-field refusal.
-> - **W3.0.3** `solver_block` CHT regression (SPIKE, `a03e4ec`) — zero extractor
->   change; confirms chtMultiRegionSimpleFoam reported; W3.0.3↔W3.2 seam pinned.
+> **Status**: `P3_IN_PROGRESS`. HEAD = `32e5397`. P3 CHT charter `DEC-V61-217`
+> Accepted. **The ENTIRE P3-prep arc is COMPLETE** — the readers + the frozen
+> slice contract W3.1 consumes, all landed this session:
+> - **W3.0** `regionProperties` reader (DEC-V61-218, `7cdb870`) — the PIVOT snapshot.
+> - **W3.0.1** `shm_dict` multi-region (DEC-V61-219, `781c335`) — cellZone-TOKEN-keyed.
+> - **W3.0.2** `thermo_dict` multi-region (DEC-V61-220, `e733fae`) — fluid+solid;
+>   Contract A required-field refusal.
+> - **W3.0.3** `solver_block` CHT regression (SPIKE, `a03e4ec`) — zero extractor change.
+> - **W3.0.6** multi-region `RunArtifactSlice` (DEC-V61-221, `32e5397`) — RegionSlice
+>   + CoupledPatch nested dataclasses + `regions` field; Python↔TS parity restored;
+>   **clean Codex APPROVE at R2**. The frozen contract W3.1 R13–R16 consume.
 >
-> **NEXT (bigger · load-bearing · surfaced for user greenlight)**: **W3.0.6** —
-> multi-region `RunArtifactSlice` (extends DEC-V61-215 with `regions:
-> list[RegionSlice]`, 3+ nested dataclasses; `RegionSlice = (name, kind,
-> thermo_type, coupled_patches, sHM_snapshot_ref, thermo_snapshot_ref)`). All four
-> deps {W3.0, W3.0.1, W3.0.2, W3.0.3} are now met. **MUST land BEFORE W3.1 CHT
-> rule distillation** (P1-close blindspot #5). Bigger than the W3.0.x extractors
-> (a schema contract W3.1 consumes) — worth a brief target/plan checkpoint before
-> diving in.
+> **NEXT (the actual rules phase · bigger · surfaced for user greenlight)**: **W3.1**
+> — CHT v9 rule distillation. Distill **3–4 advisor rules R13–R16** from V-series CHT
+> death-chains (V14 sentinel ±1e+300 · V15 limitTemperature clamp · V63-A/V93/V94
+> face-zone loss · V90 locationsInMesh · V92 cellZoneInside · case_011 v5b conduction-
+> dominance). Candidates: R13 wall-coupling-type-mismatch ← `coupled_patches[].coupling_type`
+> · R14 per-region-thermo-missing ← `thermo_type`/`thermo_snapshot_ref` · R15
+> conduction-dominance ← `kind` · R16 face-zone-loss ← `shm_snapshot_ref`. Each rule:
+> offline-runnable (Law 3) · names ≥1 V-row it would have caught · fires on synthetic
+> CHT fixtures · silent on healthy cases · four-question gate per rule · Codex APPROVE.
+> Mirrors the W2.1 distillation pattern (DEC-V61-216). Bigger than the W3.0.x schema
+> work (it's rule LOGIC + V-series evidence) — worth a target/plan checkpoint.
 >
-> **Pending session-end**: Notion sync of Accepted DECs `V61-219` + `V61-220`
-> (verify `V61-218` already synced) — `notion_sync_status: pending_accepted`.
+> **Pending session-end**: Notion sync of Accepted DECs `V61-219` + `V61-220` +
+> `V61-221` (verify `V61-218` already synced) — `notion_sync_status: pending_accepted`.
 >
 > ---
 >
