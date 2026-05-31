@@ -1,6 +1,52 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3-PREP ARC COMPLETE (W3.0/.0.1/.0.2/.0.3/.0.6) (2026-05-30 · read first)
+> ## ⏩ MOST RECENT — P3 W3.1 CHT v9 RULES LANDED (DEC-V61-222) (2026-05-31 · read first)
+>
+> **Status**: `P3_IN_PROGRESS`. HEAD = `97b2ca6`. W3.1 (CHT v9 rule distillation,
+> `DEC-V61-217` W3.1) LANDED via a 4-commit Codex chain (`6adce39` rules → `e1d2f13`
+> deriver adapter → `27913a5` defer R15/R16 → `97b2ca6` revert UI wiring).
+>
+> **What shipped (14 rules total, v9.4.0)**:
+> - **R13 `COUPLED_INTERFACE_DANGLING_REF`** ← `coupled_patches[].neighbour_region`
+>   vs region inventory. Catches **V94** (dangling coupled ref → "Cannot find
+>   patchField entry"). *Regrounded* from the charter's unsound "wall-coupling-type-
+>   mismatch" (red-team killed: false-fired on healthy mixed-physics + dead code).
+> - **R14 `PER_REGION_THERMO_MISSING`** ← `thermo_type`+`thermo_snapshot_ref` both
+>   None. Catches **V14/V92** (region declared, no per-region thermo payload).
+> - **Deriver-path reachability**: `derive_slice_from_manifest()` reads
+>   `manifest["regions"]` via bulletproof-graceful `_regions_from_manifest()`
+>   (106-case crash-safe; production-path proven through real `matches_for_manifest`).
+>   This DEFINES the `manifest["regions"]` contract W3.2 emits.
+>
+> **DEFERRED → W3.2** (Codex R1 cross-artifact finding — the frozen schema carries
+> DECLARED topology, not produced-mesh presence): **R15 CONDUCTION_DOMINANCE** (kind
+> from regionProperties ≠ mesh-loss) + **R16 FACE_ZONE_LOSS** (shm_snapshot_ref=None
+> = "extruded", not "lost" — false-fires on healthy case_002b). Both need a per-region
+> mesh-presence field. UI live-card path REVERTED (Codex R2 — run-detail API doesn't
+> emit regions); the full UI/producer flow is one coherent W3.2 unit.
+>
+> **Codex chain**: R0→R1→R2 all CHANGES_REQUIRED on converging producer-side layers
+> (one root: production reachability needs W3.2). Round cap=3 reached. 2 user
+> adjudications (charter-trigger R1 + round-cap R2). R2 P1 ratified W3.2-deferred →
+> `codex_round3_overflow_w31.md`. ALL rounds on CRS (86gs **5-for-5 unavailable** this
+> session — recommend CRS-primary routing DEC). 448 p3+v9 tests green · tsc clean.
+>
+> **NEXT = W3.2** (runner-wire · `DEC-V61-217` W3.2 · gated on W3.0.6, now also needs
+> W3.1's deriver contract): `foam_agent_adapter` CHT dispatch + new `GeometryType` +
+> `case_family_registry` chtMultiRegion family + generator producing `regionProperties`
+> + per-region `0/<region>` + per-region thermo + master `controlDict`. **PLUS the
+> W3.1 follow-up the chain deferred**: (a) `build_manifest()` emits `manifest["regions"]`
+> from the W3.0.x extractors; (b) run-detail API (`run_history.py` + `get_run_detail()`)
+> emits regions + re-add the UI adapter carry-through; (c) add a `RegionSlice`
+> produced-mesh-presence field → reground + re-ship R15/R16; (d) integration test:
+> a real multi-region bundle fires ≥1 CHT rule end-to-end. See DEC-V61-222 §W3.2-followup.
+>
+> **Pending session-end**: Notion sync of Accepted DECs `V61-219`/`V61-220`/`V61-221`/
+> **`V61-222`** (verify `V61-218` synced) — all `notion_sync_status: pending_accepted`.
+>
+> ---
+>
+> ## Earlier — P3-PREP ARC COMPLETE (W3.0/.0.1/.0.2/.0.3/.0.6) (2026-05-30)
 >
 > **Status**: `P3_IN_PROGRESS`. HEAD = `32e5397`. P3 CHT charter `DEC-V61-217`
 > Accepted. **The ENTIRE P3-prep arc is COMPLETE** — the readers + the frozen
