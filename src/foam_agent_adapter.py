@@ -2562,6 +2562,14 @@ fields          (U);
             + "    (0.1  0.05  0.01)   // 14\n"
             + "    (0    0.05  0.01)   // 15\n"
             + ");\n\n"
+            # Each block carries a BARE cellZone name between the vertex list and
+            # the cell-count vector — `hex (...) <zoneName> (nx ny nz) grading`.
+            # This is the canonical OpenFOAM blockMesh cellZone-assignment form
+            # (NO `zone` keyword — that token does not exist in the hex grammar).
+            # VERIFIED live in the ESI openfoam-2312 image: blockMesh on the
+            # generated case reports "Writing polyMesh with 3 cellZones"
+            # (region_hot_fluid/region_solid/region_cold_fluid), confirming
+            # splitMeshRegions -cellZones (W3.2b) will find the three regions.
             + "blocks\n(\n"
             + "    hex (0 1 2 3 8 9 10 11) " + hot["name"]
             + " (" + str(nx) + " 8 " + str(nz) + ") simpleGrading (1 1 1)\n"
@@ -2719,7 +2727,7 @@ fields          (U);
             # 0/<fluid>/T
             _write(
                 "0/" + rn + "/T",
-                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                _hdr("T", "0/" + rn, cls="volScalarField")
                 + "dimensions      [0 0 0 1 0 0 0];\n"
                 + "internalField   uniform " + tin + ";\n"
                 + "boundaryField\n{\n"
@@ -2739,7 +2747,7 @@ fields          (U);
             # 0/<fluid>/U
             _write(
                 "0/" + rn + "/U",
-                _hdr("volVectorField", "0/" + rn, cls="volVectorField")
+                _hdr("U", "0/" + rn, cls="volVectorField")
                 + "dimensions      [0 1 -1 0 0 0 0];\n"
                 + "internalField   uniform (" + uin + " 0 0);\n"
                 + "boundaryField\n{\n"
@@ -2755,7 +2763,7 @@ fields          (U);
             # 0/<fluid>/p (calculated; p_rgh is solved)
             _write(
                 "0/" + rn + "/p",
-                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                _hdr("p", "0/" + rn, cls="volScalarField")
                 + "dimensions      [1 -1 -2 0 0 0 0];\n"
                 + "internalField   uniform 1e5;\n"
                 + "boundaryField\n{\n"
@@ -2766,7 +2774,7 @@ fields          (U);
             # 0/<fluid>/p_rgh
             _write(
                 "0/" + rn + "/p_rgh",
-                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                _hdr("p_rgh", "0/" + rn, cls="volScalarField")
                 + "dimensions      [1 -1 -2 0 0 0 0];\n"
                 + "internalField   uniform 1e5;\n"
                 + "boundaryField\n{\n"
@@ -2786,7 +2794,7 @@ fields          (U);
         iface_cs = _iface(solid["name"], cold["name"])
         _write(
             "0/" + solid["name"] + "/T",
-            _hdr("volScalarField", "0/" + solid["name"], cls="volScalarField")
+            _hdr("T", "0/" + solid["name"], cls="volScalarField")
             + "dimensions      [0 0 0 1 0 0 0];\n"
             + "internalField   uniform " + ts + ";\n"
             + "boundaryField\n{\n"
@@ -2813,7 +2821,7 @@ fields          (U);
         # canonical solid-p BC (the solid SIMPLE loop never solves it).
         _write(
             "0/" + solid["name"] + "/p",
-            _hdr("volScalarField", "0/" + solid["name"], cls="volScalarField")
+            _hdr("p", "0/" + solid["name"], cls="volScalarField")
             + "dimensions      [1 -1 -2 0 0 0 0];\n"
             + "internalField   uniform 1e5;\n"
             + "boundaryField\n{\n"

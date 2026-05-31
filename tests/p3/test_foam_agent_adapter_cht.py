@@ -186,6 +186,37 @@ def test_blockmesh_patch_names_match_field_bcs(tmp_path: Path) -> None:
     assert "region_solid_walls" in bm
 
 
+def test_field_files_have_correct_foamfile_object_name(tmp_path: Path) -> None:
+    """Codex R1 P2 regression: a 0/<region>/<field> FoamFile `object` MUST be the
+    field name (T/U/p/p_rgh), not the class (volScalarField/volVectorField) —
+    OpenFOAM rejects a header whose object name disagrees with the field being
+    read (W3.2b field-load). The `class` stays the OpenFOAM field class."""
+    import re
+
+    case = _generate(tmp_path)
+    checks = [
+        ("0/region_hot_fluid/T", "T", "volScalarField"),
+        ("0/region_hot_fluid/U", "U", "volVectorField"),
+        ("0/region_hot_fluid/p", "p", "volScalarField"),
+        ("0/region_hot_fluid/p_rgh", "p_rgh", "volScalarField"),
+        ("0/region_cold_fluid/T", "T", "volScalarField"),
+        ("0/region_solid/T", "T", "volScalarField"),
+        ("0/region_solid/p", "p", "volScalarField"),
+    ]
+    for rel, obj, cls in checks:
+        txt = (case / rel).read_text()
+        assert re.search(r"object\s+" + re.escape(obj) + r"\s*;", txt), (
+            f"{rel}: FoamFile object should be '{obj}'"
+        )
+        assert re.search(r"class\s+" + re.escape(cls) + r"\s*;", txt), (
+            f"{rel}: FoamFile class should be '{cls}'"
+        )
+        # the R1 P2 bug: object must NOT be a field-class token
+        assert not re.search(r"object\s+vol(Scalar|Vector)Field\s*;", txt), (
+            f"{rel}: FoamFile object is a class name (R1 P2 regression)"
+        )
+
+
 def test_blockmesh_has_three_named_cellzones(tmp_path: Path) -> None:
     case = _generate(tmp_path)
     bm = (case / "system" / "blockMeshDict").read_text()
