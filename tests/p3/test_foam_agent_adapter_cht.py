@@ -80,6 +80,10 @@ def test_generates_three_region_skeleton(tmp_path: Path) -> None:
         for f in ("U", "p", "p_rgh"):
             assert (case / "0" / r / f).is_file()
     assert not (case / "0" / "region_solid" / "U").exists()
+    # solid gets T AND p (Codex R0 P2: chtMultiRegionSimpleFoam needs a solid
+    # pressure field at startup) but no momentum field.
+    assert (case / "0" / "region_solid" / "p").is_file()
+    assert not (case / "0" / "region_solid" / "p_rgh").exists()
 
 
 def test_region_properties_roundtrips_through_w30_reader(tmp_path: Path) -> None:
@@ -152,6 +156,34 @@ def test_fluid_interface_patch_names_match_splitmeshregions_convention(tmp_path:
     case = _generate(tmp_path)
     hot_T = (case / "0" / "region_hot_fluid" / "T").read_text()
     assert "region_hot_fluid_to_region_solid" in hot_T
+
+
+def test_blockmesh_patch_names_match_field_bcs(tmp_path: Path) -> None:
+    """Codex R0 P1 regression: every external patch a per-region 0/ field
+    references MUST exist in the blockMeshDict it emits, or chtMultiRegionSimpleFoam
+    aborts at field-load (W3.2b). Pins generator internal consistency."""
+    import re
+
+    case = _generate(tmp_path)
+    bm = (case / "system" / "blockMeshDict").read_text()
+    mesh_patches = set(re.findall(r"^\s{4}(\S+)\s*\{ type (?:patch|wall)", bm, re.M))
+
+    for r in ("region_hot_fluid", "region_cold_fluid"):
+        for field in ("T", "U", "p_rgh"):
+            txt = (case / "0" / r / field).read_text()
+            ext = {
+                x for x in re.findall(r"^\s{4}(\S+)", txt, re.M)
+                if x.endswith(("_inlet", "_outlet", "_wall"))
+            }
+            assert ext, f"{r}/{field} should reference external patches"
+            assert ext <= mesh_patches, (
+                f"{r}/{field} references patches absent from blockMesh: "
+                f"{ext - mesh_patches}"
+            )
+    # solid external wall patch matches between mesh + field
+    solid_T = (case / "0" / "region_solid" / "T").read_text()
+    assert "region_solid_walls" in solid_T
+    assert "region_solid_walls" in bm
 
 
 def test_blockmesh_has_three_named_cellzones(tmp_path: Path) -> None:
@@ -231,6 +263,39 @@ def test_cht_execute_hits_explicit_live_run_boundary(tmp_path, monkeypatch) -> N
     assert "W3.2b" in msg
     assert "chtMultiRegionSimpleFoam" in msg
     assert "splitMeshRegions" in msg
+
+
+def test_mesh_already_provided_cht_also_hits_boundary(tmp_path, monkeypatch) -> None:
+    """Codex R0 P2 regression: a STAGED/imported CHT case
+    (mesh_already_provided=True) must ALSO hit the W3.2b boundary — not fall
+    through to the imported-case simpleFoam default (the single-region misroute
+    the guard exists to prevent)."""
+    import src.foam_agent_adapter as faa
+
+    monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
+    monkeypatch.setattr(faa, "docker", _FakeDocker)
+
+    # minimal pre-populated case dir (the executor only checks polyMesh/ exists)
+    src_case = tmp_path / "imported_cht"
+    (src_case / "constant" / "polyMesh").mkdir(parents=True)
+
+    spec = TaskSpec(
+        name="imported_cht",
+        geometry_type=GeometryType.CHT_MULTI_REGION,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        mesh_already_provided=True,
+        case_dir_override=str(src_case),
+    )
+    ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
+    res = ex.execute(spec)
+
+    assert res.success is False
+    msg = res.error_message or ""
+    assert "W3.2b" in msg
+    # the boundary explicitly warns against the simpleFoam misroute
+    assert "simpleFoam" in msg
 
 
 def test_cht_never_silently_succeeds_without_docker(tmp_path, monkeypatch) -> None:

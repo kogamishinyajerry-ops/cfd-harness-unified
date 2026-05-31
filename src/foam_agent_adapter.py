@@ -804,12 +804,15 @@ class FoamAgentExecutor:
             # binary (ESI-image only). Both are W3.2b (charter row W3.2
             # live-run). Fail LOUD + explicit here rather than running the
             # single-region blockMesh->solver pipeline on a multi-region case
-            # (which would emit nonsense / V94-class errors). The case dir is
-            # already generated above, so it is on disk for audit ingestion.
-            if (
-                not task_spec.mesh_already_provided
-                and task_spec.geometry_type == GeometryType.CHT_MULTI_REGION
-            ):
+            # (which would emit nonsense / V94-class errors).
+            #
+            # This fires for ALL CHT cases regardless of mesh provenance (Codex
+            # R0 P2): a staged/imported CHT case (mesh_already_provided=True)
+            # would otherwise fall through to the simpleFoam default at the top
+            # of the dispatch — the exact single-region misrouting this guard
+            # prevents. Live CHT execution (fresh-generated OR imported mesh) is
+            # uniformly W3.2b.
+            if task_spec.geometry_type == GeometryType.CHT_MULTI_REGION:
                 return self._fail(
                     "CHT_MULTI_REGION live execution is deferred to P3 W3.2b "
                     "(DEC-V61-217 charter row W3.2 live-run): the multi-region "
@@ -817,11 +820,12 @@ class FoamAgentExecutor:
                     "region-scoped chtMultiRegionSimpleFoam) is not wired into "
                     "this single-region executor flow, and the adapter's "
                     "hardwired OF10 bashrc has no chtMultiRegionSimpleFoam "
-                    "binary (ESI-image only). W3.2a generated the case directory "
-                    "(regionProperties + per-region thermophysicalProperties + "
-                    "coupled-baffle 0/<region> fields + master controlDict); it "
-                    "is structurally complete and audit-ingestable but not yet "
-                    "live-runnable through this adapter.",
+                    "binary (ESI-image only). W3.2a wired CHT generation + "
+                    "dispatch + case_family; a freshly-generated CHT case dir is "
+                    "structurally complete and audit-ingestable, but neither a "
+                    "generated nor an imported (mesh_already_provided) CHT case "
+                    "is live-runnable through this adapter yet — and a CHT case "
+                    "must NEVER be routed to the single-region simpleFoam path.",
                     time.monotonic() - t0,
                     raw_output_path=raw_output_path,
                 )
@@ -2568,13 +2572,17 @@ fields          (U);
             + ");\n\n"
             + "edges\n(\n);\n\n"
             + "boundary\n(\n"
-            + "    hot_inlet     { type patch; faces ( (0 3 11 8) ); }\n"
-            + "    hot_outlet    { type patch; faces ( (1 2 10 9) ); }\n"
-            + "    hot_wall      { type wall;  faces ( (0 1 9 8) ); }\n"
-            + "    cold_inlet    { type patch; faces ( (5 7 15 13) ); }\n"
-            + "    cold_outlet   { type patch; faces ( (4 6 14 12) ); }\n"
-            + "    cold_wall     { type wall;  faces ( (6 7 15 14) ); }\n"
-            + "    solid_walls   { type wall;  faces ( (3 5 13 11) (2 4 12 10) ); }\n"
+            # Patch names derive from the SAME region descriptors as the 0/<region>
+            # field writers below — guarantees the blockMesh patches and the
+            # per-region boundaryField entries match (Codex R0 P1: a name mismatch
+            # would abort chtMultiRegionSimpleFoam at field-load in W3.2b).
+            + "    " + hot["name"] + "_inlet   { type patch; faces ( (0 3 11 8) ); }\n"
+            + "    " + hot["name"] + "_outlet  { type patch; faces ( (1 2 10 9) ); }\n"
+            + "    " + hot["name"] + "_wall    { type wall;  faces ( (0 1 9 8) ); }\n"
+            + "    " + cold["name"] + "_inlet  { type patch; faces ( (5 7 15 13) ); }\n"
+            + "    " + cold["name"] + "_outlet { type patch; faces ( (4 6 14 12) ); }\n"
+            + "    " + cold["name"] + "_wall   { type wall;  faces ( (6 7 15 14) ); }\n"
+            + "    " + solid["name"] + "_walls { type wall;  faces ( (3 5 13 11) (2 4 12 10) ); }\n"
             + "    front\n    {\n        type empty;\n"
             + "        faces ( (0 1 2 3) (3 2 4 5) (5 4 6 7) );\n    }\n"
             + "    back\n    {\n        type empty;\n"
@@ -2792,9 +2800,24 @@ fields          (U);
             + "        Tnbr            T;\n"
             + "        kappaMethod     solidThermo;\n"
             + "        value           uniform " + ts + ";\n    }\n"
-            + "    solid_walls { type zeroGradient; }\n"
+            + "    " + solid["name"] + "_walls { type zeroGradient; }\n"
             + "    front  { type empty; }\n"
             + "    back   { type empty; }\n"
+            + "}\n"
+            + FOOT,
+        )
+
+        # 0/region_solid/p — chtMultiRegionSimpleFoam (ESI/2312) requires a
+        # pressure field in the solid region as part of startup field-load, even
+        # though the solid solves only energy (Codex R0 P2). `calculated` is the
+        # canonical solid-p BC (the solid SIMPLE loop never solves it).
+        _write(
+            "0/" + solid["name"] + "/p",
+            _hdr("volScalarField", "0/" + solid["name"], cls="volScalarField")
+            + "dimensions      [1 -1 -2 0 0 0 0];\n"
+            + "internalField   uniform 1e5;\n"
+            + "boundaryField\n{\n"
+            + "    \".*\" { type calculated; value uniform 1e5; }\n"
             + "}\n"
             + FOOT,
         )
