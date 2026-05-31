@@ -21,6 +21,7 @@
  */
 
 import type { StepId } from "../pages/workbench/v3/WorkbenchShellV3";
+import type { RegionSlice } from "./advisor_pattern_matcher";
 
 /** Subset of RunDetail (ui/backend/schemas/run_history.py) that V6.A reads.
  *  Keeping this narrow makes the contract explicit + lets us evolve the
@@ -37,6 +38,14 @@ export interface BridgeArtifact {
   task_spec?: Record<string, unknown>;
   key_quantities?: Record<string, unknown>;
   residuals?: Record<string, number>;
+  /**
+   * W3.1 · DEC-V61-215 · per-region CHT snapshots.
+   * Forward-compat: populated once W3.2 wires the audit-package builder to emit
+   * manifest["regions"] into the run-detail payload. Until then, the backend bridge
+   * payload omits this field → undefined here → R13–R16 silently dormant (correct).
+   * ADDITIVE-OPTIONAL: no existing BridgeArtifact literal breaks.
+   */
+  regions?: RegionSlice[] | null;
 }
 
 export interface BridgeStepState {

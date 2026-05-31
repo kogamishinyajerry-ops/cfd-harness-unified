@@ -87,11 +87,13 @@ from typing import Any, Dict, List, Optional
 
 from .pattern_matcher import (
     ConvergenceStats,
+    CoupledPatch,
     DevelopedRegionGoldDelta,
     GoldDelta,
     IntegratedDragPct,
     MatchedCommentary,
     ReferenceBandSummary,
+    RegionSlice,
     RunArtifactSlice,
     match_advisor_patterns,
 )
@@ -129,6 +131,128 @@ def _parse_final_iter(log_tail: str) -> Optional[int]:
         return None
     # Take the max — both kinds of marker may co-exist; pick the latest.
     return int(max(candidates))
+
+
+def _regions_from_manifest(manifest: Dict[str, Any]) -> Optional[List[RegionSlice]]:
+    """Parse manifest["regions"] → Optional[List[RegionSlice]].
+
+    manifest["regions"] contract (W3.2 forward-compat · DEC-V61-213):
+        Each entry mirrors RegionSlice:
+          {
+            "name": str,                          # required — None/missing → skip entry
+            "kind": "fluid" | "solid" | null,     # None when ambiguous or absent
+            "thermo_type": str | null,
+            "coupled_patches": [
+              {"patch_name": str, "coupling_type": str,
+               "neighbour_region": str | null}
+            ] | null,
+            "shm_snapshot_ref": str | null,
+            "thermo_snapshot_ref": str | null
+          }
+
+    This key is emitted by W3.2 audit-integration, which feeds the output of
+    the W3.0.x multi-region extractors (region_properties_reader /
+    shm_dict_multi_region / thermo_dict_multi_region) into the manifest builder.
+    Current single-region and legacy manifests omit the key entirely → regions=None
+    → R13–R16 gracefully silent.
+
+    RESIDUAL W3.2 GAP: This adapter is READY. The production audit-package
+    builder (src/audit_package/manifest.py build_manifest()) does NOT yet emit
+    manifest["regions"]. W3.2 must add that emission. Until then, all real audit
+    bundles take the "no regions key → return None" path and R13–R16 are silent
+    in production. This is the correct honest behavior (DEC-V61-213
+    presence-vs-payload independence: absent key = not extracted, not empty).
+
+    Three-state preservation (per DEC-V61-213):
+        - manifest has no "regions" key → None  (not extracted / legacy)
+        - manifest["regions"] == []             → []  (present, zero regions)
+        - manifest["regions"] is a populated list → List[RegionSlice]
+
+    Presence-vs-payload per field:
+        - "kind": missing/None → None (HONEST-REFUSAL; never fabricate)
+        - "thermo_type": missing/None → None
+        - "coupled_patches": missing → None (not extracted)
+                             [] → ()  (extracted, zero)
+                             populated → tuple[CoupledPatch, ...]
+        - refs: missing/None → None
+
+    BULLETPROOF-GRACEFUL: runs on the PRODUCTION HOT PATH (every audit bundle
+    not just CHT). Any structural error (non-list regions, non-dict entry, wrong
+    types, null name) yields None for that entry or the whole result; the deriver
+    MUST NEVER raise. A crash here would break every audit bundle's commentary.
+    """
+    if "regions" not in manifest:
+        return None
+    raw = manifest["regions"]
+    if not isinstance(raw, list):
+        # Structural error — malformed; return None to avoid breaking audit bundle
+        return None
+    if len(raw) == 0:
+        return []
+    try:
+        result: List[RegionSlice] = []
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue  # skip malformed entries; do not crash
+            name = entry.get("name")
+            if not isinstance(name, str) or not name:
+                continue  # name required; skip entry with missing/null/empty name
+            kind_raw = entry.get("kind")
+            if kind_raw not in ("fluid", "solid", None):
+                kind_raw = None  # coerce unknown strings → None (honest)
+            thermo_type = entry.get("thermo_type")
+            if not isinstance(thermo_type, str):
+                thermo_type = None
+            shm_snapshot_ref = entry.get("shm_snapshot_ref")
+            if not isinstance(shm_snapshot_ref, str):
+                shm_snapshot_ref = None
+            thermo_snapshot_ref = entry.get("thermo_snapshot_ref")
+            if not isinstance(thermo_snapshot_ref, str):
+                thermo_snapshot_ref = None
+            # coupled_patches: missing/null → None (not extracted)
+            #                  [] → ()  (extracted, zero patches)
+            #                  populated list → tuple[CoupledPatch, ...]
+            cp_raw = entry.get("coupled_patches")
+            coupled_patches: Optional[tuple]
+            if cp_raw is None and "coupled_patches" not in entry:
+                coupled_patches = None  # key absent — not extracted
+            elif cp_raw is None:
+                coupled_patches = None  # explicit null — treat as not extracted
+            elif not isinstance(cp_raw, list):
+                coupled_patches = None  # malformed — safe default
+            elif len(cp_raw) == 0:
+                coupled_patches = ()
+            else:
+                patches: List[CoupledPatch] = []
+                for cp in cp_raw:
+                    if not isinstance(cp, dict):
+                        continue
+                    pname = cp.get("patch_name")
+                    ctype = cp.get("coupling_type")
+                    if not isinstance(pname, str) or not isinstance(ctype, str):
+                        continue  # skip malformed patch
+                    neighbour = cp.get("neighbour_region")
+                    if not isinstance(neighbour, str):
+                        neighbour = None
+                    patches.append(CoupledPatch(
+                        patch_name=pname,
+                        coupling_type=ctype,
+                        neighbour_region=neighbour,
+                    ))
+                coupled_patches = tuple(patches) if patches else ()
+            result.append(RegionSlice(
+                name=name,
+                kind=kind_raw,
+                thermo_type=thermo_type,
+                coupled_patches=coupled_patches,
+                shm_snapshot_ref=shm_snapshot_ref,
+                thermo_snapshot_ref=thermo_snapshot_ref,
+            ))
+        return result
+    except Exception:
+        # Catch-all: anything unexpected returns None (safe degrade).
+        # A crash here would break every audit bundle.
+        return None
 
 
 def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
@@ -370,6 +494,14 @@ def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
                 except (TypeError, ValueError):
                     reference_comparison_band_summary = None
 
+    # W3.1 · DEC-V61-215 multi-region CHT extension.
+    # _regions_from_manifest returns None when the manifest has no "regions"
+    # key (all current single-region + legacy manifests) → R13–R16 silently
+    # dormant. When W3.2 wires build_manifest() to emit manifest["regions"],
+    # the CHT rules activate automatically through this path.
+    # See _regions_from_manifest docstring for the full W3.2 gap statement.
+    regions = _regions_from_manifest(manifest)
+
     return RunArtifactSlice(
         run_id=run_id,
         case_id=case_id,
@@ -382,6 +514,8 @@ def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
         developed_region_gold_delta=developed_region_gold_delta,
         integrated_drag_pct=integrated_drag_pct,
         reference_comparison_band_summary=reference_comparison_band_summary,
+        # W3.1 · DEC-V61-215 multi-region CHT regions
+        regions=regions,
     )
 
 
