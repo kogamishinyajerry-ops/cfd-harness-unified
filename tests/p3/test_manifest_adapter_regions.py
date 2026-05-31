@@ -4,17 +4,18 @@ Two test classes:
 
 TestProductionPathReachability
     Proves the manifest → _regions_from_manifest → derive_slice_from_manifest →
-    matches_for_manifest() production chain surfaces CHT rules R13–R16 end-to-end
+    matches_for_manifest() production chain surfaces CHT rules R13–R14 end-to-end
     through the REAL deriver (no synthetic shortcut). This is the Codex P1 crux:
-    before this fix matches_for_manifest() could NEVER return any of R13–R16 because
+    before this fix matches_for_manifest() could NEVER return any of R13–R14 because
     regions was always None.
+
+    (R15 + R16 were deferred per Codex R1 / DEC-V61-222 — no faithful signal in
+    the frozen schema; their production-path firing tests were removed with them.)
 
     Tests use the REAL public API (matches_for_manifest) to verify:
       - manifest WITH regions containing an unhealthy region → R14 fires
       - manifest WITHOUT regions key → no CHT rule fires (silent / graceful)
       - manifest WITH regions containing dangling neighbour → R13 fires
-      - manifest WITH all-solid regions → R15 fires
-      - manifest WITH partial shm_snapshot_ref → R16 fires
 
 TestRegionsManifestParsingGraceful
     Proves _regions_from_manifest / derive_slice_from_manifest return gracefully
@@ -143,8 +144,6 @@ class TestProductionPathReachability:
         for rule_id in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rule_id not in ids, (
                 f"{rule_id} must be silent when manifest has no 'regions' key"
@@ -182,53 +181,6 @@ class TestProductionPathReachability:
             "R13 must fire end-to-end when neighbour_region is not in region inventory"
         )
 
-    def test_r15_fires_via_manifest_all_solid_regions(self):
-        """R15 fires end-to-end: all regions have kind='solid', no fluid present."""
-        manifest = _minimal_manifest(regions=[
-            _region_entry(
-                name="plate_1", kind="solid",
-                thermo_type="heSolidThermo", thermo_snapshot_ref="s1",
-                shm_snapshot_ref="shm1", coupled_patches=[],
-            ),
-            _region_entry(
-                name="plate_2", kind="solid",
-                thermo_type="heSolidThermo", thermo_snapshot_ref="s2",
-                shm_snapshot_ref="shm2", coupled_patches=[],
-            ),
-        ])
-        matches = matches_for_manifest(manifest)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" in ids, (
-            "R15 must fire end-to-end when all manifest regions are solid"
-        )
-
-    def test_r16_fires_via_manifest_partial_shm_snapshot(self):
-        """R16 fires end-to-end: one region has shm_snapshot_ref, one does not (XOR)."""
-        manifest = _minimal_manifest(regions=[
-            _region_entry(
-                name="fluid",
-                kind="fluid",
-                thermo_type="heRhoThermo",
-                thermo_snapshot_ref="snap_f",
-                shm_snapshot_ref="shm_f",  # present
-                coupled_patches=[],
-            ),
-            _region_entry(
-                name="solid_lost",
-                kind="solid",
-                thermo_type="heSolidThermo",
-                thermo_snapshot_ref="snap_s",
-                shm_snapshot_ref=None,  # absent — R16 trigger
-                coupled_patches=[],
-            ),
-        ])
-        matches = matches_for_manifest(manifest)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" in ids, (
-            "R16 must fire end-to-end when one region lacks shm_snapshot_ref "
-            "while at least one other region has it"
-        )
-
     def test_no_cht_rule_when_manifest_regions_empty_list(self):
         """Empty regions list → R13–R16 all silent (zero regions to check)."""
         manifest = _minimal_manifest(regions=[])
@@ -237,8 +189,6 @@ class TestProductionPathReachability:
         for rule_id in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rule_id not in ids, (
                 f"{rule_id} must be silent when manifest['regions'] == []"
@@ -277,8 +227,6 @@ class TestProductionPathReachability:
         for rule_id in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rule_id not in ids, (
                 f"{rule_id} must be silent on a healthy CHT manifest"

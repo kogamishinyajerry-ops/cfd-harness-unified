@@ -716,10 +716,15 @@ class TestW2_1_RulesetSurface:
         assert "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11" in ids
         assert "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12" in ids
 
-    def test_ruleset_has_16_rules(self):
+    def test_ruleset_has_14_rules(self):
         """W2.1 = +3 rules over the 9 landed through R9 → 12 total.
-        W3.1 = +4 CHT rules R13–R16 → 16 total."""
-        assert len(V9_ADVISOR_RULES) == 16
+        W3.1 = +2 CHT rules R13+R14 shipped → 14 total.
+        R15 (CONDUCTION_DOMINANCE) + R16 (FACE_ZONE_LOSS) deferred per
+        Codex R1 (DEC-V61-222): frozen W3.0.6 schema carries DECLARED topology
+        (kind from regionProperties, shm_snapshot_ref sHM-vs-extruded) but NOT
+        produced-mesh presence; faithful R15/R16 require a future W3.2
+        mesh-presence field."""
+        assert len(V9_ADVISOR_RULES) == 14
 
     @pytest.mark.parametrize(
         "rule_id,expected_severity",

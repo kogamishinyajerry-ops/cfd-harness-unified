@@ -459,7 +459,29 @@ def _pred_residual_divergence(slice_: RunArtifactSlice) -> Optional[MatchSite]:
 
 
 # ---------------------------------------------------------------------------
-# W3.1 CHT predicates — R13, R14, R15, R16
+# W3.1 CHT predicates — R13, R14 (SHIPPED) · R15, R16 DEFERRED
+#
+# W3.1 shipped R13 (COUPLED_INTERFACE_DANGLING_REF) and R14
+# (PER_REGION_THERMO_MISSING) as faithful rules: both read fields that are
+# genuinely present in the frozen W3.0.6 RegionSlice schema.
+#
+# R15 CONDUCTION_DOMINANCE and R16 FACE_ZONE_LOSS are DEFERRED (Codex R1,
+# DEC-V61-222): the frozen schema carries DECLARED topology only —
+# kind (from regionProperties) and shm_snapshot_ref (distinguishing
+# sHM-vs-extruded) — but NOT produced-mesh presence. Faithful R15/R16 need
+# a per-region mesh-presence / faceZone-presence signal that does not exist
+# until W3.2 (which owns mesh production). Specifically:
+#   - R16: shm_snapshot_ref=None means "extruded, not sHM'd" for case_002b's
+#     6 solids (healthy extruded case), NOT "face-zone lost" → false-positive.
+#   - R15: kind comes from regionProperties, so a mesh-lost fluid still
+#     reads kind='fluid' → R15 cannot fire on V92 (blind spot).
+# Full reachability of R13/R14 via the manifest→regions adapter is proved
+# by tests/p3/test_manifest_adapter_regions.py TestProductionPathReachability.
+#
+# RegionSlice.kind and RegionSlice.shm_snapshot_ref are carried in the frozen
+# W3.0.6 schema but are read by NO shipped rule post-deferral. Do NOT remove
+# them: the frozen W3.0.6 contract requires them, and the future mesh-presence
+# rules (naturally landing with W3.2) will consume them.
 # ---------------------------------------------------------------------------
 
 
@@ -563,122 +585,6 @@ def _pred_per_region_thermo_missing(slice_: RunArtifactSlice) -> Optional[MatchS
     return None
 
 
-def _pred_conduction_dominance(slice_: RunArtifactSlice) -> Optional[MatchSite]:
-    # W3.1 · R15 CONDUCTION_DOMINANCE_V9_R15
-    #
-    # Detects a ZERO-FLUID region inventory: every classified region in the
-    # CHT slice is solid, so no convection is possible. This fires on the
-    # V92-class fluid-region loss (a fluid region silently got 0 cells and
-    # was dropped from the final polyMesh → the inventory becomes all-solid).
-    # It also fires when the case was always conduction-only (no fluid region
-    # declared at all). In either case, no convective momentum source can
-    # drive inter-region heat exchange.
-    #
-    # V92 faithful death-chain (region silently dropped from polyMesh →
-    # inventory becomes all-solid → R15 fires): .planning/methodology/
-    # industrial_case_solver_findings.md:1360-1370.
-    #
-    # Charter reference: DEC-V61-217 lines 106-110 (case_011 v5b degenerate-
-    # physics conduction-dominated boundary-equilibration — NOTE: the BC-driven
-    # v5b degeneracy described there has 2 fluid + 1 solid, which R15 does NOT
-    # detect because n_fluid=2 > 0; that scenario is documented as a known gap
-    # below).
-    #
-    # KNOWN-GAP (honest disclosed gap · W3.1 R15 negative contract):
-    # R15 will NOT fire when:
-    #   (a) regions is None — legacy/scalar slice (graceful-skip).
-    #   (b) regions == [] — no classified regions to count.
-    #   (c) a region's kind is None — ambiguous classification (DEC-V61-213
-    #       honest None); MUST be SKIPPED from the count, never guessed.
-    #   (d) n_fluid >= 1 after skipping None-kind regions — at least one fluid
-    #       region with a real flow regime present.
-    #   (e) BC-DRIVEN DEGENERACY (disclosed known gap): the V94 case_011 v5b
-    #       scenario — fluid regions ARE present in the inventory (n_fluid=2)
-    #       but are kinematically dead (all-walls fixedValue (0,0,0), no mass
-    #       flow → pure-conduction collapse at iter 200). This is NOT detectable
-    #       from the current slice schema: no kinematic-BC / mass-flow field
-    #       exists on RegionSlice. R15 detects only the zero-fluid-topology
-    #       case, not the BC-driven kinematically-dead-fluid case.
-    # The deterministic FIRE condition is the unambiguous n_fluid == 0 case
-    # where at least one solid region exists (pure-conduction degeneracy).
-    if slice_.regions is None:
-        return None
-    if len(slice_.regions) == 0:
-        return None
-
-    n_fluid = 0
-    n_solid = 0
-    for region in slice_.regions:
-        if region.kind is None:
-            continue  # ambiguous — skip, never guess
-        if region.kind == "fluid":
-            n_fluid += 1
-        elif region.kind == "solid":
-            n_solid += 1
-
-    # Only fire if we have at least one classifiable region AND zero fluids.
-    if n_fluid == 0 and n_solid >= 1:
-        return MatchSite(matched_at=f"n_fluid=0_n_solid={n_solid}")
-
-    return None
-
-
-def _pred_face_zone_loss(slice_: RunArtifactSlice) -> Optional[MatchSite]:
-    # W3.1 · R16 FACE_ZONE_LOSS_V9_R16
-    #
-    # Face-zone / region-mesh loss XOR (CHT mirror of R12 PASS/FAIL XOR):
-    # a region is declared in the CHT inventory (regions[].name present) but
-    # its snappyHexMesh face-zone/cellZone output reference is absent
-    # (shm_snapshot_ref is None) — the two signals disagree.
-    #
-    # Four orthogonal V-row death-chains:
-    #   V94: STL face-zone labels absent → one undifferentiated patch per
-    #        region pair; named patches never materialise.
-    #   V85: solid insidePoint inside hot-fluid layer + 0.8mm sub-cell plates →
-    #        cellZone walk leaks → region_hot_fluid absent from final polyMesh.
-    #   V90: modern locationsInMesh syntax on separate-STL multi-region →
-    #        empty named cellZones; only 1 of 3 populated.
-    #   V92: cellZoneInside inside on fuse_many void-bearing STL → region_solid
-    #        0 cells, missing from polyMesh.
-    #
-    # Mirror of R12 shape: requires at least ONE region WITH a populated
-    # shm_snapshot_ref before flagging the ones WITHOUT. This distinguishes
-    # 'shm stage skipped entirely' (all refs None → uniform absence, graceful
-    # skip) from 'this specific region lost its face-zone' (some refs present,
-    # one absent → XOR disagreement).
-    #
-    # KNOWN-GAP (signal-vs-noise discipline · W3.1 R16 negative contract):
-    # R16 will NOT fire when:
-    #   (a) regions is None — legacy/scalar slice (graceful-skip).
-    #   (b) regions == [] — no regions to cross-check.
-    #   (c) shm_snapshot_ref is present (non-None) for a region — no XOR
-    #       disagreement for that region.
-    #   (d) NO region in the slice has any shm_snapshot_ref at all (all None) —
-    #       shm stage skipped entirely; cannot distinguish from face-zone loss;
-    #       graceful skip, not per-region finding. The rule refuses to fire on
-    #       half-data (mirrors R12's 'station_pct is None → skip' discipline).
-    if slice_.regions is None:
-        return None
-    if len(slice_.regions) == 0:
-        return None
-
-    # Require at least one region WITH a ref before flagging any without.
-    # (R12 mirror: refuse to fire on half-data / uniform absence.)
-    any_ref_present = any(
-        r.shm_snapshot_ref is not None for r in slice_.regions
-    )
-    if not any_ref_present:
-        return None
-
-    # XOR: find first region that is declared (has a name) but has no ref.
-    for region in slice_.regions:
-        if region.shm_snapshot_ref is None:
-            return MatchSite(
-                matched_at=f"region:{region.name}:declared_no_shm_snapshot"
-            )
-
-    return None
-
 
 _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] = {
     "RESIDUAL_OSCILLATION_P_V9_R1": _pred_residual_oscillation_p,
@@ -693,11 +599,9 @@ _PREDICATES_BY_ID: Dict[str, Callable[[RunArtifactSlice], Optional[MatchSite]]] 
     "KNOWN_DEVIATION_PATTERN_NEAR_LE_V9_R10": _pred_known_deviation_pattern_near_le,
     "DEVELOPED_REGION_SHAPE_MISMATCH_V9_R11": _pred_developed_region_shape_mismatch,
     "INTEGRATED_VS_STATION_DRAG_DISCREPANCY_V9_R12": _pred_integrated_vs_station_discrepancy,
-    # W3.1 CHT rules
+    # W3.1 CHT rules — R13 + R14 SHIPPED; R15 + R16 DEFERRED (Codex R1, DEC-V61-222)
     "COUPLED_INTERFACE_DANGLING_REF_V9_R13": _pred_coupled_interface_dangling_ref,
     "PER_REGION_THERMO_MISSING_V9_R14": _pred_per_region_thermo_missing,
-    "CONDUCTION_DOMINANCE_V9_R15": _pred_conduction_dominance,
-    "FACE_ZONE_LOSS_V9_R16": _pred_face_zone_loss,
 }
 
 

@@ -622,12 +622,12 @@ class TestByteReproducibilitySidecar:
     def test_regions_field_does_not_affect_matched_json_bytes(self):
         """RS#36 byte-invariance — exercised through the REAL matcher + serializer
         (Codex R1 P3#1). Run ``match_advisor_patterns`` on a slice carrying
-        HEALTHY regions (every region fully populated so NO W3.1 rule R13–R16
+        HEALTHY regions (every region fully populated so NO W3.1 rule R13–R14
         fires) vs an otherwise-identical slice WITHOUT regions, serialize each
         matched-commentary list with the REAL ``_canonical_json``, and assert
         byte-identical output.
 
-        Post-W3.1 premise (updated — W3.1 rules R13–R16 DO read ``regions``):
+        Post-W3.1 premise (updated — W3.1 rules R13–R14 DO read ``regions``):
         the ``regions`` FIELD itself never serializes into the sidecar (only the
         matched commentary does), so HEALTHY region data — which triggers no
         rule — cannot change the bytes. When a region is UNHEALTHY the rules

@@ -1,20 +1,24 @@
-"""P3 W3.1 · CHT advisor rules R13–R16 tests.
+"""P3 W3.1 · CHT advisor rules R13–R14 tests (R15+R16 DEFERRED).
 
-Tests the four new V9 advisor rules for conjugate heat transfer (CHT)
+Tests the two shipped V9 advisor rules for conjugate heat transfer (CHT)
 topology analysis:
     R13 COUPLED_INTERFACE_DANGLING_REF_V9_R13
     R14 PER_REGION_THERMO_MISSING_V9_R14
-    R15 CONDUCTION_DOMINANCE_V9_R15
-    R16 FACE_ZONE_LOSS_V9_R16
+
+R15 CONDUCTION_DOMINANCE and R16 FACE_ZONE_LOSS are DEFERRED per Codex R1
+(DEC-V61-222): the frozen W3.0.6 RegionSlice schema carries DECLARED topology
+(kind from regionProperties, shm_snapshot_ref distinguishing sHM-vs-extruded)
+but NOT produced-mesh presence. R16's shm_snapshot_ref=None means "extruded,
+not sHM'd" for case_002b's 6 solids (healthy), NOT "face-zone lost"
+→ false-positive. R15's kind comes from regionProperties so a mesh-lost fluid
+still reads kind='fluid' → R15 cannot fire faithfully on V92. Faithful R15/R16
+require a future W3.2 per-region mesh-presence field.
 
 Evidence: synthetic V-row-replay fixtures derived from the following
 industrial case death-chains per the P3 W3.1 task specification:
     V94 — case_011 v1 0.orig BC files referencing non-existent coupled patches
     V14 — chtMultiRegionSimpleFoam crash mid-Time=1, missing-field sentinel ±1e+300
     V92 — region_solid 0 cells, absent from final polyMesh
-    V85 — cellZone walk leaks across 0.8mm sub-cell plates
-    V90 — modern locationsInMesh syntax → empty named cellZones
-    V15 — fluid-side limitTemperature clamping (thermal sensitivity context)
 
 Executor mode: mocked (no OpenFOAM process invoked; all slices are
 synthetic Python objects — MOCKED RUN, not a real solver run).
@@ -37,21 +41,6 @@ R14 PER_REGION_THERMO_MISSING_V9_R14:
     Artifacts canonical: YES — provenance non-empty (RS#32 enforced at import).
     TrustGate-explainable: YES — fires when BOTH thermo payload fields are None;
                            matched_at names the region and reason 'thermo_missing'.
-    Advisory-only: YES — severity 'warn'; no gate verdict change.
-
-R15 CONDUCTION_DOMINANCE_V9_R15:
-    LLM offline: YES — pure function over RegionSlice.kind counts.
-    Artifacts canonical: YES — provenance cites V94 death-chain lines verbatim.
-    TrustGate-explainable: YES — fires only when n_fluid==0 AND n_solid>=1 after
-                           skipping None-kind ambiguous regions; matched_at is
-                           'n_fluid=0_n_solid=<N>' which is fully auditable.
-    Advisory-only: YES — severity 'warn'; heuristic topology hint, not a gate.
-
-R16 FACE_ZONE_LOSS_V9_R16:
-    LLM offline: YES — pure function over RegionSlice.shm_snapshot_ref present/absent.
-    Artifacts canonical: YES — provenance cites V94/V85/V90/V92 death-chain lines.
-    TrustGate-explainable: YES — mirrors R12 XOR shape; requires >=1 region WITH
-                           a ref before flagging those without (half-data discipline).
     Advisory-only: YES — severity 'warn'; no gate verdict change.
 """
 
@@ -120,27 +109,34 @@ def _region(
 # ---------------------------------------------------------------------------
 
 def test_load_corpus_still_builds():
-    """_load_corpus() must build cleanly with all 16 rules (join integrity)."""
+    """_load_corpus() must build cleanly with all 14 rules (join integrity).
+
+    W3.1 shipped R13 + R14; R15 + R16 deferred (Codex R1, DEC-V61-222).
+    """
     version, rules = _load_corpus()
     ids = {r.id for r in rules}
     for expected_id in (
         "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
         "PER_REGION_THERMO_MISSING_V9_R14",
+    ):
+        assert expected_id in ids, f"Missing rule id after _load_corpus(): {expected_id}"
+    for deferred_id in (
         "CONDUCTION_DOMINANCE_V9_R15",
         "FACE_ZONE_LOSS_V9_R16",
     ):
-        assert expected_id in ids, f"Missing rule id after _load_corpus(): {expected_id}"
-    assert len(rules) == 16
+        assert deferred_id not in ids, (
+            f"Deferred rule {deferred_id} must NOT appear in the shipped corpus "
+            f"(Codex R1 deferral, DEC-V61-222)"
+        )
+    assert len(rules) == 14
 
 
 def test_all_new_rules_have_non_empty_provenance():
-    """RS#32: provenance must be non-empty for all R13–R16."""
+    """RS#32: provenance must be non-empty for all shipped CHT rules (R13 + R14)."""
     for rule in V9_ADVISOR_RULES:
         if rule.id in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rule.provenance, f"RS#32 violation: {rule.id} has empty provenance"
             assert len(rule.provenance) > 0
@@ -458,296 +454,6 @@ class TestR14PerRegionThermoMissing:
 
 
 # ---------------------------------------------------------------------------
-# R15 CONDUCTION_DOMINANCE_V9_R15
-# ---------------------------------------------------------------------------
-
-class TestR15ConductionDominance:
-    """Synthetic V92-class fluid-region-loss replay: an all-solid inventory
-    (every classified region is solid). R15 detects only this zero-fluid
-    topology — NOT the V94/case_011-v5b BC-driven degeneracy (2 fluid + 1 solid,
-    kinematically dead), which is a disclosed known gap (no kinematic-BC field on
-    the slice)."""
-
-    def test_fires_on_zero_fluid_regions(self):
-        """V92-class replay (fluid region dropped from inventory): n_fluid=0,
-        n_solid=2 → pure-conduction degeneracy."""
-        slice_ = _make_base_slice(
-            run_id="R-V94-R15",
-            case_id="cht_v94_degenerate_conduction",
-            regions=[
-                _region(
-                    name="plate_1",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap1",
-                    shm_snapshot_ref="shm1",
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="plate_2",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap2",
-                    shm_snapshot_ref="shm2",
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" in ids
-        r15 = next(m for m in matches if m["rule_id"] == "CONDUCTION_DOMINANCE_V9_R15")
-        assert r15["matched_at"] == "n_fluid=0_n_solid=2"
-        assert r15["severity"] == "warn"
-
-    def test_silent_on_case_with_fluid_regions(self):
-        """Healthy: case_011 normal topology — 2 fluid : 1 solid → NOT degenerate."""
-        slice_ = _make_base_slice(
-            run_id="R-CASE011-FLUID",
-            case_id="case_011_healthy",
-            regions=[
-                _region(
-                    name="fluid_hot",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snf1",
-                    shm_snapshot_ref="shmf1",
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="fluid_cold",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snf2",
-                    shm_snapshot_ref="shmf2",
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="solid_aluminum",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="sns",
-                    shm_snapshot_ref="shms",
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" not in ids
-
-    def test_silent_when_kind_is_none(self):
-        """Honest None: region with kind=None must be SKIPPED, not guessed.
-        If all regions have kind=None, n_fluid=0 and n_solid=0 — no fire."""
-        slice_ = _make_base_slice(
-            run_id="R-KIND-NONE",
-            case_id="cht_ambiguous_kind",
-            regions=[
-                _region(
-                    name="ambiguous_region",
-                    kind=None,  # ambiguous — must skip
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap",
-                    shm_snapshot_ref="shm",
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" not in ids, (
-            "R15 must NOT fire when the only region has kind=None (ambiguous — cannot "
-            "determine fluid/solid classification)"
-        )
-
-    def test_silent_on_legacy_regions_none(self):
-        """Graceful skip: regions=None is the legacy/scalar slice sentinel."""
-        slice_ = _make_base_slice(run_id="R-LEG3", case_id="legacy")
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" not in ids
-
-    def test_silent_on_empty_regions_list(self):
-        """Graceful skip: regions=[] — no regions to count."""
-        slice_ = _make_base_slice(
-            run_id="R-EMPTY3", case_id="cht_empty3", regions=[]
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "CONDUCTION_DOMINANCE_V9_R15" not in ids
-
-    def test_solid_heavy_case_002b_fires_when_fluid_absent(self):
-        """case_002b analog: 6 solid : 1 fluid — healthy (has fluid). Only fires if fluid gone."""
-        # With fluid present: MUST NOT fire
-        regions_with_fluid = [
-            _region("fluid", "fluid", "heRhoThermo", "sf", "shmf", ()),
-            _region("ti_shell_1", "solid", "heSolidThermo", "ss1", "shms1", ()),
-            _region("ti_shell_2", "solid", "heSolidThermo", "ss2", "shms2", ()),
-        ]
-        slice_healthy = _make_base_slice(
-            run_id="R-002B-HEALTHY",
-            case_id="case_002b_healthy",
-            regions=regions_with_fluid,
-        )
-        matches = _matches_for(slice_healthy)
-        assert "CONDUCTION_DOMINANCE_V9_R15" not in _rule_ids(matches)
-
-
-# ---------------------------------------------------------------------------
-# R16 FACE_ZONE_LOSS_V9_R16
-# ---------------------------------------------------------------------------
-
-class TestR16FaceZoneLoss:
-    """Synthetic V-row replay: V94/V85/V90/V92 — region declared but sHM ref absent."""
-
-    def test_fires_on_region_without_shm_ref_when_others_have_refs(self):
-        """V94/V85 replay: some regions have shm refs, one does not (XOR disagreement)."""
-        slice_ = _make_base_slice(
-            run_id="R-V94-R16",
-            case_id="cht_face_zone_loss",
-            regions=[
-                _region(
-                    name="fluid",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap_f",
-                    shm_snapshot_ref="shm_fluid",  # present
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="solid_lost",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap_s",
-                    shm_snapshot_ref=None,  # absent — face-zone loss
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" in ids
-        r16 = next(m for m in matches if m["rule_id"] == "FACE_ZONE_LOSS_V9_R16")
-        assert r16["matched_at"] == "region:solid_lost:declared_no_shm_snapshot"
-        assert r16["severity"] == "warn"
-
-    def test_silent_on_fully_meshed_healthy_case(self):
-        """Healthy: every declared region has a populated shm_snapshot_ref."""
-        slice_ = _make_base_slice(
-            run_id="R-FULL-SHM",
-            case_id="cht_healthy_mesh",
-            regions=[
-                _region(
-                    name="fluid",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap_f",
-                    shm_snapshot_ref="shm_f",  # present
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="solid",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap_s",
-                    shm_snapshot_ref="shm_s",  # present
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" not in ids
-
-    def test_silent_when_all_shm_refs_absent_shm_stage_skipped(self):
-        """Graceful skip: ALL shm_snapshot_ref are None — sHM stage skipped entirely.
-        Cannot distinguish 'stage skipped' from 'region lost its face-zone'
-        without at least one ref present — mirrors R12 half-data discipline."""
-        slice_ = _make_base_slice(
-            run_id="R-ALL-NONE-SHM",
-            case_id="cht_shm_stage_skipped",
-            regions=[
-                _region(
-                    name="fluid",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap_f",
-                    shm_snapshot_ref=None,  # all absent — sHM stage not run
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="solid",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap_s",
-                    shm_snapshot_ref=None,  # all absent
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" not in ids, (
-            "R16 must NOT fire when ALL shm_snapshot_ref are None — sHM stage "
-            "skipped entirely (cannot distinguish from face-zone loss without >=1 ref)"
-        )
-
-    def test_silent_on_legacy_regions_none(self):
-        """Graceful skip: regions=None is the legacy/scalar slice sentinel."""
-        slice_ = _make_base_slice(run_id="R-LEG4", case_id="legacy")
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" not in ids
-
-    def test_silent_on_empty_regions_list(self):
-        """Graceful skip: regions=[] — no regions to cross-check."""
-        slice_ = _make_base_slice(
-            run_id="R-EMPTY4", case_id="cht_empty4", regions=[]
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" not in ids
-
-    def test_fires_on_first_region_without_ref_v90_v92_topology(self):
-        """V90/V92 replay: 3-region case, one region completely absent from mesh."""
-        slice_ = _make_base_slice(
-            run_id="R-V90-V92-R16",
-            case_id="cht_v90_v92_missing_cellzone",
-            regions=[
-                _region(
-                    name="region_hot_fluid",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap_hot",
-                    shm_snapshot_ref="shm_hot",
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="region_cold_fluid",
-                    kind="fluid",
-                    thermo_type="heRhoThermo",
-                    thermo_snapshot_ref="snap_cold",
-                    shm_snapshot_ref="shm_cold",
-                    coupled_patches=(),
-                ),
-                _region(
-                    name="region_solid",
-                    kind="solid",
-                    thermo_type="heSolidThermo",
-                    thermo_snapshot_ref="snap_solid",
-                    shm_snapshot_ref=None,  # 0 cells / absent from polyMesh
-                    coupled_patches=(),
-                ),
-            ],
-        )
-        matches = _matches_for(slice_)
-        ids = _rule_ids(matches)
-        assert "FACE_ZONE_LOSS_V9_R16" in ids
-        r16 = next(m for m in matches if m["rule_id"] == "FACE_ZONE_LOSS_V9_R16")
-        assert "region_solid" in r16["matched_at"]
-
-
-# ---------------------------------------------------------------------------
 # RED-TEAM PINS (regrounded) · R13 COUPLED_INTERFACE_DANGLING_REF_V9_R13
 # ---------------------------------------------------------------------------
 #
@@ -853,7 +559,6 @@ def test_existing_rules_unaffected_by_cht_regions_none():
     matches = _matches_for(slice_)
     ids = _rule_ids(matches)
     assert "MAX_ITERS_REACHED_V9_R2" in ids
-    # None of R13–R16 should fire on a legacy slice
-    for r_id in ("COUPLED_INTERFACE_DANGLING_REF_V9_R13", "PER_REGION_THERMO_MISSING_V9_R14",
-                 "CONDUCTION_DOMINANCE_V9_R15", "FACE_ZONE_LOSS_V9_R16"):
+    # None of the CHT rules (R13–R14 shipped) should fire on a legacy slice
+    for r_id in ("COUPLED_INTERFACE_DANGLING_REF_V9_R13", "PER_REGION_THERMO_MISSING_V9_R14"):
         assert r_id not in ids, f"{r_id} must not fire on legacy regions=None slice"

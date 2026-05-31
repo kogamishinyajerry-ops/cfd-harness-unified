@@ -42,7 +42,7 @@ export interface BridgeArtifact {
    * W3.1 · DEC-V61-215 · per-region CHT snapshots.
    * Forward-compat: populated once W3.2 wires the audit-package builder to emit
    * manifest["regions"] into the run-detail payload. Until then, the backend bridge
-   * payload omits this field → undefined here → R13–R16 silently dormant (correct).
+   * payload omits this field → undefined here → R13–R14 silently dormant (correct).
    * ADDITIVE-OPTIONAL: no existing BridgeArtifact literal breaks.
    */
   regions?: RegionSlice[] | null;

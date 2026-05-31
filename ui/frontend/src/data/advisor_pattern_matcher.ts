@@ -19,8 +19,23 @@
 // RS#38 cross-language contract: this TS mirror MUST track the Python dataclasses
 // field-for-field. Additive-non-breaking: `regions` is optional, so every
 // pre-W3.0.6 RunArtifactSlice literal still type-checks. The frozen contract
-// feeds W3.1 CHT rules (R13 coupled_patches[*].neighbour_region · R14 thermo_type /
-// thermo_snapshot_ref · R15 kind · R16 shm_snapshot_ref).
+// feeds W3.1 CHT rules:
+//   R13 coupled_patches[*].neighbour_region  [SHIPPED]
+//   R14 thermo_type / thermo_snapshot_ref    [SHIPPED]
+//   R15 kind                                 [DEFERRED — Codex R1, DEC-V61-222:
+//     schema carries DECLARED topology (kind from regionProperties), NOT produced-
+//     mesh presence; mesh-lost fluid still reads kind='fluid' → false-negative on V92.
+//     Requires future W3.2 per-region mesh-presence field.]
+//   R16 shm_snapshot_ref                     [DEFERRED — Codex R1, DEC-V61-222:
+//     shm_snapshot_ref=None means "extruded, not sHM'd" (healthy for case_002b's
+//     6 solids), NOT "face-zone lost" → false-positive.
+//     Requires future W3.2 per-region mesh-presence field.]
+//
+// Dead-field note (RS#38 parity with Python pattern_matcher.py): RegionSlice.kind
+// and RegionSlice.shm_snapshot_ref are currently read by NO shipped rule (R15 + R16
+// both deferred). Do NOT remove them from the schema — the frozen W3.0.6 contract
+// carries them and the future mesh-presence rules (naturally landing with W3.2) will
+// consume them.
 //
 // Three-state (DEC-V61-213 presence-vs-payload): for `regions` and
 // `coupled_patches`, `null`/absent = not extracted · `[]` = extracted, zero ·
@@ -163,7 +178,8 @@ export interface RunArtifactSlice {
    * W3.0.6 · DEC-V61-221 multi-region CHT regions. Additive-non-breaking:
    * undefined/null for single-region + legacy + pre-W3.0.6 slices (graceful-skip,
    * not partial). `[]` = multi-region case with zero regions surfaced; populated
-   * = per-region snapshots. Consumed by W3.1 CHT rules R13–R16. Python parity:
+   * = per-region snapshots. Consumed by W3.1 CHT rules R13–R14 (R15/R16
+   * deferred — Codex R1, DEC-V61-222). Python parity:
    * RunArtifactSlice.regions: Optional[List[RegionSlice]].
    */
   regions?: RegionSlice[] | null;

@@ -1,4 +1,4 @@
-"""Red-team probes for W3.1 CHT advisor rules R13–R16 (FALSE-POSITIVE / CRASH lens).
+"""Red-team probes for W3.1 CHT advisor rules R13–R14 (FALSE-POSITIVE / CRASH lens).
 
 These tests document failure modes found by the Red Team review (Lens 1 ·
 false-positive discipline) and the regrounded behavior after the W3.1 fix cycle.
@@ -30,9 +30,7 @@ from ui.backend.services.v9_advisor import (
     match_advisor_patterns,
 )
 from ui.backend.services.v9_advisor.rules import (
-    _pred_conduction_dominance,
     _pred_coupled_interface_dangling_ref,
-    _pred_face_zone_loss,
     _pred_per_region_thermo_missing,
 )
 
@@ -164,14 +162,9 @@ class TestCHTRulesNoCrash:
         slice_ = _base(regions=[r])
         # Must not raise.
         ids = _ids(slice_)
-        # R14 legitimately fires (both thermo fields None); others silent.
+        # R14 legitimately fires (both thermo fields None); R13 silent (no coupled patches).
         assert "PER_REGION_THERMO_MISSING_V9_R14" in ids
-        for rid in (
-            "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
-        ):
-            assert rid not in ids
+        assert "COUPLED_INTERFACE_DANGLING_REF_V9_R13" not in ids
 
     def test_malformed_coupling_type_none_does_not_crash_regrounded_r13(self):
         """Regrounded R13 does NOT use coupling_type at all — it only reads
@@ -201,8 +194,6 @@ class TestCHTRulesNoCrash:
         for rid in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rid not in ids
 
@@ -212,12 +203,5 @@ class TestCHTRulesNoCrash:
         for rid in (
             "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
             "PER_REGION_THERMO_MISSING_V9_R14",
-            "CONDUCTION_DOMINANCE_V9_R15",
-            "FACE_ZONE_LOSS_V9_R16",
         ):
             assert rid not in ids
-
-    def test_R15_silent_on_kind_none(self):
-        r = RegionSlice(name="ambig", kind=None, thermo_type="heRhoThermo")
-        slice_ = _base(regions=[r])
-        assert _pred_conduction_dominance(slice_) is None

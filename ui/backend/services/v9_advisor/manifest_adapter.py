@@ -154,12 +154,12 @@ def _regions_from_manifest(manifest: Dict[str, Any]) -> Optional[List[RegionSlic
     the W3.0.x multi-region extractors (region_properties_reader /
     shm_dict_multi_region / thermo_dict_multi_region) into the manifest builder.
     Current single-region and legacy manifests omit the key entirely → regions=None
-    → R13–R16 gracefully silent.
+    → R13–R14 gracefully silent (R15/R16 deferred — Codex R1, DEC-V61-222).
 
     RESIDUAL W3.2 GAP: This adapter is READY. The production audit-package
     builder (src/audit_package/manifest.py build_manifest()) does NOT yet emit
     manifest["regions"]. W3.2 must add that emission. Until then, all real audit
-    bundles take the "no regions key → return None" path and R13–R16 are silent
+    bundles take the "no regions key → return None" path and R13–R14 are silent
     in production. This is the correct honest behavior (DEC-V61-213
     presence-vs-payload independence: absent key = not extracted, not empty).
 
@@ -496,7 +496,7 @@ def derive_slice_from_manifest(manifest: Dict[str, Any]) -> RunArtifactSlice:
 
     # W3.1 · DEC-V61-215 multi-region CHT extension.
     # _regions_from_manifest returns None when the manifest has no "regions"
-    # key (all current single-region + legacy manifests) → R13–R16 silently
+    # key (all current single-region + legacy manifests) → R13–R14 silently
     # dormant. When W3.2 wires build_manifest() to emit manifest["regions"],
     # the CHT rules activate automatically through this path.
     # See _regions_from_manifest docstring for the full W3.2 gap statement.

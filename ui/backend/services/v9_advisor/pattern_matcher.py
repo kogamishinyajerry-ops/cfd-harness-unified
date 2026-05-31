@@ -58,18 +58,23 @@ sites stay unchanged because regions defaults None. This extension is a
 frozen schema contract for W3.1 CHT rule distillation — no new predicates
 ship here. W3.1 rules that consume these fields:
 
-    - R13 COUPLED_INTERFACE_DANGLING_REF
+    - R13 COUPLED_INTERFACE_DANGLING_REF (SHIPPED)
         Reads RegionSlice.coupled_patches[*].neighbour_region vs region-name inventory.
 
-    - R14 PER_REGION_THERMO_MISSING
+    - R14 PER_REGION_THERMO_MISSING (SHIPPED)
         Reads RegionSlice.thermo_type / thermo_snapshot_ref.
 
-    - R15 CONDUCTION_DOMINANCE
-        Reads RegionSlice.kind to identify solid-heavy CHT topologies.
+    - R15 CONDUCTION_DOMINANCE (DEFERRED — Codex R1, DEC-V61-222)
+        Would read RegionSlice.kind. DEFERRED: kind comes from regionProperties
+        (DECLARED topology), so a mesh-lost fluid still reads kind='fluid' →
+        faithful R15 cannot fire on V92. Requires produced-mesh presence field
+        (future W3.2 extension).
 
-    - R16 FACE_ZONE_LOSS
-        Reads RegionSlice.shm_snapshot_ref to cross-check snappyHexMesh
-        face-zone output against expected coupling geometry.
+    - R16 FACE_ZONE_LOSS (DEFERRED — Codex R1, DEC-V61-222)
+        Would read RegionSlice.shm_snapshot_ref. DEFERRED: shm_snapshot_ref=None
+        means "extruded, not sHM'd" (healthy for case_002b's 6 solids), NOT
+        "face-zone lost" → false-positive. Requires produced-mesh presence field
+        (future W3.2 extension).
 
 Each RegionSlice field is independently optional (all default None) per
 DEC-V61-213 presence-vs-payload independence contract: per-region payload
@@ -240,9 +245,10 @@ class CoupledPatch:
 class RegionSlice:
     """Per-region data snapshot carried inside RunArtifactSlice.regions.
 
-    This is the frozen W3.1 contract: W3.1 CHT rule authors (R13–R16)
-    read these fields. All payload fields are independently Optional per
-    DEC-V61-213 presence-vs-payload independence.
+    This is the frozen W3.1 contract: W3.1 CHT rule authors read these fields
+    (R13 + R14 shipped; R15 + R16 deferred — Codex R1, DEC-V61-222). All payload
+    fields are independently Optional per DEC-V61-213 presence-vs-payload
+    independence.
 
     Fields
     ------
@@ -261,8 +267,9 @@ class RegionSlice:
         label claims payload it does not have). The ``Literal`` is a
         caller-validated type hint, NOT runtime-enforced (no mypy gate in CI;
         subsystem convention — the manifest deriver is the trusted producer).
-        R15 CONDUCTION_DOMINANCE reads this; None ⇒ dominance undeterminable
-        for that region (the rule must skip it, not guess).
+        Read by NO shipped rule (R15 CONDUCTION_DOMINANCE DEFERRED — Codex R1,
+        DEC-V61-222: kind is DECLARED topology from regionProperties, not
+        produced-mesh presence). Carried for the future mesh-presence R15.
 
     thermo_type : Optional[str]
         Thermophysical model type string from W3.0.2
@@ -283,7 +290,10 @@ class RegionSlice:
         Opaque string reference to the W3.0.1 RegionShmSnapshot for
         this region. NOT the object itself — kept as a string to decouple
         v9_advisor from case_extractors / trimesh (module boundary
-        contract). W3.1 R16 FACE_ZONE_LOSS reads this ref.
+        contract). Read by NO shipped rule (R16 FACE_ZONE_LOSS DEFERRED — Codex
+        R1, DEC-V61-222: shm_snapshot_ref=None means "extruded, not sHM'd",
+        healthy for case_002b's 6 solids, NOT "face-zone lost"). Carried for the
+        future mesh-presence R16.
 
     thermo_snapshot_ref : Optional[str]
         Opaque string reference to the W3.0.2 RegionThermoSnapshot for
@@ -291,10 +301,19 @@ class RegionSlice:
         as shm_snapshot_ref. W3.1 R14 reads this ref.
 
     W3.1 rule→field mapping (frozen contract):
-        R13 COUPLED_INTERFACE_DANGLING_REF ← coupled_patches[*].neighbour_region (vs region inventory)
-        R14 PER_REGION_THERMO_MISSING      ← thermo_type, thermo_snapshot_ref
-        R15 CONDUCTION_DOMINANCE           ← kind
-        R16 FACE_ZONE_LOSS                 ← shm_snapshot_ref
+        R13 COUPLED_INTERFACE_DANGLING_REF ← coupled_patches[*].neighbour_region (vs region inventory)  [SHIPPED]
+        R14 PER_REGION_THERMO_MISSING      ← thermo_type, thermo_snapshot_ref  [SHIPPED]
+        R15 CONDUCTION_DOMINANCE           ← kind  [DEFERRED — Codex R1, DEC-V61-222: schema carries
+                                                     DECLARED topology from regionProperties, NOT produced-
+                                                     mesh presence; mesh-lost fluid still reads kind='fluid']
+        R16 FACE_ZONE_LOSS                 ← shm_snapshot_ref  [DEFERRED — Codex R1, DEC-V61-222:
+                                                     shm_snapshot_ref=None means "extruded, not sHM'd"
+                                                     (healthy for case_002b 6 solids), NOT "face-zone lost"]
+
+    Dead-field note: RegionSlice.kind and RegionSlice.shm_snapshot_ref are
+    currently read by NO shipped rule (R15 + R16 are both deferred). Do NOT
+    remove them: the frozen W3.0.6 contract carries them, and the future
+    mesh-presence rules (naturally landing with W3.2) will consume them.
     """
 
     name: str

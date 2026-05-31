@@ -237,8 +237,6 @@ describe("W3.1 · end-to-end CHT rule activation via adapted slices", () => {
     for (const rId of [
       "COUPLED_INTERFACE_DANGLING_REF_V9_R13",
       "PER_REGION_THERMO_MISSING_V9_R14",
-      "CONDUCTION_DOMINANCE_V9_R15",
-      "FACE_ZONE_LOSS_V9_R16",
     ]) {
       expect(ids).not.toContain(rId);
     }
