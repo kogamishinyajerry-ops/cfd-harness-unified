@@ -11,7 +11,7 @@ round_cap: 3
 codex_review_relay: 86gs gpt-5.4 xhigh
 codex_verdict: APPROVE (R2 clean · chain R0→R1→R2)
 codex_tool_report_path: reports/codex_tool_reports/v61_218_chain_report.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-31 (https://www.notion.so/371c68942bed812da2ccd4b0a30414c8)
 ---
 
 # DEC-V61-218 · regionProperties reader for CHT multi-region topology (P3 W3.0)

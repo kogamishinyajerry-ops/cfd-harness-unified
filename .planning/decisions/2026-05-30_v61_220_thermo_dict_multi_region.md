@@ -12,7 +12,7 @@ codex_review_relay: 86gs gpt-5.4 xhigh (R0) → CRS gpt-5.4 high (R1+R2, 86gs up
 codex_verdict: cap=3 reached (R0 2×P2 → R1 2×P1 → R2 1×P1, all CHANGES_REQUIRED) — every finding fixed+pinned; R2 (3rd round) fixed at cap without an independent R3 re-review (consult tool errored; W3.0.1 precedent + overflow record). R2 implicitly validated the substantial R1 Contract-A refactor (reviewed, not re-flagged); only the 5-LOC R2 dedup is un-re-reviewed (low-risk honest residual)
 codex_tool_report_path: reports/codex_tool_reports/v61_220_chain_report.md
 overflow_record: .planning/retrospectives/codex_round3_overflow_w302.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-31 (https://www.notion.so/371c68942bed81689883f294598e7932)
 touches_shared_dec: V61-213 (thermo_dict_extractor leaf-scanners hardened with depth-0 stripping — fixes a latent nested-leak fabrication shared by the single-region path)
 ---
 

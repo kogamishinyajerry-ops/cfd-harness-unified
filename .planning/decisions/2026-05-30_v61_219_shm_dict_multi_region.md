@@ -12,7 +12,7 @@ codex_review_relay: crs gpt-5.4 (effort=high, fallback) — 86gs 502 Bad Gateway
 codex_verdict: cap=3 reached (R0→R1→R2 all CHANGES_REQUIRED, all P2/P3 no P1) — R0+R1 (6 findings) fixed+verified; R2 (2 findings) fixed at cap without independent R3 re-review per discipline (overflow record + user-ratified path)
 codex_tool_report_path: reports/codex_tool_reports/v61_219_chain_report.md
 overflow_record: .planning/retrospectives/codex_round3_overflow_w301.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-31 (https://www.notion.so/371c68942bed81ac88e1d1e0f5d2904e)
 ---
 
 # DEC-V61-219 · shm_dict multi-region variant for CHT topology (P3 W3.0.1)

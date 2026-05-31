@@ -11,7 +11,7 @@ round_cap: 3
 codex_review_relay: 86gs gpt-5.4 xhigh (R0+R1) → CRS gpt-5.4 high (R2; 86gs R2 hung/killed, fallback per DEC-V61-214; effort xhigh→high on R2 noted)
 codex_verdict: APPROVE at R2 (clean gate, within cap=3) — R0 1×P2 (TS parity mirror) + R1 2×P3 (test hygiene; R1 explicitly found NO production regression) fixed+verified; R2 found no bug. No overflow record needed.
 codex_tool_report_path: reports/codex_tool_reports/v61_221_chain_report.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-05-31 (https://www.notion.so/371c68942bed8100bf9dc83739c37b45)
 touches_shared_dec: V61-215 (RunArtifactSlice base contract in pattern_matcher.py — extended additively, mirroring its W2.0.6 nested-dataclass pattern)
 sibling_dec_contract_for: V61-217 W3.1 (CHT rule distillation consumes RunArtifactSlice.regions — schema frozen here)
 ---
