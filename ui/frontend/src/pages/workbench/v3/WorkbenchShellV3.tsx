@@ -75,10 +75,6 @@ function adaptBridgeArtifactToSlice(
     forces: undefined,
     convergence_stats: undefined,
     gold_delta: undefined,
-    // W3.1 · DEC-V61-215 · forward-compat carry-through.
-    // bridge.regions is populated once W3.2 emits manifest["regions"] into
-    // the bridge/run-detail backend payload. Until then undefined → R13–R16 silent.
-    regions: bridge.regions ?? undefined,
   };
 }
 import { MainCanvasV3 } from "./components/MainCanvasV3";

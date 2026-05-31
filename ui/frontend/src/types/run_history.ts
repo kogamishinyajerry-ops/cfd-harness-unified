@@ -1,8 +1,6 @@
 // Run history types · M3 · Workbench Closed-Loop main-line.
 // Mirrors ui/backend/schemas/run_history.py.
 
-import type { RegionSlice } from "@/data/advisor_pattern_matcher";
-
 // M4 closed-set categories. Adding a new one needs both backend
 // (_FAILURE_CATEGORIES in wizard_drivers.py) and frontend (this union +
 // the FAILURE_CATEGORY_LABEL_ZH map below) to stay in sync.
@@ -55,14 +53,6 @@ export interface RunDetail {
   task_spec: Record<string, unknown>;
   key_quantities: Record<string, unknown>;
   residuals: Record<string, number>;
-  /**
-   * W3.1 · DEC-V61-215 · per-region CHT snapshots.
-   * Forward-compat: populated once W3.2 wires build_manifest() to emit
-   * manifest["regions"]. Until then, the backend run-detail payload omits
-   * this field → undefined here → R13–R16 silently dormant (correct behavior).
-   * Adding this field is ADDITIVE-OPTIONAL: no existing RunDetail literal breaks.
-   */
-  regions?: RegionSlice[] | null;
 }
 
 // Bilingual label map for the FailureBanner / table chip.

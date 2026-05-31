@@ -54,10 +54,6 @@ function adaptRunDetailToSlice(detail: RunDetail): RunArtifactSlice {
     forces: undefined,
     convergence_stats: undefined,
     gold_delta: undefined,
-    // W3.1 · DEC-V61-215 · forward-compat carry-through.
-    // detail.regions is populated once W3.2 emits manifest["regions"] into
-    // the run-detail backend payload. Until then undefined → R13–R16 silent.
-    regions: detail.regions ?? undefined,
   };
 }
 
