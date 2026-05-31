@@ -85,11 +85,15 @@ def test_cht_solver_not_density_based_at_risk(tmp_path: Path, cht_solver: str) -
     assert snap.adjust_time_step is None
 
 
-def test_cht_family_not_yet_registered_seam_with_w32() -> None:
-    """W3.0.3 ↔ W3.2 seam: the solver name is parsed, but no CHT case family is
-    registered yet. ``helper_candidate_applies`` returns False for the CHT solver
-    today. W3.2 registers ``cht_steady_laminar_multi_region`` and flips this — at
-    which point this assertion is updated (intentional cross-workstream tripwire).
+def test_cht_steady_family_registered_by_w32a() -> None:
+    """W3.0.3 ↔ W3.2a seam (FLIPPED by DEC-V61-223): W3.2a registered the
+    ``cht_steady_laminar_multi_region`` family, so the STEADY solver now unlocks
+    its helper for the laminar target regime. The TRANSIENT ``chtMultiRegionFoam``
+    stays UNregistered per charter Q4 (steady + laminar first; transient deferred)
+    — this asymmetry is the intentional tripwire: a future transient sub-DEC
+    flips the second assertion.
     """
-    assert helper_candidate_applies("chtMultiRegionSimpleFoam", "laminar") is False
+    # Steady variant: registered by W3.2a → laminar (target regime) applies.
+    assert helper_candidate_applies("chtMultiRegionSimpleFoam", "laminar") is True
+    # Transient variant: still unregistered (charter Q4 deferral).
     assert helper_candidate_applies("chtMultiRegionFoam", "laminar") is False

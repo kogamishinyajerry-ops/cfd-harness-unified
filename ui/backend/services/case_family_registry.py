@@ -64,6 +64,19 @@ FORM_HELPER_SKELETONS: dict[tuple[str, str], dict[str, Any]] = {
         "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
         "wall":   {"patch_type": "noSlip",       "fields": {}},
     },
+    # P3 W3.2a (DEC-V61-223 · parent DEC-V61-217 charter row W3.2): steady
+    # laminar conjugate-heat-transfer multi-region. Closes the
+    # DEC-V61-202-SUB-M31-CYCLE4 deferred-target commitment for chtMultiRegion.
+    # The "wall" placeholder is the canonical CHT fluid<->solid coupled-baffle
+    # interface BC (NOT a plain noSlip) — the load-bearing CHT-specific shape an
+    # engineer must fill per interface. Pure-CHT v0.1: laminar, no radiation
+    # (charter Decision 1 / Q4). Placeholder T 300 K signals the engineer must
+    # enter the real per-stream inlet temperatures.
+    ("bc.patches", "cht_steady_laminar_multi_region"): {
+        "inlet":  {"patch_type": "fixedValue",   "fields": {"U": [1.0, 0.0, 0.0], "T": 300.0}},
+        "outlet": {"patch_type": "zeroGradient", "fields": {"p": "zeroGradient"}},
+        "wall":   {"patch_type": "compressible::turbulentTemperatureCoupledBaffleMixed", "fields": {}},
+    },
 }
 
 
@@ -85,6 +98,11 @@ SOLVER_TO_CASE_FAMILY_CANDIDATES: dict[str, frozenset[str]] = {
     # imported from non-workbench LES studies.
     "pimpleFoam": frozenset({"les_transient_incompressible"}),
     "pisoFoam": frozenset({"les_transient_incompressible"}),
+    # P3 W3.2a (DEC-V61-223): steady-variant CHT only. Transient
+    # `chtMultiRegionFoam` stays UNregistered per charter Q4 (laminar +
+    # steady first; transient is a deferred follow-on), so it intentionally
+    # does not unlock the v0.1 laminar skeleton.
+    "chtMultiRegionSimpleFoam": frozenset({"cht_steady_laminar_multi_region"}),
 }
 
 
@@ -168,6 +186,17 @@ def helper_candidate_applies(
         if normalized_turb == "laminar":
             return False
         return True
+
+    if solver == "chtMultiRegionSimpleFoam":
+        # P3 W3.2a (DEC-V61-223) CHT gate — the MIRROR of the simpleFoam RANS
+        # gate. For pure-CHT v0.1 (charter Q4) laminar IS the target regime, so
+        # a registered helper applies for "laminar" (and the unspecified/empty
+        # default, since solid regions carry no turbulence model). Turbulent CHT
+        # is a deferred follow-on (only the steady-laminar family is registered),
+        # so an explicit non-laminar turbulence model does NOT yet match —
+        # honest "don't offer a v0.1 laminar helper for an out-of-scope
+        # turbulent CHT case".
+        return normalized_turb in ("", "laminar")
 
     if solver in ("pisoFoam", "pimpleFoam"):
         # LES gate: turbulence_model must be LES-class. pimpleFoam

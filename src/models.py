@@ -24,6 +24,13 @@ class GeometryType(Enum):
     NATURAL_CONVECTION_CAVITY = "NATURAL_CONVECTION_CAVITY"
     AIRFOIL = "AIRFOIL"
     IMPINGING_JET = "IMPINGING_JET"
+    # P3 W3.2a (DEC-V61-223, parent DEC-V61-217 charter row W3.2): conjugate
+    # heat transfer multi-region geometry. Dispatches to
+    # FoamAgentExecutor._generate_cht_multi_region() (a blockMesh box-region
+    # 2-fluid + 1-solid steady-laminar plate, solver chtMultiRegionSimpleFoam).
+    # Name is geometry-agnostic (reusable for case_002b-class single-stream CHT
+    # later) rather than over-fitting to a specific HX instance.
+    CHT_MULTI_REGION = "CHT_MULTI_REGION"
     CUSTOM = "CUSTOM"
 
 

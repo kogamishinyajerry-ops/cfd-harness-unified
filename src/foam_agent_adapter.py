@@ -770,6 +770,12 @@ class FoamAgentExecutor:
             elif task_spec.geometry_type == GeometryType.IMPINGING_JET:
                 self._generate_impinging_jet(case_host_dir, task_spec)
                 solver_name = "buoyantFoam"
+            elif task_spec.geometry_type == GeometryType.CHT_MULTI_REGION:
+                # P3 W3.2a (DEC-V61-223): generate the multi-region CHT case
+                # dir; the LIVE run is W3.2b (boundary asserted just below the
+                # dispatch chain, before the single-region blockMesh->solver).
+                self._generate_cht_multi_region(case_host_dir, task_spec)
+                solver_name = "chtMultiRegionSimpleFoam"
             elif task_spec.geometry_type == GeometryType.SIMPLE_GRID:
                 # LDC: canonical name match, no Re-heuristic (Codex MEDIUM: the
                 # `Re < 2300` fallback was too broad — any SIMPLE_GRID laminar
@@ -787,6 +793,38 @@ class FoamAgentExecutor:
             else:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
+
+            # P3 W3.2a (DEC-V61-223) — explicit live-run boundary. The CHT
+            # multi-region case GENERATOR + geometry dispatch + case_family
+            # registration land in W3.2a (offline-testable). The LIVE
+            # multi-region execution pipeline — blockMesh -> splitMeshRegions
+            # -cellZones -> region-scoped chtMultiRegionSimpleFoam — is NOT
+            # wired into the single-region flow below, and the adapter's
+            # hardwired OF10 bashrc (line ~7879) has no chtMultiRegionSimpleFoam
+            # binary (ESI-image only). Both are W3.2b (charter row W3.2
+            # live-run). Fail LOUD + explicit here rather than running the
+            # single-region blockMesh->solver pipeline on a multi-region case
+            # (which would emit nonsense / V94-class errors). The case dir is
+            # already generated above, so it is on disk for audit ingestion.
+            if (
+                not task_spec.mesh_already_provided
+                and task_spec.geometry_type == GeometryType.CHT_MULTI_REGION
+            ):
+                return self._fail(
+                    "CHT_MULTI_REGION live execution is deferred to P3 W3.2b "
+                    "(DEC-V61-217 charter row W3.2 live-run): the multi-region "
+                    "mesh pipeline (blockMesh -> splitMeshRegions -cellZones -> "
+                    "region-scoped chtMultiRegionSimpleFoam) is not wired into "
+                    "this single-region executor flow, and the adapter's "
+                    "hardwired OF10 bashrc has no chtMultiRegionSimpleFoam "
+                    "binary (ESI-image only). W3.2a generated the case directory "
+                    "(regionProperties + per-region thermophysicalProperties + "
+                    "coupled-baffle 0/<region> fields + master controlDict); it "
+                    "is structurally complete and audit-ingestable but not yet "
+                    "live-runnable through this adapter.",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
 
             # 5. 执行 blockMesh — DEC-V61-090 (M6.1): skipped when an
             # upstream stage has already produced constant/polyMesh/
@@ -2321,6 +2359,444 @@ fields          (U);
 // ************************************************************************* //
 """,
             encoding="utf-8",
+        )
+
+    def _generate_cht_multi_region(self, case_dir: Path, task_spec: TaskSpec) -> None:
+        """Generate a steady-laminar conjugate-heat-transfer (CHT) multi-region case.
+
+        P3 W3.2a (DEC-V61-223; parent DEC-V61-217 charter row W3.2). Emits a
+        ``case_011``-stripped *canonical* CHT topology — two laminar air channels
+        (hot + cold) separated by an aluminium-6061 solid plate — exercising
+        multi-region topology + per-region thermophysical properties +
+        fluid<->solid coupled-baffle interface BCs, with ZERO radiation /
+        turbulence / phase-change (pure-CHT v0.1 envelope · charter Decision 1).
+
+        SCOPE — GENERATION ONLY (W3.2a). This writes a structurally-complete,
+        audit-ingestable case directory whose dicts parse through the W3.0.x
+        region extractors (``regionProperties`` + per-region
+        ``thermophysicalProperties``). It does NOT run: the LIVE multi-region
+        mesh pipeline (``blockMesh`` -> ``splitMeshRegions -cellZones`` ->
+        region-scoped ``chtMultiRegionSimpleFoam``) plus the OF10-vs-ESI
+        solver/image reconciliation are P3 W3.2b. ``execute()`` reaches an
+        explicit live-run boundary for this geometry (it returns a labelled
+        failure) rather than running the single-region pipeline on a
+        multi-region case — see the dispatch in ``execute()``.
+
+        Mesh strategy: a ``blockMesh`` BOX topology with three conformal,
+        face-sharing blocks each assigned a named cellZone (one per region) +
+        explicitly-named external patches. The fluid<->solid interfaces are
+        INTERNAL faces (shared block faces), so ``splitMeshRegions -cellZones``
+        materialises them as coupled ``<region>_to_<neighbour>`` patches and the
+        ``0/<region>/T`` coupled BCs reference exactly those auto-generated
+        names. This deliberately sidesteps the STL/snappyHexMesh multi-region
+        death-chains (V90 empty cellZones / V92 ``cellZoneInside`` heterogeneity
+        / V94 face-zone loss) that ``case_011`` v5b hit — the honest v0.1 path
+        (charter W3.0.1 requires only the *extractor* survive those sHM forms,
+        not the generator produce them).
+
+        Region descriptors default to the ``case_011`` plate-fin profile and may
+        be overridden via ``task_spec.boundary_conditions``.
+        """
+        bc = task_spec.boundary_conditions or {}
+
+        # --- region descriptors (case_011 plate-fin compact HX · stripped) ---
+        # Material numerals from .planning/case_profiles/case_011_plate_fin_compact_hx.md.
+        # thermo blocks mirror the EXACT shape the W3.0.2 multi-region thermo
+        # extractor parses (heRhoThermo/const fluid · heSolidThermo/constIso
+        # solid) so the generated case round-trips through the audit extractors.
+        hot = {
+            "name": "region_hot_fluid", "T_in": float(bc.get("T_hot_in", 420.0)),
+            "U_in": float(bc.get("U_hot", 1.0)),
+            "mol_weight": "28.96", "Cp": "1007", "mu": "2.4e-5", "Pr": "0.7",
+        }
+        cold = {
+            "name": "region_cold_fluid", "T_in": float(bc.get("T_cold_in", 300.0)),
+            "U_in": float(bc.get("U_cold", 0.8)),
+            "mol_weight": "28.96", "Cp": "1007", "mu": "1.9e-5", "Pr": "0.7",
+        }
+        fluids = [hot, cold]
+        solid = {
+            "name": "region_solid", "mol_weight": "26.98", "Cp": "896",
+            "kappa": "205", "rho": "2700",
+        }
+        T_solid_init = float(bc.get("T_solid_init", (hot["T_in"] + cold["T_in"]) / 2.0))
+        all_region_names = [hot["name"], cold["name"], solid["name"]]
+
+        # --- directory skeleton ---
+        (case_dir / "system").mkdir(parents=True, exist_ok=True)
+        (case_dir / "constant").mkdir(parents=True, exist_ok=True)
+        (case_dir / "0").mkdir(parents=True, exist_ok=True)
+        for rname in all_region_names:
+            (case_dir / "constant" / rname).mkdir(parents=True, exist_ok=True)
+            (case_dir / "system" / rname).mkdir(parents=True, exist_ok=True)
+            (case_dir / "0" / rname).mkdir(parents=True, exist_ok=True)
+
+        def _hdr(obj: str, location: str, cls: str = "dictionary") -> str:
+            return (
+                "/*--------------------------------*- C++ -*----------------------------------*\\\n"
+                "\\*---------------------------------------------------------------------------*/\n"
+                "FoamFile\n"
+                "{\n"
+                "    version     2.0;\n"
+                "    format      ascii;\n"
+                "    class       " + cls + ";\n"
+                '    location    "' + location + '";\n'
+                "    object      " + obj + ";\n"
+                "}\n"
+                "// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n\n"
+            )
+
+        FOOT = "\n// ************************************************************************* //\n"
+
+        def _write(rel: str, body: str) -> None:
+            (case_dir / rel).write_text(body, encoding="utf-8")
+
+        # ------------------------------------------------------------------
+        # constant/regionProperties — fluid/solid group lists. Format mirrors
+        # tests/p3/test_region_properties_reader.py::_make_region_props so the
+        # W3.0 regionProperties reader parses it (2 fluid + 1 solid → 3 regions).
+        # ------------------------------------------------------------------
+        fluid_names = " ".join(f["name"] for f in fluids)
+        _write(
+            "constant/regionProperties",
+            _hdr("regionProperties", "constant")
+            + "regions\n(\n"
+            + "    fluid       (" + fluid_names + ")\n"
+            + "    solid       (" + solid["name"] + ")\n"
+            + ");\n"
+            + FOOT,
+        )
+
+        # constant/g — shared gravity (chtMultiRegion fluids use p_rgh).
+        _write(
+            "constant/g",
+            _hdr("g", "constant", cls="uniformDimensionedVectorField")
+            + "dimensions      [0 1 -2 0 0 0 0];\n"
+            + "value           ( 0 -9.81 0 );\n"
+            + FOOT,
+        )
+
+        # ------------------------------------------------------------------
+        # per-region constant/<region>/thermophysicalProperties + momentumTransport
+        # ------------------------------------------------------------------
+        for f in fluids:
+            _write(
+                "constant/" + f["name"] + "/thermophysicalProperties",
+                _hdr("thermophysicalProperties", "constant/" + f["name"])
+                + "thermoType\n{\n"
+                + "    type            heRhoThermo;\n"
+                + "    mixture         pureMixture;\n"
+                + "    transport       const;\n"
+                + "    thermo          hConst;\n"
+                + "    equationOfState perfectGas;\n"
+                + "    specie          specie;\n"
+                + "    energy          sensibleEnthalpy;\n"
+                + "}\n\n"
+                + "mixture\n{\n"
+                + "    specie         { molWeight " + f["mol_weight"] + "; }\n"
+                + "    thermodynamics { Cp " + f["Cp"] + "; Hf 0; }\n"
+                + "    transport      { mu " + f["mu"] + "; Pr " + f["Pr"] + "; }\n"
+                + "}\n"
+                + FOOT,
+            )
+            # fluid momentumTransport — laminar (pure-CHT v0.1, no turbulence).
+            _write(
+                "constant/" + f["name"] + "/momentumTransport",
+                _hdr("momentumTransport", "constant/" + f["name"])
+                + "simulationType  laminar;\n"
+                + FOOT,
+            )
+
+        _write(
+            "constant/" + solid["name"] + "/thermophysicalProperties",
+            _hdr("thermophysicalProperties", "constant/" + solid["name"])
+            + "thermoType\n{\n"
+            + "    type            heSolidThermo;\n"
+            + "    mixture         pureMixture;\n"
+            + "    transport       constIso;\n"
+            + "    thermo          hConst;\n"
+            + "    equationOfState rhoConst;\n"
+            + "    specie          specie;\n"
+            + "    energy          sensibleEnthalpy;\n"
+            + "}\n\n"
+            + "mixture\n{\n"
+            + "    specie          { molWeight " + solid["mol_weight"] + "; }\n"
+            + "    thermodynamics  { Cp " + solid["Cp"] + "; Hf 0; }\n"
+            + "    transport       { kappa " + solid["kappa"] + "; }\n"
+            + "    equationOfState { rho " + solid["rho"] + "; }\n"
+            + "}\n"
+            + FOOT,
+        )
+
+        # ------------------------------------------------------------------
+        # system/blockMeshDict — 3 conformal stacked blocks (hot | solid | cold)
+        # each a named cellZone; fluid<->solid faces are INTERNAL (shared), so
+        # splitMeshRegions -cellZones materialises the coupled interface patches.
+        # Live checkMesh/face-orientation validation is W3.2b.
+        # ------------------------------------------------------------------
+        nx = int(bc.get("nx", 20))
+        nz = 1
+        _write(
+            "system/blockMeshDict",
+            _hdr("blockMeshDict", "system")
+            + "convertToMeters 1;\n\n"
+            + "vertices\n(\n"
+            + "    (0    0     0)      // 0\n"
+            + "    (0.1  0     0)      // 1\n"
+            + "    (0.1  0.02  0)      // 2\n"
+            + "    (0    0.02  0)      // 3\n"
+            + "    (0.1  0.03  0)      // 4\n"
+            + "    (0    0.03  0)      // 5\n"
+            + "    (0.1  0.05  0)      // 6\n"
+            + "    (0    0.05  0)      // 7\n"
+            + "    (0    0     0.01)   // 8\n"
+            + "    (0.1  0     0.01)   // 9\n"
+            + "    (0.1  0.02  0.01)   // 10\n"
+            + "    (0    0.02  0.01)   // 11\n"
+            + "    (0.1  0.03  0.01)   // 12\n"
+            + "    (0    0.03  0.01)   // 13\n"
+            + "    (0.1  0.05  0.01)   // 14\n"
+            + "    (0    0.05  0.01)   // 15\n"
+            + ");\n\n"
+            + "blocks\n(\n"
+            + "    hex (0 1 2 3 8 9 10 11) " + hot["name"]
+            + " (" + str(nx) + " 8 " + str(nz) + ") simpleGrading (1 1 1)\n"
+            + "    hex (3 2 4 5 11 10 12 13) " + solid["name"]
+            + " (" + str(nx) + " 4 " + str(nz) + ") simpleGrading (1 1 1)\n"
+            + "    hex (5 4 6 7 13 12 14 15) " + cold["name"]
+            + " (" + str(nx) + " 8 " + str(nz) + ") simpleGrading (1 1 1)\n"
+            + ");\n\n"
+            + "edges\n(\n);\n\n"
+            + "boundary\n(\n"
+            + "    hot_inlet     { type patch; faces ( (0 3 11 8) ); }\n"
+            + "    hot_outlet    { type patch; faces ( (1 2 10 9) ); }\n"
+            + "    hot_wall      { type wall;  faces ( (0 1 9 8) ); }\n"
+            + "    cold_inlet    { type patch; faces ( (5 7 15 13) ); }\n"
+            + "    cold_outlet   { type patch; faces ( (4 6 14 12) ); }\n"
+            + "    cold_wall     { type wall;  faces ( (6 7 15 14) ); }\n"
+            + "    solid_walls   { type wall;  faces ( (3 5 13 11) (2 4 12 10) ); }\n"
+            + "    front\n    {\n        type empty;\n"
+            + "        faces ( (0 1 2 3) (3 2 4 5) (5 4 6 7) );\n    }\n"
+            + "    back\n    {\n        type empty;\n"
+            + "        faces ( (8 11 10 9) (11 13 12 10) (13 15 14 12) );\n    }\n"
+            + ");\n\n"
+            + "mergePatchPairs\n(\n);\n"
+            + FOOT,
+        )
+
+        # ------------------------------------------------------------------
+        # master system/controlDict — application chtMultiRegionSimpleFoam.
+        # controlDict is region-agnostic (top-level) per W3.0.3 (DEC-V61-211).
+        # ------------------------------------------------------------------
+        end_iter = int(bc.get("endTime", 200))
+        _write(
+            "system/controlDict",
+            _hdr("controlDict", "system")
+            + "application       chtMultiRegionSimpleFoam;\n"
+            + "startFrom         startTime;\n"
+            + "startTime         0;\n"
+            + "stopAt            endTime;\n"
+            + "endTime           " + str(end_iter) + ";\n"
+            + "deltaT            1;\n"
+            + "writeControl      timeStep;\n"
+            + "writeInterval     " + str(end_iter) + ";\n"
+            + "purgeWrite        0;\n"
+            + "writeFormat       ascii;\n"
+            + "writePrecision    7;\n"
+            + "writeCompression  off;\n"
+            + "timeFormat        general;\n"
+            + "timePrecision     6;\n"
+            + "runTimeModifiable true;\n"
+            + "maxCo             0.3;\n"
+            + FOOT,
+        )
+
+        # master system/fvSchemes + fvSolution (region loop scaffolding;
+        # per-region schemes/solvers carry the real discretisation below).
+        _write(
+            "system/fvSchemes",
+            _hdr("fvSchemes", "system")
+            + "ddtSchemes      { default steadyState; }\n"
+            + "gradSchemes     { default Gauss linear; }\n"
+            + "divSchemes      { default none; }\n"
+            + "laplacianSchemes{ default Gauss linear corrected; }\n"
+            + "interpolationSchemes { default linear; }\n"
+            + "snGradSchemes   { default corrected; }\n"
+            + FOOT,
+        )
+        _write(
+            "system/fvSolution",
+            _hdr("fvSolution", "system")
+            + "PIMPLE\n{\n    nOuterCorrectors 1;\n}\n"
+            + FOOT,
+        )
+
+        # ------------------------------------------------------------------
+        # per-region system/<region>/{fvSchemes,fvSolution}
+        # ------------------------------------------------------------------
+        for f in fluids:
+            _write(
+                "system/" + f["name"] + "/fvSchemes",
+                _hdr("fvSchemes", "system/" + f["name"])
+                + "ddtSchemes      { default steadyState; }\n"
+                + "gradSchemes     { default Gauss linear; }\n"
+                + "divSchemes\n{\n"
+                + "    default         none;\n"
+                + "    div(phi,U)      bounded Gauss linearUpwind grad(U);\n"
+                + "    div(phi,K)      bounded Gauss linear;\n"
+                + "    div(phi,h)      bounded Gauss linearUpwind grad(h);\n"
+                + "    div(phi,Ekp)    bounded Gauss linear;\n"
+                + "    div((muEff*dev2(T(grad(U))))) Gauss linear;\n"
+                + "}\n"
+                + "laplacianSchemes{ default Gauss linear corrected; }\n"
+                + "interpolationSchemes { default linear; }\n"
+                + "snGradSchemes   { default corrected; }\n"
+                + FOOT,
+            )
+            _write(
+                "system/" + f["name"] + "/fvSolution",
+                _hdr("fvSolution", "system/" + f["name"])
+                + "solvers\n{\n"
+                + "    p_rgh\n    {\n        solver GAMG; smoother GaussSeidel;\n"
+                + "        tolerance 1e-7; relTol 0.01;\n    }\n"
+                + "    \"(U|h|k|epsilon)\"\n    {\n        solver PBiCGStab; preconditioner DILU;\n"
+                + "        tolerance 1e-7; relTol 0.1;\n    }\n"
+                + "}\n"
+                + "SIMPLE\n{\n    momentumPredictor yes;\n    nNonOrthogonalCorrectors 0;\n"
+                + "    rhoMin 0.2; rhoMax 2.0;\n}\n"
+                + "relaxationFactors\n{\n"
+                + "    fields { rho 1.0; p_rgh 0.7; }\n"
+                + "    equations { U 0.3; h 0.3; }\n}\n"
+                + FOOT,
+            )
+
+        _write(
+            "system/" + solid["name"] + "/fvSchemes",
+            _hdr("fvSchemes", "system/" + solid["name"])
+            + "ddtSchemes      { default steadyState; }\n"
+            + "gradSchemes     { default Gauss linear; }\n"
+            + "divSchemes      { default none; }\n"
+            + "laplacianSchemes{ default Gauss linear corrected; }\n"
+            + "interpolationSchemes { default linear; }\n"
+            + "snGradSchemes   { default corrected; }\n"
+            + FOOT,
+        )
+        _write(
+            "system/" + solid["name"] + "/fvSolution",
+            _hdr("fvSolution", "system/" + solid["name"])
+            + "solvers\n{\n"
+            + "    h\n    {\n        solver PCG; preconditioner DIC;\n"
+            + "        tolerance 1e-7; relTol 0.1;\n    }\n"
+            + "}\n"
+            + "SIMPLE\n{\n    nNonOrthogonalCorrectors 0;\n}\n"
+            + "relaxationFactors\n{\n    equations { h 0.5; }\n}\n"
+            + FOOT,
+        )
+
+        # ------------------------------------------------------------------
+        # per-region 0/<region>/ fields. Fluid<->solid interface patches are the
+        # splitMeshRegions auto-generated <region>_to_<neighbour> names; the
+        # coupled-baffle BC is compressible::turbulentTemperatureCoupledBaffleMixed
+        # (NOT the Rad variant — pure-CHT v0.1 has no radiation), kappaMethod
+        # fluidThermo on fluid sides / solidThermo on the solid side.
+        # ------------------------------------------------------------------
+        def _iface(a: str, b: str) -> str:
+            return a + "_to_" + b
+
+        for f in fluids:
+            rn = f["name"]
+            iface = _iface(rn, solid["name"])
+            tin = repr(f["T_in"])
+            uin = repr(f["U_in"])
+            # 0/<fluid>/T
+            _write(
+                "0/" + rn + "/T",
+                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                + "dimensions      [0 0 0 1 0 0 0];\n"
+                + "internalField   uniform " + tin + ";\n"
+                + "boundaryField\n{\n"
+                + "    " + rn + "_inlet  { type fixedValue; value uniform " + tin + "; }\n"
+                + "    " + rn + "_outlet { type inletOutlet; inletValue uniform " + tin + "; value uniform " + tin + "; }\n"
+                + "    " + rn + "_wall   { type zeroGradient; }\n"
+                + "    " + iface + "\n    {\n"
+                + "        type            compressible::turbulentTemperatureCoupledBaffleMixed;\n"
+                + "        Tnbr            T;\n"
+                + "        kappaMethod     fluidThermo;\n"
+                + "        value           uniform " + tin + ";\n    }\n"
+                + "    front  { type empty; }\n"
+                + "    back   { type empty; }\n"
+                + "}\n"
+                + FOOT,
+            )
+            # 0/<fluid>/U
+            _write(
+                "0/" + rn + "/U",
+                _hdr("volVectorField", "0/" + rn, cls="volVectorField")
+                + "dimensions      [0 1 -1 0 0 0 0];\n"
+                + "internalField   uniform (" + uin + " 0 0);\n"
+                + "boundaryField\n{\n"
+                + "    " + rn + "_inlet  { type fixedValue; value uniform (" + uin + " 0 0); }\n"
+                + "    " + rn + "_outlet { type zeroGradient; }\n"
+                + "    " + rn + "_wall   { type noSlip; }\n"
+                + "    " + iface + " { type noSlip; }\n"
+                + "    front  { type empty; }\n"
+                + "    back   { type empty; }\n"
+                + "}\n"
+                + FOOT,
+            )
+            # 0/<fluid>/p (calculated; p_rgh is solved)
+            _write(
+                "0/" + rn + "/p",
+                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                + "dimensions      [1 -1 -2 0 0 0 0];\n"
+                + "internalField   uniform 1e5;\n"
+                + "boundaryField\n{\n"
+                + "    \".*\" { type calculated; value uniform 1e5; }\n"
+                + "}\n"
+                + FOOT,
+            )
+            # 0/<fluid>/p_rgh
+            _write(
+                "0/" + rn + "/p_rgh",
+                _hdr("volScalarField", "0/" + rn, cls="volScalarField")
+                + "dimensions      [1 -1 -2 0 0 0 0];\n"
+                + "internalField   uniform 1e5;\n"
+                + "boundaryField\n{\n"
+                + "    " + rn + "_inlet  { type fixedFluxPressure; value uniform 1e5; }\n"
+                + "    " + rn + "_outlet { type fixedValue; value uniform 1e5; }\n"
+                + "    " + rn + "_wall   { type fixedFluxPressure; value uniform 1e5; }\n"
+                + "    " + iface + " { type fixedFluxPressure; value uniform 1e5; }\n"
+                + "    front  { type empty; }\n"
+                + "    back   { type empty; }\n"
+                + "}\n"
+                + FOOT,
+            )
+
+        # 0/region_solid/T — coupled-baffle on BOTH fluid interfaces (solidThermo).
+        ts = repr(T_solid_init)
+        iface_hs = _iface(solid["name"], hot["name"])
+        iface_cs = _iface(solid["name"], cold["name"])
+        _write(
+            "0/" + solid["name"] + "/T",
+            _hdr("volScalarField", "0/" + solid["name"], cls="volScalarField")
+            + "dimensions      [0 0 0 1 0 0 0];\n"
+            + "internalField   uniform " + ts + ";\n"
+            + "boundaryField\n{\n"
+            + "    " + iface_hs + "\n    {\n"
+            + "        type            compressible::turbulentTemperatureCoupledBaffleMixed;\n"
+            + "        Tnbr            T;\n"
+            + "        kappaMethod     solidThermo;\n"
+            + "        value           uniform " + ts + ";\n    }\n"
+            + "    " + iface_cs + "\n    {\n"
+            + "        type            compressible::turbulentTemperatureCoupledBaffleMixed;\n"
+            + "        Tnbr            T;\n"
+            + "        kappaMethod     solidThermo;\n"
+            + "        value           uniform " + ts + ";\n    }\n"
+            + "    solid_walls { type zeroGradient; }\n"
+            + "    front  { type empty; }\n"
+            + "    back   { type empty; }\n"
+            + "}\n"
+            + FOOT,
         )
 
     def _generate_natural_convection_cavity(self, case_dir: Path, task_spec: TaskSpec) -> None:

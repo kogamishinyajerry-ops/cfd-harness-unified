@@ -24,7 +24,9 @@ def test_registry_has_at_least_3_skeletons():
     at this threshold. Pinning the count guards against accidental
     deletion. Cycle 5+ can raise the floor as new families land.
     """
-    assert len(FORM_HELPER_SKELETONS) >= 3
+    # P3 W3.2a (DEC-V61-223): floor raised 3 → 4 with the
+    # cht_steady_laminar_multi_region skeleton.
+    assert len(FORM_HELPER_SKELETONS) >= 4
 
 
 def test_registered_families_match_cycle_1_3_4_set():
@@ -38,6 +40,8 @@ def test_registered_families_match_cycle_1_3_4_set():
         "ship_vof",
         "rans_steady_incompressible",
         "les_transient_incompressible",
+        # P3 W3.2a (DEC-V61-223): steady-laminar CHT multi-region.
+        "cht_steady_laminar_multi_region",
     }
 
 
@@ -111,9 +115,19 @@ def test_all_skeletons_share_3_patch_inlet_outlet_wall_shape():
         ("pimpleFoam", "les", True),
         ("pimpleFoam", "les_wale", True),
         ("pisoFoam", "LesDynamic", True),
+        # P3 W3.2a (DEC-V61-223): steady CHT gate — MIRROR of simpleFoam
+        # (laminar IS the target regime; turbulent CHT deferred per charter Q4).
+        ("chtMultiRegionSimpleFoam", "laminar", True),
+        ("chtMultiRegionSimpleFoam", "LAMINAR", True),  # case-insensitive
+        ("chtMultiRegionSimpleFoam", None, True),       # solid regions: no turb model
+        ("chtMultiRegionSimpleFoam", "", True),
+        ("chtMultiRegionSimpleFoam", "kOmegaSST", False),  # turbulent CHT deferred
         # Unregistered solvers: never fire
         ("rhoSimpleFoam", "kOmegaSST", False),
+        # Transient chtMultiRegionFoam stays UNregistered (charter Q4 deferral) —
+        # only the steady SimpleFoam variant is registered by W3.2a.
         ("chtMultiRegionFoam", None, False),
+        ("chtMultiRegionFoam", "laminar", False),
         ("buoyantPimpleFoam", "LES_WALE", False),  # not in registry yet
         # Edge cases
         (None, "kOmegaSST", False),
