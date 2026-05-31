@@ -49,6 +49,34 @@ manifests honestly carry None (no fabrication · Law-1 advisor-not-driver
 discipline). Truth-chain: every populated value traces verbatim to
 trust_report.json keys produced by cfdtrust qoi.py — no recomputation
 beyond a single `max()` over an existing list (worst_near_le_pct).
+
+W3.0.6 (DEC-V61-215 multi-region RunArtifactSlice extension · 2026-05-30):
+Two new frozen dataclasses (CoupledPatch, RegionSlice) and one optional
+field (regions: Optional[List[RegionSlice]]) appended to RunArtifactSlice.
+Additive-non-breaking: all ~59 legacy RunArtifactSlice( construction
+sites stay unchanged because regions defaults None. This extension is a
+frozen schema contract for W3.1 CHT rule distillation — no new predicates
+ship here. W3.1 rules that consume these fields:
+
+    - R13 WALL_COUPLING_MISMATCH
+        Reads RegionSlice.coupled_patches[*].coupling_type.
+
+    - R14 PER_REGION_THERMO_MISSING
+        Reads RegionSlice.thermo_type / thermo_snapshot_ref.
+
+    - R15 CONDUCTION_DOMINANCE
+        Reads RegionSlice.kind to identify solid-heavy CHT topologies.
+
+    - R16 FACE_ZONE_LOSS
+        Reads RegionSlice.shm_snapshot_ref to cross-check snappyHexMesh
+        face-zone output against expected coupling geometry.
+
+Each RegionSlice field is independently optional (all default None) per
+DEC-V61-213 presence-vs-payload independence contract: per-region payload
+completeness is tracked separately from region-list presence. Refs
+(shm_snapshot_ref, thermo_snapshot_ref) are opaque strings; this module
+does NOT validate that they resolve — that is the caller's responsibility.
+No fabrication: a RegionSlice carries only what the caller passes.
 """
 
 from __future__ import annotations
@@ -169,6 +197,113 @@ class ReferenceBandSummary:
     x_floor_m: Optional[float] = None
 
 
+# ---------------------------------------------------------------------------
+# W3.0.6 · DEC-V61-215 multi-region CHT schema extension
+# ---------------------------------------------------------------------------
+# Frozen data contract for W3.1 CHT rule distillation. No predicates here.
+# No IO, no LLM, no subprocess — pure data shapes only.
+
+
+@dataclass(frozen=True)
+class CoupledPatch:
+    """A single CHT-coupled boundary patch on a region interface.
+
+    Fields
+    ------
+    patch_name : str
+        The OpenFOAM boundary patch name (e.g. ``"heater_to_fluid"``).
+    coupling_type : str
+        The thermal boundary condition type string. Known valid values:
+        - ``"compressible::turbulentTemperatureCoupledBaffleMixed"``
+          (solid-fluid conduction coupling, case_011 topology)
+        - ``"compressible::turbulentTemperatureRadCoupledMixed"``
+          (radiation-coupled baffle, case_002b topology)
+        - ``"humidityTemperatureCoupledMixed"``
+          (humidity+temperature coupled)
+        Stored verbatim as a free string (caller-validated, NOT a runtime-enforced
+        enum — the catalog above is the recognized vocabulary, but any string is
+        accepted; the manifest deriver is the trusted producer). W3.1 R13 rule
+        reads this for mismatch detection.
+    neighbour_region : Optional[str]
+        The name of the adjacent coupled region. None when not extracted.
+
+    Source: OpenFOAM ``0/T`` boundary condition entries for the region,
+    extracted by the W3.x CHT surface extractor (not yet implemented).
+    """
+
+    patch_name: str
+    coupling_type: str
+    neighbour_region: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class RegionSlice:
+    """Per-region data snapshot carried inside RunArtifactSlice.regions.
+
+    This is the frozen W3.1 contract: W3.1 CHT rule authors (R13–R16)
+    read these fields. All payload fields are independently Optional per
+    DEC-V61-213 presence-vs-payload independence.
+
+    Fields
+    ------
+    name : str
+        Region name as it appears in the OpenFOAM case directory
+        (e.g. ``"fluid"``, ``"heater"``, ``"radiator_fin_1"``).
+
+    kind : Optional[Literal["fluid", "solid"]]
+        Physical role of the region, mirroring the W3.0.2
+        ``RegionThermoSnapshot.kind`` domain (``str | None``): ``"fluid"`` /
+        ``"solid"``, or **None when the upstream classification is ambiguous**
+        (e.g. a region listed in BOTH the fluid and solid groups — W3.0.2 emits
+        kind=None for exactly this case). Required to specify (no default), but
+        None is a legitimate HONEST value: do NOT fabricate a fluid/solid label
+        for an ambiguous region (DEC-V61-213 presence-vs-payload — a guessed
+        label claims payload it does not have). The ``Literal`` is a
+        caller-validated type hint, NOT runtime-enforced (no mypy gate in CI;
+        subsystem convention — the manifest deriver is the trusted producer).
+        R15 CONDUCTION_DOMINANCE reads this; None ⇒ dominance undeterminable
+        for that region (the rule must skip it, not guess).
+
+    thermo_type : Optional[str]
+        Thermophysical model type string from W3.0.2
+        ``RegionThermoSnapshot.thermo_type``
+        (e.g. ``"heRhoThermo"``, ``"heSolidThermo"``).
+        None when thermo dict was not extracted or region is absent.
+        W3.1 R14 PER_REGION_THERMO_MISSING reads this field.
+
+    coupled_patches : Optional[tuple[CoupledPatch, ...]]
+        Tuple of coupled boundary patches for this region. None when
+        coupling data was not extracted; empty tuple () when extraction
+        ran and found zero coupled patches (presence-vs-payload
+        distinction per DEC-V61-213). W3.1 R13 WALL_COUPLING_MISMATCH
+        reads coupling_type values across paired regions.
+
+    shm_snapshot_ref : Optional[str]
+        Opaque string reference to the W3.0.1 RegionShmSnapshot for
+        this region. NOT the object itself — kept as a string to decouple
+        v9_advisor from case_extractors / trimesh (module boundary
+        contract). W3.1 R16 FACE_ZONE_LOSS reads this ref.
+
+    thermo_snapshot_ref : Optional[str]
+        Opaque string reference to the W3.0.2 RegionThermoSnapshot for
+        this region. NOT the object itself — same decoupling rationale
+        as shm_snapshot_ref. W3.1 R14 reads this ref.
+
+    W3.1 rule→field mapping (frozen contract):
+        R13 WALL_COUPLING_MISMATCH      ← coupled_patches[*].coupling_type
+        R14 PER_REGION_THERMO_MISSING   ← thermo_type, thermo_snapshot_ref
+        R15 CONDUCTION_DOMINANCE        ← kind
+        R16 FACE_ZONE_LOSS              ← shm_snapshot_ref
+    """
+
+    name: str
+    kind: Optional[Literal["fluid", "solid"]]
+    thermo_type: Optional[str] = None
+    coupled_patches: Optional[tuple[CoupledPatch, ...]] = None
+    shm_snapshot_ref: Optional[str] = None
+    thermo_snapshot_ref: Optional[str] = None
+
+
 @dataclass(frozen=True)
 class RunArtifactSlice:
     run_id: str
@@ -186,6 +321,13 @@ class RunArtifactSlice:
     developed_region_gold_delta: Optional[DevelopedRegionGoldDelta] = None
     integrated_drag_pct: Optional[IntegratedDragPct] = None
     reference_comparison_band_summary: Optional[ReferenceBandSummary] = None
+    # W3.0.6 · DEC-V61-215 multi-region CHT extension.
+    # Default None: all ~59 legacy RunArtifactSlice( construction sites
+    # stay compiling unchanged (additive-non-breaking contract).
+    # None = no region info at all; [] = present but empty (0 regions
+    # known); [RegionSlice(...)] = populated. Per DEC-V61-213:
+    # presence-vs-payload independence is maintained independently.
+    regions: Optional[List["RegionSlice"]] = None
 
 
 @dataclass(frozen=True)

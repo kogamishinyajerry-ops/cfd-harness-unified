@@ -13,6 +13,52 @@
  * Query for run-history/run-detail provides the artifact slice).
  */
 
+// ────────────────────────────────────────────────────────────────────────
+// W3.0.6 · DEC-V61-221 multi-region CHT slice extension (Python parity:
+// ui/backend/services/v9_advisor/pattern_matcher.py RegionSlice / CoupledPatch).
+// RS#38 cross-language contract: this TS mirror MUST track the Python dataclasses
+// field-for-field. Additive-non-breaking: `regions` is optional, so every
+// pre-W3.0.6 RunArtifactSlice literal still type-checks. The frozen contract
+// feeds W3.1 CHT rules (R13 coupled_patches[].coupling_type · R14 thermo_type /
+// thermo_snapshot_ref · R15 kind · R16 shm_snapshot_ref).
+//
+// Three-state (DEC-V61-213 presence-vs-payload): for `regions` and
+// `coupled_patches`, `null`/absent = not extracted · `[]` = extracted, zero ·
+// populated = present. `kind` is `null` when the upstream classification is
+// ambiguous (mirrors Python RegionThermoSnapshot.kind = str | None) — NEVER
+// fabricate a fluid/solid label for an ambiguous region.
+// ────────────────────────────────────────────────────────────────────────
+
+/** A single CHT-coupled boundary patch on a region interface. */
+export interface CoupledPatch {
+  patch_name: string;
+  /**
+   * Thermal coupling BC type string (caller-validated, not a runtime-enforced
+   * enum). Recognized vocabulary:
+   *   - "compressible::turbulentTemperatureCoupledBaffleMixed"
+   *   - "compressible::turbulentTemperatureRadCoupledMixed"
+   *   - "humidityTemperatureCoupledMixed"
+   */
+  coupling_type: string;
+  /** Adjacent coupled region name; null when not extracted. */
+  neighbour_region?: string | null;
+}
+
+/** Per-region snapshot carried inside RunArtifactSlice.regions (W3.1 contract). */
+export interface RegionSlice {
+  name: string;
+  /** "fluid" | "solid", or null when the upstream classification is ambiguous. */
+  kind: "fluid" | "solid" | null;
+  /** Thermophysical model type (← W3.0.2 RegionThermoSnapshot.thermo_type). */
+  thermo_type?: string | null;
+  /** Coupled boundary patches. null/absent = not extracted; [] = extracted, zero. */
+  coupled_patches?: CoupledPatch[] | null;
+  /** Opaque ref to the W3.0.1 RegionShmSnapshot (decoupled — not embedded). */
+  shm_snapshot_ref?: string | null;
+  /** Opaque ref to the W3.0.2 RegionThermoSnapshot (decoupled — not embedded). */
+  thermo_snapshot_ref?: string | null;
+}
+
 export interface RunArtifactSlice {
   run_id: string;
   case_id: string;
@@ -112,6 +158,15 @@ export interface RunArtifactSlice {
      */
     x_floor_m?: number;
   };
+
+  /**
+   * W3.0.6 · DEC-V61-221 multi-region CHT regions. Additive-non-breaking:
+   * undefined/null for single-region + legacy + pre-W3.0.6 slices (graceful-skip,
+   * not partial). `[]` = multi-region case with zero regions surfaced; populated
+   * = per-region snapshots. Consumed by W3.1 CHT rules R13–R16. Python parity:
+   * RunArtifactSlice.regions: Optional[List[RegionSlice]].
+   */
+  regions?: RegionSlice[] | null;
 }
 
 export type MatchSeverity = "info" | "warn" | "advise";

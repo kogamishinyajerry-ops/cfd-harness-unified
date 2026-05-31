@@ -21,11 +21,13 @@ import pytest
 
 from ui.backend.services.v9_advisor import (
     ConvergenceStats,
+    CoupledPatch,
     DevelopedRegionGoldDelta,
     ForcesEntry,
     GoldDelta,
     IntegratedDragPct,
     ReferenceBandSummary,
+    RegionSlice,
     RunArtifactSlice,
     V9_ADVISOR_RULES,
     match_advisor_patterns,
@@ -62,6 +64,29 @@ def _hydrate_slice(d: Dict[str, Any]) -> RunArtifactSlice:
         reference_comparison_band_summary = ReferenceBandSummary(
             **d["reference_comparison_band_summary"]
         )
+    # W3.0.6 · DEC-V61-215 multi-region CHT extension.
+    # Hydrate regions list: None (absent/null) vs [] (empty) vs populated.
+    # Each RegionSlice may have nested CoupledPatch objects in coupled_patches.
+    regions = None
+    if d.get("regions") is not None:
+        hydrated_regions = []
+        for r in d["regions"]:
+            coupled_patches = None
+            if r.get("coupled_patches") is not None:
+                coupled_patches = tuple(
+                    CoupledPatch(**cp) for cp in r["coupled_patches"]
+                )
+            hydrated_regions.append(
+                RegionSlice(
+                    name=r["name"],
+                    kind=r["kind"],
+                    thermo_type=r.get("thermo_type"),
+                    coupled_patches=coupled_patches,
+                    shm_snapshot_ref=r.get("shm_snapshot_ref"),
+                    thermo_snapshot_ref=r.get("thermo_snapshot_ref"),
+                )
+            )
+        regions = hydrated_regions
     return RunArtifactSlice(
         run_id=d["run_id"],
         case_id=d["case_id"],
@@ -74,6 +99,7 @@ def _hydrate_slice(d: Dict[str, Any]) -> RunArtifactSlice:
         developed_region_gold_delta=developed_region_gold_delta,
         integrated_drag_pct=integrated_drag_pct,
         reference_comparison_band_summary=reference_comparison_band_summary,
+        regions=regions,
     )
 
 

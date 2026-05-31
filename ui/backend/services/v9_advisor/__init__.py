@@ -6,6 +6,7 @@ Public API:
     - match_advisor_patterns · pure-function matcher · (slice, rules) → matches
     - RunArtifactSlice / ForcesEntry / ConvergenceStats / GoldDelta · input shapes
     - MatchedCommentary · output shape
+    - CoupledPatch / RegionSlice · W3.0.6 multi-region CHT extension shapes
 
 V130 invariant honored BY CONSTRUCTION (V91 RS#35): module imports
 restricted to stdlib + typing + intra-package.
@@ -19,6 +20,7 @@ from .manifest_adapter import (
 from .pattern_matcher import (
     AdvisorRule,
     ConvergenceStats,
+    CoupledPatch,
     DevelopedRegionGoldDelta,
     ForcesEntry,
     GoldDelta,
@@ -26,6 +28,7 @@ from .pattern_matcher import (
     MatchedCommentary,
     MatchSite,
     ReferenceBandSummary,
+    RegionSlice,
     RunArtifactSlice,
     match_advisor_patterns,
 )
@@ -34,6 +37,7 @@ from .rules import V9_ADVISOR_RULES, V9_RULESET_VERSION
 __all__ = [
     "AdvisorRule",
     "ConvergenceStats",
+    "CoupledPatch",
     "DevelopedRegionGoldDelta",
     "ForcesEntry",
     "GoldDelta",
@@ -41,6 +45,7 @@ __all__ = [
     "MatchedCommentary",
     "MatchSite",
     "ReferenceBandSummary",
+    "RegionSlice",
     "RunArtifactSlice",
     "V9_ADVISOR_RULES",
     "V9_RULESET_VERSION",
