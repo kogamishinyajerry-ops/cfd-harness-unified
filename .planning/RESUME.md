@@ -33,8 +33,15 @@
 >   `_w33b_pipe_probe` → gate PASS; anti-cheat (doctored qWindowAvg → Nu out of band
 >   → FAIL; doctored TbulkOut → energy hard-gate FAIL; out-of-band Re → FAIL);
 >   extracted Nu ≠ gold ref yet within 10%; missing input → raise. **362 p3 + 1 skip.**
-> - Frozen converged-tail artifacts: `reports/showcase_aero/_w33b_pipe_probe/`
->   ({postProcessing — the gate replay source; channel — case dicts; REPRODUCE.md}).
+> - Frozen converged-tail artifacts: `reports/showcase_aero/_w33b_pipe_probe/` — a
+>   proper case dir (postProcessing = gate replay source; constant/fluid/physicalProperties
+>   = the case fluid the gate reads; system; 0; REPRODUCE.md).
+> - **Codex CRS chain (effort=high, 86gs hung)**: R0 2 findings [P2 Re read from gold
+>   YAML; P3 no Pr gate] → fix `2969ede` (derive Re from solved mdot+area; add Pr
+>   hard gate). R1 2 findings [P1 mu read from gold; P2 Pr read from gold] → fix
+>   reads ALL fluid transport props (mu/cp/k/Pr) from the CASE `physicalProperties`
+>   + adds a fluid-matches-gold hard gate. Gate now has 4 hard components; still
+>   PASSES (6/6 checks green). R2 review pending.
 >
 > **RE-ANCHOR rationale (DEC-V61-228, user decision "Re-anchor at higher Re"):** a
 > baseline Re=10000 conjugate solve over-predicted Gnielinski **+17%** —

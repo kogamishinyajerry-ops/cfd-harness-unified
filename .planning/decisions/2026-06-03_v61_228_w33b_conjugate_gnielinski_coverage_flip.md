@@ -9,9 +9,9 @@ autonomous_governance: true
 confidence: high
 kogami_opt_in: false (additive V&V benchmark + gate plumbing; reversible; no §11.1 workbench-freeze paths touched)
 round_cap: 3
-codex_review_relay: pending (CRS gpt-5.4 high primary; risk-tier = CFD new geometry type + new gate code + coverage flip)
-codex_verdict: pending_R0
-codex_tool_report_path: reports/codex_tool_reports/v61_228_w33b_conjugate_report.md (pending)
+codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs xhigh hung with empty output >3min, consistent with W3.2b/W3.3a; effort downgrade noted)
+codex_verdict: pending_R2 (R0 2×[P2,P3] → fix 2969ede; R1 2×[P1,P2] → fix reads CASE fluid props; R2 review pending)
+codex_tool_report_path: reports/codex_tool_reports/v61_228_w33b_conjugate_report.md
 notion_sync_status: pending_accepted
 touches_shared_dec: knowledge/gold_standards/cht_pipe_gnielinski.yaml (Re re-anchor 10000→50000 + contract_status LIVE_RUN_PASS) · no schema/loader changes (reuses V61-227 CONJUGATE enum + multi-doc loaders)
 date: 2026-06-03
@@ -78,11 +78,14 @@ the reference is still the closed-form Gnielinski value re-derived from inputs
   Fail-closed on missing/NaN/non-physical dT.
 - **Gate** `src/cht_conjugate_gate.py` (**Control Plane** — only plane that may
   import both Execution + Evaluation): `gate_conjugate_against_gold()` extract →
-  `ResultComparator.compare()` vs the Gnielinski gold + **two HARD gates**:
-  (1) energy-balance closure `|Q_iface − ṁcp·(T_out−T_in)| ≤ 5%·|Q_iface|`;
-  (2) Re inside the Gnielinski validity band (3e3 < Re < 5e6). Applying the
-  correlation out of range, or accepting a non-converged/inconsistent solve where
-  Nu accidentally matched, both FAIL here.
+  `ResultComparator.compare()` vs the Gnielinski gold + **four HARD gates**
+  (hardened by the Codex chain — see below): (1) energy-balance closure
+  `|Q_iface − ṁcp·(T_out−T_in)| ≤ 5%·|Q_iface|`; (2) Reynolds — recovered from the
+  SOLVED inlet mass flux + the CASE viscosity (NOT the YAML) — both inside the band
+  (3e3 < Re < 5e6) AND matching the gold target Re; (3) Prandtl (from the CASE
+  mu·cp/k) inside the band (0.5 < Pr < 2000); (4) the CASE physicalProperties
+  match the gold reference fluid. Fluid transport props are read from the replayed
+  case's `constant/<region>/physicalProperties`, not trusted from the gold.
 - **Contract** `knowledge/gold_standards/cht_pipe_gnielinski.yaml`: Re re-anchored
   10000→50000 (ref Nu=104.7987 re-derived), `contract_status →
   LIVE_RUN_PASS_W3.3b_B` with the live evidence, mesh_info/solver_info updated.
@@ -94,9 +97,10 @@ the reference is still the closed-form Gnielinski value re-derived from inputs
   Nu out of band → FAIL; doctored TbulkOut → energy hard-gate FAIL; out-of-band Re
   → FAIL); extracted Nu ≠ gold reference yet within 10%; missing input → raise.
   Self-verifying `test_cht_pipe_gnielinski_gold.py` (4) re-derives 104.7987.
-- **Frozen artifacts** `reports/showcase_aero/_w33b_pipe_probe/`: `postProcessing/`
-  (converged-tail .dat, the gate-replay source), `channel/` (case dicts — uniform
-  IC + system + constant), `REPRODUCE.md` (live-run recipe incl. mapFields restart).
+- **Frozen artifacts** `reports/showcase_aero/_w33b_pipe_probe/` — a proper case
+  dir: `postProcessing/` (converged-tail .dat, the gate-replay source),
+  `constant/{fluid,solid}/physicalProperties` (the fluid props the gate reads),
+  `system/`, `0/` (uniform IC), `REPRODUCE.md` (live recipe incl. mapFields restart).
 
 ## Scope / honesty boundary
 
@@ -130,6 +134,19 @@ the reference is still the closed-form Gnielinski value re-derived from inputs
 
 ## Codex review
 
-Risk-tier (CFD new geometry type + new gate code + coverage flip) → Codex review
-chain (CRS primary, cap=3) to run on the W3.3b commit. Verdict + report path to
-be filled on completion; `notion_sync_status` advances only after APPROVE.
+Risk-tier (CFD new geometry type + new gate code + coverage flip) → Codex chain,
+CRS `gpt-5.4` effort=high (86gs xhigh hung with empty output; effort downgrade per
+fallback rule). Report: `reports/codex_tool_reports/v61_228_w33b_conjugate_report.md`.
+
+- **R0** (`40420ab`) — no P0/P1; **2 findings**: [P2] Re hard gate read `Re` from
+  the gold YAML, not the replayed case; [P3] only Re was range-checked, not Pr.
+  → **fix `2969ede`**: derive Re from the measured inlet mass flux + patch area;
+  add a Prandtl hard gate.
+- **R1** (`2969ede`) — escalated; **2 findings**: [P1] viscosity for the Re recovery
+  still came from the gold YAML; [P2] Pr likewise. A rerun with drifted transport
+  props (same mass flux) could pass undetected. → **fix (this commit)**: the
+  extractor reads ALL fluid transport properties (mu, cp, k_fluid, Pr) from the
+  replayed case's `constant/<region>/physicalProperties`; the gate adds a
+  fluid-matches-gold hard gate. Gate still PASSES (6/6 checks green). Bundle
+  restructured into a proper case dir so the case fluid is co-located with the probes.
+- **R2** — review pending (cap=3). `notion_sync_status` advances only after APPROVE.

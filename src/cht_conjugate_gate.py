@@ -7,19 +7,26 @@ against the Gnielinski reference in
 ``knowledge/gold_standards/cht_pipe_gnielinski.yaml`` via the canonical
 ``ResultComparator`` (Evaluation Plane).
 
-Three HARD gate components backstop the 10% Gnielinski tolerance (gold rationale):
+The fluid transport properties (mu, cp, k_fluid, Pr) are read from the REPLAYED
+case's ``constant/<region>/physicalProperties`` by the extractor — NOT the gold —
+so Re/Pr/Nu reflect the actual run. Four HARD gate components backstop the 10%
+Gnielinski tolerance (gold rationale):
 
   1. **Energy balance** — the interface wall-heat integral must equal the fluid
      enthalpy rise: ``|Q_total - mdot*cp*(T_out - T_in)| <= rel_tol*|Q_total|``.
      A non-converged or inconsistent solve (e.g. cup-mixing T that disagrees with
      the wall heat) fails here even if Nu accidentally matched.
   2. **Reynolds validity + target match** — the SOLVED Re (recovered from the
-     measured inlet mass flux + patch area, NOT the gold YAML) must lie inside the
-     Gnielinski band (3e3 < Re < 5e6) AND match the gold's target Re. This
-     verifies the *replayed case was actually solved at the gold's flow rate*; a
-     stale/drifted run cannot ride a Nu match into a false coverage flip.
-  3. **Prandtl validity** — Pr (derived from mu*cp/k_fluid) must lie inside the
+     measured inlet mass flux + patch area + the CASE viscosity, NOT the gold YAML)
+     must lie inside the Gnielinski band (3e3 < Re < 5e6) AND match the gold's
+     target Re. Verifies the *replayed case was actually solved at the gold's flow
+     rate*; a stale/drifted run cannot ride a Nu match into a false coverage flip.
+  3. **Prandtl validity** — Pr (from the CASE mu*cp/k_fluid) must lie inside the
      Gnielinski band (0.5 < Pr < 2000). An out-of-domain fluid cannot pass.
+  4. **Fluid matches gold** — the CASE physicalProperties (mu, cp, k_fluid, Pr)
+     must match the gold reference fluid; the reference Nu was derived for it, so a
+     rerun with different transport properties is caught instead of silently
+     re-scaling the comparison.
 
 ADR-001 plane assignment: **Control Plane** — the only plane permitted to import
 BOTH Execution (the extractor) and Evaluation (the comparator), same posture as
@@ -62,6 +69,11 @@ _RE_TARGET_REL_TOL = 0.05
 _PR_VALIDITY_MIN_DEFAULT = 0.5
 _PR_VALIDITY_MAX_DEFAULT = 2000.0
 
+# The CASE fluid (read from physicalProperties) must match the gold reference fluid
+# to this tolerance; otherwise Re/Pr/Nu are scaled by a fluid the reference was not
+# derived for. 1% absorbs the rhoConst kappa=mu*Cp/Pr rounding vs the gold k_fluid.
+_FLUID_PROP_REL_TOL = 0.01
+
 
 @dataclass(frozen=True)
 class ConjugateGateResult:
@@ -73,7 +85,8 @@ class ConjugateGateResult:
     energy_balance_ok: bool
     reynolds_in_band: bool        # SOLVED Re inside the Gnielinski validity band
     reynolds_matches_target: bool  # SOLVED Re ~= gold target Re (right run replayed)
-    prandtl_in_band: bool          # fluid Pr inside the Gnielinski validity band
+    prandtl_in_band: bool          # CASE fluid Pr inside the Gnielinski validity band
+    fluid_matches_gold: bool       # CASE physicalProperties match the gold reference fluid
     summary: str
 
 
@@ -99,9 +112,7 @@ def gate_conjugate_against_gold(
     qois = extract_conjugate_qois(
         case_dir,
         D_h=float(ci["D"]),
-        k_fluid=float(ci["k_fluid"]),
-        cp=float(ci["cp"]),
-        mu=float(ci["mu"]),
+        fluid_region=str(ci.get("fluid_region", "fluid")),
     )
     result = ExecutionResult(
         success=True,
@@ -141,12 +152,28 @@ def gate_conjugate_against_gold(
     )
 
     # HARD gate 3: Prandtl inside the Gnielinski validity band. Pr is DERIVED from
-    # the fluid properties (mu*cp/k_fluid), so an alternate fluid / re-anchor with
-    # an out-of-domain Pr cannot pass even if Nu + energy happen to match.
-    pr = float(ci["mu"]) * float(ci["cp"]) / float(ci["k_fluid"])
+    # the CASE's own physicalProperties (mu*cp/k_fluid via the extractor), so an
+    # alternate/drifted fluid with an out-of-domain Pr cannot pass even if Nu +
+    # energy happen to match.
+    pr = qois.prandtl
     pr_min = float(ci.get("Pr_validity_min", _PR_VALIDITY_MIN_DEFAULT))
     pr_max = float(ci.get("Pr_validity_max", _PR_VALIDITY_MAX_DEFAULT))
     prandtl_in_band = pr_min < pr < pr_max
+
+    # HARD gate 4: the CASE fluid (read from constant/<region>/physicalProperties)
+    # must match the gold's reference fluid. Re + Pr + Nu are dimensionalised with
+    # the case properties; this verifies they are the ones the gold reference was
+    # derived for, so a rerun with different transport props is caught here rather
+    # than silently re-scaling the comparison.
+    def _rel_ok(case_v: float, gold_v: float) -> bool:
+        return abs(case_v - gold_v) <= _FLUID_PROP_REL_TOL * abs(gold_v)
+
+    fluid_matches_gold = (
+        _rel_ok(qois.mu_pa_s, float(ci["mu"]))
+        and _rel_ok(qois.cp_j_kgk, float(ci["cp"]))
+        and _rel_ok(qois.k_fluid_w_mk, float(ci["k_fluid"]))
+        and _rel_ok(qois.prandtl, float(ci["Pr"]))
+    )
 
     passed = (
         observables_ok
@@ -154,6 +181,7 @@ def gate_conjugate_against_gold(
         and reynolds_in_band
         and reynolds_matches_target
         and prandtl_in_band
+        and fluid_matches_gold
     )
 
     parts = [f"{name}={'PASS' if cmp.passed else 'FAIL'}" for name, cmp in comparisons]
@@ -161,12 +189,13 @@ def gate_conjugate_against_gold(
     parts.append(f"Re_in_band={'PASS' if reynolds_in_band else 'FAIL'}")
     parts.append(f"Re_matches_target={'PASS' if reynolds_matches_target else 'FAIL'}")
     parts.append(f"Pr_in_band={'PASS' if prandtl_in_band else 'FAIL'}")
+    parts.append(f"fluid_matches_gold={'PASS' if fluid_matches_gold else 'FAIL'}")
     summary = (
         f"cht_conjugate gate {'PASS' if passed else 'FAIL'} "
         f"(Nu={qois.nusselt_number:.4f}, h={qois.h_w_m2k:.4f} W/m2.K, "
         f"dT_window={qois.delta_t_window_k:.3f} K, "
         f"energy_residual={qois.energy_balance_residual_w:.4g} W <= {energy_threshold:.4g}, "
-        f"Re_solved={re_solved:.0f} (target {re_target:g}), Pr={pr:.4f}) | "
+        f"Re_solved={re_solved:.0f} (target {re_target:g}), Pr={pr:.4f} (case)) | "
         + ", ".join(parts)
     )
     return ConjugateGateResult(
@@ -177,5 +206,6 @@ def gate_conjugate_against_gold(
         reynolds_in_band=reynolds_in_band,
         reynolds_matches_target=reynolds_matches_target,
         prandtl_in_band=prandtl_in_band,
+        fluid_matches_gold=fluid_matches_gold,
         summary=summary,
     )

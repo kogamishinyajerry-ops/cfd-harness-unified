@@ -40,6 +40,7 @@ the gate's energy-balance hard check.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -77,6 +78,11 @@ class ConjugateQoIs:
     mdot_kg_s: float              # measured inlet mass flux (magnitude)
     inlet_area_m2: float          # inlet patch area (from the probe header)
     reynolds_solved: float        # Re recovered from the SOLVED case: mdot*D_h/(A_in*mu)
+    mu_pa_s: float                # dynamic viscosity from the CASE physicalProperties
+    cp_j_kgk: float               # specific heat (Cv=Cp under rhoConst) from the CASE
+    k_fluid_w_mk: float           # thermal conductivity mu*Cp/Pr from the CASE
+    prandtl: float                # Pr from the CASE physicalProperties
+    rho_kg_m3: float              # density from the CASE physicalProperties
     q_iface_total_w: float        # areaIntegrate(wallHeatFlux), full interface (magnitude)
     q_window_w: float             # areaIntegrate(wallHeatFlux), window (magnitude)
     energy_balance_residual_w: float  # |Q_total - mdot*cp*(T_out - T_in)|
@@ -139,6 +145,48 @@ def _read_area_header(dat_path: Path) -> float:
     raise ConjugateExtractorError(f"no '# Area' header in {dat_path}")
 
 
+_FOAM_KV = re.compile(r"^\s*([A-Za-z]\w*)\s+([-+0-9.eE]+)\s*;")
+
+
+def _read_fluid_properties(case_dir: Path, fluid_region: str) -> Dict[str, float]:
+    """Parse mu, cp(=Cv), Pr, rho from the SOLVED case's fluid physicalProperties.
+
+    The conjugate replay bundle ships ``constant/<fluid_region>/physicalProperties``
+    (the actual transport/thermo the solve ran with). Reading the fluid properties
+    from the CASE — not the gold YAML — lets the gate verify the replayed artifacts
+    were produced with the reference fluid (Codex R1 P1/P2): a rerun that changed
+    viscosity (same mass flux) would otherwise pass the Re/Pr gates undetected.
+
+    Under rhoConst, CpMCv=0 so Cp=Cv (verified OF11 rhoConstI.H); kappa = mu*Cp/Pr.
+    Returns {mu, cp, k_fluid, prandtl, rho}. Fail-closed on missing/NaN/non-positive.
+    """
+    path = case_dir / "constant" / fluid_region / "physicalProperties"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"fluid physicalProperties not found at {path} "
+            f"(needed to recover the SOLVED fluid properties for Re/Pr gating)"
+        )
+    scalars: Dict[str, float] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        m = _FOAM_KV.match(line.split("//", 1)[0])  # strip inline comment
+        if m:
+            try:
+                scalars[m.group(1)] = float(m.group(2))
+            except ValueError:
+                continue
+    try:
+        cp = scalars["Cv"]  # rhoConst: Cp = Cv (CpMCv=0)
+        mu = scalars["mu"]
+        pr = scalars["Pr"]
+        rho = scalars["rho"]
+    except KeyError as exc:
+        raise ConjugateExtractorError(f"missing fluid property {exc} in {path}") from exc
+    for name, val in (("cp", cp), ("mu", mu), ("Pr", pr), ("rho", rho)):
+        if not math.isfinite(val) or val <= 0.0:
+            raise ConjugateExtractorError(f"non-physical fluid {name}={val} in {path}")
+    return {"mu": mu, "cp": cp, "k_fluid": mu * cp / pr, "prandtl": pr, "rho": rho}
+
+
 def _read_last_scalar(dat_path: Path) -> float:
     """Return the value column of the LAST data row of a surfaceFieldValue.dat.
 
@@ -175,28 +223,34 @@ def extract_conjugate_qois(
     case_dir: Path,
     *,
     D_h: float,
-    k_fluid: float,
-    cp: float,
-    mu: float,
+    fluid_region: str = "fluid",
 ) -> ConjugateQoIs:
     """Extract the fully-developed conjugate Nusselt number from a solved case.
 
     Args:
         case_dir: case root containing ``postProcessing/{qWindowAvg,qWindowInt,
-            TwallWindow,QifaceTotal,TbulkOut,Tin,mdotIn}/<time>/surfaceFieldValue.dat``.
-        D_h: hydraulic diameter [m]            (gold input; = 2*gap for parallel plates)
-        k_fluid: fluid thermal conductivity [W/m/K] (gold input)
-        cp: fluid specific heat [J/kg/K]       (gold input)
-        mu: dynamic viscosity [Pa.s]           (gold input; used to recover solved Re)
+            TwallWindow,QifaceTotal,TbulkOut,Tin,mdotIn}/<time>/surfaceFieldValue.dat``
+            AND ``constant/<fluid_region>/physicalProperties``.
+        D_h: hydraulic diameter [m]   (gold/geometry input; = 2*gap for parallel plates)
+        fluid_region: fluid region subdir name (default ``fluid``).
 
-    q_wall / T_wall / T_bulk / mdot / inlet-area come from the solver; D_h,
-    k_fluid, cp, mu are inputs. Nu is built from those — never from the
+    The fluid transport properties (mu, cp, k_fluid, Pr) are read from the CASE's
+    ``physicalProperties`` — NOT the gold — so the gate validates the replayed
+    artifacts' actual fluid (Codex R1). q_wall / T_wall / T_bulk / mdot / inlet
+    area come from the solver. Nu = h*D_h/k is built from those — never from the
     Gnielinski formula. The SOLVED Reynolds number is recovered from the measured
-    inlet mass flux and patch area (Re = mdot*D_h/(A_in*mu)) so the gate can
-    verify the replayed case's actual flow rate, not the gold's claimed Re.
-    Raises ``FileNotFoundError`` if probes are absent and
+    inlet mass flux and patch area (Re = mdot*D_h/(A_in*mu)). D_h is the only
+    geometry input; the gate cross-checks the case fluid against the gold.
+    Raises ``FileNotFoundError`` if probes / physicalProperties are absent and
     ``ConjugateExtractorError`` on non-physical / unparseable values.
     """
+    props = _read_fluid_properties(case_dir, fluid_region)
+    mu = props["mu"]
+    cp = props["cp"]
+    k_fluid = props["k_fluid"]
+    prandtl = props["prandtl"]
+    rho = props["rho"]
+
     post = case_dir / "postProcessing"
     # wall heat flux integrals/averages are sign-conventioned by patch normal;
     # the physics (hot wall -> fluid) is unambiguous, so use magnitudes.
@@ -210,10 +264,9 @@ def extract_conjugate_qois(
     mdot = abs(_read_last_scalar(mdot_dat))
     inlet_area = _read_area_header(mdot_dat)  # inlet patch area for the Re recovery
 
-    if D_h <= 0.0 or k_fluid <= 0.0 or cp <= 0.0 or mu <= 0.0:
-        raise ConjugateExtractorError(
-            f"non-physical inputs: D_h={D_h}, k_fluid={k_fluid}, cp={cp}, mu={mu}"
-        )
+    if D_h <= 0.0:
+        raise ConjugateExtractorError(f"non-physical hydraulic diameter D_h={D_h}")
+    # mu / cp / k_fluid / Pr already validated (>0, finite) in _read_fluid_properties.
     if mdot <= 0.0:
         raise ConjugateExtractorError(f"non-physical mass flux mdot={mdot}")
 
@@ -249,6 +302,11 @@ def extract_conjugate_qois(
         mdot_kg_s=mdot,
         inlet_area_m2=inlet_area,
         reynolds_solved=reynolds_solved,
+        mu_pa_s=mu,
+        cp_j_kgk=cp,
+        k_fluid_w_mk=k_fluid,
+        prandtl=prandtl,
+        rho_kg_m3=rho,
         q_iface_total_w=q_total,
         q_window_w=q_window,
         energy_balance_residual_w=energy_residual,

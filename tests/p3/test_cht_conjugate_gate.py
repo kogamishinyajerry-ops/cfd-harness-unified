@@ -27,6 +27,7 @@ which locks the *reference* against fabrication):
 """
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 
@@ -59,10 +60,18 @@ def _extract_from_probe():
     return extract_conjugate_qois(
         _PROBE,
         D_h=float(ci["D"]),
-        k_fluid=float(ci["k_fluid"]),
-        cp=float(ci["cp"]),
-        mu=float(ci["mu"]),
+        fluid_region=str(ci.get("fluid_region", "fluid")),
     )
+
+
+def _copy_case(tmp_path: Path) -> Path:
+    """Copy the full frozen case (postProcessing + constant + system + 0) to tmp.
+
+    The extractor now reads fluid properties from constant/<region>/physicalProperties,
+    so doctoring tests must replay a complete case dir, not just postProcessing/."""
+    case = tmp_path / "case"
+    shutil.copytree(_PROBE, case)
+    return case
 
 
 @pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
@@ -82,6 +91,12 @@ def test_extractor_reproduces_recorded_probe_qois() -> None:
     # Re is recovered from the SOLVED inlet mass flux + patch area, ~= target 50000
     assert qois.inlet_area_m2 == pytest.approx(1.25e-4, rel=1e-6)
     assert qois.reynolds_solved == pytest.approx(50000.0, rel=1e-4)
+    # fluid transport properties are READ FROM THE CASE physicalProperties (Codex R1)
+    assert qois.mu_pa_s == pytest.approx(1.846e-5, rel=1e-6)
+    assert qois.cp_j_kgk == pytest.approx(1007.0, rel=1e-6)
+    assert qois.k_fluid_w_mk == pytest.approx(0.0263, rel=1e-3)
+    assert qois.prandtl == pytest.approx(0.70681, rel=1e-4)
+    assert qois.rho_kg_m3 == pytest.approx(1.1614, rel=1e-6)
 
 
 @pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
@@ -102,6 +117,7 @@ def test_cht_conjugate_gate_passes_on_recorded_probe() -> None:
     assert result.reynolds_in_band, result.summary
     assert result.reynolds_matches_target, result.summary
     assert result.prandtl_in_band, result.summary
+    assert result.fluid_matches_gold, result.summary
     names = {name for name, _ in result.comparisons}
     assert names == {"nusselt_number"}
     for name, cmp in result.comparisons:
@@ -126,8 +142,7 @@ def test_gate_is_real_doctored_wall_heat_flux_fails(tmp_path: Path) -> None:
     """Genuineness: a wrong wall heat flux must flip Nu out of band -> FAIL.
     Proves the gate compares real solver output against the reference rather than
     rubber-stamping."""
-    case = tmp_path / "doctored_q"
-    shutil.copytree(_PROBE / "postProcessing", case / "postProcessing")
+    case = _copy_case(tmp_path)
     bad = case / "postProcessing" / "qWindowAvg" / "0" / "surfaceFieldValue.dat"
     text = bad.read_text(encoding="utf-8")
     # halve the converged window wall heat flux -> h and Nu collapse below the band
@@ -145,8 +160,7 @@ def test_energy_balance_is_a_hard_gate_doctored_outlet_T_fails(tmp_path: Path) -
     """A doctored cup-mixing outlet temperature breaks the interface-heat ==
     enthalpy-rise closure and must FAIL the gate even when the Nu observable still
     matches the reference. Locks energy balance as a hard gate, not decoration."""
-    case = tmp_path / "doctored_tout"
-    shutil.copytree(_PROBE / "postProcessing", case / "postProcessing")
+    case = _copy_case(tmp_path)
     bad = case / "postProcessing" / "TbulkOut" / "0" / "surfaceFieldValue.dat"
     text = bad.read_text(encoding="utf-8")
     # drop the outlet bulk T toward inlet -> enthalpy rise no longer matches Q_iface
@@ -221,6 +235,56 @@ def test_prandtl_validity_is_a_hard_gate(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_reynolds_uses_case_viscosity_not_yaml(tmp_path: Path) -> None:
+    """Codex R1 P1: the recovered Re must use the CASE viscosity, not the gold's.
+    Double mu in the case physicalProperties (gold unchanged): reynolds_solved
+    halves to ~25000 — proving it reads the case — and the gate FAILS (the run no
+    longer matches the gold's target flow / reference fluid)."""
+    case = _copy_case(tmp_path)
+    pp = case / "constant" / "fluid" / "physicalProperties"
+    pp.write_text(
+        pp.read_text(encoding="utf-8").replace("1.846e-5", "3.692e-5"), encoding="utf-8"
+    )
+    result = gate_conjugate_against_gold(case, gold_path=_GOLD)
+    # Re recovered from the CASE mu (doubled) -> ~25000, NOT the gold's 50000
+    assert result.qois.reynolds_solved == pytest.approx(25000.0, rel=1e-3)
+    assert not result.reynolds_matches_target
+    assert not result.fluid_matches_gold
+    assert not result.passed, result.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_prandtl_uses_case_properties_not_yaml(tmp_path: Path) -> None:
+    """Codex R1 P2: Pr is taken from the CASE physicalProperties. Push the case Pr
+    out of the Gnielinski band: prandtl_in_band flips False and the gate FAILS,
+    even though the gold contract stays in-range."""
+    case = _copy_case(tmp_path)
+    pp = case / "constant" / "fluid" / "physicalProperties"
+    pp.write_text(
+        pp.read_text(encoding="utf-8").replace("0.70681", "3000.0"), encoding="utf-8"
+    )
+    result = gate_conjugate_against_gold(case, gold_path=_GOLD)
+    assert result.qois.prandtl == pytest.approx(3000.0, rel=1e-3)
+    assert not result.prandtl_in_band  # 3000 > 2000 upper bound
+    assert not result.passed, result.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_fluid_mismatch_with_gold_is_a_hard_gate(tmp_path: Path) -> None:
+    """Codex R1: the CASE fluid must match the gold reference fluid (the reference
+    Nu was derived for it). Change the case specific heat: fluid_matches_gold flips
+    False and the gate FAILS even though the gold contract is unchanged."""
+    case = _copy_case(tmp_path)
+    pp = case / "constant" / "fluid" / "physicalProperties"
+    txt = re.sub(r"Cv\s+1007\s*;", "Cv 1500;", pp.read_text(encoding="utf-8"))
+    pp.write_text(txt, encoding="utf-8")
+    result = gate_conjugate_against_gold(case, gold_path=_GOLD)
+    assert result.qois.cp_j_kgk == pytest.approx(1500.0, rel=1e-6)
+    assert not result.fluid_matches_gold
+    assert not result.passed, result.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
 def test_to_key_quantities_uses_gold_quantity_names() -> None:
     """The comparator looks up gold `quantity` names in key_quantities; the
     extractor's key must match exactly (else the gate silently SKIPs)."""
@@ -231,4 +295,4 @@ def test_to_key_quantities_uses_gold_quantity_names() -> None:
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
     """No silent default: an empty case dir raises rather than fabricating QoIs."""
     with pytest.raises((FileNotFoundError, ConjugateExtractorError)):
-        extract_conjugate_qois(tmp_path, D_h=0.05, k_fluid=0.0263, cp=1007.0, mu=1.846e-5)
+        extract_conjugate_qois(tmp_path, D_h=0.05)
