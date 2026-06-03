@@ -26,6 +26,7 @@ const NAV: NavItem[] = [
   { label: "Workbench", to: "/workbench", enabled: true, phaseLabel: "Phase 6" },
   { label: "Cases", to: "/cases", enabled: true, phaseLabel: "Phase 0" },
   { label: "Decisions", to: "/decisions", enabled: true, phaseLabel: "Phase 2" },
+  { label: "Workflow Monitor", to: "/workflow-monitor", enabled: true, phaseLabel: "Preview" },
   { label: "Runs", to: "/runs", enabled: true, phaseLabel: "Phase 3" },
   {
     label: "Audit Package",
