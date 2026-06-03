@@ -35,13 +35,26 @@
 > frontend 8/8 + `tsc -b` pass; real-data page rendered headless (no mock banner).
 > Showcase fixtures committed `7bb84b4` (run_record.json; 21MB raw logs gitignored).
 >
-> **NEXT (pick one)**: (a) **W3.3 V&V benchmark gate** — the thing that flips
-> runnable-coverage 1→2; (b) **Workflow Monitor live-NEW-run runner** — a Python
-> `WorkflowRunner` that orchestrates the 6 real stage services, persists
-> `runs/<id>/` (resumable), streams real SSE (the current backend is real-data
-> REPLAY of completed runs, not live execution); (c) **buoyantFoam→OF11**
-> reconciliation (its own sub-DEC). **Session-end TODO**: Notion batch-sync
-> Accepted DECs V61-224/225/226.
+> **W3.3 ARC OPENED** (the V&V gate that flips coverage 1→2): research+plan
+> `12224f6` (`.planning/p3_w33_cht_benchmark_research.md`) → **user ratified W3.3a**
+> (analytical solid-side first) → W3.3a benchmark CONTRACT landed `d2ffbc7`
+> (`knowledge/gold_standards/cht_straight_fin.yaml` — analytical straight-fin
+> η=0.77402 / tip-ratio=0.66604, Incropera-cited; **self-verifying** test
+> `tests/p3/test_cht_straight_fin_gold.py` re-derives from inputs, 4/4, so the
+> reference can't drift or be fabricated). `contract_status =
+> ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING` — does NOT yet flip coverage.
+>
+> **NEXT (W3.3a remaining — fresh budget; load-bearing solver, don't rush)**:
+> (1) author the live OF11 fin case (blockMesh + solid thermo + Robin convective
+> BC + `foamRun -solver solid`) and PROVE it reproduces η within 5% — a W3.2b-style
+> probe FIRST; (2) per-region CHT QoI extractor (fin_efficiency/tip-ratio from the
+> solid T field) mirroring `ui/backend/audit/cfdtrust/audit/qoi.py`; (3) register
+> `gate_mode: cht_analytical` in `GoldStandardComparator` (reuse `compare()` +
+> G-gates); (4) live PASS + coverage test. Then **W3.3b** (full conjugate vs
+> Gnielinski) for the formal coverage 1→2 flip. **Other tracks**: Workflow Monitor
+> live-NEW-run runner (current backend is real-data REPLAY, not live execution) ·
+> buoyantFoam→OF11. **Session-end TODO**: Notion batch-sync Accepted DECs
+> V61-224/225/226.
 >
 > **Infra note**: the OF11 `cfd-openfoam` container is left running (intentional).
 > Pre-existing dev servers :8000 (backend, STALE — predates the workflow-runs
