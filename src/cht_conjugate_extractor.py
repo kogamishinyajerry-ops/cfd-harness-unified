@@ -75,6 +75,8 @@ class ConjugateQoIs:
     t_bulk_out_k: float           # measured cup-mixing outlet T
     t_in_k: float                 # measured inlet T
     mdot_kg_s: float              # measured inlet mass flux (magnitude)
+    inlet_area_m2: float          # inlet patch area (from the probe header)
+    reynolds_solved: float        # Re recovered from the SOLVED case: mdot*D_h/(A_in*mu)
     q_iface_total_w: float        # areaIntegrate(wallHeatFlux), full interface (magnitude)
     q_window_w: float             # areaIntegrate(wallHeatFlux), window (magnitude)
     energy_balance_residual_w: float  # |Q_total - mdot*cp*(T_out - T_in)|
@@ -105,6 +107,36 @@ def _find_surface_field_dat(post_dir: Path, probe: str) -> Path:
             f"(expected {probe}/<time>/surfaceFieldValue.dat)"
         )
     return matches[-1]
+
+
+def _read_area_header(dat_path: Path) -> float:
+    """Return the ``# Area : <value>`` from a surfaceFieldValue.dat header.
+
+    surfaceFieldValue always emits the selection area in the comment header
+    (even with ``writeArea false``). Used to recover the SOLVED Reynolds number
+    from the measured inlet mass flux, so the Re validity gate verifies the
+    actual flow rate of the replayed case rather than trusting the gold YAML.
+    Fail-closed if the header line is absent / non-finite / non-positive.
+    """
+    for line in dat_path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s.startswith("#"):
+            continue
+        # "# Area   :      1.25000000e-04"
+        if "Area" in s and ":" in s:
+            tail = s.split(":", 1)[1].strip()
+            try:
+                area = float(tail.split()[0])
+            except (ValueError, IndexError) as exc:
+                raise ConjugateExtractorError(
+                    f"unparseable Area header in {dat_path}: {tail!r}"
+                ) from exc
+            if not math.isfinite(area) or area <= 0.0:
+                raise ConjugateExtractorError(
+                    f"non-physical inlet area in {dat_path}: {area}"
+                )
+            return area
+    raise ConjugateExtractorError(f"no '# Area' header in {dat_path}")
 
 
 def _read_last_scalar(dat_path: Path) -> float:
@@ -145,6 +177,7 @@ def extract_conjugate_qois(
     D_h: float,
     k_fluid: float,
     cp: float,
+    mu: float,
 ) -> ConjugateQoIs:
     """Extract the fully-developed conjugate Nusselt number from a solved case.
 
@@ -154,9 +187,13 @@ def extract_conjugate_qois(
         D_h: hydraulic diameter [m]            (gold input; = 2*gap for parallel plates)
         k_fluid: fluid thermal conductivity [W/m/K] (gold input)
         cp: fluid specific heat [J/kg/K]       (gold input)
+        mu: dynamic viscosity [Pa.s]           (gold input; used to recover solved Re)
 
-    q_wall / T_wall / T_bulk / mdot come from the solver; D_h, k_fluid, cp are
-    inputs. Nu is built from those — never from the Gnielinski formula.
+    q_wall / T_wall / T_bulk / mdot / inlet-area come from the solver; D_h,
+    k_fluid, cp, mu are inputs. Nu is built from those — never from the
+    Gnielinski formula. The SOLVED Reynolds number is recovered from the measured
+    inlet mass flux and patch area (Re = mdot*D_h/(A_in*mu)) so the gate can
+    verify the replayed case's actual flow rate, not the gold's claimed Re.
     Raises ``FileNotFoundError`` if probes are absent and
     ``ConjugateExtractorError`` on non-physical / unparseable values.
     """
@@ -169,14 +206,20 @@ def extract_conjugate_qois(
     q_total = abs(_read_last_scalar(_find_surface_field_dat(post, _Q_IFACE_TOTAL)))
     t_bulk_out = _read_last_scalar(_find_surface_field_dat(post, _T_BULK_OUT))
     t_in = _read_last_scalar(_find_surface_field_dat(post, _T_IN))
-    mdot = abs(_read_last_scalar(_find_surface_field_dat(post, _MDOT_IN)))
+    mdot_dat = _find_surface_field_dat(post, _MDOT_IN)
+    mdot = abs(_read_last_scalar(mdot_dat))
+    inlet_area = _read_area_header(mdot_dat)  # inlet patch area for the Re recovery
 
-    if D_h <= 0.0 or k_fluid <= 0.0 or cp <= 0.0:
+    if D_h <= 0.0 or k_fluid <= 0.0 or cp <= 0.0 or mu <= 0.0:
         raise ConjugateExtractorError(
-            f"non-physical inputs: D_h={D_h}, k_fluid={k_fluid}, cp={cp}"
+            f"non-physical inputs: D_h={D_h}, k_fluid={k_fluid}, cp={cp}, mu={mu}"
         )
     if mdot <= 0.0:
         raise ConjugateExtractorError(f"non-physical mass flux mdot={mdot}")
+
+    # Re from the SOLVED case: mass flux per unit area is rho*U, so
+    # Re_Dh = (mdot/A_in)*D_h/mu = mdot*D_h/(A_in*mu)  (rho cancels).
+    reynolds_solved = mdot * D_h / (inlet_area * mu)
 
     # window-mean bulk temperature from a cumulative energy balance (no internal
     # cut-plane): the fluid heats from T_in to the outlet by Q_total; the window
@@ -204,6 +247,8 @@ def extract_conjugate_qois(
         t_bulk_out_k=t_bulk_out,
         t_in_k=t_in,
         mdot_kg_s=mdot,
+        inlet_area_m2=inlet_area,
+        reynolds_solved=reynolds_solved,
         q_iface_total_w=q_total,
         q_window_w=q_window,
         energy_balance_residual_w=energy_residual,

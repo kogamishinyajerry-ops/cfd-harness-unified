@@ -35,8 +35,11 @@
 # the documented CHT-reproduction band for this correlation is <10% (Schmid et al.
 # 2019, cited in .planning/p3_w33_cht_benchmark_research.md). A 5% gate against a
 # correlation whose own scatter is +/-20% would be physically DISHONEST. 10% is the
-# precedent ceiling; it is backstopped by an energy-balance HARD gate (interface
-# heat == fluid enthalpy rise) + a Re-in-validity-band hard gate in cht_conjugate_gate.
+# precedent ceiling; it is backstopped by THREE HARD gates in cht_conjugate_gate:
+# (1) energy balance (interface heat == fluid enthalpy rise); (2) Reynolds —
+# recovered from the SOLVED inlet mass flux (NOT this YAML) and required both
+# in-band AND matching the target Re (so a wrong/stale run cannot ride a Nu match
+# into a false coverage flip); (3) Prandtl (mu*cp/k) inside the Gnielinski domain.
 #
 # CONTRACT STATUS — `CONJUGATE_REFERENCE_AUTHORED · LIVE_RUN_PASS_W3.3b_B`:
 #   W3.3b-A authored the analytically-locked reference; W3.3b-B ran the live
@@ -88,6 +91,8 @@ case_info:
     k_solid: 50.0          # W/m.K  (steel-class wall; sets conjugate coupling only, NOT the reference)
     Re_validity_min: 3000.0
     Re_validity_max: 5.0e6
+    Pr_validity_min: 0.5      # Gnielinski Prandtl domain (gate checks mu*cp/k vs this)
+    Pr_validity_max: 2000.0
     fluid_region: fluid
     interface_patch: fluid_to_solid   # FLUID-side interface patch (h is the fluid-produced coefficient)
     inlet_patch: inlet

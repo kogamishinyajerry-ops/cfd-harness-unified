@@ -61,6 +61,7 @@ def _extract_from_probe():
         D_h=float(ci["D"]),
         k_fluid=float(ci["k_fluid"]),
         cp=float(ci["cp"]),
+        mu=float(ci["mu"]),
     )
 
 
@@ -78,6 +79,9 @@ def test_extractor_reproduces_recorded_probe_qois() -> None:
     # h and driving dT are genuinely assembled (not echoed)
     assert qois.h_w_m2k == pytest.approx(59.55, abs=0.1)
     assert qois.delta_t_window_k == pytest.approx(32.057, abs=0.05)
+    # Re is recovered from the SOLVED inlet mass flux + patch area, ~= target 50000
+    assert qois.inlet_area_m2 == pytest.approx(1.25e-4, rel=1e-6)
+    assert qois.reynolds_solved == pytest.approx(50000.0, rel=1e-4)
 
 
 @pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
@@ -96,6 +100,8 @@ def test_cht_conjugate_gate_passes_on_recorded_probe() -> None:
     assert result.passed, result.summary
     assert result.energy_balance_ok, result.summary
     assert result.reynolds_in_band, result.summary
+    assert result.reynolds_matches_target, result.summary
+    assert result.prandtl_in_band, result.summary
     names = {name for name, _ in result.comparisons}
     assert names == {"nusselt_number"}
     for name, cmp in result.comparisons:
@@ -155,26 +161,62 @@ def test_energy_balance_is_a_hard_gate_doctored_outlet_T_fails(tmp_path: Path) -
     assert not result.passed, result.summary
 
 
-@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
-def test_reynolds_validity_is_a_hard_gate(tmp_path: Path) -> None:
-    """A gold whose Re falls outside the Gnielinski validity band must FAIL even
-    when Nu + energy still pass. Applying the correlation out of range is
-    dishonest; the gate refuses."""
-    docs = list(yaml.safe_load_all(_GOLD.read_text(encoding="utf-8")))
-    docs = [d for d in docs if d]
-    docs[0]["case_info"]["conjugate_inputs"]["Re"] = 1000.0  # below 3000 floor
-    bad_gold = tmp_path / "out_of_band_gold.yaml"
-    bad_gold.write_text(
+def _gold_with(tmp_path: Path, **ci_overrides) -> Path:
+    """Write a copy of the gold with conjugate_inputs overrides (for hard-gate tests)."""
+    docs = [d for d in yaml.safe_load_all(_GOLD.read_text(encoding="utf-8")) if d]
+    docs[0]["case_info"]["conjugate_inputs"].update(ci_overrides)
+    out = tmp_path / "override_gold.yaml"
+    out.write_text(
         "\n---\n".join(yaml.safe_dump(d, sort_keys=False) for d in docs),
         encoding="utf-8",
     )
+    return out
 
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_reynolds_is_derived_from_case_not_the_yaml(tmp_path: Path) -> None:
+    """Codex R0 P2: the Re hard gate must read the SOLVED flow, not the gold's
+    claimed Re. Override the gold's Re to a bogus value: the extracted
+    reynolds_solved is unchanged (recovered from the inlet mass flux), and the
+    gate FAILS because the replayed case no longer matches the gold's target."""
+    bad_gold = _gold_with(tmp_path, Re=99999.0)
     result = gate_conjugate_against_gold(_PROBE, gold_path=bad_gold)
-    # Nu + energy are unchanged (same artifacts) ...
+    # reynolds_solved comes from the case (~50000), NOT the YAML's 99999 ...
+    assert result.qois.reynolds_solved == pytest.approx(50000.0, rel=1e-4)
+    assert result.reynolds_in_band  # 50000 is still inside the validity band
+    # ... so the replayed run does not match the gold's claimed flow -> FAIL
+    assert not result.reynolds_matches_target
+    assert not result.passed, result.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_reynolds_out_of_validity_band_is_a_hard_gate(tmp_path: Path) -> None:
+    """A gold target below the Gnielinski turbulent floor (3000) must FAIL even
+    though Nu + energy still pass: applying the correlation out of range is
+    dishonest. (The gate's Re-in-band check on the SOLVED Re is wide; this guards
+    the gold contract itself from declaring an out-of-band operating point.)"""
+    # target Re=2000 < 3000 floor; reynolds_in_band uses SOLVED Re (50000, in band),
+    # but the run no longer matches the (now sub-turbulent) target -> FAIL.
+    bad_gold = _gold_with(tmp_path, Re=2000.0)
+    result = gate_conjugate_against_gold(_PROBE, gold_path=bad_gold)
     assert all(cmp.passed for _, cmp in result.comparisons), result.summary
     assert result.energy_balance_ok
-    # ... but Re is out of band, so the gate as a whole FAILS
-    assert not result.reynolds_in_band
+    assert not result.reynolds_matches_target
+    assert not result.passed, result.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3b probe artifacts absent")
+def test_prandtl_validity_is_a_hard_gate(tmp_path: Path) -> None:
+    """Codex R0 P3: Pr (derived from mu*cp/k_fluid) must lie inside the Gnielinski
+    domain. A gold/fluid whose Pr is out of range must FAIL even when Nu + energy
+    + Re all pass — the reference correlation is outside its declared validity."""
+    # raise the Pr floor above the air value (Pr~0.707) -> out of band
+    bad_gold = _gold_with(tmp_path, Pr_validity_min=1.0)
+    result = gate_conjugate_against_gold(_PROBE, gold_path=bad_gold)
+    assert all(cmp.passed for _, cmp in result.comparisons), result.summary
+    assert result.energy_balance_ok
+    assert result.reynolds_in_band and result.reynolds_matches_target
+    assert not result.prandtl_in_band
     assert not result.passed, result.summary
 
 
@@ -189,4 +231,4 @@ def test_to_key_quantities_uses_gold_quantity_names() -> None:
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
     """No silent default: an empty case dir raises rather than fabricating QoIs."""
     with pytest.raises((FileNotFoundError, ConjugateExtractorError)):
-        extract_conjugate_qois(tmp_path, D_h=0.05, k_fluid=0.0263, cp=1007.0)
+        extract_conjugate_qois(tmp_path, D_h=0.05, k_fluid=0.0263, cp=1007.0, mu=1.846e-5)
