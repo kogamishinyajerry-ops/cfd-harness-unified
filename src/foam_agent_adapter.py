@@ -3075,29 +3075,71 @@ fields          (U);
                     raw_output_path=raw_output_path,
                 )
 
-            # (b) in-container pipeline.
-            blockmesh_ok, blockmesh_log = self._docker_exec(
-                "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
-            )
-            if not blockmesh_ok:
-                return self._fail(
-                    f"CHT blockMesh failed (W3.2b/DEC-V61-225):\n{blockmesh_log}",
-                    time.monotonic() - t0,
-                    raw_output_path=raw_output_path,
+            # (b) in-container pipeline. Honor mesh_already_provided (Codex R0 P2 ·
+            # 86gs · M6.1 parity): a STAGED/imported multi-region case carries its
+            # own mesh — NEVER blockMesh over it. blockMesh regenerates geometry
+            # from a blockMeshDict the imported case may not even have, and would
+            # clobber the supplied mesh. Mirror the single-region M6.1 defensive
+            # check: require a mesh on disk (base constant/polyMesh OR already-split
+            # per-region meshes), else honest BLOCK. splitMeshRegions is also
+            # skipped when the per-region meshes are already present (already-split
+            # import); otherwise it partitions the supplied base mesh's cellZones
+            # into regions (non-destructive prep, not a geometry regeneration).
+            if task_spec.mesh_already_provided:
+                base_polymesh = case_host_dir / "constant" / "polyMesh"
+                per_region_present = all(
+                    (case_host_dir / "constant" / r / "polyMesh").is_dir()
+                    for r in (fluids + solids)
                 )
+                if not base_polymesh.is_dir() and not per_region_present:
+                    return self._fail(
+                        "CHT mesh_already_provided=True but neither a base "
+                        "constant/polyMesh nor per-region "
+                        f"constant/<region>/polyMesh for {fluids + solids} exists "
+                        "(W3.2b/DEC-V61-225) — the upstream stage must supply the "
+                        "mesh before this flag is set; no blockMesh is run over an "
+                        "imported case (honest BLOCK, never a silent overwrite).",
+                        time.monotonic() - t0,
+                        raw_output_path=raw_output_path,
+                    )
+                if not per_region_present:
+                    split_ok, split_log = self._docker_exec(
+                        "splitMeshRegions -cellZones -overwrite",
+                        case_cont_dir,
+                        self.BLOCK_MESH_TIMEOUT,
+                    )
+                    if not split_ok:
+                        return self._fail(
+                            "CHT splitMeshRegions -cellZones -overwrite failed "
+                            "(W3.2b/DEC-V61-225 · mesh_already_provided):\n"
+                            f"{split_log}",
+                            time.monotonic() - t0,
+                            raw_output_path=raw_output_path,
+                        )
+            else:
+                blockmesh_ok, blockmesh_log = self._docker_exec(
+                    "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
+                )
+                if not blockmesh_ok:
+                    return self._fail(
+                        "CHT blockMesh failed (W3.2b/DEC-V61-225):\n"
+                        f"{blockmesh_log}",
+                        time.monotonic() - t0,
+                        raw_output_path=raw_output_path,
+                    )
 
-            split_ok, split_log = self._docker_exec(
-                "splitMeshRegions -cellZones -overwrite",
-                case_cont_dir,
-                self.BLOCK_MESH_TIMEOUT,
-            )
-            if not split_ok:
-                return self._fail(
-                    "CHT splitMeshRegions -cellZones -overwrite failed "
-                    f"(W3.2b/DEC-V61-225):\n{split_log}",
-                    time.monotonic() - t0,
-                    raw_output_path=raw_output_path,
+                split_ok, split_log = self._docker_exec(
+                    "splitMeshRegions -cellZones -overwrite",
+                    case_cont_dir,
+                    self.BLOCK_MESH_TIMEOUT,
                 )
+                if not split_ok:
+                    return self._fail(
+                        "CHT splitMeshRegions -cellZones -overwrite failed "
+                        f"(W3.2b/DEC-V61-225):\n{split_log}",
+                        time.monotonic() - t0,
+                        raw_output_path=raw_output_path,
+                    )
 
             solver_ok, solver_log = self._docker_exec(
                 "foamMultiRun",

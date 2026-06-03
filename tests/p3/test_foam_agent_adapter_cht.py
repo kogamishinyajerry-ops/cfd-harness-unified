@@ -433,6 +433,58 @@ def test_mesh_already_provided_cht_never_misroutes_to_simplefoam(
     assert res.is_mock is False
     assert "foamMultiRun" in commands
     assert "simpleFoam" not in commands
+    # Codex R0 P2 (86gs): mesh_already_provided must NOT blockMesh over the
+    # supplied mesh. A base constant/polyMesh is present (not yet split), so
+    # splitMeshRegions runs but blockMesh is skipped.
+    assert "blockMesh" not in commands
+    assert "splitMeshRegions -cellZones -overwrite" in commands
+
+
+def test_cht_mesh_already_provided_without_polymesh_is_honest_block(
+    tmp_path, monkeypatch
+) -> None:
+    """Codex R0 P2 (86gs) regression: mesh_already_provided=True with NO mesh on
+    disk (neither base constant/polyMesh nor per-region) must be an honest BLOCK
+    — never a blockMesh that fabricates/overwrites geometry, never a misroute."""
+    import src.foam_agent_adapter as faa
+
+    monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
+    monkeypatch.setattr(faa, "docker", _FakeDocker)
+
+    src_case = tmp_path / "imported_cht_no_mesh"
+    src_case.mkdir(parents=True)
+    ex_gen = faa.FoamAgentExecutor(work_dir=str(tmp_path / "_gen"))
+    ex_gen._generate_cht_multi_region(src_case, _cht_spec())
+    ex_gen._translate_cht_case_esi_to_of11(src_case)
+    # NOTE: deliberately NO polyMesh staged.
+
+    commands: list[str] = []
+
+    def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
+        commands.append(command)
+        return True, "ok"
+
+    monkeypatch.setattr(faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec)
+
+    spec = TaskSpec(
+        name="imported_cht_no_mesh",
+        geometry_type=GeometryType.CHT_MULTI_REGION,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        mesh_already_provided=True,
+        case_dir_override=str(src_case),
+    )
+    ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
+    res = ex.execute(spec)
+
+    assert res.success is False
+    assert res.is_mock is False
+    assert "mesh_already_provided=True" in (res.error_message or "")
+    # No mesh on disk → must never have attempted blockMesh, split, or solve.
+    assert "blockMesh" not in commands
+    assert "splitMeshRegions -cellZones -overwrite" not in commands
+    assert "foamMultiRun" not in commands
 
 
 def test_cht_never_silently_succeeds_without_docker(tmp_path, monkeypatch) -> None:
