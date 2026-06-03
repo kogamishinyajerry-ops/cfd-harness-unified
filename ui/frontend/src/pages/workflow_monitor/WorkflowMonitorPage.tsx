@@ -18,7 +18,7 @@
 
 import { useState } from "react";
 
-import type { WorkflowRun } from "@/types/workflow";
+import type { WorkflowRun, WorkflowRunSummary } from "@/types/workflow";
 import { WORKFLOW_MONITOR_MOCK } from "@/data/workflowMonitorMock";
 
 import {
@@ -30,10 +30,17 @@ import {
 
 export function WorkflowMonitorPage({
   run = WORKFLOW_MONITOR_MOCK,
+  runs = [],
+  selectedRunKey,
+  onSelectRun,
 }: {
-  // Injectable so a live /api/runs/<id> payload (or a test) can drive the same
-  // page. Defaults to the design-preview fixture.
+  // Pure presentational. Injectable `run` so a real /api/workflow-runs payload
+  // (via WorkflowMonitorRoute) or a test drives the same page. Defaults to the
+  // design-preview fixture. `runs`/`onSelectRun` render an optional run picker.
   run?: WorkflowRun;
+  runs?: WorkflowRunSummary[];
+  selectedRunKey?: string | null;
+  onSelectRun?: (key: string) => void;
 }) {
   const [selectedKey, setSelectedKey] = useState<string>(run.currentStage);
   const selected =
@@ -68,6 +75,31 @@ export function WorkflowMonitorPage({
         </div>
         <p className="font-mono text-[11px] text-surface-500">run: {run.runId}</p>
       </header>
+
+      {runs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-surface-400">
+            Run
+          </span>
+          {runs.map((r) => {
+            const active = r.runKey === (selectedRunKey ?? run.runId);
+            return (
+              <button
+                key={r.runKey}
+                type="button"
+                onClick={() => onSelectRun?.(r.runKey)}
+                className={`rounded-sm border px-2 py-1 text-xs transition-colors ${
+                  active
+                    ? "border-surface-500 bg-surface-800 text-surface-100"
+                    : "border-surface-800 bg-surface-900/40 text-surface-300 hover:bg-surface-800/50"
+                }`}
+              >
+                {r.runKey.replace("naca0012_showcase_", "")}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <main className="grid flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(260px,320px)]">
         <StageGraph

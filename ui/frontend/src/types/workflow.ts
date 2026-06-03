@@ -120,6 +120,15 @@ export interface WorkflowRun {
   timeline: TimelineEntry[];
 }
 
+/** Lightweight listing entry — GET /api/workflow-runs. */
+export interface WorkflowRunSummary {
+  runKey: string;
+  runId: string;
+  caseName: string;
+  isMock: boolean;
+  currentStage: StageKey;
+}
+
 /** Stable display order of stages (used by the graph + timeline). */
 export const STAGE_ORDER: StageKey[] = [
   "geometry_intake",

@@ -74,6 +74,7 @@ from ui.backend.routes import (
     wizard,
     workbench_basics,
     workbench_frame,
+    workflow_runs,
 )
 
 # M5.0 STL import + M6.0 gmsh meshing both require the [workbench]
@@ -235,6 +236,7 @@ app.include_router(batch_matrix.router, prefix="/api", tags=["batch-matrix"])
 app.include_router(exports.router, prefix="/api", tags=["exports"])
 app.include_router(wizard.router, prefix="/api", tags=["wizard"])
 app.include_router(run_history.router, prefix="/api", tags=["run-history"])
+app.include_router(workflow_runs.router, prefix="/api", tags=["workflow-runs"])
 app.include_router(solver_stream.router, prefix="/api", tags=["solver-stream"])
 app.include_router(ai_chat.router, prefix="/api", tags=["ai-chat"])
 app.include_router(ai_coach.router, prefix="/api", tags=["ai-coach"])

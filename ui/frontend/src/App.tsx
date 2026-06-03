@@ -4,7 +4,7 @@ import { Layout } from "@/components/Layout";
 import { AuditPackagePage } from "@/pages/AuditPackagePage";
 import { DecisionsQueuePage } from "@/pages/DecisionsQueuePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
-import { WorkflowMonitorPage } from "@/pages/workflow_monitor/WorkflowMonitorPage";
+import { WorkflowMonitorRoute } from "@/pages/workflow_monitor/WorkflowMonitorRoute";
 import { ShortcutPalette } from "@/components/ShortcutPalette";
 import { ThemeRoot } from "@/components/ThemeRoot";
 import { WorkbenchShellV4 } from "@/pages/workbench/v4/WorkbenchShellV4";
@@ -65,7 +65,7 @@ export default function App() {
         <Route element={<Layout />}>
           {/* DEC-V61-226 · Workflow Monitor (in-house, mock-first design
               preview). Observation surface — NOT the frozen workbench shell. */}
-          <Route path="/workflow-monitor" element={<WorkflowMonitorPage />} />
+          <Route path="/workflow-monitor" element={<WorkflowMonitorRoute />} />
           <Route path="/audit-package" element={<AuditPackagePage />} />
           <Route path="/decisions" element={<DecisionsQueuePage />} />
           <Route

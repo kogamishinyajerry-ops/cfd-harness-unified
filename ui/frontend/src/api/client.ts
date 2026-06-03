@@ -51,6 +51,7 @@ import type {
   RunDetail,
   RunHistoryListResponse,
 } from "@/types/run_history";
+import type { WorkflowRun, WorkflowRunSummary } from "@/types/workflow";
 
 async function request<T>(
   path: string,
@@ -112,6 +113,14 @@ export const api = {
   listCaseRuns: (caseId: string) =>
     request<RunDescriptor[]>(
       `/api/cases/${encodeURIComponent(caseId)}/runs`,
+    ),
+
+  // DEC-V61-226 · Workflow Monitor (real-data backend)
+  listWorkflowRuns: () =>
+    request<WorkflowRunSummary[]>("/api/workflow-runs"),
+  getWorkflowRun: (runKey: string) =>
+    request<WorkflowRun>(
+      `/api/workflow-runs/${encodeURIComponent(runKey)}`,
     ),
 
   // Phase 1
