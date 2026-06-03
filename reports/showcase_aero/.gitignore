@@ -1,0 +1,10 @@
+# Heavy/scratch artifacts — NOT committed. The distilled REAL solver numbers
+# live in each naca0012_showcase_a*/run_record.json (committed; the Workflow
+# Monitor backend + its tests read these). The raw solver logs are large and
+# reproducible, so they stay local-only.
+log.simpleFoam
+**/log.simpleFoam
+_work/
+__pycache__/
+**/__pycache__/
+driver.log

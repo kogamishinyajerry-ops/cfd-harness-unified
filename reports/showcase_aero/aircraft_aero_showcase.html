@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NACA0012 RANS Sweep — Pure-Aerodynamic Vertical (OF11 adapter)</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161d26; --panel2:#1c2632; --ink:#e6edf3; --muted:#8a99a8;
+    --line:#2a3644; --accent:#4ea1ff; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-size:15px}
+  .wrap{max-width:1040px;margin:0 auto;padding:32px 22px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:8px}
+  h1{font-size:25px;margin:0 0 6px;letter-spacing:-0.01em}
+  h2{font-size:18px;margin:34px 0 12px;padding-top:8px;border-top:1px solid var(--line);color:var(--ink)}
+  h2:first-of-type{border-top:none}
+  .sub{color:var(--muted);font-size:14px;margin:0}
+  .scope{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:6px;padding:14px 16px;margin:18px 0}
+  .scope b{color:var(--accent)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:10px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--muted);margin-right:6px}
+  .pill.ok{color:var(--ok);border-color:#1f4d2a}
+  .pill.dec{color:var(--accent);border-color:#1d3d5c}
+  table{border-collapse:collapse;width:100%;font-size:14px;margin:6px 0}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:right}
+  th{background:var(--panel2);color:var(--muted);font-weight:600;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  td.l,th.l{text-align:left}
+  tbody tr:nth-child(even){background:rgba(255,255,255,0.018)}
+  .mono{font-family:var(--mono)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:760px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+  .kv{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line);font-size:14px}
+  .kv:last-child{border-bottom:none}
+  .kv span:first-child{color:var(--muted)}
+  .kv span:last-child{font-family:var(--mono)}
+  .note{font-size:13px;color:var(--muted);margin:8px 0}
+  .flag{font-size:12px;font-family:var(--mono)}
+  figure{margin:12px 0}
+  figcaption{font-size:13px;color:var(--muted);margin-top:6px}
+  svg{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:block;max-width:100%}
+  .legend{font-size:13px;color:var(--muted);margin:6px 0 0}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin:0 5px 0 14px;vertical-align:middle}
+  footer{margin-top:40px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:12px;font-family:var(--mono)}
+  code{font-family:var(--mono);background:var(--panel2);padding:1px 5px;border-radius:3px;font-size:13px}
+  .caveat{background:rgba(210,153,34,0.07);border:1px solid #4d3d12;border-radius:6px;padding:12px 14px;margin:14px 0;font-size:13.5px}
+  .caveat b{color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>NACA0012 RANS Sweep — Pure-Aerodynamic Vertical</h1>
+  <p class="sub">2D wing-section lift polar, run end-to-end through the cfd-harness workbench adapter on Foundation OpenFOAM&nbsp;11.</p>
+  <div style="margin-top:12px">
+    <span class="pill dec">DEC-V61-225</span>
+    <span class="pill ok">runnable-coverage = 1</span>
+    <span class="pill">OpenFOAM 11 (Foundation)</span>
+    <span class="pill">foamRun -solver incompressibleFluid</span>
+    <span class="pill mono">2026-06-03</span>
+  </div>
+</header>
+
+<div class="scope">
+  <p style="margin:0 0 8px"><b>What this is.</b> A four-point angle-of-attack sweep of a NACA&nbsp;0012 airfoil,
+  solved as a steady incompressible RANS problem at flight Reynolds number
+  (Re&nbsp;=&nbsp;3&times;10<sup>6</sup>). Each operating point was driven <b>end-to-end through the workbench's
+  <code>FoamAgentExecutor.execute()</code> adapter</b> against the live
+  <code>cfd-openfoam</code> Foundation-OF11 container — not hand-run on the command line.</p>
+  <p style="margin:0 0 8px"><b>Honest scope: this is a 2D wing-section, NOT a 3D aircraft.</b> It is the canonical
+  building block of aircraft external aerodynamics (a single span station), solved in the airfoil's
+  chord plane. There is no fuselage, no wingtip, no 3D induced drag, no span effects, no compressibility
+  (single incompressible/kinematic regime). Treat the numbers as a 2D sectional polar, nothing more.</p>
+  <p style="margin:0"><b>Why it matters here.</b> This is the first time the pure-aerodynamic vertical was
+  proven <b>runnable-coverage = 1 through the adapter</b>: the workbench's ESI-style request
+  (<code>simpleFoam</code>) was reconciled to the Foundation-OF11 invocation
+  <code>foamRun -solver incompressibleFluid</code> (the W3.2b / DEC-V61-225 reconciliation), and the full
+  request &rarr; container-run &rarr; harvested-coefficients loop closed for all four points.
+  ESI solver names like <code>simpleFoam</code> / <code>chtMultiRegionSimpleFoam</code> do not exist in
+  this image; the adapter maps to the Foundation module solver. The solver-log banner below
+  confirms the actual executable.</p>
+</div>
+
+<pre style="background:#0a0e12;border:1px solid var(--line);border-radius:6px;padding:12px 14px;
+  font-family:var(--mono);font-size:12.5px;color:#b9c6d3;overflow-x:auto;margin:0 0 8px">Build  : 11-e1fc8c682ae6
+Exec   : foamRun -solver incompressibleFluid
+Selecting solver incompressibleFluid
+Selecting RAS turbulence model kOmegaSST</pre>
+<p class="note">&mdash; verbatim from <code>naca0012_showcase_a00/log.simpleFoam</code> (the log keeps the ESI
+filename for the adapter's request, but the resolved <code>Exec</code> line is the OF11 reality).</p>
+
+<h2>1 &middot; Case setup</h2>
+<div class="grid2">
+  <div class="card">
+    <div class="kv"><span>Geometry</span><span>NACA 0012 airfoil</span></div>
+    <div class="kv"><span>Chord</span><span>1.0 m (normalized)</span></div>
+    <div class="kv"><span>Dimensionality</span><span>2D (chord plane, thin span)</span></div>
+    <div class="kv"><span>Reynolds number</span><span>3.0 &times; 10<sup>6</sup></span></div>
+    <div class="kv"><span>Regime</span><span>incompressible / steady RANS</span></div>
+    <div class="kv"><span>Reference</span><span>Ladson 1988, NASA TM-4074</span></div>
+  </div>
+  <div class="card">
+    <div class="kv"><span>Solver (Foundation OF11)</span><span>foamRun &minus;solver incompressibleFluid</span></div>
+    <div class="kv"><span>Turbulence model</span><span>k&ndash;&omega; SST (RAS)</span></div>
+    <div class="kv"><span>Mesh topology</span><span>C-grid, &asymp; 96,000 cells</span></div>
+    <div class="kv"><span>Mesh check</span><span>checkMesh OK</span></div>
+    <div class="kv"><span>Max non-orthogonality</span><span>68.7&deg;</span></div>
+    <div class="kv"><span>AoA sweep</span><span>0&deg;, 4&deg;, 8&deg;, 12&deg;</span></div>
+  </div>
+</div>
+<p class="note">Sweep deliberately stays in the pre-stall linear-lift range (NACA&nbsp;0012 static stall
+&asymp; 15&ndash;16&deg;). Coefficients are harvested from the solver's own
+<code>forceCoeffs1_FO_aerofoil</code> function object.</p>
+
+<h2>2 &middot; Lift &amp; drag polar (real harvested coefficients)</h2>
+<table>
+  <thead>
+    <tr>
+      <th class="l">AoA [deg]</th><th>C<sub>l</sub></th><th>C<sub>d</sub></th>
+      <th>L/D</th><th>Iterations</th><th>Converged</th><th>y+ max</th>
+    </tr>
+  </thead>
+  <tbody id="polarBody"></tbody>
+</table>
+<div class="caveat">
+  <b>Honest read of the C<sub>l</sub>&asymp;0 point (AoA 0&deg;).</b> A symmetric airfoil at zero incidence
+  produces zero net lift; the harvested C<sub>l</sub> is &minus;1.6&times;10<sup>&minus;8</sup>, i.e. numerically
+  zero (sign is meaningless at this magnitude). The function-object's "C<sub>l</sub> drift over last 100
+  iterations" reads as a huge percentage <i>precisely because</i> it is a relative drift on a near-zero
+  base &mdash; the <i>absolute</i> value is flat and the C<sub>d</sub> drift is 3&times;10<sup>&minus;4</sup>%.
+  We report it as C<sub>l</sub> = 0, not as a real lift contribution.
+</div>
+
+<h2>3 &middot; Lift &amp; drag polar (inline plot from the same numbers)</h2>
+<figure>
+  <svg id="polarSvg" viewBox="0 0 720 360" width="720" height="360" role="img"
+       aria-label="Cl and Cd versus angle of attack"></svg>
+  <figcaption>Drawn directly from the four harvested data points (no smoothing, no fit overlaid on the markers).
+  Left axis = C<sub>l</sub>; right axis = C<sub>d</sub>. Markers are the exact run values.</figcaption>
+</figure>
+<p class="legend"><i style="background:#4ea1ff"></i>C<sub>l</sub> vs AoA
+  <i style="background:#d29922"></i>C<sub>d</sub> vs AoA</p>
+<p class="note">Lift-curve slope over the linear range:
+  <span class="mono">dC<sub>l</sub>/d&alpha; &asymp; 0.0685 per deg</span>
+  (= 3.92 per rad; thin-airfoil ideal is 2&pi; &asymp; 6.28/rad &mdash; the RANS value sits sensibly below
+  ideal, as expected for finite-Re viscous flow). Linearity check over 0&ndash;12&deg;: <span class="ok">OK</span>
+  (residual &asymp; 0.037).</p>
+
+<h2>4 &middot; Per-run convergence &amp; near-wall resolution</h2>
+<table>
+  <thead>
+    <tr>
+      <th class="l">Run</th><th>AoA</th><th>Iterations</th>
+      <th>Solver verdict</th><th>Post-fix recompute</th>
+      <th>y+ min / avg / max</th><th>y+ advisory</th><th class="l">Notes</th>
+    </tr>
+  </thead>
+  <tbody id="convBody"></tbody>
+</table>
+<div class="caveat">
+  <b>Two points hit the iteration cap (8&deg; and 12&deg;).</b> At AoA 8&deg; and 12&deg; the solver reached the
+  endTime cap of 8000 iterations <i>without printing its own "SIMPLE solution converged" verdict</i>
+  (<code>solver_declared_converged = false</code>). An independent post-run recomputation of the
+  convergence criterion from the final residuals (all &le; 7&times;10<sup>&minus;7</sup> on p, &le; 2.4&times;10<sup>&minus;7</sup>
+  on omega) and the coefficient drift (C<sub>l</sub>/C<sub>d</sub> drift &lt; 5&times;10<sup>&minus;4</sup>% over the last
+  100 iterations) finds them effectively converged &mdash; so we mark them
+  <span class="warn">capped&nbsp;/&nbsp;recompute-converged</span>, not a clean solver-declared convergence.
+  The 12&deg; coefficients were additionally <b>harvested after the driver process was killed</b>
+  (<code>harvested_post_driver_kill = true</code>); the artifacts are intact and the coefficients come
+  straight from the function-object output, but we flag it so no one mistakes it for an untouched clean run.
+  AoA 0&deg; and 4&deg; are clean solver-declared convergences (0&deg; at 6645 iters, 4&deg; at 4010 iters).
+</div>
+<p class="note">All four runs pass the y+ advisory (wall-resolved, max y+ from 37 at 0&deg; rising to 103 at 12&deg;
+as the suction-side gradients steepen). y+ rising toward the wall-function boundary at the highest AoA is
+expected and is reported, not hidden.</p>
+
+<h2>5 &middot; What is NOT claimed</h2>
+<ul class="note" style="line-height:1.7">
+  <li>No 3D / finite-wing effects, no induced drag, no wingtip vortices &mdash; this is a 2D section.</li>
+  <li>No experimental validation is asserted on this page; the polar is internally consistent and physically
+      plausible (slope below 2&pi;/rad, monotone C<sub>d</sub> rise, pre-stall), but a Ladson/TM-4074 cross-check
+      is a separate exercise.</li>
+  <li>The 8&deg; and 12&deg; points are iteration-capped (recompute-converged), not solver-declared converged;
+      the 12&deg; point was harvested post-driver-kill. Both are flagged above.</li>
+  <li>Every number on this page is a harvested run value. Nothing is interpolated, fitted-then-reported as data,
+      or fabricated.</li>
+</ul>
+
+<footer>
+  <div>source: reports/showcase_aero/showcase_summary.json &middot; per-run: naca0012_showcase_a{00,04,08,12}/{run_record.json,log.simpleFoam}</div>
+  <div>solver: OpenFOAM 11 Foundation (Build 11-e1fc8c682ae6) &middot; foamRun -solver incompressibleFluid &middot; kOmegaSST RAS</div>
+  <div>adapter reconciliation: W3.2b / DEC-V61-225 (simpleFoam &rarr; foamRun -solver incompressibleFluid) &middot; container: cfd-openfoam (amd64 emulated on arm64)</div>
+</footer>
+
+</div>
+
+<script>
+// ---- REAL DATA (verbatim from showcase_summary.json runs[]) ----
+var RUNS = [
+  {alpha:0,  cl:-1.597793e-08, cd:0.01256229, iters:6645, solverConv:true,  recompConv:true,  yplusMin:11.5331,  yplusAvg:20.96132, yplusMax:37.4514,  yplusAdv:"PASS", postKill:false},
+  {alpha:4,  cl:0.3621906,     cd:0.01821041, iters:4010, solverConv:true,  recompConv:true,  yplusMin:8.117643, yplusAvg:20.69417, yplusMax:58.67585, yplusAdv:"PASS", postKill:false},
+  {alpha:8,  cl:0.6749625,     cd:0.03623578, iters:8000, solverConv:false, recompConv:true,  yplusMin:4.729729, yplusAvg:19.61867, yplusMax:83.75746, yplusAdv:"PASS", postKill:false},
+  {alpha:12, cl:0.8087292,     cd:0.07458749, iters:8000, solverConv:false, recompConv:true,  yplusMin:3.356578, yplusAvg:17.75777, yplusMax:102.9815, yplusAdv:"PASS", postKill:true}
+];
+var ITER_CAP = 8000;
+
+function clDisplay(v){ return Math.abs(v) < 1e-4 ? "0 (≈1.6e-08)" : v.toFixed(4); }
+function f4(v){ return v.toFixed(4); }
+function f2(v){ return v.toFixed(2); }
+
+// ---- Section 2: polar table ----
+(function(){
+  var tb = document.getElementById('polarBody');
+  RUNS.forEach(function(r){
+    var ld = Math.abs(r.cl) < 1e-4 ? "—" : (r.cl / r.cd).toFixed(1);
+    var convCell, convClass;
+    if(r.solverConv){ convCell = "yes"; convClass="ok"; }
+    else { convCell = "capped*"; convClass="warn"; }
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="l mono">'+r.alpha.toFixed(0)+'</td>'+
+      '<td class="mono">'+clDisplay(r.cl)+'</td>'+
+      '<td class="mono">'+f4(r.cd)+'</td>'+
+      '<td class="mono">'+ld+'</td>'+
+      '<td class="mono">'+r.iters+'</td>'+
+      '<td class="mono '+convClass+'">'+convCell+'</td>'+
+      '<td class="mono">'+f2(r.yplusMax)+'</td>';
+    tb.appendChild(tr);
+  });
+  var foot = document.createElement('tr');
+  foot.innerHTML = '<td class="l muted" colspan="7" style="font-size:12.5px">'+
+    '* "capped" = reached '+ITER_CAP+'-iter cap without solver-declared convergence; '+
+    'independent post-fix recompute finds it converged (residuals &amp; coeff-drift). See &sect;4.</td>';
+  tb.appendChild(foot);
+})();
+
+// ---- Section 4: convergence table ----
+(function(){
+  var tb = document.getElementById('convBody');
+  var names = {0:"a00",4:"a04",8:"a08",12:"a12"};
+  RUNS.forEach(function(r){
+    var verdict = r.solverConv
+      ? '<span class="ok">declared converged</span>'
+      : '<span class="warn">hit '+ITER_CAP+'-iter cap</span>';
+    var recomp = r.recompConv ? '<span class="ok">converged</span>' : '<span class="bad">no</span>';
+    var notes = [];
+    if(r.alpha===0) notes.push("C<sub>l</sub>&asymp;0 (symmetric, 0&deg;)");
+    if(!r.solverConv) notes.push("recompute-converged");
+    if(r.postKill) notes.push('<span class="warn">harvested post-driver-kill</span>');
+    if(notes.length===0) notes.push("clean");
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="l mono">naca0012_showcase_'+names[r.alpha]+'</td>'+
+      '<td class="mono">'+r.alpha.toFixed(0)+'&deg;</td>'+
+      '<td class="mono">'+r.iters+'</td>'+
+      '<td>'+verdict+'</td>'+
+      '<td>'+recomp+'</td>'+
+      '<td class="mono">'+f2(r.yplusMin)+' / '+f2(r.yplusAvg)+' / '+f2(r.yplusMax)+'</td>'+
+      '<td class="mono ok">'+r.yplusAdv+'</td>'+
+      '<td class="l flag">'+notes.join(' &middot; ')+'</td>';
+    tb.appendChild(tr);
+  });
+})();
+
+// ---- Section 3: inline SVG dual-axis polar ----
+(function(){
+  var svg = document.getElementById('polarSvg');
+  var W=720, H=360, mL=58, mR=58, mT=24, mB=46;
+  var pw = W-mL-mR, ph = H-mT-mB;
+  var NS="http://www.w3.org/2000/svg";
+
+  var alphas = RUNS.map(function(r){return r.alpha;});
+  var aMin=0, aMax=12;                 // AoA axis
+  var clMin=0, clMax=1.0;              // left axis (Cl), padded above max 0.809
+  var cdMin=0, cdMax=0.08;            // right axis (Cd), padded above max 0.0746
+
+  function xOf(a){ return mL + (a-aMin)/(aMax-aMin)*pw; }
+  function yCl(v){ return mT + (1-(v-clMin)/(clMax-clMin))*ph; }
+  function yCd(v){ return mT + (1-(v-cdMin)/(cdMax-cdMin))*ph; }
+
+  function el(tag,attrs,txt){
+    var e=document.createElementNS(NS,tag);
+    for(var k in attrs) e.setAttribute(k,attrs[k]);
+    if(txt!=null) e.textContent=txt;
+    svg.appendChild(e); return e;
+  }
+
+  // plot frame
+  el('rect',{x:mL,y:mT,width:pw,height:ph,fill:'none',stroke:'#2a3644'});
+
+  // gridlines + AoA ticks
+  [0,4,8,12].forEach(function(a){
+    var x=xOf(a);
+    el('line',{x1:x,y1:mT,x2:x,y2:mT+ph,stroke:'#202b38'});
+    el('text',{x:x,y:mT+ph+18,fill:'#8a99a8','font-size':12,'text-anchor':'middle','font-family':'monospace'}, a+'°');
+  });
+  el('text',{x:mL+pw/2,y:H-8,fill:'#8a99a8','font-size':13,'text-anchor':'middle'},'Angle of attack');
+
+  // left axis (Cl) ticks
+  [0,0.25,0.5,0.75,1.0].forEach(function(v){
+    var y=yCl(v);
+    el('line',{x1:mL,y1:y,x2:mL+pw,y2:y,stroke:'#1a232e'});
+    el('text',{x:mL-8,y:y+4,fill:'#4ea1ff','font-size':11,'text-anchor':'end','font-family':'monospace'}, v.toFixed(2));
+  });
+  el('text',{x:16,y:mT+ph/2,fill:'#4ea1ff','font-size':12,'text-anchor':'middle',transform:'rotate(-90 16 '+(mT+ph/2)+')'},'Cl');
+
+  // right axis (Cd) ticks
+  [0,0.02,0.04,0.06,0.08].forEach(function(v){
+    var y=yCd(v);
+    el('text',{x:mL+pw+8,y:y+4,fill:'#d29922','font-size':11,'text-anchor':'start','font-family':'monospace'}, v.toFixed(2));
+  });
+  el('text',{x:W-14,y:mT+ph/2,fill:'#d29922','font-size':12,'text-anchor':'middle',transform:'rotate(90 '+(W-14)+' '+(mT+ph/2)+')'},'Cd');
+
+  // Cl polyline + markers (clamp the tiny negative 0deg value to 0 for display only)
+  var clPts = RUNS.map(function(r){ return xOf(r.alpha)+','+yCl(Math.max(0,r.cl)); }).join(' ');
+  el('polyline',{points:clPts,fill:'none',stroke:'#4ea1ff','stroke-width':2});
+  RUNS.forEach(function(r){
+    var x=xOf(r.alpha), y=yCl(Math.max(0,r.cl));
+    el('circle',{cx:x,cy:y,r:4.5,fill:'#4ea1ff',stroke:'#0f1419','stroke-width':1.5});
+    var lab = Math.abs(r.cl)<1e-4 ? '0' : r.cl.toFixed(3);
+    el('text',{x:x,y:y-9,fill:'#9fc6ff','font-size':10.5,'text-anchor':'middle','font-family':'monospace'}, lab);
+  });
+
+  // Cd polyline + markers
+  var cdPts = RUNS.map(function(r){ return xOf(r.alpha)+','+yCd(r.cd); }).join(' ');
+  el('polyline',{points:cdPts,fill:'none',stroke:'#d29922','stroke-width':2,'stroke-dasharray':'5 4'});
+  RUNS.forEach(function(r){
+    var x=xOf(r.alpha), y=yCd(r.cd);
+    el('rect',{x:x-4,y:y-4,width:8,height:8,fill:'#d29922',stroke:'#0f1419','stroke-width':1.5});
+    el('text',{x:x,y:y+18,fill:'#e6c275','font-size':10.5,'text-anchor':'middle','font-family':'monospace'}, r.cd.toFixed(4));
+  });
+})();
+</script>
+</body>
+</html>
