@@ -1,37 +1,51 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.2b DE-RISKED: BOTH paths PROVEN to run in OF11 (read first)
+> ## ⏩ MOST RECENT — P3 W3.2b LANDED + Codex CLOSED + Workflow Monitor SHIPPED (read first)
 >
-> **Status**: `P3_IN_PROGRESS`. HEAD ≈ `5b11627`+docs. **runnable-coverage still 1**
-> (no run through the adapter YET — proven only in throwaway containers).
-> **User decisions this session**: Option **A** (reconcile adapter → OF11/foamRun &
-> run CHT) + scope **1b** (reconcile the WHOLE execution path: RANS **and** CHT).
+> **Status**: `P3_IN_PROGRESS`. **HEAD = `7bb84b4`**. **runnable-coverage STILL 1**
+> (W3.2b proves CHT+RANS RUN through the adapter; formal 1→2 needs the **W3.3** V&V
+> benchmark tolerance gate).
 >
-> **What's PROVEN (live, in OF11 `openfoam/openfoam11-paraview510`)**:
-> - **Probe**: `foam_agent_adapter.execute()` hard-fails at `containers.get(
->   "cfd-openfoam")` (`:581-601`) — container absent → the ENTIRE adapter execution
->   path is dead in this env. coverage=1 (RANS) was `cfdtrust`-produced, never the
->   adapter. Project-wide execution staleness.
-> - **CHT**: W3.2a-generated case runs end-to-end via `foamMultiRun` — 200 SIMPLE
->   iters to `End`, 0 ±1e+300, after 6 ESI→Foundation dict translations (table in
->   DEC-V61-225). blockMesh + `splitMeshRegions -cellZones` clean as-is.
-> - **RANS**: adapter-generated `BACKWARD_FACING_STEP` runs **AS-IS** (zero case
->   translation) via `foamRun -solver incompressibleFluid` — 7360 cells, to `End`,
->   21.6s. RANS = just a solver-COMMAND swap.
-> - **Infra provisioned**: a live OF11 `cfd-openfoam` container is up
->   (`docker run -d --name cfd-openfoam --platform linux/amd64 --entrypoint tail
->   openfoam/openfoam11-paraview510 -f /dev/null`).
+> **W3.2b (DEC-V61-225) LANDED + Accepted.** The whole `foam_agent_adapter` exec
+> path is reconciled to OF11 (RANS + CHT). Commits: feat `2aa0297` → `8bdea61`
+> (CRS R0: regionProperties comment-anchor + buoyantFoam honest-BLOCK) → `462128f`
+> (86gs R0 P2: honor `mesh_already_provided`, M6.1 parity) → `6617098` (CRS R1 P1:
+> CHT mesh+solve in a **single `_docker_exec`** under `set -e` — removes the
+> implicit cross-call put_archive merge dependency). **LIVE OF11 CHT gate PASS
+> 9.17s** (`CFD_LIVE_OF11=1`); 334 p3 + 200 adapter green. Codex CRS R0→R2 (86gs
+> hung → CRS); **R2 P1 "buoyantFoam regression" ADJUDICATED false-premise**
+> (pre-W3.2b adapter sourced a nonexistent `/opt/openfoam10/etc/bashrc` → every
+> adapter solve was already dead per DEC-V61-224; `buoyantFoam` absent in OF11;
+> guard = honest BLOCK, tested intended; reverting = re-introduce R0 cryptic-fail)
+> + **USER-RATIFIED 维持现状**. `buoyantFoam`→OF11 = logged deferred follow-up.
 >
-> **NEXT = IMPLEMENT W3.2b (DEC-V61-225 has the surgical map — de-risked)**: in
-> `src/foam_agent_adapter.py`: (1) bashrc `:8386` OF10→OF11; (2) `_docker_exec`
-> +`log_name` param; (3) `_of11_solver_command` {simpleFoam,pimpleFoam,icoFoam}→
-> `foamRun -solver incompressibleFluid` + wire `:889`; (4) replace CHT boundary
-> `:815-831` with `_execute_cht_multi_region` (blockMesh→splitMeshRegions→6-keyword
-> translate→foamMultiRun→parse); (5) reconcile ~6 `fake_docker_exec` (+`log_name`)
-> + flip the W3.2a boundary test + add translation/live tests; (6) feat→Codex
-> round-cap=3→fix. `buoyantFoam` deferred (needs a `foamRun -solver fluid` probe).
-> Then W3.3 V&V gate flips coverage 1→2. **Caveat**: this is load-bearing solver
-> code → don't rush; full Codex chain required.
+> **Workflow Monitor (DEC-V61-226) SHIPPED.** User pivot: "visible/resumable/
+> traceable CFD workflow runtime". Chief-eng **REJECTED Trigger.dev** (north-star
+> conflict [local-first/offline/auditable] + Python↔TS seam + the 6 stages already
+> exist as backend routes + the proposal's "mock that pretends to solve" honesty
+> risk); built **in-house** on FastAPI+SSE+React. MVP-1 frontend mock-first
+> (`cef6ccd`, `ui/frontend/src/pages/workflow_monitor/` — OUTSIDE §11.1 freeze,
+> indelible isMock banner) → **real backend** (`3e63372`: `schemas/workflow.py`
+> camelCase Pydantic · `services/workflow_monitor.py` assembles a `WorkflowRun`
+> from REAL `reports/showcase_aero/naca0012_showcase_a*/run_record.json`,
+> `is_mock=False`, honest report gate keys on the recorded `converged` flag NOT a
+> cl%-drift [7747% artifact at α=0] · `routes/workflow_runs.py` GET list/run + SSE
+> events, run_key resolved vs the discovered set = no traversal · frontend
+> `WorkflowMonitorRoute` react-query + honest mock-fallback). Backend 5/5 +
+> frontend 8/8 + `tsc -b` pass; real-data page rendered headless (no mock banner).
+> Showcase fixtures committed `7bb84b4` (run_record.json; 21MB raw logs gitignored).
+>
+> **NEXT (pick one)**: (a) **W3.3 V&V benchmark gate** — the thing that flips
+> runnable-coverage 1→2; (b) **Workflow Monitor live-NEW-run runner** — a Python
+> `WorkflowRunner` that orchestrates the 6 real stage services, persists
+> `runs/<id>/` (resumable), streams real SSE (the current backend is real-data
+> REPLAY of completed runs, not live execution); (c) **buoyantFoam→OF11**
+> reconciliation (its own sub-DEC). **Session-end TODO**: Notion batch-sync
+> Accepted DECs V61-224/225/226.
+>
+> **Infra note**: the OF11 `cfd-openfoam` container is left running (intentional).
+> Pre-existing dev servers :8000 (backend, STALE — predates the workflow-runs
+> route) + :5188 (vite) are running; a fresh restart picks up the new route.
 >
 > ---
 >
