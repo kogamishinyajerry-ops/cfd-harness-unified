@@ -1,7 +1,7 @@
 ---
 decision_id: V61-226
 title: Workflow Monitor — in-house workflow-runtime surface (NOT Trigger.dev) · mock-first frontend
-status: Proposed
+status: Accepted
 parent_dec: none (new product surface — user-directed 2026-06-03)
 sibling_decs: V61-092 (nav-discoverability) · V61-203 (frontend tsc -b gate)
 phase: cross-cutting (workflow-runtime UX) · MVP-1 frontend design preview
