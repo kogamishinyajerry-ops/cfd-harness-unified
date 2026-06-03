@@ -1,0 +1,82 @@
+# Gold Standard — Conjugate heated pipe, fully-developed turbulent (Gnielinski)
+# ============================================================================
+# P3 W3.3b (DEC-V61-228). The benchmark that flips runnable-coverage 1->2: it
+# validates a FULL two-region conjugate solve where the FLUID flow PRODUCES the
+# heat-transfer coefficient h (vs W3.3a, which only validated solid conduction +
+# an IMPOSED Robin h). The reference is the Gnielinski (1976) correlation for
+# fully-developed turbulent internal flow.
+#
+# Closed form (Gnielinski 1976; Incropera & DeWitt FHMT 7th ed. Eq. 8.62; VDI
+# Heat Atlas):
+#     f  = (0.790 * ln(Re) - 1.64)^(-2)                       # Petukhov friction
+#     Nu = (f/8)(Re - 1000) Pr / (1 + 12.7 sqrt(f/8) (Pr^(2/3) - 1))
+#     h  = Nu * k_fluid / D
+# Validity: 3000 < Re < 5e6, 0.5 < Pr < 2000.
+# Inputs (air @300K, round pipe D=0.05 m): rho=1.1614, mu=1.846e-5, cp=1007,
+# k_fluid=0.0263 -> nu=1.589461e-5, Pr=0.70681; U_inlet=3.178922 m/s -> Re=10000
+#   ->  f=0.031480,  Nu=29.9610,  h=15.7595 W/m^2.K
+# Cross-check Dittus-Boelter (Nu=0.023 Re^0.8 Pr^0.4 = 31.73) -> Gn/DB = 0.944
+# (expected band; Gnielinski runs ~5% below D-B at this Re). The reference is NOT
+# transcribed: tests/p3/test_cht_pipe_gnielinski_gold.py RE-DERIVES Nu from Re/Pr
+# in `case_info.conjugate_inputs` and fails if the committed 29.9610 drifts.
+#
+# TOLERANCE = 0.10 (10%), DELIBERATELY NOT the 5% fin convention. Gnielinski's own
+# stated accuracy is ~+/-20% over its ~800-point database (VDI Heat Atlas lineage);
+# the documented CHT-reproduction band for this correlation is <10% (Schmid et al.
+# 2019, cited in .planning/p3_w33_cht_benchmark_research.md). A 5% gate against a
+# correlation whose own scatter is +/-20% would be physically DISHONEST. 10% is the
+# precedent ceiling; it is backstopped by an energy-balance HARD gate (interface
+# heat == fluid enthalpy rise) + a Re-in-validity-band hard gate in cht_conjugate_gate.
+#
+# CONTRACT STATUS — `CONJUGATE_REFERENCE_AUTHORED · LIVE_RUN_PENDING_W3.3b_B`:
+#   This file + its self-verifying derivation test are W3.3b-A (no solve yet). The
+#   reference is analytically locked. The live two-region conjugate solve
+#   (W3.3b-B: foamMultiRun, fluid[kOmegaSST]+solid, coupledTemperature interface)
+#   that must reproduce Nu within 10% is PENDING. runnable-coverage STAYS 1 until
+#   that live PASS lands (Blueprint v4 Law 1). If the live solve cannot reproduce
+#   Gnielinski within 10% after y+/mesh iteration, this benchmark is documented
+#   NO-GO and coverage stays 1 — the reference is NOT loosened and NOT faked.
+
+quantity: nusselt_number
+reference_values:
+  - value: 29.9610
+    unit: dimensionless
+    description: "Nu = (f/8)(Re-1000)Pr / (1 + 12.7 sqrt(f/8)(Pr^2/3 - 1)), Re=10000 Pr=0.70681 f=0.031480 — Gnielinski 1976 (analytical, re-derived in test)"
+tolerance: 0.10
+source: "Gnielinski, V. (1976), Int. Chem. Eng. 16:359-368; Incropera & DeWitt, Fundamentals of Heat and Mass Transfer 7th ed. Eq. 8.62; VDI Heat Atlas. Correlation accuracy ~+/-20%; CHT-reproduction band <10% (Schmid et al. 2019). Reference is closed-form, re-derived in test."
+literature_doi: "ISBN-9780470501979"  # Incropera & DeWitt FHMT 7th ed. (Eq. 8.62)
+mesh_info:
+  cells: 0  # PENDING live solve (W3.3b-B); structured blockMesh pipe + annular solid wall
+  type: structured
+solver_info:
+  name: foamMultiRun  # OF11 fluid(kOmegaSST)+solid conjugate via regionSolvers
+  schemes: steady
+case_info:
+  id: cht_pipe_gnielinski
+  flow_type: CONJUGATE
+  geometry_type: CHT_MULTI_REGION
+  steady_state: STEADY
+  radiation: false
+  conjugate_inputs:        # the SOLE source of the reference + extractor inputs (self-verified)
+    D: 0.05                # m   (pipe hydraulic diameter)
+    Re: 10000.0            # target bulk Reynolds number (in Gnielinski band 3e3-5e6)
+    Pr: 0.70681            # fluid Prandtl (in band 0.5-2000)
+    rho: 1.1614            # kg/m^3  (air @300K)
+    mu: 1.846e-5           # Pa.s
+    cp: 1007.0             # J/kg.K
+    k_fluid: 0.0263        # W/m.K
+    nu: 1.589461e-5        # m^2/s  (= mu/rho)
+    U_inlet: 3.178922      # m/s    (= Re*nu/D -> Re=10000)
+    k_solid: 50.0          # W/m.K  (steel-class wall; sets conjugate coupling only, NOT the reference)
+    Re_validity_min: 3000.0
+    Re_validity_max: 5.0e6
+    fluid_region: fluid
+    interface_patch: fluid_to_solid   # FLUID-side interface patch (h is the fluid-produced coefficient)
+    inlet_patch: inlet
+    outlet_patch: outlet
+  boundary_conditions:
+    fluid: "turbulent RANS kOmegaSST + eddyDiffusivity (Prt=0.85)"
+    interface: coupledTemperature      # OF11.org conjugate temperature coupling
+    outer_wall: fixedValue             # hot outer solid wall drives the heat transfer
+    inlet: "fixedValue U + fixedValue T (cold)"
+    outlet: "pressureInletOutletVelocity / inletOutlet T"
