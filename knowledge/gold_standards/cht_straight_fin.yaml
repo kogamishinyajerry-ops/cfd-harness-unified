@@ -1,0 +1,97 @@
+# Gold Standard — Straight Rectangular Fin (CHT solid-side, adiabatic tip)
+# ========================================================================
+# P3 W3.3a (DEC-V61-226 research → ratified 2026-06-03). The FIRST CHT-family
+# coverage benchmark. Chosen because its reference is ANALYTICALLY EXACT — the
+# single most important honesty property for a coverage gate (cf. the
+# lid_driven_cavity.yaml header: Phase-0 fabricated values were caught only at
+# real-solver time; we do not repeat that). Reference values here are NOT
+# transcribed from a table — they are CLOSED-FORM functions of the inputs in
+# `case_info.fin_inputs`, and `tests/p3/test_cht_straight_fin_gold.py`
+# RE-DERIVES them from those inputs and fails if the committed value drifts from
+# the formula. The benchmark cannot be silently fabricated or engineered-to-pass.
+#
+# Closed form (Incropera & DeWitt, Fundamentals of Heat & Mass Transfer, 7th ed.,
+# §3.6, Table 3.4 — straight rectangular fin, adiabatic/insulated tip):
+#     m  = sqrt(h*P / (k*A_c)),  A_c = w*t,  P = 2*(w+t)
+#     eta_f             = tanh(mL) / (mL)                 # fin efficiency
+#     theta_tip/theta_b = 1 / cosh(mL)                    # tip temperature ratio
+# with theta = T - T_inf. Inputs (canonical Al fin): k=180 W/m·K, h=100 W/m²·K,
+# L=0.05 m, t=0.003 m, w=1.0 m  →  m=19.2739 /m, mL=0.96369  →
+#     eta_f = 0.77402,  theta_tip/theta_b = 0.66604   (derivation in the test)
+#
+# CONTRACT STATUS — `ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING`:
+#   W3.3a authors this contract + a self-verifying derivation test. It does NOT
+#   yet flip runnable-coverage — that needs the live OF11 run extracted through
+#   the comparator (W3.3a live step) and, for the full two-region conjugate flip,
+#   W3.3b. tolerance=0.05 (5%) follows the project gold-standard convention
+#   (DEC-V61-209-class); the analytical reference makes a tight tolerance honest.
+#
+# SCOPE CAVEAT (the W3.3a/W3.3b distinction, per the W3.3 research doc): the
+# closed form assumes a UNIFORM, KNOWN convection coefficient h on the fin
+# surface. W3.3a verifies the SOLID conduction + the convective (Robin) BC
+# against this exact reference (h imposed). It does NOT exercise a solved fluid
+# region — that is W3.3b (full conjugate, validated against Gnielinski). So this
+# file's preconditions are honest about verifying the solid side + BC, not the
+# fluid-produced h.
+
+quantity: fin_efficiency
+reference_values:
+  - value: 0.77402
+    unit: dimensionless
+    description: "eta_f = tanh(mL)/(mL), mL=0.96369 — analytical (Incropera Eq. 3.91)"
+tolerance: 0.05
+source: "Incropera & DeWitt, Fundamentals of Heat and Mass Transfer, 7th ed., §3.6 Table 3.4 (straight rectangular fin, adiabatic tip); reference is closed-form, re-derived in test"
+literature_doi: "ISBN-9780470501979"
+mesh_info:
+  cells: null  # set when the live W3.3a case + blockMeshDict are authored
+  type: structured
+solver_info:
+  name: foamRun -solver solid  # OF11 Foundation solid heat-conduction module
+  schemes: steady
+case_info:
+  id: cht_straight_fin
+  flow_type: CONJUGATE
+  geometry_type: CHT_MULTI_REGION
+  steady_state: STEADY
+  radiation: false
+  fin_inputs:            # the SOLE source of the reference values (self-verified)
+    k_solid: 180.0       # W/m·K  (aluminium alloy)
+    h_conv: 100.0        # W/m²·K (imposed surface convection coefficient, W3.3a)
+    L: 0.05              # m  (fin length)
+    t: 0.003             # m  (fin thickness)
+    w: 1.0               # m  (fin width, per-unit-width basis)
+    tip: adiabatic       # insulated tip BC (matches the closed form above)
+  boundary_conditions:
+    base_temperature: fixedValue   # theta_b at x=0
+    surface: convective_robin      # h_conv, T_inf
+    tip: zeroGradient              # adiabatic
+
+---
+
+quantity: fin_tip_temperature_ratio
+reference_values:
+  - value: 0.66604
+    unit: dimensionless
+    description: "theta_tip/theta_b = 1/cosh(mL), mL=0.96369 — analytical (Incropera Eq. 3.80, adiabatic tip)"
+tolerance: 0.05
+source: "Incropera & DeWitt, Fundamentals of Heat and Mass Transfer, 7th ed., §3.6 (adiabatic-tip temperature distribution); reference is closed-form, re-derived in test"
+literature_doi: "ISBN-9780470501979"
+mesh_info:
+  cells: null
+  type: structured
+solver_info:
+  name: foamRun -solver solid
+  schemes: steady
+case_info:
+  id: cht_straight_fin
+  flow_type: CONJUGATE
+  geometry_type: CHT_MULTI_REGION
+  steady_state: STEADY
+  radiation: false
+  fin_inputs:
+    k_solid: 180.0
+    h_conv: 100.0
+    L: 0.05
+    t: 0.003
+    w: 1.0
+    tip: adiabatic
