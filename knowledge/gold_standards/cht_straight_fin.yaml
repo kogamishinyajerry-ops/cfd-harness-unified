@@ -66,6 +66,7 @@ case_info:
     L: 0.05              # m  (fin length)
     t: 0.003             # m  (fin thickness)
     w: 1.0               # m  (fin width, per-unit-width basis)
+    T_inf: 300.0         # K  (convection sink temperature, imposed Robin Ta)
     tip: adiabatic       # insulated tip BC (matches the closed form above)
   boundary_conditions:
     base_temperature: fixedValue   # theta_b at x=0
@@ -100,4 +101,5 @@ case_info:
     L: 0.05
     t: 0.003
     w: 1.0
+    T_inf: 300.0
     tip: adiabatic

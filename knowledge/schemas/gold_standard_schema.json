@@ -210,7 +210,8 @@
               "enum": [
                 "INTERNAL",
                 "EXTERNAL",
-                "NATURAL_CONVECTION"
+                "NATURAL_CONVECTION",
+                "CONJUGATE"
               ]
             },
             "steady_state": {
