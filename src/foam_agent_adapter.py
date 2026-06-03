@@ -868,6 +868,26 @@ class FoamAgentExecutor:
                     )
 
             # 6. 执行求解器
+            # Codex R0 P1 (DEC-V61-225): W3.2b reconciles ONLY the incompressible
+            # RANS/laminar family to OF11 (here) + CHT (foamMultiRun, separate
+            # branch). buoyant/thermal solvers (buoyantFoam: natural-convection,
+            # impinging-jet) still emit OF10/ESI dicts and have no OF11 mapping,
+            # so running them under the OF11 image would fail with a cryptic
+            # "command not found". Refuse HONESTLY (structured BLOCK naming the
+            # deferred follow-up) rather than a silent doomed run.
+            if solver_name not in self._OF11_INCOMPRESSIBLE_SOLVERS:
+                return self._fail(
+                    f"solver '{solver_name}' is not yet reconciled to the "
+                    "Foundation-OF11 runtime (W3.2b/DEC-V61-225). Reconciled: the "
+                    f"incompressible family {sorted(self._OF11_INCOMPRESSIBLE_SOLVERS)} "
+                    "via `foamRun -solver incompressibleFluid`, plus CHT via "
+                    "foamMultiRun. Buoyant/thermal solvers (e.g. buoyantFoam) are a "
+                    "deferred follow-up — their generators still emit OF10/ESI "
+                    "dicts and no OF11 solver-module mapping exists yet. Refusing "
+                    "to run a doomed solver (honest BLOCK, never a silent misrun).",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
             # DEC-V61-225 (P3 W3.2b): run the OF11/foamRun-translated command
             # (incompressible RANS → `foamRun -solver incompressibleFluid`) but
             # keep the LOG filename + error string + log parse keyed on the
@@ -2845,11 +2865,20 @@ fields          (U);
         rp = case_host_dir / "constant" / "regionProperties"
         if not rp.is_file():
             raise ValueError(f"constant/regionProperties not found at {rp}")
-        text = rp.read_text(encoding="utf-8")
+        raw = rp.read_text(encoding="utf-8")
+        # Codex R0 P1 (DEC-V61-225): strip C/C++ comments first, then anchor the
+        # parse on the `regions ( ... )` block, so stray `fluid`/`solid`
+        # substrings in comments or unrelated identifiers (common in hand-
+        # authored / imported CHT cases, mesh_already_provided=True) can NOT
+        # mis-anchor the region lists and wrongly BLOCK an otherwise-valid case.
+        text = re.sub(r"/\*.*?\*/", " ", raw, flags=re.DOTALL)
+        text = re.sub(r"//[^\n]*", " ", text)
+        block_m = re.search(r"\bregions\b\s*\((.*)\)\s*;", text, flags=re.DOTALL)
+        scope = block_m.group(1) if block_m else text
 
         def _names_for(group: str) -> List[str]:
-            # match `fluid   ( a b c )` — group name then a parenthesised list.
-            m = re.search(group + r"\s*\(\s*([^)]*)\)", text)
+            # `fluid ( a b c )` WITHIN the regions block — word-boundary anchored.
+            m = re.search(r"\b" + re.escape(group) + r"\b\s*\(\s*([^)]*)\)", scope)
             if not m:
                 return []
             return [tok for tok in m.group(1).split() if tok]

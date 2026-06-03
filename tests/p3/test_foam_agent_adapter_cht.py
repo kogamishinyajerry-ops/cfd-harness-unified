@@ -526,3 +526,60 @@ def test_cht_live_run_through_adapter_of11(tmp_path: Path) -> None:
     # at least the solid energy + one fluid pressure residual were parsed
     assert any(k.endswith(":e") for k in res.residuals)
     assert any(k.endswith(":p_rgh") for k in res.residuals)
+
+
+def test_read_cht_regions_ignores_comment_substrings(tmp_path: Path) -> None:
+    """Codex R0 P1 (DEC-V61-225): a hand-authored / imported regionProperties
+    whose COMMENTS contain `fluid (...)` / `solid (...)` must NOT mis-anchor the
+    region parse onto the comment (the old bare-substring search returned the
+    commented WRONG lists and would wrongly BLOCK a valid imported CHT case)."""
+    rp = tmp_path / "constant" / "regionProperties"
+    rp.parent.mkdir(parents=True)
+    rp.write_text(
+        "// example layout: fluid (WRONG_FLUID) solid (WRONG_SOLID)\n"
+        "/* fluid (ALSO_WRONG) solid (ALSO_BAD) */\n"
+        "regions\n(\n    fluid       (air_hot air_cold)\n"
+        "    solid       (metal)\n);\n",
+        encoding="utf-8",
+    )
+    fluids, solids = FoamAgentExecutor._read_cht_regions(tmp_path)
+    assert fluids == ["air_hot", "air_cold"]
+    assert solids == ["metal"]
+
+
+def test_buoyant_geometry_honest_block_under_of11(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Codex R0 P1 (DEC-V61-225): buoyantFoam geometries (natural convection /
+    impinging jet) are NOT yet reconciled to OF11. execute() must return an
+    HONEST structured BLOCK (success=False, is_mock=False) naming the deferred
+    follow-up — never a doomed run of a solver absent from the OF11 image."""
+    import src.foam_agent_adapter as faa
+
+    monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
+    monkeypatch.setattr(faa, "docker", _FakeDocker)
+
+    ran: list[str] = []
+
+    def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
+        ran.append(command)
+        return True, "ok"
+
+    monkeypatch.setattr(faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec)
+
+    ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
+    spec = TaskSpec(
+        name="nc_cavity",
+        geometry_type=GeometryType.NATURAL_CONVECTION_CAVITY,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Ra=1e6,
+    )
+    res = ex.execute(spec)
+    assert res.success is False
+    assert res.is_mock is False
+    msg = res.error_message or ""
+    assert "buoyantFoam" in msg and "not yet reconciled" in msg
+    # the buoyant solver was NEVER attempted as a container command.
+    assert "buoyantFoam" not in ran
