@@ -103,7 +103,15 @@ class AutoVerifier:
         post_processing_dir: Optional[Path] = None,
         timestamp: str = DEFAULT_TIMESTAMP,
     ) -> AutoVerifyReport:
-        gold_standard = yaml.safe_load(gold_standard_file.read_text(encoding="utf-8"))
+        # Gold files may be single- or multi-document (the quantity/
+        # reference_values family is multi-doc — e.g. cht_straight_fin). Read all
+        # docs and use the first non-empty one so a multi-doc file does not raise
+        # ComposerError here (Codex R0 P2). Anchor cases use the single-doc
+        # `observables` schema, so this is behaviour-preserving for them; a
+        # non-anchor multi-doc file (never routed here) degrades to a SKIPPED
+        # comparison rather than a crash.
+        _gold_docs = [d for d in yaml.safe_load_all(gold_standard_file.read_text(encoding="utf-8")) if d]
+        gold_standard = _gold_docs[0] if _gold_docs else {}
         sim_results = self._load_mapping_file(sim_results_file)
         return self.verify(
             case_id=case_id,

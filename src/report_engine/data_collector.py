@@ -73,7 +73,14 @@ class ReportDataCollector:
 
     def _load_gold_standard(self, case_id: str) -> Dict[str, Any]:
         path = KNOWLEDGE_ROOT / "gold_standards" / f"{case_id}.yaml"
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        # Gold files come in two families: single-doc (schema_version 2,
+        # `observables:`) and multi-doc (quantity/reference_values — e.g.
+        # lid_driven_cavity, circular_cylinder_wake, cht_straight_fin). Read all
+        # documents and return the first non-empty one so a multi-doc file does
+        # NOT raise yaml.composer.ComposerError here (Codex R0 P2). Single-doc
+        # files are unchanged: safe_load_all yields exactly one doc.
+        docs = [d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d]
+        return docs[0] if docs else {}
 
     def _load_case_meta(self, case_id: str) -> Dict[str, Any]:
         case_path = KNOWLEDGE_ROOT / "cases" / f"{case_id}.yaml"

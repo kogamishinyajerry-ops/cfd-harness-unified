@@ -146,5 +146,24 @@ def test_to_key_quantities_uses_gold_quantity_names() -> None:
 
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
     """No silent default: an empty case dir raises rather than fabricating QoIs."""
-    with pytest.raises(FileNotFoundError):
+    from src.cht_fin_extractor import FinExtractorError
+
+    with pytest.raises((FileNotFoundError, FinExtractorError)):
         extract_fin_qois(tmp_path, h_conv=100.0, w=1.0, t=0.003, L=0.05, T_inf=300.0)
+
+
+def test_generic_gold_loaders_tolerate_multidoc_cht_gold() -> None:
+    """Codex R0 P2 regression: cht_straight_fin.yaml is multi-doc; the generic
+    single-doc gold loaders must NOT raise yaml.composer.ComposerError on it.
+
+    These loaders never route cht in normal flows (it is not an anchor case and
+    has no auto_verify_report), but the hardening removes a latent opaque crash
+    for the whole multi-doc gold family. Behaviour is unchanged for the
+    single-doc (observables) files they actually serve.
+    """
+    from src.report_engine.data_collector import ReportDataCollector
+
+    gold = ReportDataCollector()._load_gold_standard("cht_straight_fin")
+    assert isinstance(gold, dict)
+    # first doc of the multi-doc fin gold is the fin_efficiency observable
+    assert gold.get("quantity") == "fin_efficiency"
