@@ -19,6 +19,8 @@ Charter W3.2 passes-criteria covered HERE (the offline subset):
 """
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 
 import pytest
@@ -240,7 +242,14 @@ def test_boundary_conditions_overrides_respected(tmp_path: Path) -> None:
 
 
 # ----------------------------------------------------------------------
-# Dispatch live-run boundary (W3.2a wires the route; LIVE run is W3.2b)
+# Dispatch LIVE-run reconciliation (DEC-V61-225 · W3.2b · OF11/foamMultiRun)
+#
+# The W3.2a fail-loud boundary is REMOVED: execute() now routes CHT to the
+# dedicated _execute_cht_multi_region runner (host-side ESI→Foundation
+# translation → blockMesh → splitMeshRegions -cellZones -overwrite →
+# foamMultiRun). These tests assert the simulated-success contract (no Docker)
+# + the never-misroute-to-simpleFoam invariant; the REAL OF11 run is the
+# opt-in CFD_LIVE_OF11 test at the bottom.
 # ----------------------------------------------------------------------
 
 class _FakeContainer:
@@ -272,43 +281,141 @@ class _FakeDocker:
         return _FakeClient()
 
 
-def test_cht_execute_hits_explicit_live_run_boundary(tmp_path, monkeypatch) -> None:
-    """With a (faked) running container, execute() routes CHT to the generator
-    then returns an EXPLICIT W3.2b live-run boundary failure — it never runs the
-    single-region blockMesh->solver pipeline on a multi-region case. (The temp
-    case dir generated en route is torn down by execute()'s finally-block; the
-    generator's on-disk output is covered by the direct generator tests above.)
-    """
+def _make_multiregion_log(fluids, solids) -> str:
+    """A minimal foamMultiRun-shaped log: per-region Solving lines + End."""
+    lines = ["Exec   : foamMultiRun", "Time = 200s"]
+    for f in fluids:
+        lines.append(
+            f"{f}  DILUPBiCGStab:  Solving for Ux, Initial residual = 4.4e-07, "
+            "Final residual = 8.7e-10, No Iterations 1"
+        )
+        lines.append(
+            f"{f}  GAMG:  Solving for p_rgh, Initial residual = 1.4e-06, "
+            "Final residual = 1.8e-08, No Iterations 2"
+        )
+        lines.append(
+            f"{f}  time step continuity errors : sum local = 4.6e-08, "
+            "global = -1.0e-08, cumulative = -4.8e-04"
+        )
+    for s in solids:
+        lines.append(
+            f"{s}      DICPCG:  Solving for e, Initial residual = 0.0095, "
+            "Final residual = 8.5e-05, No Iterations 1"
+        )
+    lines.append("End")
+    return "\n".join(lines) + "\n"
+
+
+def test_cht_execute_runs_multiregion_pipeline_success(tmp_path, monkeypatch) -> None:
+    """DEC-V61-225: execute() on a CHT spec runs the multi-region pipeline
+    (translate → blockMesh → splitMeshRegions → foamMultiRun) and returns a REAL
+    (is_mock=False) success. _docker_exec is monkeypatched to simulate a
+    successful run so the test stays Docker-free. It asserts the pipeline order
+    AND that a CHT case is NEVER routed to the single-region simpleFoam path."""
     import src.foam_agent_adapter as faa
 
     monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
     monkeypatch.setattr(faa, "docker", _FakeDocker)
+
+    commands: list[str] = []
+    fluids = ["region_hot_fluid", "region_cold_fluid"]
+    solids = ["region_solid"]
+
+    def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
+        commands.append(command)
+        if command == "foamMultiRun":
+            return True, _make_multiregion_log(fluids, solids)
+        return True, f"ok:{command}"
+
+    monkeypatch.setattr(
+        faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+    )
+
+    ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
+    res = ex.execute(_cht_spec())
+
+    assert res.success is True
+    assert res.is_mock is False
+    # exact pipeline order; foamMultiRun (NOT simpleFoam / chtMultiRegionSimpleFoam)
+    assert commands == [
+        "blockMesh",
+        "splitMeshRegions -cellZones -overwrite",
+        "foamMultiRun",
+    ]
+    assert "simpleFoam" not in commands
+    assert "chtMultiRegionSimpleFoam" not in commands
+    # per-region residuals parsed (solid energy 'e', fluid p_rgh)
+    assert "region_solid:e" in res.residuals
+    assert "region_hot_fluid:p_rgh" in res.residuals
+    assert res.key_quantities.get("reached_end") is True
+
+
+def test_cht_blockmesh_failure_is_honest_block(tmp_path, monkeypatch) -> None:
+    """DEC-V61-225: a non-zero blockMesh yields a structured BLOCK (success=False,
+    is_mock=False) — NOT a crash and NEVER a misroute to the single-region path."""
+    import src.foam_agent_adapter as faa
+
+    monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
+    monkeypatch.setattr(faa, "docker", _FakeDocker)
+
+    commands: list[str] = []
+
+    def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
+        commands.append(command)
+        if command == "blockMesh":
+            return False, "blockMesh: FOAM FATAL ERROR"
+        return True, "ok"
+
+    monkeypatch.setattr(
+        faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+    )
 
     ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
     res = ex.execute(_cht_spec())
 
     assert res.success is False
     assert res.is_mock is False
-    msg = res.error_message or ""
-    # explicit, labelled boundary — NOT the generic docker-unavailable failure
-    assert "W3.2b" in msg
-    assert "chtMultiRegionSimpleFoam" in msg
-    assert "splitMeshRegions" in msg
+    assert "blockMesh" in (res.error_message or "")
+    # foamMultiRun must NOT run after a blockMesh failure, and simpleFoam never.
+    assert "foamMultiRun" not in commands
+    assert "simpleFoam" not in commands
 
 
-def test_mesh_already_provided_cht_also_hits_boundary(tmp_path, monkeypatch) -> None:
-    """Codex R0 P2 regression: a STAGED/imported CHT case
-    (mesh_already_provided=True) must ALSO hit the W3.2b boundary — not fall
-    through to the imported-case simpleFoam default (the single-region misroute
-    the guard exists to prevent)."""
+def test_mesh_already_provided_cht_never_misroutes_to_simplefoam(
+    tmp_path, monkeypatch
+) -> None:
+    """Codex R0 P2 regression (re-targeted for W3.2b): a STAGED/imported CHT case
+    (mesh_already_provided=True) must run the multi-region pipeline — NOT fall
+    through to the imported-case simpleFoam default. is_mock stays False."""
     import src.foam_agent_adapter as faa
 
     monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
     monkeypatch.setattr(faa, "docker", _FakeDocker)
 
-    # minimal pre-populated case dir (the executor only checks polyMesh/ exists)
+    # A pre-populated, ALREADY-translated CHT case dir (mesh_already_provided
+    # skips the generator, so the staged dir must carry the OF11-shaped dicts;
+    # we generate then translate it up-front to mirror an imported OF11 case).
     src_case = tmp_path / "imported_cht"
+    src_case.mkdir(parents=True)
+    ex_gen = faa.FoamAgentExecutor(work_dir=str(tmp_path / "_gen"))
+    ex_gen._generate_cht_multi_region(src_case, _cht_spec())
+    ex_gen._translate_cht_case_esi_to_of11(src_case)
+    # mesh_already_provided requires a polyMesh on disk (pre-flight check).
     (src_case / "constant" / "polyMesh").mkdir(parents=True)
+
+    commands: list[str] = []
+    fluids = ["region_hot_fluid", "region_cold_fluid"]
+    solids = ["region_solid"]
+
+    def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
+        commands.append(command)
+        if command == "foamMultiRun":
+            return True, _make_multiregion_log(fluids, solids)
+        return True, "ok"
+
+    monkeypatch.setattr(
+        faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec
+    )
 
     spec = TaskSpec(
         name="imported_cht",
@@ -322,11 +429,10 @@ def test_mesh_already_provided_cht_also_hits_boundary(tmp_path, monkeypatch) -> 
     ex = faa.FoamAgentExecutor(work_dir=str(tmp_path / "work"))
     res = ex.execute(spec)
 
-    assert res.success is False
-    msg = res.error_message or ""
-    assert "W3.2b" in msg
-    # the boundary explicitly warns against the simpleFoam misroute
-    assert "simpleFoam" in msg
+    assert res.success is True
+    assert res.is_mock is False
+    assert "foamMultiRun" in commands
+    assert "simpleFoam" not in commands
 
 
 def test_cht_never_silently_succeeds_without_docker(tmp_path, monkeypatch) -> None:
@@ -340,3 +446,83 @@ def test_cht_never_silently_succeeds_without_docker(tmp_path, monkeypatch) -> No
     res = ex.execute(_cht_spec())
     assert res.success is False
     assert res.is_mock is False
+
+
+# ----------------------------------------------------------------------
+# DEC-V61-225 unit tests: solver-command mapping + ESI→OF11 translation pins
+# ----------------------------------------------------------------------
+
+def test_of11_solver_command_mapping(tmp_path: Path) -> None:
+    """The incompressible RANS family maps to foamRun -solver incompressibleFluid;
+    everything else (notably buoyantFoam, deferred) passes through unchanged."""
+    ex = FoamAgentExecutor(work_dir=str(tmp_path / "_w"))
+    for name in ("simpleFoam", "pimpleFoam", "icoFoam"):
+        assert ex._of11_solver_command(name) == "foamRun -solver incompressibleFluid"
+    # buoyantFoam intentionally unmapped/deferred → passes through (fails honestly)
+    assert ex._of11_solver_command("buoyantFoam") == "buoyantFoam"
+    assert (
+        ex._of11_solver_command("chtMultiRegionSimpleFoam")
+        == "chtMultiRegionSimpleFoam"
+    )
+
+
+def test_translate_cht_case_esi_to_of11_pins_six_keywords(tmp_path: Path) -> None:
+    """Pin all 6 ESI→Foundation(OF11) keyword changes on a freshly generated CHT
+    case (NO Docker). DEC-V61-225 translation table."""
+    case = _generate(tmp_path)
+    ex = FoamAgentExecutor(work_dir=str(tmp_path / "_w"))
+    fluids, solids = ex._read_cht_regions(case)
+    assert fluids == ["region_hot_fluid", "region_cold_fluid"]
+    assert solids == ["region_solid"]
+
+    ex._translate_cht_case_esi_to_of11(case)
+
+    # (1)(2)(3) solid thermophysicalProperties
+    solid_tp = (case / "constant" / "region_solid" / "thermophysicalProperties").read_text()
+    assert "constIsoSolid" in solid_tp
+    assert "constIso;" not in solid_tp  # no bare constIso remains
+    assert "eConst" in solid_tp
+    assert "hConst" not in solid_tp
+    assert "sensibleInternalEnergy" in solid_tp
+    assert "sensibleEnthalpy" not in solid_tp
+    assert "Cv 896" in solid_tp  # Cp → Cv, value preserved
+    assert "Cp " not in solid_tp
+
+    # (4) per-fluid gravity materialised from constant/g
+    top_g = (case / "constant" / "g").read_text()
+    for f in fluids:
+        fg = case / "constant" / f / "g"
+        assert fg.is_file()
+        assert fg.read_text() == top_g
+
+    # (5) per-fluid fvSolution SIMPLE: rhoMin/rhoMax removed
+    for f in fluids:
+        fv = (case / "system" / f / "fvSolution").read_text()
+        assert "rhoMin" not in fv
+        assert "rhoMax" not in fv
+
+    # (6) solid fvSolution: energy solver block key + relaxation key h → e
+    solid_fv = (case / "system" / "region_solid" / "fvSolution").read_text()
+    assert re.search(r"(?m)^\s*e\s*$", solid_fv)  # solver block key
+    assert "equations { e 0.5; }" in solid_fv
+    # the bare 'h' solver/relax keys are gone (other tokens unaffected)
+    assert not re.search(r"(?m)^\s*h\s*$", solid_fv)
+    assert "{ h 0.5; }" not in solid_fv
+
+
+@pytest.mark.skipif(
+    os.environ.get("CFD_LIVE_OF11") != "1",
+    reason="opt-in live OF11 run (set CFD_LIVE_OF11=1 with the cfd-openfoam container up)",
+)
+def test_cht_live_run_through_adapter_of11(tmp_path: Path) -> None:
+    """Opt-in: the REAL OF11/foamMultiRun run through the adapter, gated on
+    CFD_LIVE_OF11=1 (so CI without docker stays green). Reproduces the logged
+    solve: success=True, is_mock=False, ≥1 region residual, reached End."""
+    ex = FoamAgentExecutor(work_dir=str(tmp_path / "work"))
+    res = ex.execute(_cht_spec())
+    assert res.success is True, res.error_message
+    assert res.is_mock is False
+    assert res.key_quantities.get("reached_end") is True
+    # at least the solid energy + one fluid pressure residual were parsed
+    assert any(k.endswith(":e") for k in res.residuals)
+    assert any(k.endswith(":p_rgh") for k in res.residuals)

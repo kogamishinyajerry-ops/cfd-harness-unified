@@ -1151,7 +1151,7 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
 
         commands = []
 
-        def fake_docker_exec(self, command, working_dir, timeout):
+        def fake_docker_exec(self, command, working_dir, timeout, log_name=None):
             commands.append(command)
             return True, f"ok:{command}"
 
@@ -1163,9 +1163,13 @@ Execution time = 0.456 s,  ClockTime = 0.500 s
         result = executor.execute(make_airfoil_task())
 
         assert result.success is True
+        # DEC-V61-225 (P3 W3.2b): the EXECUTED solver command is now the
+        # OF11/foamRun-translated form (simpleFoam → foamRun -solver
+        # incompressibleFluid); the log file + parse stay keyed on simpleFoam
+        # via _docker_exec(log_name=...).
         assert commands[:2] == [
             "blockMesh",
-            "simpleFoam",
+            "foamRun -solver incompressibleFluid",
         ]
         assert 'transformPoints "scale=(1 0 1)"' not in commands
         assert "extrudeMesh" not in commands
@@ -3188,7 +3192,7 @@ class TestM6_1MeshAlreadyProvidedFlag:
         called: list[str] = []
         gen_called: list[str] = []
 
-        def fake_docker_exec(self_, command, working_dir, timeout):
+        def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
             called.append(command)
             return True, "ok"
 
@@ -3258,7 +3262,7 @@ class TestM6_1MeshAlreadyProvidedFlag:
 
         called: list[str] = []
 
-        def fake_docker_exec(self_, command, working_dir, timeout):
+        def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
             called.append(command)
             return True, "ok"
 
@@ -3317,7 +3321,7 @@ class TestM6_1MeshAlreadyProvidedFlag:
         # Capture which path _docker_exec is told to operate on.
         exec_paths: list[str] = []
 
-        def fake_docker_exec(self_, command, working_dir, timeout):
+        def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
             exec_paths.append(working_dir)
             return True, "ok"
 
@@ -3435,7 +3439,7 @@ class TestM6_1MeshAlreadyProvidedFlag:
         called: list[str] = []
         staged_paths: list[Path] = []
 
-        def fake_docker_exec(self_, command, working_dir, timeout):
+        def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
             called.append(command)
             return True, "ok"
 
@@ -3625,7 +3629,7 @@ class TestM6_1MeshAlreadyProvidedFlag:
 
         called: list[str] = []
 
-        def fake_docker_exec(self_, command, working_dir, timeout):
+        def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
             called.append(command)
             return True, "ok"
 

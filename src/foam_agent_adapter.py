@@ -794,40 +794,22 @@ class FoamAgentExecutor:
                 self._generate_lid_driven_cavity(case_host_dir, task_spec)
                 solver_name = "simpleFoam"
 
-            # P3 W3.2a (DEC-V61-223) — explicit live-run boundary. The CHT
-            # multi-region case GENERATOR + geometry dispatch + case_family
-            # registration land in W3.2a (offline-testable). The LIVE
-            # multi-region execution pipeline — blockMesh -> splitMeshRegions
-            # -cellZones -> region-scoped chtMultiRegionSimpleFoam — is NOT
-            # wired into the single-region flow below, and the adapter's
-            # hardwired OF10 bashrc (line ~7879) has no chtMultiRegionSimpleFoam
-            # binary (ESI-image only). Both are W3.2b (charter row W3.2
-            # live-run). Fail LOUD + explicit here rather than running the
-            # single-region blockMesh->solver pipeline on a multi-region case
-            # (which would emit nonsense / V94-class errors).
-            #
-            # This fires for ALL CHT cases regardless of mesh provenance (Codex
-            # R0 P2): a staged/imported CHT case (mesh_already_provided=True)
-            # would otherwise fall through to the simpleFoam default at the top
-            # of the dispatch — the exact single-region misrouting this guard
-            # prevents. Live CHT execution (fresh-generated OR imported mesh) is
-            # uniformly W3.2b.
+            # P3 W3.2b (DEC-V61-225) — LIVE CHT multi-region run. The W3.2a
+            # boundary (which deferred this to W3.2b and failed LOUD) is now
+            # REPLACED by the proven OF11/foamMultiRun pipeline: host-side
+            # ESI→Foundation dict translation → blockMesh → splitMeshRegions
+            # -cellZones -overwrite → foamMultiRun → per-region log parse. A CHT
+            # case is NEVER routed to the single-region simpleFoam path: this
+            # dedicated runner runs OR returns a structured BLOCK (honest), and
+            # the early dispatch (top of this try) never reaches the
+            # single-region blockMesh→solver flow for CHT_MULTI_REGION.
             if task_spec.geometry_type == GeometryType.CHT_MULTI_REGION:
-                return self._fail(
-                    "CHT_MULTI_REGION live execution is deferred to P3 W3.2b "
-                    "(DEC-V61-217 charter row W3.2 live-run): the multi-region "
-                    "mesh pipeline (blockMesh -> splitMeshRegions -cellZones -> "
-                    "region-scoped chtMultiRegionSimpleFoam) is not wired into "
-                    "this single-region executor flow, and the adapter's "
-                    "hardwired OF10 bashrc has no chtMultiRegionSimpleFoam "
-                    "binary (ESI-image only). W3.2a wired CHT generation + "
-                    "dispatch + case_family; a freshly-generated CHT case dir is "
-                    "structurally complete and audit-ingestable, but neither a "
-                    "generated nor an imported (mesh_already_provided) CHT case "
-                    "is live-runnable through this adapter yet — and a CHT case "
-                    "must NEVER be routed to the single-region simpleFoam path.",
-                    time.monotonic() - t0,
-                    raw_output_path=raw_output_path,
+                return self._execute_cht_multi_region(
+                    task_spec,
+                    case_host_dir,
+                    case_cont_dir,
+                    raw_output_path,
+                    t0,
                 )
 
             # 5. 执行 blockMesh — DEC-V61-090 (M6.1): skipped when an
@@ -886,8 +868,17 @@ class FoamAgentExecutor:
                     )
 
             # 6. 执行求解器
+            # DEC-V61-225 (P3 W3.2b): run the OF11/foamRun-translated command
+            # (incompressible RANS → `foamRun -solver incompressibleFluid`) but
+            # keep the LOG filename + error string + log parse keyed on the
+            # original `solver_name` (log_name=solver_name) so the
+            # `log.{solver_name}` parser (:~934) and the `_parse_solver_log`
+            # branch stay unchanged.
             solver_ok, solver_log = self._docker_exec(
-                solver_name, case_cont_dir, self._timeout,
+                self._of11_solver_command(solver_name),
+                case_cont_dir,
+                self._timeout,
+                log_name=solver_name,
             )
             if not solver_ok:
                 return self._fail(
@@ -2829,6 +2820,289 @@ fields          (U);
             + "}\n"
             + FOOT,
         )
+
+    # ------------------------------------------------------------------
+    # P3 W3.2b (DEC-V61-225) — LIVE CHT multi-region run (OF11/foamMultiRun)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _read_cht_regions(case_host_dir: Path) -> Tuple[List[str], List[str]]:
+        """Parse ``constant/regionProperties`` → (fluid_regions, solid_regions).
+
+        DEC-V61-225. The reader is deliberately tolerant of the exact
+        whitespace the W3.2a generator emits::
+
+            regions
+            (
+                fluid       (region_hot_fluid region_cold_fluid)
+                solid       (region_solid)
+            );
+
+        Returns the region-name lists in declaration order. Raises
+        ``ValueError`` if the file is missing or no regions are found (the
+        caller turns that into a structured BLOCK).
+        """
+        rp = case_host_dir / "constant" / "regionProperties"
+        if not rp.is_file():
+            raise ValueError(f"constant/regionProperties not found at {rp}")
+        text = rp.read_text(encoding="utf-8")
+
+        def _names_for(group: str) -> List[str]:
+            # match `fluid   ( a b c )` — group name then a parenthesised list.
+            m = re.search(group + r"\s*\(\s*([^)]*)\)", text)
+            if not m:
+                return []
+            return [tok for tok in m.group(1).split() if tok]
+
+        fluids = _names_for("fluid")
+        solids = _names_for("solid")
+        if not fluids and not solids:
+            raise ValueError(
+                f"no fluid/solid regions parsed from {rp} (content:\n{text[:400]})"
+            )
+        return fluids, solids
+
+    def _translate_cht_case_esi_to_of11(self, case_host_dir: Path) -> None:
+        """Deterministic host-side ESI→Foundation(OF11) dict translation.
+
+        DEC-V61-225 (P3 W3.2b). The W3.2a generator emits ESI-shaped CHT dicts;
+        OF11/foamMultiRun requires a BOUNDED set of keyword changes (each one
+        confirmed against the live solve log
+        ``.planning/intel/p3_w32b/of11_foammultirun_solve.log``). This applies
+        exactly the 6-keyword translation table from the DEC, in-place on the
+        already-generated host case dir, BEFORE the in-container pipeline
+        uploads it. NOTE: by design (b) the GENERATOR is left untouched (its
+        ESI output round-trips through the W3.0.x extractor contract / 519
+        tests); the OF11 reconciliation is isolated to this run-path pass.
+
+        The 6 changes:
+          1. solid thermophysicalProperties: transport constIso → constIsoSolid
+          2. ″                              : thermo    hConst   → eConst
+          3. ″                              : energy sensibleEnthalpy →
+             sensibleInternalEnergy  AND  thermodynamics Cp → Cv (value kept)
+          4. each fluid: constant/<fluid>/g materialised (copy constant/g)
+          5. each fluid system/<fluid>/fvSolution SIMPLE: rhoMin/rhoMax removed
+          6. solid system/<solid>/fvSolution: energy solver key + relax key h → e
+        """
+        fluids, solids = self._read_cht_regions(case_host_dir)
+        const = case_host_dir / "constant"
+        system = case_host_dir / "system"
+
+        # --- (1)(2)(3) per solid thermophysicalProperties ---------------------
+        for sname in solids:
+            tp = const / sname / "thermophysicalProperties"
+            if not tp.is_file():
+                raise ValueError(
+                    f"solid thermophysicalProperties missing: {tp}"
+                )
+            txt = tp.read_text(encoding="utf-8")
+            # (1) transport constIso → constIsoSolid. Word-boundary-anchored so
+            # an already-translated `constIsoSolid` is NOT doubled.
+            txt = re.sub(
+                r"(transport\s+)constIso\b(?!Solid)", r"\1constIsoSolid", txt
+            )
+            # (2) thermo hConst → eConst
+            txt = re.sub(r"(thermo\s+)hConst\b", r"\1eConst", txt)
+            # (3a) energy sensibleEnthalpy → sensibleInternalEnergy
+            txt = re.sub(
+                r"(energy\s+)sensibleEnthalpy\b", r"\1sensibleInternalEnergy", txt
+            )
+            # (3b) inside thermodynamics: rename Cp key → Cv (keep its value).
+            # Only the Cp token, not e.g. a substring in another identifier.
+            txt = re.sub(r"\bCp(\s+[-+0-9.eE]+\s*;)", r"Cv\1", txt)
+            tp.write_text(txt, encoding="utf-8")
+
+        # --- (4) per-fluid gravity: copy top-level constant/g -----------------
+        top_g = const / "g"
+        if not top_g.is_file():
+            raise ValueError(f"top-level constant/g missing: {top_g}")
+        g_body = top_g.read_text(encoding="utf-8")
+        for fname in fluids:
+            fg = const / fname / "g"
+            if not fg.is_file():
+                fg.parent.mkdir(parents=True, exist_ok=True)
+                fg.write_text(g_body, encoding="utf-8")
+
+        # --- (5) per-fluid fvSolution SIMPLE: drop rhoMin/rhoMax --------------
+        for fname in fluids:
+            fv = system / fname / "fvSolution"
+            if not fv.is_file():
+                raise ValueError(f"fluid fvSolution missing: {fv}")
+            txt = fv.read_text(encoding="utf-8")
+            # Remove any line that declares rhoMin and/or rhoMax (the generator
+            # emits them together: "    rhoMin 0.2; rhoMax 2.0;\n"). Tolerant of
+            # either-one-only and surrounding whitespace.
+            lines = [
+                ln for ln in txt.splitlines(keepends=True)
+                if not re.search(r"\b(rhoMin|rhoMax)\b", ln)
+            ]
+            fv.write_text("".join(lines), encoding="utf-8")
+
+        # --- (6) per-solid fvSolution: energy solver + relax key h → e --------
+        for sname in solids:
+            fv = system / sname / "fvSolution"
+            if not fv.is_file():
+                raise ValueError(f"solid fvSolution missing: {fv}")
+            txt = fv.read_text(encoding="utf-8")
+            # Rename the standalone `h` solver block key and the `h` relaxation
+            # key to `e`. The generator emits `    h\n    {` (solver block) and
+            # `equations { h 0.5; }` (relaxation). Both are matched precisely so
+            # we never touch a `phi`/`rho`/other token containing an "h".
+            #   solver-block key:  ^<indent>h$  (the key on its own line)
+            txt = re.sub(r"(?m)^(\s*)h(\s*)$", r"\1e\2", txt)
+            #   relaxation key:    `h <value>;` inside `equations { ... }`
+            txt = re.sub(r"\bh(\s+[-+0-9.eE]+\s*;)", r"e\1", txt)
+            fv.write_text(txt, encoding="utf-8")
+
+    def _parse_cht_multiregion_log(
+        self, log_text: str, fluids: List[str], solids: List[str]
+    ) -> Tuple[Dict[str, float], Dict[str, Any]]:
+        """Parse a foamMultiRun log → per-region final residuals + continuity.
+
+        DEC-V61-225. foamMultiRun prefixes every line with the region name, e.g.
+        ``region_hot_fluid  GAMG:  Solving for p_rgh, Initial residual = ...``.
+        We capture the LAST (final-iteration) initial-residual per (region,var)
+        and the last per-region time-step continuity error. Returns
+        ``(residuals, key_quantities)`` keyed as ``<region>:<var>``.
+        """
+        residuals: Dict[str, float] = {}
+        key_quantities: Dict[str, Any] = {}
+        all_regions = list(fluids) + list(solids)
+        # `Solving for <var>, Initial residual = <x>` with a leading region tag.
+        solve_re = re.compile(
+            r"^(?P<region>\S+)\s+.*?Solving for (?P<var>\w+),"
+            r".*?Initial residual\s*=\s*(?P<res>[\d.eE+-]+)"
+        )
+        cont_re = re.compile(
+            r"^(?P<region>\S+)\s+.*?time step continuity errors :"
+            r".*?sum local\s*=\s*(?P<sl>[\d.eE+-]+)"
+        )
+        for line in log_text.splitlines():
+            m = solve_re.match(line)
+            if m and m.group("region") in all_regions:
+                key = f"{m.group('region')}:{m.group('var')}"
+                try:
+                    residuals[key] = float(m.group("res"))
+                except ValueError:
+                    pass
+                continue
+            c = cont_re.match(line)
+            if c and c.group("region") in all_regions:
+                try:
+                    key_quantities[
+                        f"{c.group('region')}:continuity_sum_local"
+                    ] = float(c.group("sl"))
+                except ValueError:
+                    pass
+        key_quantities["regions"] = all_regions
+        key_quantities["reached_end"] = log_text.rstrip().endswith("End")
+        return residuals, key_quantities
+
+    def _execute_cht_multi_region(
+        self,
+        task_spec: TaskSpec,
+        case_host_dir: Path,
+        case_cont_dir: str,
+        raw_output_path: Optional[str],
+        t0: float,
+    ) -> ExecutionResult:
+        """LIVE CHT multi-region run via OF11/foamMultiRun (DEC-V61-225, W3.2b).
+
+        Pipeline (PROVEN against
+        ``.planning/intel/p3_w32b/of11_foammultirun_solve.log``):
+
+          (a) host-side ESI→Foundation translation of the W3.2a-generated case
+              (``_translate_cht_case_esi_to_of11``) — done BEFORE any container
+              call so the translated dicts upload.
+          (b) in-container, each via ``_docker_exec`` (which re-uploads the host
+              case dir on every call via put_archive but does NOT delete
+              in-container files absent from the tar, so blockMesh's
+              ``constant/polyMesh`` and splitMeshRegions' per-region
+              ``constant/<region>/polyMesh`` PERSIST across the later calls):
+                  blockMesh
+                  splitMeshRegions -cellZones -overwrite
+                  foamMultiRun                       (log_name="foamMultiRun")
+          (c) parse the foamMultiRun log for per-region residuals/continuity and
+              return ``ExecutionResult(success=True, is_mock=False, ...)``.
+
+        On ANY failure (non-zero blockMesh/split/foamMultiRun, missing regions,
+        or container unavailable) returns ``self._fail(...)`` → an HONEST BLOCK.
+        A CHT case is NEVER misrouted to the single-region simpleFoam path and
+        this method NEVER crashes the caller.
+        """
+        try:
+            # (a) deterministic host-side ESI→Foundation translation.
+            try:
+                fluids, solids = self._read_cht_regions(case_host_dir)
+                self._translate_cht_case_esi_to_of11(case_host_dir)
+            except Exception as exc:  # translation / region-discovery failure
+                return self._fail(
+                    f"CHT ESI→OF11 translation failed (W3.2b/DEC-V61-225): "
+                    f"{exc!r}. The generated case dir is structurally complete "
+                    "but could not be reconciled to the OF11 dict shape; no "
+                    "solver was run (honest BLOCK, never a single-region "
+                    "misroute).",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            # (b) in-container pipeline.
+            blockmesh_ok, blockmesh_log = self._docker_exec(
+                "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
+            )
+            if not blockmesh_ok:
+                return self._fail(
+                    f"CHT blockMesh failed (W3.2b/DEC-V61-225):\n{blockmesh_log}",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            split_ok, split_log = self._docker_exec(
+                "splitMeshRegions -cellZones -overwrite",
+                case_cont_dir,
+                self.BLOCK_MESH_TIMEOUT,
+            )
+            if not split_ok:
+                return self._fail(
+                    "CHT splitMeshRegions -cellZones -overwrite failed "
+                    f"(W3.2b/DEC-V61-225):\n{split_log}",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            solver_ok, solver_log = self._docker_exec(
+                "foamMultiRun",
+                case_cont_dir,
+                self._timeout,
+                log_name="foamMultiRun",
+            )
+            if not solver_ok:
+                return self._fail(
+                    f"CHT foamMultiRun failed (W3.2b/DEC-V61-225):\n{solver_log}",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            # (c) parse per-region residuals/continuity.
+            residuals, key_quantities = self._parse_cht_multiregion_log(
+                solver_log, fluids, solids
+            )
+            elapsed = time.monotonic() - t0
+            return ExecutionResult(
+                success=True,
+                is_mock=False,
+                residuals=residuals,
+                key_quantities=key_quantities,
+                execution_time_s=elapsed,
+                raw_output_path=raw_output_path,
+            )
+        except Exception as exc:  # belt-and-braces: never crash the caller
+            return self._fail(
+                f"CHT multi-region run raised unexpectedly "
+                f"(W3.2b/DEC-V61-225): {exc!r}",
+                time.monotonic() - t0,
+                raw_output_path=raw_output_path,
+            )
 
     def _generate_natural_convection_cavity(self, case_dir: Path, task_spec: TaskSpec) -> None:
         """生成自然对流腔体（差温腔体）OpenFOAM case 文件。
@@ -8336,11 +8610,37 @@ mergePatchPairs
     # Docker execution helpers
     # ------------------------------------------------------------------
 
+    # DEC-V61-225 (P3 W3.2b): the adapter historically emitted ESI solver
+    # names (simpleFoam/pimpleFoam/icoFoam). The only runnable backend is the
+    # Foundation OF11 image, which runs single-region incompressible RANS via
+    # the `foamRun -solver incompressibleFluid` module (PROVEN live: a
+    # foam_agent_adapter-generated BACKWARD_FACING_STEP case ran AS-IS — only
+    # the solver COMMAND changes, ZERO case translation). This maps the
+    # incompressible family to that command; everything else (notably
+    # `buoyantFoam`, a distinct solver family deferred to a follow-up sub-DEC)
+    # passes through UNCHANGED so it fails honestly in OF11 rather than being
+    # silently misrouted.
+    _OF11_INCOMPRESSIBLE_SOLVERS = frozenset({"simpleFoam", "pimpleFoam", "icoFoam"})
+
+    def _of11_solver_command(self, solver_name: str) -> str:
+        """Translate an ESI solver NAME to its OF11/foamRun run-command.
+
+        DEC-V61-225: incompressible RANS family → ``foamRun -solver
+        incompressibleFluid``; all other names pass through unchanged
+        (``buoyantFoam`` intentionally unmapped/deferred — passes through =
+        fails honestly in OF11, never a silent misrun; CHT uses ``foamMultiRun``
+        via :meth:`_execute_cht_multi_region`).
+        """
+        if solver_name in self._OF11_INCOMPRESSIBLE_SOLVERS:
+            return "foamRun -solver incompressibleFluid"
+        return solver_name
+
     def _docker_exec(
         self,
         command: str,
         working_dir: str,
         timeout: int,
+        log_name: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """在 cfd-openfoam 容器中执行命令，返回 (success, stdout_log)。
 
@@ -8350,6 +8650,13 @@ mergePatchPairs
         3. 以 root 权限 chmod 确保 openfoam 可写
         4. 执行 OpenFOAM 命令
         5. 复制 log 文件回宿主机
+
+        DEC-V61-225 (P3 W3.2b): ``log_name`` decouples the log FILENAME from the
+        executed COMMAND. The RANS reconciliation runs the translated
+        ``foamRun -solver incompressibleFluid`` command but must still write
+        ``log.simpleFoam`` (the original solver_name) so the existing
+        ``log.{solver_name}`` parser (:~934) is unchanged. When ``log_name`` is
+        None the behaviour is identical to before (sanitize the command itself).
         """
         container = self._docker_client.containers.get(self._container_name)
         case_id = working_dir.split("/")[-1]
@@ -8381,9 +8688,12 @@ mergePatchPairs
             print(f"[WARN] chmod exec_run failed: {e}", file=_sys.stderr)
 
         # Step 4: 执行 OpenFOAM 命令
-        safe_log_name = re.sub(r"[^a-zA-Z0-9]", "_", command).strip("_")
+        # DEC-V61-225: sanitize log_name (the desired log basename, e.g. the
+        # original solver_name) when provided, else fall back to the command
+        # itself (unchanged legacy behaviour for blockMesh/postProcess/etc.).
+        safe_log_name = re.sub(r"[^a-zA-Z0-9]", "_", (log_name or command)).strip("_")
         bash_cmd = (
-            f"source /opt/openfoam10/etc/bashrc && "
+            f"source /opt/openfoam11/etc/bashrc && "
             f"cd {working_dir} && "
             f"{command} > log.{safe_log_name} 2>&1"
         )
