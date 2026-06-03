@@ -1,6 +1,41 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.2a LANDED + 2026-06-03 TAKEOVER RE-ASSESSMENT (read first)
+> ## ⏩ MOST RECENT — P3 W3.2b DE-RISKED: BOTH paths PROVEN to run in OF11 (read first)
+>
+> **Status**: `P3_IN_PROGRESS`. HEAD ≈ `5b11627`+docs. **runnable-coverage still 1**
+> (no run through the adapter YET — proven only in throwaway containers).
+> **User decisions this session**: Option **A** (reconcile adapter → OF11/foamRun &
+> run CHT) + scope **1b** (reconcile the WHOLE execution path: RANS **and** CHT).
+>
+> **What's PROVEN (live, in OF11 `openfoam/openfoam11-paraview510`)**:
+> - **Probe**: `foam_agent_adapter.execute()` hard-fails at `containers.get(
+>   "cfd-openfoam")` (`:581-601`) — container absent → the ENTIRE adapter execution
+>   path is dead in this env. coverage=1 (RANS) was `cfdtrust`-produced, never the
+>   adapter. Project-wide execution staleness.
+> - **CHT**: W3.2a-generated case runs end-to-end via `foamMultiRun` — 200 SIMPLE
+>   iters to `End`, 0 ±1e+300, after 6 ESI→Foundation dict translations (table in
+>   DEC-V61-225). blockMesh + `splitMeshRegions -cellZones` clean as-is.
+> - **RANS**: adapter-generated `BACKWARD_FACING_STEP` runs **AS-IS** (zero case
+>   translation) via `foamRun -solver incompressibleFluid` — 7360 cells, to `End`,
+>   21.6s. RANS = just a solver-COMMAND swap.
+> - **Infra provisioned**: a live OF11 `cfd-openfoam` container is up
+>   (`docker run -d --name cfd-openfoam --platform linux/amd64 --entrypoint tail
+>   openfoam/openfoam11-paraview510 -f /dev/null`).
+>
+> **NEXT = IMPLEMENT W3.2b (DEC-V61-225 has the surgical map — de-risked)**: in
+> `src/foam_agent_adapter.py`: (1) bashrc `:8386` OF10→OF11; (2) `_docker_exec`
+> +`log_name` param; (3) `_of11_solver_command` {simpleFoam,pimpleFoam,icoFoam}→
+> `foamRun -solver incompressibleFluid` + wire `:889`; (4) replace CHT boundary
+> `:815-831` with `_execute_cht_multi_region` (blockMesh→splitMeshRegions→6-keyword
+> translate→foamMultiRun→parse); (5) reconcile ~6 `fake_docker_exec` (+`log_name`)
+> + flip the W3.2a boundary test + add translation/live tests; (6) feat→Codex
+> round-cap=3→fix. `buoyantFoam` deferred (needs a `foamRun -solver fluid` probe).
+> Then W3.3 V&V gate flips coverage 1→2. **Caveat**: this is load-bearing solver
+> code → don't rush; full Codex chain required.
+>
+> ---
+>
+> ## Earlier — P3 W3.2a LANDED + 2026-06-03 TAKEOVER RE-ASSESSMENT
 >
 > **Status**: `P3_IN_PROGRESS`. **HEAD = `8391973`**. **runnable-coverage STILL 1.**
 >
