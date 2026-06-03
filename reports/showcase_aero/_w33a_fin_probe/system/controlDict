@@ -1,0 +1,121 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// OF11 Foundation: single solid region run via the generic foamRun application
+// loading the 'solid' module (thermal transport in a solid region).
+// Equivalent CLI override:  foamRun -solver solid
+application     foamRun;
+
+solver          solid;
+
+startFrom       startTime;
+startTime       0;
+
+stopAt          endTime;
+
+// With ddtSchemes 'steadyState' (see fvSchemes) each step is one iteration;
+// 400 is far more than enough for this linear conduction problem to converge
+// to machine round-off.
+endTime         400;
+deltaT          1;
+
+writeControl    timeStep;
+writeInterval   400;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+writePrecision  10;
+writeCompression off;
+
+timeFormat      general;
+timePrecision   6;
+
+runTimeModifiable true;
+
+// ------------------------------------------------------------------------- //
+// Automatic extraction of the verification quantities at the converged time.
+//   wallHeatFluxFO -> volScalarField 'wallHeatFlux' on all wall patches.
+//                     Its own .dat file also reports Q [W] per patch directly.
+//   basePower      -> areaIntegrate(wallHeatFlux) over 'base'  -> heat rate [W]
+//   finPower       -> areaIntegrate(wallHeatFlux) over 'fin'   -> cross-check [W]
+//   tipT           -> areaAverage(T) over 'tip'   -> tip temperature  [K]
+//   baseT          -> areaAverage(T) over 'base'  -> sanity (== 400 K)
+//
+// Explicit surfaceFieldValue blocks are used (NOT '#includeFunc patchIntegrate(
+// ...)') so the case does not depend on caseDict argument-substitution keys,
+// which differ subtly between OF point releases. Verified arg form for the
+// underlying caseDict is 'select patch; name <p>; fields (<f>);'.
+// ------------------------------------------------------------------------- //
+functions
+{
+    wallHeatFluxFO
+    {
+        type            wallHeatFlux;
+        libs            ("libfieldFunctionObjects.so");
+        patches         (base fin tip);   // all three are type wall
+        writeControl    writeTime;
+    }
+
+    basePower
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        select          patch;
+        name            base;
+        operation       areaIntegrate;
+        fields          (wallHeatFlux);
+        writeFields     false;
+        writeControl    writeTime;
+    }
+
+    finPower
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        select          patch;
+        name            fin;
+        operation       areaIntegrate;
+        fields          (wallHeatFlux);
+        writeFields     false;
+        writeControl    writeTime;
+    }
+
+    tipT
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        select          patch;
+        name            tip;
+        operation       areaAverage;
+        fields          (T);
+        writeFields     false;
+        writeControl    writeTime;
+    }
+
+    baseT
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        select          patch;
+        name            base;
+        operation       areaAverage;
+        fields          (T);
+        writeFields     false;
+        writeControl    writeTime;
+    }
+}
+
+// ************************************************************************* //

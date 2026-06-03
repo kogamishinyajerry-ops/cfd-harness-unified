@@ -1,0 +1,53 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [ 0 0 0 1 0 0 0 ];
+
+// Any reasonable seed; the steady solution is BC-driven and guess-independent.
+internalField   uniform 300;
+
+boundaryField
+{
+    base                        // x = 0 : fixed fin-root temperature, theta_b = 100 K
+    {
+        type            fixedValue;
+        value           uniform 400;
+    }
+
+    tip                         // x = L : adiabatic fin tip
+    {
+        type            zeroGradient;
+    }
+
+    fin                         // 4 lateral surfaces : convective (Robin) BC
+    {
+        // OF11 Foundation replacement for ESI/OF10 externalWallHeatFluxTemperature.
+        // 'externalTemperature' is a mixed (Robin) BC: q = h*(T - Ta).
+        // VERIFIED from OF11 source:
+        //   h  -> scalarField  => 'h uniform 100;'
+        //   Ta -> Function1    => 'Ta constant 300;'
+        // kappa is taken AUTOMATICALLY from the region thermophysicalTransport
+        // model (constSolidThermo kappa = 180); there is NO kappaMethod/kappa
+        // keyword in OF11 (the key OF11-vs-ESI difference).
+        type            externalTemperature;
+        h               uniform 100;        // [W/m^2/K] heat transfer coefficient
+        Ta              constant 300;       // [K]       ambient (Function1, uniform in space)
+        thicknessLayers ();                 // no contact-resistance layers
+        kappaLayers     ();
+        value           uniform 300;        // initial patch value (mixed-BC seed)
+    }
+}
+
+// ************************************************************************* //

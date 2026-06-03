@@ -1,0 +1,5 @@
+# Regenerable solver output — the case dicts (committed) + `blockMesh` + `foamRun
+# -solver solid` reproduce these. The distilled QoI evidence lives in
+# postProcessing/*/0/surfaceFieldValue.dat (committed) + log.foamRun.
+400/
+constant/polyMesh/

@@ -1,0 +1,15 @@
+#!/bin/sh
+cd "${0%/*}" || exit 1                          # run from this case directory
+. "${WM_PROJECT_DIR:?}/bin/tools/RunFunctions"  # OpenFOAM run functions
+
+runApplication blockMesh
+runApplication checkMesh
+runApplication foamRun                           # reads 'solver solid' from controlDict
+
+# --- Extraction (also produced live by the in-controlDict functions) ----------
+# OF11 CLI notes:
+#   * the utility is 'foamPostProcess' (NOT 'postProcess').
+#   * pass '-solver solid' so the solid thermo/transport (hence wallHeatFlux's
+#     kappa) is constructed; otherwise wallHeatFlux FATAL-errors 'Unable to find
+#     thermophysicalTransportModel'.
+runApplication -s wallHeatFlux foamPostProcess -solver solid -func wallHeatFlux -latestTime

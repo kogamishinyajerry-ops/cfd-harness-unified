@@ -1,0 +1,90 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Straight rectangular fin (Incropera FHMT Table 3.4, adiabatic tip).
+//   x : length    L = 0.05 m   (base at x=0, tip at x=L)
+//   y : width     w = 1.0  m
+//   z : thickness t = 0.003 m
+// Biot = h*(t/2)/k = 8.3e-4 << 1  ->  effectively 1-D conduction along x,
+// so transverse resolution is irrelevant; ny=nz=2 only keeps checkMesh clean.
+
+convertToMeters 1;
+
+L   0.05;
+w   1.0;
+t   0.003;
+
+vertices
+(
+    (0      0      0   )   // 0
+    ($L     0      0   )   // 1
+    ($L     $w     0   )   // 2
+    (0      $w     0   )   // 3
+    (0      0      $t  )   // 4
+    ($L     0      $t  )   // 5
+    ($L     $w     $t  )   // 6
+    (0      $w     $t  )   // 7
+);
+
+// nx=100 resolves the axial fin-length gradient to <0.01%; ny=nz=2 are minimal.
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (100 2 2) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    base                    // x = 0 : fin root, fixed base temperature
+    {
+        // 'wall' (NOT 'patch') is mandatory: the wallHeatFlux function object
+        // filters to wallPolyPatch and silently drops non-wall patches.
+        type wall;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+
+    tip                     // x = L : adiabatic fin tip (zeroGradient)
+    {
+        type wall;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+
+    fin                     // 4 lateral surfaces : convecting fin surface (Robin)
+    {
+        type wall;
+        faces
+        (
+            (0 1 5 4)       // y = 0  (-y face)
+            (3 7 6 2)       // y = w  (+y face)
+            (0 3 2 1)       // z = 0  (-z face)
+            (4 5 6 7)       // z = t  (+z face)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

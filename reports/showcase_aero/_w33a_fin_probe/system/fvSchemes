@@ -1,0 +1,52 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// 'steadyState' drops the fvm::ddt(rho,e) term in the solid energy equation,
+// leaving the pure steady conduction balance div(q) = 0, i.e. div(kappa grad T)=0.
+ddtSchemes
+{
+    default         steadyState;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+}
+
+// No convection in a solid; the energy equation has no genuine div() term
+// (thermophysicalTransport->divq(e) is discretised via laplacianSchemes).
+divSchemes
+{
+    default         none;
+}
+
+// 'corrected' is harmless on the perfectly orthogonal hex mesh and strictly
+// safer than 'uncorrected' if checkMesh ever reports epsilon non-orthogonality.
+laplacianSchemes
+{
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+// ************************************************************************* //

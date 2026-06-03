@@ -1,0 +1,52 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// The 'solid' module solves the energy equation for the INTERNAL-ENERGY field
+// 'e' (constSolidThermo -> sensibleInternalEnergy, e = Cv*T).  Hence the linear
+// solver entries MUST be keyed on 'e'/'eFinal' (NOT 'T').
+solvers
+{
+    e
+    {
+        solver           PCG;
+        preconditioner   DIC;
+        tolerance        1e-08;
+        relTol           0.01;
+    }
+
+    eFinal
+    {
+        $e;
+        relTol           0;
+    }
+}
+
+// foamRun drives the module inside a PIMPLE control. The mesh is perfectly
+// orthogonal so no non-orthogonal correction is needed.
+PIMPLE
+{
+    nNonOrthogonalCorrectors 0;
+}
+
+// Linear, single-equation problem -> no under-relaxation required.
+relaxationFactors
+{
+    equations
+    {
+        e       1;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,43 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      physicalProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// OF11 Foundation 'constSolidThermo' shorthand for a constant, isotropic solid.
+// Verified format (matches the official OF11 constSolidThermo example):
+// top-level 'thermoType constSolidThermo;' + rho/Cv/kappa as {type uniform;...}.
+// Only kappa is load-bearing for the STEADY result; rho and Cv affect transients
+// only (the ddt term is dropped by steadyState) but must be present and > 0.
+// Energy variable resolves to internal energy 'e' (=> fvSolution keys 'e').
+
+thermoType          constSolidThermo;
+
+rho
+{
+    type        uniform;
+    value       8000;       // [kg/m^3]  (irrelevant at steady state)
+}
+
+Cv
+{
+    type        uniform;
+    value       500;        // [J/kg/K]  (irrelevant at steady state)
+}
+
+kappa
+{
+    type        uniform;
+    value       180;        // [W/m/K]   <-- the fin conductivity k (load-bearing)
+}
+
+// ************************************************************************* //

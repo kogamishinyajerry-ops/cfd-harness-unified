@@ -19,12 +19,18 @@
 # L=0.05 m, t=0.003 m, w=1.0 m  →  m=19.2739 /m, mL=0.96369  →
 #     eta_f = 0.77402,  theta_tip/theta_b = 0.66604   (derivation in the test)
 #
-# CONTRACT STATUS — `ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING`:
-#   W3.3a authors this contract + a self-verifying derivation test. It does NOT
-#   yet flip runnable-coverage — that needs the live OF11 run extracted through
-#   the comparator (W3.3a live step) and, for the full two-region conjugate flip,
-#   W3.3b. tolerance=0.05 (5%) follows the project gold-standard convention
-#   (DEC-V61-209-class); the analytical reference makes a tight tolerance honest.
+# CONTRACT STATUS — `SOLID_SIDE_LIVE_VALIDATED · CONJUGATE_FLIP_PENDING_W3.3b`:
+#   W3.3a authored this contract + a self-verifying derivation test, then PROVED
+#   it reproduces in a live OF11 `foamRun -solver solid` solve:
+#     fin_efficiency      sim 0.77354 vs 0.77402  -> 0.063% (PASS, <5%)
+#     tip_temperature_ratio sim 0.66622 vs 0.66604 -> 0.028% (PASS, <5%)
+#   energy-conserving (|Q_base|=|Q_fin|), adversarially CONFIRMED_WITH_CAVEATS
+#   (Workflow wi98g7czg). Evidence: .planning/intel/p3_w33a/fin_probe_evidence.md
+#   + reports/showcase_aero/_w33a_fin_probe/. This validates the SOLID conduction
+#   + imposed-h (Robin) BC against the exact adiabatic-tip fin. It does NOT yet
+#   flip runnable-coverage 1->2 — that requires W3.3b (full two-region conjugate
+#   vs Gnielinski, fluid-PRODUCED h). tolerance=0.05 (5%) per the project
+#   convention (DEC-V61-209-class); the analytical reference makes it honest.
 #
 # SCOPE CAVEAT (the W3.3a/W3.3b distinction, per the W3.3 research doc): the
 # closed form assumes a UNIFORM, KNOWN convection coefficient h on the fin
@@ -43,7 +49,7 @@ tolerance: 0.05
 source: "Incropera & DeWitt, Fundamentals of Heat and Mass Transfer, 7th ed., §3.6 Table 3.4 (straight rectangular fin, adiabatic tip); reference is closed-form, re-derived in test"
 literature_doi: "ISBN-9780470501979"
 mesh_info:
-  cells: null  # set when the live W3.3a case + blockMeshDict are authored
+  cells: 400  # thin-bar 100x2x2 hex (live W3.3a probe, checkMesh OK)
   type: structured
 solver_info:
   name: foamRun -solver solid  # OF11 Foundation solid heat-conduction module
@@ -77,7 +83,7 @@ tolerance: 0.05
 source: "Incropera & DeWitt, Fundamentals of Heat and Mass Transfer, 7th ed., §3.6 (adiabatic-tip temperature distribution); reference is closed-form, re-derived in test"
 literature_doi: "ISBN-9780470501979"
 mesh_info:
-  cells: null
+  cells: 400
   type: structured
 solver_info:
   name: foamRun -solver solid
