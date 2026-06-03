@@ -35,6 +35,12 @@ from .result_comparator import ResultComparator
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_GOLD = _REPO_ROOT / "knowledge" / "gold_standards" / "cht_straight_fin.yaml"
 
+# Adiabatic-tip energy-closure tolerance: |Q_base + Q_fin| must be within this
+# fraction of |Q_base|. The live probe achieves ~1.3e-7; 1e-3 is enormously
+# slack yet still trips a stale/zero/wrong-patch finPower (which drives the
+# residual to ~|Q_base|, ratio ~1.0). See gate_fin_against_gold.
+_ENERGY_CLOSURE_REL_TOL = 1e-3
+
 
 @dataclass(frozen=True)
 class FinGateResult:
@@ -43,6 +49,7 @@ class FinGateResult:
     passed: bool
     qois: FinConductionQoIs
     comparisons: List[Tuple[str, ComparisonResult]]
+    energy_closure_ok: bool
     summary: str
 
 
@@ -90,11 +97,31 @@ def gate_fin_against_gold(
         }
         comparisons.append((doc["quantity"], comparator.compare(result, gold)))
 
-    passed = all(cmp.passed for _, cmp in comparisons)
+    observables_ok = all(cmp.passed for _, cmp in comparisons)
+    # Adiabatic-tip energy closure is a HARD precondition of this benchmark, not
+    # decoration: with an insulated tip every watt injected at the base must leave
+    # through the fin surface, so |Q_base + Q_fin| ~ 0. A stale / wrong-patch
+    # finPower can leave basePower + tipT matching the analytical reference yet
+    # break this balance — without bounding the residual here, such an
+    # inconsistent post-processing dataset would falsely PASS (Codex R1 P2). The
+    # residual is the SOLVER's own two-channel disagreement, so this also defends
+    # the "dual-channel consistency" honesty claim from the W3.3a adversarial pass.
+    energy_threshold = _ENERGY_CLOSURE_REL_TOL * abs(qois.q_base_w)
+    energy_closure_ok = qois.energy_residual_w <= energy_threshold
+    passed = observables_ok and energy_closure_ok
+
     parts = [f"{name}={'PASS' if cmp.passed else 'FAIL'}" for name, cmp in comparisons]
+    parts.append(f"energy_closure={'PASS' if energy_closure_ok else 'FAIL'}")
     summary = (
         f"cht_analytical gate {'PASS' if passed else 'FAIL'} "
         f"(eta={qois.fin_efficiency:.5f}, tip={qois.fin_tip_temperature_ratio:.5f}, "
-        f"energy_residual={qois.energy_residual_w:.3e} W) | " + ", ".join(parts)
+        f"energy_residual={qois.energy_residual_w:.3e} W <= {energy_threshold:.3e}) | "
+        + ", ".join(parts)
     )
-    return FinGateResult(passed=passed, qois=qois, comparisons=comparisons, summary=summary)
+    return FinGateResult(
+        passed=passed,
+        qois=qois,
+        comparisons=comparisons,
+        energy_closure_ok=energy_closure_ok,
+        summary=summary,
+    )

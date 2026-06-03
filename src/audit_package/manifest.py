@@ -164,11 +164,40 @@ def _load_gold_standard(
         path = gold_root / f"{candidate}.yaml"
         if path.exists():
             try:
-                data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-                if isinstance(data, dict):
-                    return data
+                # Gold files come in two families: single-doc (schema_version 2,
+                # `observables:`) and multi-doc (quantity/reference_values — e.g.
+                # cht_straight_fin, lid_driven_cavity). Bare safe_load() raises
+                # ComposerError on multi-doc, which the old `except` swallowed,
+                # silently producing `gold_standard = null` and DROPPING the
+                # reference contract from the audit package (Codex R1 P2). Read
+                # all docs and preserve the full contract.
+                docs = [
+                    d
+                    for d in yaml.safe_load_all(path.read_text(encoding="utf-8"))
+                    if isinstance(d, dict)
+                ]
             except (yaml.YAMLError, OSError):
                 continue
+            if not docs:
+                continue
+            if len(docs) == 1:
+                return docs[0]
+            # Multi-document: wrap so downstream `.get()` consumers stay valid
+            # AND every per-quantity reference document is retained verbatim in
+            # the manifest (no observable silently dropped).
+            merged_legacy: List[str] = []
+            for doc in docs:
+                for legacy in doc.get("legacy_case_ids") or []:
+                    if isinstance(legacy, str) and legacy not in merged_legacy:
+                        merged_legacy.append(legacy)
+            wrapper: Dict[str, Any] = {
+                "case_id": (docs[0].get("case_info") or {}).get("id", candidate),
+                "multi_document": True,
+                "documents": docs,
+            }
+            if merged_legacy:
+                wrapper["legacy_case_ids"] = merged_legacy
+            return wrapper
     return None
 
 

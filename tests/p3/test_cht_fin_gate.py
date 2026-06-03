@@ -76,6 +76,7 @@ def test_energy_closure_adiabatic_tip() -> None:
 def test_cht_analytical_gate_passes_on_recorded_probe() -> None:
     result = gate_fin_against_gold(_PROBE, gold_path=_GOLD)
     assert result.passed, result.summary
+    assert result.energy_closure_ok, result.summary
     names = {name for name, _ in result.comparisons}
     assert names == {"fin_efficiency", "fin_tip_temperature_ratio"}
     for name, cmp in result.comparisons:
@@ -150,6 +151,45 @@ def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
 
     with pytest.raises((FileNotFoundError, FinExtractorError)):
         extract_fin_qois(tmp_path, h_conv=100.0, w=1.0, t=0.003, L=0.05, T_inf=300.0)
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="recorded W3.3a probe artifacts absent")
+def test_energy_closure_is_a_hard_gate_doctored_finpower_fails(tmp_path: Path) -> None:
+    """Codex R1 P2: a stale/wrong finPower must FAIL the gate even when basePower
+    and tipT still match the analytical reference. Locks energy closure as a hard
+    gate, not a decorative summary field."""
+    case = tmp_path / "stale_fin"
+    shutil.copytree(_PROBE / "postProcessing", case / "postProcessing")
+    bad = case / "postProcessing" / "finPower" / "0" / "surfaceFieldValue.dat"
+    text = bad.read_text(encoding="utf-8")
+    # zero the fin-surface heat (stale FO / wrong patch) — basePower & tipT intact
+    text = text.replace("-7.7585708246e+02", "0.0000000000e+00")
+    bad.write_text(text, encoding="utf-8")
+
+    result = gate_fin_against_gold(case, gold_path=_GOLD)
+    # the two scalar observables still match the reference ...
+    assert all(cmp.passed for _, cmp in result.comparisons), result.summary
+    # ... but energy closure is broken, so the gate as a whole FAILS
+    assert not result.energy_closure_ok
+    assert not result.passed, result.summary
+
+
+def test_audit_manifest_loader_preserves_multidoc_cht_gold() -> None:
+    """Codex R1 P2: audit manifests must not silently drop the cht reference.
+
+    audit_package.manifest._load_gold_standard previously swallowed the multi-doc
+    ComposerError and returned None (gold_standard=null in the audit package).
+    It must now return the FULL contract (both per-quantity documents)."""
+    from src.audit_package.manifest import _load_gold_standard
+
+    gold = _load_gold_standard("cht_straight_fin", _GOLD.parent)
+    assert gold is not None, "audit loader dropped the multi-doc cht gold (null contract)"
+    assert isinstance(gold, dict)
+    assert gold.get("multi_document") is True
+    assert gold.get("case_id") == "cht_straight_fin"
+    docs = gold.get("documents")
+    assert isinstance(docs, list) and len(docs) == 2
+    assert {d["quantity"] for d in docs} == {"fin_efficiency", "fin_tip_temperature_ratio"}
 
 
 def test_generic_gold_loaders_tolerate_multidoc_cht_gold() -> None:
