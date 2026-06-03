@@ -1,6 +1,52 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.2b LANDED + Codex CLOSED + Workflow Monitor SHIPPED (read first)
+> ## ⏩ MOST RECENT — P3 W3.3a GATE-WIRING LANDED + Codex APPROVE (read first)
+>
+> **Status**: `P3_IN_PROGRESS`. **HEAD = `dac52c7`**. **runnable-coverage STILL 1**
+> (W3.3a validates the SOLID side + Robin BC through a real comparison gate; the
+> formal 1→2 flip needs **W3.3b** = full two-region conjugate vs Gnielinski,
+> FLUID-produced h).
+>
+> **W3.3a gate-wiring (DEC-V61-227) LANDED + Accepted + Codex APPROVE (cap=3).**
+> The W3.3a analytical fin benchmark now runs THROUGH a real comparison gate,
+> OFFLINE (no Docker), reproducing the `84ce01d` live PASS from committed probe
+> artifacts. Authoritative comparator = **`ResultComparator`** (the
+> quantity/reference_values multi-doc family — NOT `auto_verifier`; an independent
+> read-only mapping workflow `wnpnped3d` confirmed this and corrected the prior
+> RESUME/STATE NEXT, which wrongly named `auto_verifier.gold_standard_comparator`).
+> - `src/cht_fin_extractor.py` (**Execution** plane, PURE — no comparator import):
+>   parse `postProcessing/*/surfaceFieldValue.dat` → `fin_efficiency =
+>   Q_base/(h·P·L·θ_b)`, `fin_tip_temperature_ratio = (T_tip−T_inf)/(T_base−T_inf)`,
+>   from raw solver output + inputs only (NEVER the closed form → anti-tautology),
+>   fail-closed on missing/NaN.
+> - `src/cht_fin_gate.py` (**Control** plane — only plane allowed to import both
+>   Execution + Evaluation, ≡ task_runner): `gate_fin_against_gold()` extract →
+>   `ExecutionResult` → `ResultComparator.compare()` per gold doc + a **HARD
+>   energy-closure gate** `|Q_base+Q_fin| ≤ 1e-3·|Q_base|` (Codex R1 P2-A).
+> - gold `cht_straight_fin.yaml` +`T_inf`; schema +`CONJUGATE` flow_type enum
+>   (fixed a pre-existing corpus-validator RED); `_plane_assignment`+`.importlinter`
+>   regen (lint-imports 5/5 KEPT — ADR-001 forced the extractor/gate split).
+> - `tests/p3/test_cht_fin_gate.py`: offline replay of `_w33a_fin_probe` → gate
+>   PASS; anti-cheat (doctored Q_base/finPower/T_tip → FAIL; extracted ≠ gold ref;
+>   energy closure; missing input → raise).
+> - **Codex chain (cap=3)**: R0 1×P2 (multi-doc vs single-doc loaders →
+>   `cf2e0e9`: `data_collector`+`auto_verifier` safe_load_all+first-doc,
+>   behaviour-preserving) → R1 2×P2 (energy gate + `manifest` multi-doc wrapper →
+>   `b5bd8f2`) → **R2 APPROVE**. Relay weathered a CRS-502 outage → 86gs-xhigh flap
+>   → CRS recovery (all R0–R2 CRS high). Commits e38b279/cf2e0e9/b5bd8f2/dac52c7.
+>   **Full suite 1965 passed / 3 skipped.** Report:
+>   `reports/codex_tool_reports/v61_227_w33a_gate_report.md`.
+>
+> **NEXT**: **W3.3b** — full two-region conjugate (fluid+solid) vs Gnielinski,
+> fluid-PRODUCED h → flips runnable-coverage **1→2**. (Adapter live-run *dispatch*
+> wiring for the fin is out of scope — the fin is single-region `foamRun -solver
+> solid`, gated offline; a live-through-adapter populator is a separate follow-on.)
+> **Session-end TODO**: Notion batch-sync Accepted DEC-V61-224/225/226/227. Commits
+> are LOCAL on `main` (not pushed — push is a user call).
+>
+> ---
+>
+> ## ✅ PRIOR — P3 W3.2b LANDED + Codex CLOSED + Workflow Monitor SHIPPED + W3.3a live-validated
 >
 > **Status**: `P3_IN_PROGRESS`. **HEAD = `7bb84b4`**. **runnable-coverage STILL 1**
 > (W3.2b proves CHT+RANS RUN through the adapter; formal 1→2 needs the **W3.3** V&V
