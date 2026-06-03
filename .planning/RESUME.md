@@ -44,15 +44,29 @@
 > reference can't drift or be fabricated). `contract_status =
 > ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING` — does NOT yet flip coverage.
 >
-> **NEXT (W3.3a remaining — fresh budget; load-bearing solver, don't rush)**:
-> (1) author the live OF11 fin case (blockMesh + solid thermo + Robin convective
-> BC + `foamRun -solver solid`) and PROVE it reproduces η within 5% — a W3.2b-style
-> probe FIRST; (2) per-region CHT QoI extractor (fin_efficiency/tip-ratio from the
-> solid T field) mirroring `ui/backend/audit/cfdtrust/audit/qoi.py`; (3) register
-> `gate_mode: cht_analytical` in `GoldStandardComparator` (reuse `compare()` +
-> G-gates); (4) live PASS + coverage test. Then **W3.3b** (full conjugate vs
-> Gnielinski) for the formal coverage 1→2 flip. **Other tracks**: Workflow Monitor
-> live-NEW-run runner (current backend is real-data REPLAY, not live execution) ·
+> **W3.3a LIVE-VALIDATED** `84ce01d` (ultracode): a 4-agent design workflow
+> (`wuep5hxdl` — 3 doc-grounded OF11 designers + judge; caught the ESI→OF11 BC
+> rename `externalWallHeatFluxTemperature`→`externalTemperature`) produced the
+> case; I ran it in `cfd-openfoam`; an adversarial-verify workflow (`wi98g7czg` —
+> 3 skeptics + judge) returned **CONFIRMED_WITH_CAVEATS · trustworthy**. Live
+> `foamRun -solver solid` (constSolidThermo kappa=180, 100×2×2 hex, Robin fin BC,
+> adiabatic tip, e-resid 7.83e-9): **fin_efficiency 0.77354 vs 0.77402 = 0.063%
+> PASS · tip_ratio 0.66622 vs 0.66604 = 0.028% PASS**, energy-conserving. Not
+> circular/fabricated (self-verify test is the honesty lock; dual-channel
+> flux+temp consistency; Bi=8.3e-4). `contract_status →
+> SOLID_SIDE_LIVE_VALIDATED · CONJUGATE_FLIP_PENDING_W3.3b`. Evidence:
+> `.planning/intel/p3_w33a/fin_probe_evidence.md` +
+> `reports/showcase_aero/_w33a_fin_probe/` (dicts + logs + postProcessing .dat).
+> **runnable-coverage STILL 1** (solid-side validated; the formal 1→2 flip needs
+> W3.3b, fluid-produced h).
+>
+> **NEXT (W3.3a gate-wiring — production code, its OWN feat→Codex chain)**:
+> (a) CHT QoI extractor (parse Q_base/T_tip → fin_efficiency/tip-ratio) mirroring
+> `ui/backend/audit/cfdtrust/audit/qoi.py`; (b) register `gate_mode:
+> cht_analytical` in `src/auto_verifier/gold_standard_comparator.py` (reuse
+> `compare()` + G-gates); (c) coverage test asserting the live PASS (mirror
+> `tests/test_e2e_mock.py:75`). Then **W3.3b** (full conjugate vs Gnielinski)
+> flips coverage 1→2. **Other tracks**: Workflow Monitor live-NEW-run runner ·
 > buoyantFoam→OF11. **Session-end TODO**: Notion batch-sync Accepted DECs
 > V61-224/225/226.
 >
