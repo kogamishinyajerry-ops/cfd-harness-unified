@@ -12,7 +12,7 @@ round_cap: 3
 codex_review_relay: CRS gpt-5.4 high (R0–R2; R2 after CRS-502 outage → 86gs-flap → CRS-recovered); effort=high
 codex_verdict: APPROVE (R2, cap=3 — R0 1×P2 → R1 2×P2 → R2 0 findings)
 codex_tool_report_path: reports/codex_tool_reports/v61_227_w33a_gate_report.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-06-03 (https://app.notion.com/p/374c68942bed81a2a074f9183741b91f)
 touches_shared_dec: knowledge/schemas/gold_standard_schema.json (additive enum: +CONJUGATE) · generic gold loaders hardened (data_collector, auto_verifier, manifest)
 date: 2026-06-03
 ---

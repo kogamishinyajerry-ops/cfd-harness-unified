@@ -12,7 +12,7 @@ round_cap: 3
 codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs xhigh hung with empty output >3min, consistent with W3.2b/W3.3a; effort downgrade noted)
 codex_verdict: APPROVE (R2, cap=3 — R0 2×[P2,P3] → fix 2969ede; R1 2×[P1,P2] → fix 5e026cb reads CASE fluid props; R2 0 findings, APPROVE)
 codex_tool_report_path: reports/codex_tool_reports/v61_228_w33b_conjugate_report.md
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-06-03 (https://app.notion.com/p/374c68942bed813c957fcf16fd1316c5)
 touches_shared_dec: knowledge/gold_standards/cht_pipe_gnielinski.yaml (Re re-anchor 10000→50000 + contract_status LIVE_RUN_PASS) · no schema/loader changes (reuses V61-227 CONJUGATE enum + multi-doc loaders)
 date: 2026-06-03
 ---
@@ -92,10 +92,11 @@ the reference is still the closed-form Gnielinski value re-derived from inputs
   Reuses the V61-227 `CONJUGATE` enum + multi-doc loaders (no new schema changes).
 - **Plane SSOT** `_plane_assignment.py` + `.importlinter` already carried both
   modules; `lint-imports` **5/5 KEPT** (extractor=Execution, gate=Control).
-- **Offline replay test** `tests/p3/test_cht_conjugate_gate.py` (**9 green**):
-  drives the frozen probe artifacts → gate PASS; anti-cheat (doctored qWindowAvg →
-  Nu out of band → FAIL; doctored TbulkOut → energy hard-gate FAIL; out-of-band Re
-  → FAIL); extracted Nu ≠ gold reference yet within 10%; missing input → raise.
+- **Offline replay test** `tests/p3/test_cht_conjugate_gate.py` (**14 green** after
+  the Codex-chain hardening): drives the frozen probe artifacts → gate PASS;
+  anti-cheat (doctored qWindowAvg → Nu out of band → FAIL; doctored TbulkOut →
+  energy hard-gate FAIL; out-of-band Re → FAIL; case-derived Re/Pr/fluid locks);
+  extracted Nu ≠ gold reference yet within 10%; missing input → raise.
   Self-verifying `test_cht_pipe_gnielinski_gold.py` (4) re-derives 104.7987.
 - **Frozen artifacts** `reports/showcase_aero/_w33b_pipe_probe/` — a proper case
   dir: `postProcessing/` (converged-tail .dat, the gate-replay source),
@@ -122,15 +123,16 @@ the reference is still the closed-form Gnielinski value re-derived from inputs
   within the honest 10% band. The Re=10000 NO-GO is documented, not buried; the
   tolerance was NOT loosened; the reference was NOT transcribed or engineered.
 
-## Verification
+## Verification (final, post Codex chain)
 
-- `tests/p3/test_cht_conjugate_gate.py` — 9 passed (gate PASS + 2 hard gates +
-  anti-cheat + measure-not-echo + honest-error).
+- `tests/p3/test_cht_conjugate_gate.py` — **14 passed** (gate PASS + 4 hard gates +
+  anti-cheat + measure-not-echo + case-derived Re/Pr/fluid locks + honest-error).
 - `tests/p3/test_cht_pipe_gnielinski_gold.py` — 4 passed (reference re-derivation).
-- `python -m pytest tests/p3/` — 362 passed, 1 skipped.
+- `python -m pytest tests/p3/` — **367 passed, 1 skipped**; full suite **1983 passed,
+  3 skipped**.
 - `lint-imports` — 5 contracts kept, 0 broken (ADR-001 plane separation).
-- Gate run on committed artifacts: `passed=True, energy_balance_ok=True,
-  reynolds_in_band=True, Nu=113.2126`.
+- Gate run on committed artifacts: `passed=True` with all 6 checks green
+  (Nu=113.21, energy/Re-in-band/Re-matches-target/Pr-in-band/fluid-matches-gold).
 
 ## Codex review
 

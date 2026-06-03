@@ -11,7 +11,7 @@ kogami_opt_in: false (additive new surface, outside ยง11.1 freeze; reversible โ€
 round_cap: 3
 codex_review_relay: CRS gpt-5.4 high (86gs xhigh on standby)
 codex_verdict: PENDING
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-06-03 (https://app.notion.com/p/374c68942bed8148a916c0e19e04b6c4)
 touches_shared_dec: none (App.tsx route + Layout.tsx nav are additive entries; new files under pages/workflow_monitor/)
 date: 2026-06-03
 ---

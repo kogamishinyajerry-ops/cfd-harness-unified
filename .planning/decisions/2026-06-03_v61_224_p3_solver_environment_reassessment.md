@@ -11,7 +11,7 @@ confidence: high
 kogami_opt_in: false (documentation-only strategic correction, user-directed in 2026-06-03 takeover; the EXECUTABLE reconciliation A/B is a separate future DEC that WILL carry Codex)
 codex_review_relay: N/A — documentation/strategic addendum, zero code/security surface (per the p3_cht_kickoff_considerations.md documentation-class precedent · RETRO-V61-001 cadence)
 codex_verdict: N/A (no code change)
-notion_sync_status: pending_accepted
+notion_sync_status: synced 2026-06-03 (https://app.notion.com/p/374c68942bed812bac03fd819b087cec)
 touches_shared_dec: V61-217 (charter exit-gate premise) · V61-223 (§Context correction) · V61-207 (Blueprint v4 §4)
 date: 2026-06-03
 ratified_by: user (chose "先战略复核 + charter addendum" in 2026-06-03 takeover); diagnosis from a 5-agent read-only verification fan-out + direct adapter/cfdtrust grep
