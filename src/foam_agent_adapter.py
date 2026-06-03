@@ -3043,15 +3043,15 @@ fields          (U);
           (a) host-side ESI→Foundation translation of the W3.2a-generated case
               (``_translate_cht_case_esi_to_of11``) — done BEFORE any container
               call so the translated dicts upload.
-          (b) in-container, each via ``_docker_exec`` (which re-uploads the host
-              case dir on every call via put_archive but does NOT delete
-              in-container files absent from the tar, so blockMesh's
-              ``constant/polyMesh`` and splitMeshRegions' per-region
-              ``constant/<region>/polyMesh`` PERSIST across the later calls):
-                  blockMesh
-                  splitMeshRegions -cellZones -overwrite
-                  foamMultiRun                       (log_name="foamMultiRun")
-          (c) parse the foamMultiRun log for per-region residuals/continuity and
+          (b) in-container, a SINGLE ``_docker_exec`` running the mesh→solve steps
+              chained under ``set -e`` (Codex R1 P1 · CRS): blockMesh →
+              splitMeshRegions -cellZones -overwrite → foamMultiRun. One exec means
+              one put_archive upload and NO intervening re-upload, so the
+              container-side meshes that blockMesh/splitMeshRegions create are
+              consumed by foamMultiRun in the SAME invocation — no reliance on
+              cross-call container-state survival. mesh_already_provided trims the
+              leading mesh steps (see below). Logged as ``log.foamMultiRun``.
+          (c) parse the (combined) log for per-region residuals/continuity and
               return ``ExecutionResult(success=True, is_mock=False, ...)``.
 
         On ANY failure (non-zero blockMesh/split/foamMultiRun, missing regions,
@@ -3075,16 +3075,28 @@ fields          (U);
                     raw_output_path=raw_output_path,
                 )
 
-            # (b) in-container pipeline. Honor mesh_already_provided (Codex R0 P2 ·
-            # 86gs · M6.1 parity): a STAGED/imported multi-region case carries its
-            # own mesh — NEVER blockMesh over it. blockMesh regenerates geometry
-            # from a blockMeshDict the imported case may not even have, and would
-            # clobber the supplied mesh. Mirror the single-region M6.1 defensive
-            # check: require a mesh on disk (base constant/polyMesh OR already-split
-            # per-region meshes), else honest BLOCK. splitMeshRegions is also
-            # skipped when the per-region meshes are already present (already-split
-            # import); otherwise it partitions the supplied base mesh's cellZones
-            # into regions (non-destructive prep, not a geometry regeneration).
+            # (b) in-container pipeline — SINGLE _docker_exec (Codex R1 P1 · CRS).
+            # The mesh-generating steps (blockMesh, splitMeshRegions) write their
+            # output ONLY inside the container; _docker_exec copies just the LOG
+            # back to the host, never the generated mesh. Running blockMesh →
+            # splitMeshRegions → foamMultiRun as three separate _docker_exec calls
+            # therefore depended on those container-side meshes SURVIVING the
+            # put_archive re-upload at the start of each subsequent call — an
+            # implicit, untested reliance on Docker's tar-extract (merge, no-delete)
+            # semantics. We remove that fragility entirely: chain the steps into
+            # ONE exec so there is no intervening re-upload — the split per-region
+            # meshes are consumed by foamMultiRun in the very same container
+            # invocation that created them.
+            #
+            # Honor mesh_already_provided (Codex R0 P2 · 86gs · M6.1 parity): a
+            # STAGED/imported multi-region case carries its own mesh — NEVER
+            # blockMesh over it (would regenerate geometry from a blockMeshDict the
+            # import may not have, or clobber the supplied mesh). Require a mesh on
+            # disk (base constant/polyMesh OR already-split per-region meshes), else
+            # honest BLOCK. splitMeshRegions is skipped when per-region meshes are
+            # already present (already-split import); otherwise it partitions the
+            # supplied base mesh's cellZones into regions (non-destructive prep).
+            step_cmds: list[str] = []
             if task_spec.mesh_already_provided:
                 base_polymesh = case_host_dir / "constant" / "polyMesh"
                 per_region_present = all(
@@ -3103,53 +3115,30 @@ fields          (U);
                         raw_output_path=raw_output_path,
                     )
                 if not per_region_present:
-                    split_ok, split_log = self._docker_exec(
-                        "splitMeshRegions -cellZones -overwrite",
-                        case_cont_dir,
-                        self.BLOCK_MESH_TIMEOUT,
-                    )
-                    if not split_ok:
-                        return self._fail(
-                            "CHT splitMeshRegions -cellZones -overwrite failed "
-                            "(W3.2b/DEC-V61-225 · mesh_already_provided):\n"
-                            f"{split_log}",
-                            time.monotonic() - t0,
-                            raw_output_path=raw_output_path,
-                        )
+                    step_cmds.append("splitMeshRegions -cellZones -overwrite")
             else:
-                blockmesh_ok, blockmesh_log = self._docker_exec(
-                    "blockMesh", case_cont_dir, self.BLOCK_MESH_TIMEOUT,
-                )
-                if not blockmesh_ok:
-                    return self._fail(
-                        "CHT blockMesh failed (W3.2b/DEC-V61-225):\n"
-                        f"{blockmesh_log}",
-                        time.monotonic() - t0,
-                        raw_output_path=raw_output_path,
-                    )
+                step_cmds.append("blockMesh")
+                step_cmds.append("splitMeshRegions -cellZones -overwrite")
+            step_cmds.append("foamMultiRun")
 
-                split_ok, split_log = self._docker_exec(
-                    "splitMeshRegions -cellZones -overwrite",
-                    case_cont_dir,
-                    self.BLOCK_MESH_TIMEOUT,
-                )
-                if not split_ok:
-                    return self._fail(
-                        "CHT splitMeshRegions -cellZones -overwrite failed "
-                        f"(W3.2b/DEC-V61-225):\n{split_log}",
-                        time.monotonic() - t0,
-                        raw_output_path=raw_output_path,
-                    )
-
+            # `set -e` so the FIRST failing step aborts the chain (honest BLOCK);
+            # the braces group keeps the whole chain under one stdout/stderr
+            # redirect (handled by _docker_exec) so log.foamMultiRun captures every
+            # step's output — the per-region residual parser keys only on the
+            # foamMultiRun "Solving for" lines, so the prepended mesh-step output is
+            # inert to it.
+            compound = "{ set -e; " + "; ".join(step_cmds) + "; }"
             solver_ok, solver_log = self._docker_exec(
-                "foamMultiRun",
+                compound,
                 case_cont_dir,
                 self._timeout,
                 log_name="foamMultiRun",
             )
             if not solver_ok:
                 return self._fail(
-                    f"CHT foamMultiRun failed (W3.2b/DEC-V61-225):\n{solver_log}",
+                    "CHT mesh+solve pipeline failed (W3.2b/DEC-V61-225 · steps: "
+                    f"{step_cmds}). Combined log below shows the failing step:\n"
+                    f"{solver_log}",
                     time.monotonic() - t0,
                     raw_output_path=raw_output_path,
                 )

@@ -323,7 +323,7 @@ def test_cht_execute_runs_multiregion_pipeline_success(tmp_path, monkeypatch) ->
 
     def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
         commands.append(command)
-        if command == "foamMultiRun":
+        if "foamMultiRun" in command:
             return True, _make_multiregion_log(fluids, solids)
         return True, f"ok:{command}"
 
@@ -336,14 +336,21 @@ def test_cht_execute_runs_multiregion_pipeline_success(tmp_path, monkeypatch) ->
 
     assert res.success is True
     assert res.is_mock is False
-    # exact pipeline order; foamMultiRun (NOT simpleFoam / chtMultiRegionSimpleFoam)
-    assert commands == [
-        "blockMesh",
-        "splitMeshRegions -cellZones -overwrite",
-        "foamMultiRun",
-    ]
-    assert "simpleFoam" not in commands
-    assert "chtMultiRegionSimpleFoam" not in commands
+    # Codex R1 P1 (CRS): mesh→solve runs as exactly ONE _docker_exec, so there is
+    # NO intervening put_archive re-upload that could drop the container-side
+    # split meshes before foamMultiRun consumes them.
+    assert len(commands) == 1
+    pipeline = commands[0]
+    # exact step order INSIDE the single compound exec; foamMultiRun, NOT
+    # simpleFoam / chtMultiRegionSimpleFoam
+    assert (
+        pipeline.index("blockMesh")
+        < pipeline.index("splitMeshRegions -cellZones -overwrite")
+        < pipeline.index("foamMultiRun")
+    )
+    assert "set -e" in pipeline  # first failing step aborts the chain
+    assert "simpleFoam" not in pipeline
+    assert "chtMultiRegionSimpleFoam" not in pipeline
     # per-region residuals parsed (solid energy 'e', fluid p_rgh)
     assert "region_solid:e" in res.residuals
     assert "region_hot_fluid:p_rgh" in res.residuals
@@ -352,7 +359,9 @@ def test_cht_execute_runs_multiregion_pipeline_success(tmp_path, monkeypatch) ->
 
 def test_cht_blockmesh_failure_is_honest_block(tmp_path, monkeypatch) -> None:
     """DEC-V61-225: a non-zero blockMesh yields a structured BLOCK (success=False,
-    is_mock=False) — NOT a crash and NEVER a misroute to the single-region path."""
+    is_mock=False) — NOT a crash and NEVER a misroute to the single-region path.
+    With the Codex R1 P1 single-exec pipeline, `set -e` aborts the chain at the
+    failing step and the combined log surfaces it in the honest BLOCK."""
     import src.foam_agent_adapter as faa
 
     monkeypatch.setattr(faa, "_DOCKER_AVAILABLE", True)
@@ -362,9 +371,8 @@ def test_cht_blockmesh_failure_is_honest_block(tmp_path, monkeypatch) -> None:
 
     def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
         commands.append(command)
-        if command == "blockMesh":
-            return False, "blockMesh: FOAM FATAL ERROR"
-        return True, "ok"
+        # one compound exec; set -e makes blockMesh's failure abort before solve
+        return False, "Running blockMesh ...\nblockMesh: FOAM FATAL ERROR\n"
 
     monkeypatch.setattr(
         faa.FoamAgentExecutor, "_docker_exec", fake_docker_exec
@@ -375,10 +383,12 @@ def test_cht_blockmesh_failure_is_honest_block(tmp_path, monkeypatch) -> None:
 
     assert res.success is False
     assert res.is_mock is False
+    # the failing step is named (step list) AND its output surfaced (combined log)
     assert "blockMesh" in (res.error_message or "")
-    # foamMultiRun must NOT run after a blockMesh failure, and simpleFoam never.
-    assert "foamMultiRun" not in commands
-    assert "simpleFoam" not in commands
+    assert "FOAM FATAL ERROR" in (res.error_message or "")
+    # exactly one compound exec; never a single-region simpleFoam misroute
+    assert len(commands) == 1
+    assert "simpleFoam" not in commands[0]
 
 
 def test_mesh_already_provided_cht_never_misroutes_to_simplefoam(
@@ -409,7 +419,7 @@ def test_mesh_already_provided_cht_never_misroutes_to_simplefoam(
 
     def fake_docker_exec(self_, command, working_dir, timeout, log_name=None):
         commands.append(command)
-        if command == "foamMultiRun":
+        if "foamMultiRun" in command:
             return True, _make_multiregion_log(fluids, solids)
         return True, "ok"
 
@@ -431,13 +441,17 @@ def test_mesh_already_provided_cht_never_misroutes_to_simplefoam(
 
     assert res.success is True
     assert res.is_mock is False
-    assert "foamMultiRun" in commands
-    assert "simpleFoam" not in commands
+    # single compound exec (Codex R1 P1)
+    assert len(commands) == 1
+    pipeline = commands[0]
+    assert "foamMultiRun" in pipeline
+    assert "simpleFoam" not in pipeline
     # Codex R0 P2 (86gs): mesh_already_provided must NOT blockMesh over the
     # supplied mesh. A base constant/polyMesh is present (not yet split), so
-    # splitMeshRegions runs but blockMesh is skipped.
-    assert "blockMesh" not in commands
-    assert "splitMeshRegions -cellZones -overwrite" in commands
+    # splitMeshRegions runs (in the same exec) but blockMesh is skipped.
+    assert "blockMesh" not in pipeline
+    assert "splitMeshRegions -cellZones -overwrite" in pipeline
+    assert pipeline.index("splitMeshRegions") < pipeline.index("foamMultiRun")
 
 
 def test_cht_mesh_already_provided_without_polymesh_is_honest_block(
