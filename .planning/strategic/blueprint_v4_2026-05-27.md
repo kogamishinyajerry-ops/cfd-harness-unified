@@ -64,7 +64,7 @@ Pick **1–2 compute types**, make them bulletproof end-to-end before adding the
 |---|---|---|
 | **P1 · Harden the RANS-aero vertical** | Mesh robustness on real curved CAD (fix gmsh-F2 prism-on-curved failure / commit sHM layer path); validate kΩSST wall treatment + y+; **close the V&V loop** on flat-plate / airfoil / turbine-cascade | ≥1 benchmark passes tolerance gate end-to-end through the workbench, with quantified error shown in TrustGate |
 | **P2 · Close the AI loop on the vertical** | (a) **Pre-flight signals** = mesh-quality + BC-consistency + y+ estimate + regime-check as structured artifacts; (b) expand v9 ruleset to consume them → distill the *setup-class* V-series findings; (c) **pre-flight review** (catch setup errors before solve) | v9 ruleset grows from 8 → covers the top setup-error classes; review runs offline + advisory-only on a real case |
-| **P3 · Add CHT (2nd compute type)** | Wire `chtMultiRegionSimpleFoam` **end-to-end** (currently declared-only) → validate (plate-fin / blade cooling) → sediment death-chains | CHT benchmark passes tolerance gate; runnable-coverage = 2 |
+| **P3 · Add CHT (2nd compute type)** ✅ | Wire conjugate CHT **end-to-end** → validate → sediment death-chains. *Solver reconciled to OF11 `foamMultiRun` (Foundation fork) per DEC-V61-224, not the ESI `chtMultiRegionSimpleFoam` the charter originally named.* | **MET (W3.3b · DEC-V61-228):** full two-region conjugate Gnielinski benchmark passes the 10% tolerance gate end-to-end (Nu=113.21 vs 104.7987, +8.0%; energy balance 2.12%; Re=50000) → **runnable-coverage = 2** |
 | **P4+ · Compressible, then the rest** | rhoCentralFoam (ONERA M6) → VOF → LES…, each gated on runnable + validated | each new compute type runnable + benchmark-passed before the next |
 | **Continuous** | Clear the 3 cosmetic fakes (§5); grow v9 from V-series; monthly industrial dogfood **but each new compute type must become runnable, not just profiled** | truth-chain brand stays spotless; corpus→ruleset flywheel turning |
 
@@ -93,7 +93,7 @@ Status = **runnable** (not documented). Profiles/death-chains tracked separately
 |---|---|---|---|
 | Incompressible RANS (wall-bounded / external) | ⚙️ partial → **P1 target** (validate + V&V loop) | flat plate / pipe / cavity / Couette + turbine cascade | **P1** |
 | Internal + buoyancy (transient) | ✅ buoyantFoam runnable | APU bay (external sandbox) | — (validate later) |
-| CHT (conjugate heat transfer) | ❌ declared-only | case_002b, plate-fin profile | **P3** |
+| CHT (conjugate heat transfer) | ✅ **runnable + validated** (W3.3b · Gnielinski +8.0%, DEC-V61-228) | case_002b, plate-fin profile | **P3 ✅** |
 | Compressible / transonic | ❌ declared-only | ONERA M6 / RAE M2129 profiles | P4 |
 | Multiphase / VOF | ❌ not wired | KCS ship profile | P4+ |
 | Rotating machinery (MRF/SRF) | ❌ not wired | NREL phase VI profile | P4+ |

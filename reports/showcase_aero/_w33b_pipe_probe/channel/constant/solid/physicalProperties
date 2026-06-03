@@ -1,0 +1,33 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b solid wall: steel-class, k=50 W/m.K (gold k_solid; conjugate coupling   |
+| only — does NOT set the Nu reference).  rho/Cv affect transient only.         |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant/solid";
+    object      physicalProperties;
+}
+
+thermoType          constSolidThermo;
+
+rho
+{
+    type        uniform;
+    value       7850;       // kg/m^3 (steel; transient only)
+}
+
+Cv
+{
+    type        uniform;
+    value       500;        // J/kg.K (steel; transient only)
+}
+
+kappa
+{
+    type        uniform;
+    value       50;         // W/m.K  (gold k_solid)
+}
+
+// ************************************************************************* //

@@ -34,6 +34,7 @@ source_modules =
     src.cylinder_strouhal_fft
     src.airfoil_extractors
     src.cht_fin_extractor
+    src.cht_conjugate_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -68,6 +69,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.airfoil_extractors
     src.cht_fin_extractor
+    src.cht_conjugate_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -83,6 +85,7 @@ forbidden_modules =
     src.task_runner
     src.orchestrator
     src.cht_fin_gate
+    src.cht_conjugate_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -92,6 +95,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.airfoil_extractors
     src.cht_fin_extractor
+    src.cht_conjugate_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -115,6 +119,7 @@ forbidden_modules =
     src.task_runner
     src.orchestrator
     src.cht_fin_gate
+    src.cht_conjugate_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -124,6 +129,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.airfoil_extractors
     src.cht_fin_extractor
+    src.cht_conjugate_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -149,6 +155,7 @@ forbidden_modules =
     src.task_runner
     src.orchestrator
     src.cht_fin_gate
+    src.cht_conjugate_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -158,6 +165,7 @@ forbidden_modules =
     src.cylinder_strouhal_fft
     src.airfoil_extractors
     src.cht_fin_extractor
+    src.cht_conjugate_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors

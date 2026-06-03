@@ -1,48 +1,57 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.3a GATE-WIRING LANDED + Codex APPROVE (read first)
+> ## ⏩ MOST RECENT — P3 W3.3b CONJUGATE BENCHMARK LIVE PASS → runnable-coverage 1→2 FLIPPED (read first)
 >
-> **Status**: `P3_IN_PROGRESS`. **HEAD = `dac52c7`**. **runnable-coverage STILL 1**
-> (W3.3a validates the SOLID side + Robin BC through a real comparison gate; the
-> formal 1→2 flip needs **W3.3b** = full two-region conjugate vs Gnielinski,
-> FLUID-produced h).
+> **Status**: `P3_IN_PROGRESS`. **HEAD = the W3.3b coverage-flip commit this session
+> (DEC-V61-228); run `git log -1`.** **runnable-coverage 1→2 FLIPPED** — the full
+> two-region conjugate Gnielinski benchmark passes its 10% tolerance gate
+> end-to-end. CHT is now the 2nd runnable+validated compute type (Blueprint v4 Law 1).
 >
-> **W3.3a gate-wiring (DEC-V61-227) LANDED + Accepted + Codex APPROVE (cap=3).**
-> The W3.3a analytical fin benchmark now runs THROUGH a real comparison gate,
-> OFFLINE (no Docker), reproducing the `84ce01d` live PASS from committed probe
-> artifacts. Authoritative comparator = **`ResultComparator`** (the
-> quantity/reference_values multi-doc family — NOT `auto_verifier`; an independent
-> read-only mapping workflow `wnpnped3d` confirmed this and corrected the prior
-> RESUME/STATE NEXT, which wrongly named `auto_verifier.gold_standard_comparator`).
-> - `src/cht_fin_extractor.py` (**Execution** plane, PURE — no comparator import):
->   parse `postProcessing/*/surfaceFieldValue.dat` → `fin_efficiency =
->   Q_base/(h·P·L·θ_b)`, `fin_tip_temperature_ratio = (T_tip−T_inf)/(T_base−T_inf)`,
->   from raw solver output + inputs only (NEVER the closed form → anti-tautology),
->   fail-closed on missing/NaN.
-> - `src/cht_fin_gate.py` (**Control** plane — only plane allowed to import both
->   Execution + Evaluation, ≡ task_runner): `gate_fin_against_gold()` extract →
->   `ExecutionResult` → `ResultComparator.compare()` per gold doc + a **HARD
->   energy-closure gate** `|Q_base+Q_fin| ≤ 1e-3·|Q_base|` (Codex R1 P2-A).
-> - gold `cht_straight_fin.yaml` +`T_inf`; schema +`CONJUGATE` flow_type enum
->   (fixed a pre-existing corpus-validator RED); `_plane_assignment`+`.importlinter`
->   regen (lint-imports 5/5 KEPT — ADR-001 forced the extractor/gate split).
-> - `tests/p3/test_cht_fin_gate.py`: offline replay of `_w33a_fin_probe` → gate
->   PASS; anti-cheat (doctored Q_base/finPower/T_tip → FAIL; extracted ≠ gold ref;
->   energy closure; missing input → raise).
-> - **Codex chain (cap=3)**: R0 1×P2 (multi-doc vs single-doc loaders →
->   `cf2e0e9`: `data_collector`+`auto_verifier` safe_load_all+first-doc,
->   behaviour-preserving) → R1 2×P2 (energy gate + `manifest` multi-doc wrapper →
->   `b5bd8f2`) → **R2 APPROVE**. Relay weathered a CRS-502 outage → 86gs-xhigh flap
->   → CRS recovery (all R0–R2 CRS high). Commits e38b279/cf2e0e9/b5bd8f2/dac52c7.
->   **Full suite 1965 passed / 3 skipped.** Report:
->   `reports/codex_tool_reports/v61_227_w33a_gate_report.md`.
+> **W3.3b (DEC-V61-228) LANDED.** A FULL two-region conjugate solve where the FLUID
+> flow PRODUCES h (vs W3.3a, which validated only the solid side + an IMPOSED Robin
+> h). foamMultiRun (OF11 **Foundation** fork — `regionSolvers {fluid; solid}`,
+> `coupledTemperature` interface from `splitMeshRegions -cellZones`; reconciled per
+> DEC-V61-224, not the ESI `chtMultiRegionSimpleFoam` the charter first named).
+> - **LIVE RESULT (Re=50000, resolved y+~0.8 mesh, mapFields restart):**
+>   `Nu_solve = 113.21` vs `Nu_Gnielinski = 104.7987` → **+8.0% (INSIDE 10% band)**;
+>   energy balance `|Q_iface − ṁcp·ΔT| = 0.977 W = 2.12%` of Q_iface (<5% hard gate);
+>   Re=50000 in band; h_produced=59.55 W/m²K. The +8% is the REAL, honestly-reported
+>   kOmegaSST+const-Prt internal-HT bias — within band at Re=50000.
+> - `src/cht_conjugate_extractor.py` (**Execution** plane, PURE): parse
+>   `postProcessing/*/surfaceFieldValue.dat` → `h = q_wall/(T_wall − T_bulk_window)`,
+>   `Nu = h·D_h/k`, T_bulk from a cumulative wall-heat energy balance + cup-mixing
+>   outlet T. Nu from raw solver output + inputs only (NEVER the Gnielinski form →
+>   anti-tautology), fail-closed on missing/NaN/non-physical dT.
+> - `src/cht_conjugate_gate.py` (**Control** plane): `gate_conjugate_against_gold()`
+>   extract → `ResultComparator.compare()` vs Gnielinski gold + **2 HARD gates**:
+>   energy-balance closure (≤5% of Q_iface) AND Re-in-validity-band (3e3–5e6).
+> - gold `cht_pipe_gnielinski.yaml`: re-anchored Re 10000→50000, `contract_status →
+>   LIVE_RUN_PASS_W3.3b_B`; self-verifying `test_cht_pipe_gnielinski_gold.py`
+>   re-derives 104.7987 from Re/Pr (fails on drift). `_plane_assignment`+`.importlinter`
+>   already carried both modules (lint-imports **5/5 KEPT**).
+> - `tests/p3/test_cht_conjugate_gate.py` (**9 green**): offline replay of
+>   `_w33b_pipe_probe` → gate PASS; anti-cheat (doctored qWindowAvg → Nu out of band
+>   → FAIL; doctored TbulkOut → energy hard-gate FAIL; out-of-band Re → FAIL);
+>   extracted Nu ≠ gold ref yet within 10%; missing input → raise. **362 p3 + 1 skip.**
+> - Frozen converged-tail artifacts: `reports/showcase_aero/_w33b_pipe_probe/`
+>   ({postProcessing — the gate replay source; channel — case dicts; REPRODUCE.md}).
 >
-> **NEXT**: **W3.3b** — full two-region conjugate (fluid+solid) vs Gnielinski,
-> fluid-PRODUCED h → flips runnable-coverage **1→2**. (Adapter live-run *dispatch*
-> wiring for the fin is out of scope — the fin is single-region `foamRun -solver
-> solid`, gated offline; a live-through-adapter populator is a separate follow-on.)
-> **Session-end TODO**: Notion batch-sync Accepted DEC-V61-224/225/226/227. Commits
-> are LOCAL on `main` (not pushed — push is a user call).
+> **RE-ANCHOR rationale (DEC-V61-228, user decision "Re-anchor at higher Re"):** a
+> baseline Re=10000 conjugate solve over-predicted Gnielinski **+17%** —
+> energy-consistent, fully-developed, NOT a bug — a known low-Re RANS+const-Prt
+> internal-HT bias at the turbulent edge → documented **NO-GO**. Re=50000 is
+> mid-turbulent where both the closure and the correlation are robust. Principled
+> fix to a weak validation point: 10% tolerance NOT loosened, reference re-derived
+> not transcribed, result NOT engineered to pass.
+>
+> **NEXT (Codex + Notion + follow-ons)**:
+> - **Codex review chain** on the W3.3b commit (CRS primary, cap=3) — risk-tier:
+>   CFD new geometry type + new gate code + coverage flip. *Run before declaring done.*
+> - **Session-end TODO**: Notion batch-sync Accepted DEC-V61-224/225/226/227/228.
+>   Commits are LOCAL on `main` (not pushed — push is a user call).
+> - Follow-ons: live-through-adapter dispatch for the conjugate case (currently
+>   gated offline from frozen artifacts); buoyantFoam→OF11 deferred guard; P4
+>   (rhoCentralFoam / ONERA M6) is the next compute type per the risk-first path.
 >
 > ---
 >

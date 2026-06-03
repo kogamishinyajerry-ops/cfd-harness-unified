@@ -1,0 +1,88 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b conjugate channel — parallel-plate realization of the Gnielinski pipe   |
+| benchmark.  D_h = 2H = 0.05 m (full gap H=0.025; half-channel, symmetry at    |
+| centerline -> half-gap b=0.0125).  fluid (y in [0,b]) + solid wall            |
+| (y in [b,yo]).  Interface at y=b becomes fluid_to_solid after splitMeshRegions|
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+
+convertToMeters 1;
+
+L   2.0;        // channel length (= 40 D_h, fully-developed turbulent flow)
+b   0.0125;     // fluid half-gap (centerline..interface);  D_h = 2*(2b) = 0.05
+yo  0.0175;     // solid outer face (wall thickness t = yo-b = 0.005)
+w   0.01;       // spanwise thickness (2D: 1 cell, empty)
+
+nx   200;       // streamwise cells (dx = 10 mm = D_h/5)
+nyf  60;        // fluid wall-normal cells (graded, y+ ~ 0.8 at Re=50000 -> resolved verification)
+nys  15;        // solid wall-normal cells (uniform)
+
+vertices
+(
+    (0   0    0)    // 0
+    ($L  0    0)    // 1
+    ($L  $b   0)    // 2
+    (0   $b   0)    // 3
+    (0   0    $w)   // 4
+    ($L  0    $w)   // 5
+    ($L  $b   $w)   // 6
+    (0   $b   $w)   // 7
+    (0   $yo  0)    // 8
+    ($L  $yo  0)    // 9
+    (0   $yo  $w)   // 10
+    ($L  $yo  $w)   // 11
+);
+
+blocks
+(
+    // fluid: y in [0,b], graded to wall (resolved, y+ ~ 0.8 at Re=50000)
+    hex (0 1 2 3 4 5 6 7) fluid ($nx $nyf 1) simpleGrading (1 0.05 1)
+    // solid: y in [b,yo], uniform (near-isothermal high-k wall)
+    hex (3 2 9 8 7 6 11 10) solid ($nx $nys 1) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+defaultPatch
+{
+    name    frontAndBack;
+    type    empty;
+}
+
+boundary
+(
+    inlet
+    {
+        type patch;
+        faces ( (0 4 7 3) );
+    }
+    outlet
+    {
+        type patch;
+        faces ( (1 2 6 5) );
+    }
+    symmetry
+    {
+        type symmetry;
+        faces ( (0 1 5 4) );
+    }
+    heatedWall
+    {
+        type patch;
+        faces ( (8 9 11 10) );
+    }
+    solidEnds
+    {
+        type patch;
+        faces ( (3 8 10 7) (2 6 11 9) );
+    }
+);
+
+// ************************************************************************* //

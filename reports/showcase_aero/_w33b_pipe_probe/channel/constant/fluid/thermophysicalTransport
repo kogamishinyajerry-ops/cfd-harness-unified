@@ -1,0 +1,18 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b turbulent thermal transport: eddyDiffusivity, Prt=0.85 (gold)            |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant/fluid";
+    object      thermophysicalTransport;
+}
+
+RAS
+{
+    model   eddyDiffusivity;
+    Prt     0.85;
+}
+
+// ************************************************************************* //

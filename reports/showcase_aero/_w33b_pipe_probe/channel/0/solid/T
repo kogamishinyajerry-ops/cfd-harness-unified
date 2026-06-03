@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b solid T: hot outer wall 350 K drives the conjugate heat transfer.       |
+| solid_to_fluid is the coupled interface; solidEnds adiabatic.                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0/solid";
+    object      T;
+}
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 350;
+
+boundaryField
+{
+    heatedWall
+    {
+        type            fixedValue;
+        value           uniform 350;
+    }
+    solidEnds
+    {
+        type            zeroGradient;
+    }
+    solid_to_fluid
+    {
+        type            coupledTemperature;
+        value           $internalField;
+    }
+
+    #includeEtc "caseDicts/setConstraintTypes"
+}
+
+// ************************************************************************* //

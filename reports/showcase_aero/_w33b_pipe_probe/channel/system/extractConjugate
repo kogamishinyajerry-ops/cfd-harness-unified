@@ -1,0 +1,110 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b extraction FO set for foamPostProcess -region fluid -dict <this>.        |
+| ORDER MATTERS: wallHeatFlux writes the field that the surfaceFieldValue probes |
+| then reduce.  Probe dir names match src/cht_conjugate_extractor.py constants.  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      extractConjugate;
+}
+
+functions
+{
+    wallHeatFluxField
+    {
+        type            wallHeatFlux;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        patches         (fluid_to_solid);
+    }
+
+    qWindowAvg                          // areaAverage(wallHeatFlux), window  [W/m^2]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      faceZone;
+        name            fdWindow;
+        operation       areaAverage;
+        fields          (wallHeatFlux);
+        writeFields     false;
+        writeArea       false;
+    }
+    qWindowInt                          // areaIntegrate(wallHeatFlux), window [W]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      faceZone;
+        name            fdWindow;
+        operation       areaIntegrate;
+        fields          (wallHeatFlux);
+        writeFields     false;
+        writeArea       false;
+    }
+    TwallWindow                         // areaAverage(T), window  [K]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      faceZone;
+        name            fdWindow;
+        operation       areaAverage;
+        fields          (T);
+        writeFields     false;
+        writeArea       false;
+    }
+    QifaceTotal                         // areaIntegrate(wallHeatFlux), full interface [W]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      patch;
+        name            fluid_to_solid;
+        operation       areaIntegrate;
+        fields          (wallHeatFlux);
+        writeFields     false;
+        writeArea       false;
+    }
+    TbulkOut                            // weightedAverage(phi) of T at outlet (cup-mixing) [K]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      patch;
+        name            outlet;
+        operation       average;        // with weightField phi => Sum(phi*T)/Sum(phi) = cup-mixing T
+        weightField     phi;
+        fields          (T);
+        writeFields     false;
+        writeArea       false;
+    }
+    Tin                                 // areaAverage(T) at inlet  [K]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          (T);
+        writeFields     false;
+        writeArea       false;
+    }
+    mdotIn                              // sum(phi) at inlet (mass flux) [kg/s]
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          (phi);
+        writeFields     false;
+        writeArea       false;
+    }
+}
+
+// ************************************************************************* //

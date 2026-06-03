@@ -1,0 +1,15 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b: pure forced convection (Gnielinski) -> g=0, buoyancy off.              |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       uniformDimensionedVectorField;
+    location    "constant/fluid";
+    object      g;
+}
+
+dimensions      [0 1 -2 0 0 0 0];
+value           (0 0 0);
+
+// ************************************************************************* //

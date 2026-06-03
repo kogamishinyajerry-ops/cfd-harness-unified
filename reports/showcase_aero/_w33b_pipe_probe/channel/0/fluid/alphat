@@ -1,0 +1,32 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b fluid alphat (turbulent thermal diffusivity; Jayatilleke wall function). |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0/fluid";
+    object      alphat;
+}
+
+dimensions      [1 -1 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    "(inlet|outlet)"
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    fluid_to_solid
+    {
+        type            compressible::alphatWallFunction;
+        value           uniform 0;
+    }
+
+    #includeEtc "caseDicts/setConstraintTypes"
+}
+
+// ************************************************************************* //

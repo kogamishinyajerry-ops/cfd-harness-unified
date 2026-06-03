@@ -1,0 +1,41 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b solid fvSolution (conduction energy e).                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "system/solid";
+    object      fvSolution;
+}
+
+solvers
+{
+    e
+    {
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-06;
+        relTol          0.1;
+    }
+    eFinal
+    {
+        $e;
+        relTol          0;
+    }
+}
+
+PIMPLE
+{
+    nNonOrthogonalCorrectors 0;
+}
+
+relaxationFactors
+{
+    equations
+    {
+        ".*" 1;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,21 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b fluid turbulence: RANS kOmegaSST (gold boundary_conditions.fluid)        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant/fluid";
+    object      momentumTransport;
+}
+
+simulationType RAS;
+
+RAS
+{
+    model       kOmegaSST;
+    turbulence  on;
+    printCoeffs on;
+}
+
+// ************************************************************************* //

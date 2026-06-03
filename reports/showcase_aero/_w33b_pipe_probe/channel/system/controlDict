@@ -1,0 +1,117 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b conjugate channel run control (foamMultiRun, transient -> steady).       |
+| Extraction FOs run DURING the solve (wallHeatFlux needs the live thermo        |
+| transport model, unavailable in foamPostProcess). Restart from the converged   |
+| t=1.79 field, run a few steps; the last .dat row is the converged QoI.         |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+
+application     foamMultiRun;
+
+regionSolvers
+{
+    fluid           fluid;
+    solid           solid;
+}
+
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         1.2;           // transient -> steady (converges ~0.9); FOs active throughout
+
+deltaT          0.001;
+
+writeControl    runTime;
+writeInterval   0.3;
+purgeWrite      0;             // keep all writes (do NOT lose the converged field)
+
+writeFormat     ascii;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable true;
+
+adjustTimeStep  yes;
+maxCo           1;
+maxDi           50;
+maxDeltaT       0.005;
+
+functions
+{
+    #includeFunc patchAverage(name=monWallT, region=fluid, patch=fluid_to_solid, field=T)
+    #includeFunc patchAverage(name=monOutT,  region=fluid, patch=outlet, field=T)
+
+    wallHeatFluxField
+    {
+        type            wallHeatFlux;
+        libs            ("libfieldFunctionObjects.so");
+        region          fluid;
+        patches         (fluid_to_solid);
+    }
+    qWindowAvg
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdWindow;
+        operation areaAverage; fields (wallHeatFlux); writeFields false; writeArea false;
+    }
+    qWindowInt
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdWindow;
+        operation areaIntegrate; fields (wallHeatFlux); writeFields false; writeArea false;
+    }
+    TwallWindow
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdWindow;
+        operation areaAverage; fields (T); writeFields false; writeArea false;
+    }
+    QifaceTotal
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType patch; name fluid_to_solid;
+        operation areaIntegrate; fields (wallHeatFlux); writeFields false; writeArea false;
+    }
+    TbulkOut
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType patch; name outlet;
+        operation average; weightField phi; fields (T); writeFields false; writeArea false;
+    }
+    Tin
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType patch; name inlet;
+        operation areaAverage; fields (T); writeFields false; writeArea false;
+    }
+    mdotIn
+    {
+        type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType patch; name inlet;
+        operation sum; fields (phi); writeFields false; writeArea false;
+    }
+
+    // ---- local-Nu development diagnostics ----
+    qW10avg { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW10; operation areaAverage; fields (wallHeatFlux); writeFields false; writeArea false; }
+    qW10int { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW10; operation areaIntegrate; fields (wallHeatFlux); writeFields false; writeArea false; }
+    TW10    { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW10; operation areaAverage; fields (T); writeFields false; writeArea false; }
+    qW18avg { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW18; operation areaAverage; fields (wallHeatFlux); writeFields false; writeArea false; }
+    qW18int { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW18; operation areaIntegrate; fields (wallHeatFlux); writeFields false; writeArea false; }
+    TW18    { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdW18; operation areaAverage; fields (T); writeFields false; writeArea false; }
+    QC10int { type surfaceFieldValue; libs ("libfieldFunctionObjects.so");
+        region fluid; regionType faceZone; name fdC10; operation areaIntegrate; fields (wallHeatFlux); writeFields false; writeArea false; }
+}
+
+// ************************************************************************* //

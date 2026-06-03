@@ -1,0 +1,36 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b measurement + diagnostic faceZones on the fluid-side interface.          |
+| fdWindow = main fully-developed window [1.5,1.9].  fdW10/fdW18 = local-Nu      |
+| diagnostic windows; fdC10 = cumulative [1.0,2.0] for upstream-heat balance.    |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+
+actions
+(
+    // ---- main window [1.5,1.9] ----
+    { name fdF;   type faceSet; action new;    source patchToFace; patch fluid_to_solid; }
+    { name fdF;   type faceSet; action subset; source boxToFace;   box (1.5 0.012 -1) (2.01 0.013 1); }
+    { name fdWindow; type faceZoneSet; action new; source setToFaceZone; faceSet fdF; }
+
+    // ---- diagnostic window [1.0,1.2] ----
+    { name fdF10; type faceSet; action new;    source patchToFace; patch fluid_to_solid; }
+    { name fdF10; type faceSet; action subset; source boxToFace;   box (1.0 0.012 -1) (1.2 0.013 1); }
+    { name fdW10; type faceZoneSet; action new; source setToFaceZone; faceSet fdF10; }
+
+    // ---- diagnostic window [1.8,2.0] (ends at outlet) ----
+    { name fdF18; type faceSet; action new;    source patchToFace; patch fluid_to_solid; }
+    { name fdF18; type faceSet; action subset; source boxToFace;   box (1.8 0.012 -1) (2.01 0.013 1); }
+    { name fdW18; type faceZoneSet; action new; source setToFaceZone; faceSet fdF18; }
+
+    // ---- cumulative [1.0,2.0] (Q[0,1.0] = Q_total - Q[1.0,2.0]) ----
+    { name fdFC10; type faceSet; action new;    source patchToFace; patch fluid_to_solid; }
+    { name fdFC10; type faceSet; action subset; source boxToFace;   box (1.0 0.012 -1) (2.01 0.013 1); }
+    { name fdC10; type faceZoneSet; action new; source setToFaceZone; faceSet fdFC10; }
+);
+
+// ************************************************************************* //

@@ -1,0 +1,48 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b fluid: air @300K, incompressible (rhoConst).                            |
+| rhoConst => CpMCv=0 => Cp=Cv (verified OF11 src rhoConstI.H:130).             |
+| Set Cv=1007 -> Cp=1007;  kappa = mu*Cp/Pr = 1.846e-5*1007/0.70681 = 0.02630   |
+| (= gold k_fluid).  Pr=0.70681 (gold).  rho=1.1614 (gold).                     |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant/fluid";
+    object      physicalProperties;
+}
+
+thermoType
+{
+    type            heRhoThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          eConst;
+    equationOfState rhoConst;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+mixture
+{
+    specie
+    {
+        molWeight   28.96;      // air (irrelevant to thermo under rhoConst)
+    }
+    equationOfState
+    {
+        rho         1.1614;     // kg/m^3  (gold)
+    }
+    thermodynamics
+    {
+        Cv          1007;       // J/kg/K  (= Cp under rhoConst; gold cp)
+        Hf          0;
+    }
+    transport
+    {
+        mu          1.846e-5;   // Pa.s  (gold)
+        Pr          0.70681;    // gold  -> kappa = mu*Cp/Pr = 0.0263
+    }
+}
+
+// ************************************************************************* //

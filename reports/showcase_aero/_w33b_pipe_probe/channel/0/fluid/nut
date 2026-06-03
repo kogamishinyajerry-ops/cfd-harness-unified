@@ -1,0 +1,32 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| W3.3b fluid nut (turbulent viscosity; y+-insensitive nutkWallFunction).        |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    format      ascii;
+    class       volScalarField;
+    location    "0/fluid";
+    object      nut;
+}
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    "(inlet|outlet)"
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    fluid_to_solid
+    {
+        type            nutkWallFunction;
+        value           uniform 0;
+    }
+
+    #includeEtc "caseDicts/setConstraintTypes"
+}
+
+// ************************************************************************* //
