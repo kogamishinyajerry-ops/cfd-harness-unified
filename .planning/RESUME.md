@@ -41,7 +41,8 @@
 >   hard gate). R1 2 findings [P1 mu read from gold; P2 Pr read from gold] → fix
 >   reads ALL fluid transport props (mu/cp/k/Pr) from the CASE `physicalProperties`
 >   + adds a fluid-matches-gold hard gate. Gate now has 4 hard components; still
->   PASSES (6/6 checks green). R2 review pending.
+>   PASSES (6/6 checks green). **R2 APPROVE — chain CLOSED within cap=3 (0 findings).**
+>   Report: `reports/codex_tool_reports/v61_228_w33b_conjugate_report.md`.
 >
 > **RE-ANCHOR rationale (DEC-V61-228, user decision "Re-anchor at higher Re"):** a
 > baseline Re=10000 conjugate solve over-predicted Gnielinski **+17%** —
@@ -51,9 +52,9 @@
 > fix to a weak validation point: 10% tolerance NOT loosened, reference re-derived
 > not transcribed, result NOT engineered to pass.
 >
-> **NEXT (Codex + Notion + follow-ons)**:
-> - **Codex review chain** on the W3.3b commit (CRS primary, cap=3) — risk-tier:
->   CFD new geometry type + new gate code + coverage flip. *Run before declaring done.*
+> **NEXT (Notion + follow-ons)**:
+> - **Codex review chain DONE** — CRS cap=3, R0→R1→R2 APPROVE (commits 40420ab →
+>   2969ede → 5e026cb). Gate hardened to read fluid props from the replayed case.
 > - **Session-end TODO**: Notion batch-sync Accepted DEC-V61-224/225/226/227/228.
 >   Commits are LOCAL on `main` (not pushed — push is a user call).
 > - Follow-ons: live-through-adapter dispatch for the conjugate case (currently

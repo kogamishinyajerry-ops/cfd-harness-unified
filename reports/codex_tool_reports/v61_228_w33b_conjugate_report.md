@@ -77,6 +77,16 @@ from the replayed case's `constant/<region>/physicalProperties` — not the gold
   `test_fluid_mismatch_with_gold_is_a_hard_gate`) → 14 green. Gate still PASSES
   (6/6 checks green). 367 p3 + 1 skip; lint 5/5.
 
-## R2 — `codex review` (pending)
+## R2 — `codex review --commit 5e026cb`
 
-_(verdict to be filled on completion)_
+**Verdict**: **APPROVE** — verbatim: *"I did not identify a discrete, actionable bug
+in the introduced changes. The new case-property extraction, hard-gate updates,
+fixture restructure, and test adjustments appear internally consistent for the
+committed benchmark artifacts."*
+
+## Outcome
+
+Chain **CLOSED within cap=3**: R0 (2×[P2,P3]) → fix `2969ede` → R1 (2×[P1,P2]) →
+fix `5e026cb` → **R2 APPROVE**. Final gate: 4 hard components, all fluid properties
+read from the replayed case, gate PASSES (6/6 checks green); Nu=113.21 vs
+Gnielinski 104.7987 (+8.0%, inside the 10% band). runnable-coverage 1→2 confirmed.

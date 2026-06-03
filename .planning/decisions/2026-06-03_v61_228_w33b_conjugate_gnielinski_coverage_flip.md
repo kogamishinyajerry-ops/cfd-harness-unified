@@ -10,7 +10,7 @@ confidence: high
 kogami_opt_in: false (additive V&V benchmark + gate plumbing; reversible; no §11.1 workbench-freeze paths touched)
 round_cap: 3
 codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs xhigh hung with empty output >3min, consistent with W3.2b/W3.3a; effort downgrade noted)
-codex_verdict: pending_R2 (R0 2×[P2,P3] → fix 2969ede; R1 2×[P1,P2] → fix reads CASE fluid props; R2 review pending)
+codex_verdict: APPROVE (R2, cap=3 — R0 2×[P2,P3] → fix 2969ede; R1 2×[P1,P2] → fix 5e026cb reads CASE fluid props; R2 0 findings, APPROVE)
 codex_tool_report_path: reports/codex_tool_reports/v61_228_w33b_conjugate_report.md
 notion_sync_status: pending_accepted
 touches_shared_dec: knowledge/gold_standards/cht_pipe_gnielinski.yaml (Re re-anchor 10000→50000 + contract_status LIVE_RUN_PASS) · no schema/loader changes (reuses V61-227 CONJUGATE enum + multi-doc loaders)
@@ -149,4 +149,7 @@ fallback rule). Report: `reports/codex_tool_reports/v61_228_w33b_conjugate_repor
   replayed case's `constant/<region>/physicalProperties`; the gate adds a
   fluid-matches-gold hard gate. Gate still PASSES (6/6 checks green). Bundle
   restructured into a proper case dir so the case fluid is co-located with the probes.
-- **R2** — review pending (cap=3). `notion_sync_status` advances only after APPROVE.
+- **R2** (`5e026cb`) — **APPROVE**, 0 findings: *"I did not identify a discrete,
+  actionable bug… the new case-property extraction, hard-gate updates, fixture
+  restructure, and test adjustments appear internally consistent."* Chain CLOSED
+  within cap=3. `notion_sync_status` → batch-sync at session-end (Accepted).
