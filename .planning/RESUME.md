@@ -1,6 +1,54 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.1 CHT v9 RULES LANDED (DEC-V61-222) (2026-05-31 · read first)
+> ## ⏩ MOST RECENT — P3 W3.2a LANDED + 2026-06-03 TAKEOVER RE-ASSESSMENT (read first)
+>
+> **Status**: `P3_IN_PROGRESS`. **HEAD = `8391973`**. **runnable-coverage STILL 1.**
+>
+> **W3.2a (DEC-V61-223, CHT runner-wire GENERATION side) is LANDED + finalized.**
+> Shipped: `GeometryType.CHT_MULTI_REGION` (`src/models.py`) +
+> `_generate_cht_multi_region()` (`src/foam_agent_adapter.py` — case_011-stripped
+> canonical CHT: 2 laminar air channels + Al solid plate, `regionProperties` +
+> per-region `heRhoThermo`/`heSolidThermo` thermo + non-rad coupled-baffle BCs +
+> master `controlDict`) + `cht_steady_laminar_multi_region` case-family + an
+> **honest fail-loud live-run boundary** (`success=False, is_mock=False`, labelled
+> `W3.2b`, fires for fresh AND imported mesh). **519 tests green**; the generator
+> round-trips through the REAL W3.0.x extractors (not mock). Codex **APPROVE-
+> equivalent, clean close at R1** (R0 86gs xhigh 1×P1+2×P2 → R1 CRS high 1×P2
+> fixed + 1×P2 **disproven** by running `blockMesh` in ESI
+> `opencfd/openfoam-default:2312` → "Writing polyMesh with 3 cellZones"); cap NOT
+> reached. **DEC-V61-223 → Accepted** (finalized in 2026-06-03 takeover; report
+> R2/Outcome filled; STATE ANCHOR-32 added).
+>
+> **🔴 THE BLOCKER (re-diagnosed in the 2026-06-03 takeover · DEC-V61-224)**: P3's
+> exit gate (run CHT end-to-end → coverage 2) is **environmentally/architecturally
+> unreachable as wired**. DEC-223's "missing docker Python SDK" claim is **FALSE**
+> (`uv run python -c "import docker"` → 7.1.0). The REAL root is a **two-backend
+> runner fork**: `foam_agent_adapter` (the charter's chosen path) is hardwired to a
+> **nonexistent Foundation OF10** image (`cfd-workbench/openfoam-v10:arm64` +
+> `/opt/openfoam10/etc/bashrc`) + the **ESI-only** solver name
+> `chtMultiRegionSimpleFoam`; meanwhile the ONLY backend that actually runs
+> (`ui/backend/audit/cfdtrust/backends/openfoam.py`, which produced
+> runnable-coverage=1) uses **Foundation OF11** `openfoam/openfoam11-paraview510`
+> via `foamRun -solver <module>` (OF11 does CHT via `foamRun -solver multiRegion`,
+> never the ESI name). The charter wired its exit gate to the rotten path.
+>
+> **NEXT = USER DECISION (forward W3.2 PAUSED)**: **A** = reconcile
+> `foam_agent_adapter` → OF11 + `foamRun -solver multiRegion` (image already on
+> disk; cfdtrust already drives it) → run W3.2a's generated case end-to-end →
+> legitimately flip coverage 1→2 + dissolve the fork. **B** = keep building offline
+> (W3.2c producer-side / W3.2d R15-R16 reground), freeze coverage=1, add a
+> remote/CI runner to the blueprint. **Latent-risk check before either**: confirm
+> whether coverage=1 (RANS) even executes through `foam_agent_adapter` in THIS env
+> — it was validated via `cfdtrust`, NOT the adapter, whose wired image is absent.
+> Blueprint v4 §4 amended with a solver-environment/image-reconciliation provision
+> (P4 rhoCentralFoam + P4+ VOF/LES hit the same wall). See DEC-V61-224.
+>
+> **Pending session-end**: Notion sync of Accepted DEC **`V61-223`** (and the new
+> `V61-224` once it lands) — `notion_sync_status: pending_accepted`.
+>
+> ---
+>
+> ## Earlier — P3 W3.1 CHT v9 RULES LANDED (DEC-V61-222) (2026-05-31)
 >
 > **Status**: `P3_IN_PROGRESS`. HEAD = `97b2ca6`. W3.1 (CHT v9 rule distillation,
 > `DEC-V61-217` W3.1) LANDED via a 4-commit Codex chain (`6adce39` rules → `e1d2f13`
