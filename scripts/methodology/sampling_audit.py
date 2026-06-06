@@ -68,7 +68,7 @@ TRUST_CORE_PATHS = (
 AUDIT_REQUIRED_SURFACES: tuple[tuple[str, re.Pattern[str]], ...] = (
     (
         "1.FoamAgentExecutor_call_sites",
-        re.compile(r"FoamAgentExecutor\s*\.\s*execute\s*\("),
+        re.compile(r"(?:FoamAgentExecutor|DockerOpenFOAMSolverExecutor)\s*\.\s*execute\s*\("),
     ),
     (
         "2.Docker_subprocess_reachability",

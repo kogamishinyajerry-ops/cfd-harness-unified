@@ -19,7 +19,7 @@ from .executor import (
 )
 from .executor import MockExecutor as _ExecutorPlaneMockExecutor  # noqa: F401 (registry lookup)
 from .executor.base import RunReport as ExecutorRunReport
-from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
+from .foam_agent_adapter import DockerOpenFOAMSolverExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
 from .metrics import (
     CaseProfileError,
@@ -382,7 +382,7 @@ class TaskRunner:
             if mode == "mock":
                 self._executor = MockExecutor()
             elif mode == "foam_agent":
-                self._executor = FoamAgentExecutor()
+                self._executor = DockerOpenFOAMSolverExecutor()
             else:
                 raise ValueError(
                     f'EXECUTOR_MODE must be "mock" or "foam_agent", got "{mode}"'
@@ -501,7 +501,7 @@ class TaskRunner:
             # CFDExecutor to grow a notes contract.
             exec_result = self._executor.execute(task_spec)
             if (
-                isinstance(self._executor, FoamAgentExecutor)
+                isinstance(self._executor, DockerOpenFOAMSolverExecutor)
                 and not exec_result.success
                 and exec_result.raw_output_path is None
             ):

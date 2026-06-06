@@ -45,7 +45,7 @@ from src.airfoil_extractors import (  # noqa: E402
     compute_lift_slope,
     compute_y_plus_max,
 )
-from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
+from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor  # noqa: E402
 from src.models import (  # noqa: E402
     Compressibility,
     FlowType,
@@ -84,7 +84,7 @@ def _per_run(alpha_deg: float, timestamp: str) -> dict:
     """Run one α case end-to-end. Returns a dict for aggregation."""
     print(f"\n=== α={alpha_deg:+.1f}° run start ===", flush=True)
     t0 = time.monotonic()
-    executor = FoamAgentExecutor()
+    executor = DockerOpenFOAMSolverExecutor()
     task = _make_task(alpha_deg)
     result = executor.execute(task)
     wall_s = time.monotonic() - t0

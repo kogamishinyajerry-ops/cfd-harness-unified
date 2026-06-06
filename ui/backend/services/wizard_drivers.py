@@ -460,7 +460,7 @@ class RealSolverDriver:
         # _task_spec_from_case_id above.
         from datetime import datetime, timezone
 
-        from src.foam_agent_adapter import FoamAgentExecutor
+        from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor
 
         from ui.backend.services.run_history import (
             new_run_id,
@@ -532,7 +532,7 @@ class RealSolverDriver:
             "message": "Docker + OpenFOAM 求解器执行中（同步阻塞 ~10-300s）...",
         })
 
-        executor = FoamAgentExecutor()
+        executor = DockerOpenFOAMSolverExecutor()
         exec_task = asyncio.create_task(
             asyncio.to_thread(executor.execute, task_spec)
         )

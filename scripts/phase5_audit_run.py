@@ -39,7 +39,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
+from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor  # noqa: E402
 from src.task_runner import TaskRunner  # noqa: E402
 from src.result_comparator import _lookup_with_alias  # noqa: E402
 from src.comparator_gates import (  # noqa: E402
@@ -898,7 +898,7 @@ def main() -> int:
     commit_sha = _git_head_sha()
     print(f"[audit] commit: {commit_sha} · cases: {targets}")
 
-    runner = TaskRunner(executor=FoamAgentExecutor())
+    runner = TaskRunner(executor=DockerOpenFOAMSolverExecutor())
     summary = []
     for case_id in targets:
         summary.append(run_one(runner, case_id, commit_sha))

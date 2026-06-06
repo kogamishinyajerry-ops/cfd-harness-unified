@@ -517,7 +517,7 @@ def _try_load_sampledict_output(
     return None
 
 
-class FoamAgentExecutor:
+class DockerOpenFOAMSolverExecutor:
     """通过 Docker + OpenFOAM 执行真实仿真的 FoamAgentExecutor。
 
     1. 连接 cfd-openfoam 容器
@@ -8266,7 +8266,7 @@ boundaryField
                 (
                     xoc * chord,
                     0.0,  # mid-span (y thin slab)
-                    FoamAgentExecutor._naca0012_half_thickness(xoc) * chord,
+                    DockerOpenFOAMSolverExecutor._naca0012_half_thickness(xoc) * chord,
                 )
                 for xoc in xoc_values
             ]
@@ -10577,7 +10577,7 @@ mergePatchPairs
         if isinstance(latest_dir, Path):
             nut_path = latest_dir / "nut"
             if nut_path.exists():
-                nut_candidate = FoamAgentExecutor._read_openfoam_scalar_field(nut_path)
+                nut_candidate = DockerOpenFOAMSolverExecutor._read_openfoam_scalar_field(nut_path)
                 if len(nut_candidate) == len(cxs):
                     nut_vals = nut_candidate
         del caller_frame
@@ -10917,7 +10917,7 @@ mergePatchPairs
             if x_norm < 0.0 or x_norm > 1.0 or abs(z) > search_envelope:
                 continue
 
-            z_surface = FoamAgentExecutor._naca0012_half_thickness(x_norm) * chord
+            z_surface = DockerOpenFOAMSolverExecutor._naca0012_half_thickness(x_norm) * chord
             key = round(x_norm, 3)
 
             if z >= 0.0:
@@ -10980,3 +10980,9 @@ mergePatchPairs
             raw_output_path=raw_output_path,
             error_message=message,
         )
+
+# --- Backward-compat alias (DEC-V61-229) ---
+# Legacy class name retained for import-path stability. Pure Python symbol; NEVER
+# serialized into contract_hash/manifest/signature. Distinct from the EXECUTOR_MODE
+# dispatch string "foam_agent" and the module path "src.foam_agent_adapter" (both unchanged).
+FoamAgentExecutor = DockerOpenFOAMSolverExecutor  # noqa: N816

@@ -53,8 +53,8 @@ class DockerOpenFOAMExecutor(ExecutorAbc):
 
     def _get_wrapped(self) -> CFDExecutor:
         if self._wrapped is None:
-            from src.foam_agent_adapter import FoamAgentExecutor
-            self._wrapped = FoamAgentExecutor()
+            from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor
+            self._wrapped = DockerOpenFOAMSolverExecutor()
         return self._wrapped
 
     def execute(self, task_spec: TaskSpec) -> RunReport:
@@ -87,9 +87,9 @@ class DockerOpenFOAMExecutor(ExecutorAbc):
         # Lazy import — see _get_wrapped() docstring for the symmetric-lazy
         # rationale; this avoids module-init time circularity with
         # src.foam_agent_adapter (also Plane.EXECUTION).
-        from src.foam_agent_adapter import FoamAgentExecutor  # noqa: PLC0415
+        from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor  # noqa: PLC0415
 
-        if isinstance(wrapped, FoamAgentExecutor):
+        if isinstance(wrapped, DockerOpenFOAMSolverExecutor):
             return wrapped.execute_with_run_report(task_spec)
         result = wrapped.execute(task_spec)
         return RunReport(
