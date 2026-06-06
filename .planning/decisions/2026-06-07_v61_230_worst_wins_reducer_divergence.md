@@ -1,19 +1,19 @@
 ---
 decision_id: V61-230
 title: Two worst-wins reducers — divergence investigation + unification disposition (HIGHEST correctness-risk roadmap item)
-status: Proposed
-accepted_date:
+status: Accepted
+accepted_date: 2026-06-07
 parent_dec:
 phase: positioning-optimization (multi-agent role taxonomy arc · §5 P1 item)
 autonomous_governance: true
-confidence: high (ratified disposition = test-only single-contract guard, ZERO production reducer code changed; 29 chars-pinning tests green)
+confidence: high (ratified disposition = test-only single-contract guard, ZERO production reducer code changed; 29 chars-pinning tests green; Codex APPROVE R0)
 kogami_opt_in: candidate (trust-core honest-spine correctness; user may want strategic eyes)
 round_cap: 3
-codex_review_relay: pending (CRS gpt-5.4 — 86gs saturated by cross-project reviews this session)
-codex_verdict: pending
-codex_tool_report_path:
+codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs saturated by cross-project reviews this session)
+codex_verdict: APPROVE (R0, cap=3 — first-round clean; all 3 points PASS incl. non-hollow assertions + standalone-preserving bridge)
+codex_tool_report_path: reports/codex_tool_reports/v61_230_worst_wins_contract_report.md
 ratified_disposition: single-contract test (guarded non-merge) — user chose full-merge → system-architect consult 2026-06-07 proved single physical core breaks cfdtrust standalone-verifier portability → user ratified the architect-recommended single-contract-test realization
-notion_sync_status: N/A (Proposed; syncs only on Accepted)
+notion_sync_status: pending_accepted (session-end batch)
 touches_shared_dec: src/metrics/trust_gate.py (Plane.EVALUATION trust-core) · ui/backend/audit/cfdtrust/audit/report.py (Plane.UI trust report) · .importlinter Contract 2 (plane boundary) · trust_report.json schema · scope-adjacent ui/backend/audit/tools/cwos_status.py (THIRD reducer — explicitly OUT of scope)
 investigation_workflow: wf_82bb559f-95b (4 read-only agents · real-execution divergence table · 297K tokens)
 ---
@@ -137,6 +137,9 @@ User then ratified the **single-contract-test** realization. Final outcome:
 
 ## Status
 
-Status=**Proposed** pending Codex review of the contract test. No production spine code
-changed. Investigation artifact: workflow `wf_82bb559f-95b`; architecture consult:
-system-architect 2026-06-07. On Codex APPROVE → Status=Accepted.
+Status=**Accepted** (2026-06-07). Codex APPROVE R0 (CRS gpt-5.4 high, fallback — report
+`reports/codex_tool_reports/v61_230_worst_wins_contract_report.md`). Contract test
+`f8ee889` (29 tests green; 145 green in shared metrics+task_runner session). No production
+spine code changed. Investigation artifact: workflow `wf_82bb559f-95b`; architecture consult:
+system-architect 2026-06-07. NOT pushed — push/PR remains user-gated. Notion sync deferred
+to session-end Accepted-DEC batch.
