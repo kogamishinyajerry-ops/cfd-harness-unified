@@ -12,6 +12,9 @@ makes it MACHINE-CHECKED — a future edit that actually calls the provider here
 """
 from __future__ import annotations
 
+import ast
+import inspect
+import textwrap
 from unittest.mock import MagicMock
 
 import ui.backend.services.llm_provider as llm_pkg
@@ -66,3 +69,34 @@ def test_try_llm_enhance_degrades_to_false_when_provider_unimportable(monkeypatc
 
     assert ok is False  # graceful degrade, no crash
     assert isinstance(elapsed_ms, float)
+
+
+def test_try_llm_enhance_source_has_no_provider_invocation():
+    """Import-path-ROBUST tripwire (Codex R0 ISSUE-3): the behavioral mock above patches the
+    package re-export, which a future `from ...factory import get_default_provider` + call
+    would slip past. This AST check asserts `_try_llm_enhance`'s body contains NO call to
+    `get_default_provider(...)` (by any name) and NO `.chat/.review/.complete(...)` provider
+    invocation — regardless of how the symbol is imported. DEC-V61-231."""
+    src = textwrap.dedent(inspect.getsource(ai_review_route._try_llm_enhance))
+    tree = ast.parse(src)
+    forbidden: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if isinstance(fn, ast.Name) and fn.id == "get_default_provider":
+            forbidden.append("get_default_provider()")
+        if isinstance(fn, ast.Attribute) and fn.attr in {
+            "get_default_provider",
+            "chat",
+            "review",
+            "complete",
+            "acomplete",
+            "generate",
+        }:
+            forbidden.append(f"...{fn.attr}()")
+    assert not forbidden, (
+        f"_try_llm_enhance invokes an LLM provider {forbidden} — violates the 4Q "
+        f"zero-LLM-on-POST-/ai-review invariant (DEC-V61-231). The provider may only be "
+        f"IMPORTED as an importability probe, never called on this route."
+    )

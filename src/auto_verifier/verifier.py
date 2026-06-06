@@ -170,6 +170,15 @@ class AutoVerifier:
             and physics.status == "PASS"
         ):
             return "PASS"
+        # DEC-V61-231 (Codex R0 ISSUE-2): when the gold-standard comparison was SKIPPED
+        # there is NO benchmark evidence — this must NOT collapse into the pass-ish
+        # PASS_WITH_DEVIATIONS default (that fabricates an acceptable verdict without
+        # evidence, the same defect as the out-of-scope path). Honest "not verified" =
+        # SKIPPED. PASS_WITH_DEVIATIONS is reserved for cases where a comparison WAS
+        # performed (overall PASS/PASS_WITH_DEVIATIONS) but deviations/non-convergence
+        # remain. 引擎不撒谎: 缺证据时保持 SKIPPED.
+        if comparison.overall == "SKIPPED":
+            return "SKIPPED"
         return "PASS_WITH_DEVIATIONS"
 
     @staticmethod

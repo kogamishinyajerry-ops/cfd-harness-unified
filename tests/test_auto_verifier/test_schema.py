@@ -71,3 +71,35 @@ def test_out_of_scope_case_returns_noop(tmp_path: Path):
     # report engines bucket with passing cases). 引擎不撒谎: 缺证据时保持 SKIPPED.
     assert report.verdict == "SKIPPED"
     assert report.verdict not in {"PASS", "PASS_WITH_DEVIATIONS"}  # not in any success bucket
+
+
+def test_determine_verdict_skipped_comparison_not_fabricated_pass():
+    """DEC-V61-231 (Codex R0 ISSUE-2): an IN-SCOPE case whose gold-standard comparison was
+    SKIPPED (no benchmark evidence) must resolve to verdict SKIPPED, NOT the pass-ish
+    PASS_WITH_DEVIATIONS default. PASS_WITH_DEVIATIONS stays reserved for cases where a
+    comparison WAS performed but deviations remain."""
+    from auto_verifier.schemas import (
+        ConvergenceReport,
+        GoldStandardComparison,
+        PhysicsCheck,
+    )
+
+    conv = ConvergenceReport(
+        status="CONVERGED", final_residual=1e-6, target_residual=1e-5, residual_ratio=0.1
+    )
+    phys = PhysicsCheck(status="PASS")
+
+    # no benchmark evidence (comparison SKIPPED) → honest SKIPPED, not fabricated pass
+    assert AutoVerifier._determine_verdict(
+        conv, GoldStandardComparison(overall="SKIPPED"), phys
+    ) == "SKIPPED"
+    # regressions: real comparison outcomes unchanged
+    assert AutoVerifier._determine_verdict(
+        conv, GoldStandardComparison(overall="PASS_WITH_DEVIATIONS"), phys
+    ) == "PASS_WITH_DEVIATIONS"
+    assert AutoVerifier._determine_verdict(
+        conv, GoldStandardComparison(overall="PASS"), phys
+    ) == "PASS"
+    assert AutoVerifier._determine_verdict(
+        conv, GoldStandardComparison(overall="FAIL"), phys
+    ) == "FAIL"
