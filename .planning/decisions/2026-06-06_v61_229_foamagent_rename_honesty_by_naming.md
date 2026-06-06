@@ -1,19 +1,20 @@
 ---
 decision_id: V61-229
 title: FoamAgentExecutor → DockerOpenFOAMSolverExecutor — honesty-by-naming rename + §10.5.4a gate widening
-status: Proposed
-accepted_date:
+status: Accepted
+accepted_date: 2026-06-07
 parent_dec:
 phase: positioning-optimization (multi-agent role taxonomy arc)
 autonomous_governance: true
 confidence: high
-kogami_opt_in: false
+kogami_opt_in: false (pure symbol rename + alias + gate-widening; reversible; no §11.1 workbench-freeze paths touched)
 round_cap: 3
-codex_review_relay: 86gs gpt-5.4 xhigh (PENDING — relay stalled this session; review queued before any push/merge)
-codex_verdict: pending
-codex_tool_report_path:
-notion_sync_status: N/A (Proposed; syncs only on Accepted)
+codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs xhigh saturated by concurrent cross-project whole-branch reviews; two 86gs focused reviews stalled/killed; consistent with W3.2b/W3.3a/W3.3b 86gs instability this session)
+codex_verdict: APPROVE (R0, cap=3 — first-round clean, 0 findings; all 4 review points PASS incl. manifest serializes MODE.value not class name)
+codex_tool_report_path: reports/codex_tool_reports/v61_229_rename_honesty_report.md
+notion_sync_status: pending_accepted (session-end batch)
 touches_shared_dec: §10.5.4a audit-required-surface #1 gate (scripts/methodology/sampling_audit.py — governance-rule-change) · EXECUTOR_MODE routing (string "foam_agent" preserved) · byte-reproducibility / signing contract (preserved, guard-tested)
+date: 2026-06-07
 ---
 
 # DEC-V61-229 · FoamAgentExecutor → DockerOpenFOAMSolverExecutor (honesty-by-naming)
@@ -78,9 +79,25 @@ required a DEC (governance-rule-change), not a routine refactor.
   (guard-tested). The only contract touched is the §10.5.4a gate, widened (strictly more
   coverage, never less).
 
+## Review trail (triangulated)
+
+Governance-rule-change → required異源 Codex APPROVE before push/merge. Achieved 2026-06-07,
+**clean R0** (cap=3, 0 fix rounds), triangulated three independent ways:
+
+1. **異源 Codex (the governance gate)** — CRS gpt-5.4 high (86gs xhigh saturated by
+   concurrent cross-project reviews → documented fallback). **APPROVE**, all 4 points PASS.
+   Report: `reports/codex_tool_reports/v61_229_rename_honesty_report.md`.
+2. **Ultracode 4-lens adversarial pre-review** (workflow `wf_f8b88b9c-158`) — completeness /
+   serialization-leak / gate-correctness / honesty, each finding adversarially refuted.
+   **0 confirmed defects, 0 raw findings** (4 agents / 73 tool-uses / 236K tokens).
+   *Same-family → does NOT count as governance review; supplement only.*
+3. **Opus spot-check** — every `__name__`/`__qualname__`/`type()` hit serializes *other*
+   types in error messages, never the executor class; `DockerOpenFOAMExecutor` (distinct
+   class) confirmed no collision with new `DockerOpenFOAMSolverExecutor`.
+
 ## Status note
 
-Status=Proposed pending Codex review (86gs relay stalled this session). Per project
-governance, this governance-rule-change requires Codex APPROVE before push/merge.
-Code committed on branch `feat/agent-role-taxonomy-fence` (NOT pushed). On Codex
-APPROVE → Status=Accepted + Notion sync.
+Status=**Accepted** (Codex APPROVE landed). Code on branch `feat/agent-role-taxonomy-fence`
+(commit `6707a79` rename + this DEC; follow-up commit flips DEC→Accepted + archives report).
+**NOT pushed** — push/PR remains user-gated per `~/CLAUDE.md` ("commit or push only when the
+user asks"). Notion sync deferred to session-end Accepted-DEC batch.
