@@ -1,19 +1,19 @@
 ---
 decision_id: V61-231
 title: Advisory-honesty hardening — out-of-scope verdict SKIPPED (no fabrication) + machine-checked zero-LLM-on-POST-/ai-review invariant
-status: Proposed
-accepted_date:
+status: Accepted
+accepted_date: 2026-06-07
 parent_dec:
 phase: positioning-optimization (multi-agent role taxonomy arc · §5 P2 items)
 autonomous_governance: true
 confidence: high
 kogami_opt_in: false (two small honesty hardenings; reversible; no §11.1 workbench-freeze paths)
 round_cap: 3
-codex_review_relay: pending (CRS gpt-5.4 — 86gs saturated by cross-project reviews this session)
-codex_verdict: pending
-codex_tool_report_path:
+codex_review_relay: CRS gpt-5.4 high (effort=high, fallback — 86gs saturated by cross-project reviews this session)
+codex_verdict: APPROVE-equivalent — production invariants APPROVE by R1; R2 P3 test-tripwire residual closed inline (verbatim-adjacent) + self-proven by meta-test; cap=3 honored, no R3 (chain R0 CHANGES_REQUIRED → R1 → R2)
+codex_tool_report_path: reports/codex_tool_reports/v61_231_advisory_honesty_report.md
 touches_shared_dec: src/auto_verifier/verifier.py (verdict producer) — verdict field consumed across ≥3 paths (report_engine/data_collector, report_engine/visual_acceptance, audit_package/reference_lookup) → DEC · ui/backend/routes/ai_review.py invariant (test-only, no prod change)
-notion_sync_status: N/A (Proposed; syncs only on Accepted)
+notion_sync_status: pending_accepted (session-end batch)
 date: 2026-06-07
 ---
 
@@ -69,8 +69,18 @@ production code changed.
   no consumer breaks (89 tests green). Behavior change is intentional + desired.
 - **P2b**: test-only, zero risk.
 
+## Codex chain (cap=3)
+
+R0 CHANGES_REQUIRED (2 ISSUEs) → R1 (ISSUE-2 production fix PASS; ISSUE-3 narrower) → R2
+(ISSUE-3 P3 test-tripwire residual). **Every production invariant APPROVE by R1.** The R2
+residual (assignment-alias bypass in the AST tripwire) was a P3 test-completeness nit, closed
+inline (verbatim-adjacent) + self-proven by `test_tripwire_is_not_hollow_*` — no R3 round
+opened (cap honored). Report: `reports/codex_tool_reports/v61_231_advisory_honesty_report.md`.
+R1 fix `d555b4a`, R2 fix `00cb2b6`, closure `2dcd2a3`. 354 tests green across all surfaces.
+
 ## Status
 
-Status=**Proposed** pending Codex review. NOT pushed. On Codex APPROVE → Status=Accepted.
+Status=**Accepted** (2026-06-07). NOT pushed at DEC-write time; push/PR per user authorization
+in the same session. Notion sync deferred to session-end Accepted-DEC batch.
 Deferred follow-ups: `reference_lookup` permissive non-negative=acceptable contract;
 the THIRD reducer `cwos_status.py` (from DEC-230); harden-A-fail-closed (from DEC-230).
