@@ -2,6 +2,29 @@
 
 Implements DEC-V61-162 (charter) + DEC-V61-163 (B.1 scaffold).
 
+> **Role in the architecture (see `docs/architecture/AGENT_ROLES.md` §4): this is the
+> project's ONE genuine *agentic* tier — and it is deliberately a TEST HARNESS, fenced
+> off the production solve path.**
+>
+> - **Real autonomous LLM tool-use agents**: Sonnet 4.6 / DeepSeek V4 Pro / gpt-5.4 (86gs
+>   relay) drive the real workbench over HTTP (`http_get/post/put` + `submit_verdict/drop`)
+>   under step/token budgets. Opus is **forbidden** (`assert_non_opus()`) to avoid an
+>   Opus-reads-Opus echo chamber.
+> - **Dry-run is the DEFAULT**: `python -m scripts.dogfood.orchestrate` runs fully offline
+>   (scripted mock LLM + `httpx.MockTransport`). `--live` is opt-in and needs API keys + a
+>   workbench at `localhost:8000`.
+> - **Graded deterministically**: a frozen literature-referenced value ± tolerance
+>   (`case_brief.check_verdict`), **never** LLM self-assessment.
+> - **Zero production coupling** (machine-enforced): `src/` and `ui/backend/` never import
+>   `scripts.dogfood` — asserted by
+>   `tests/architecture/test_role_taxonomy.py::test_agentic_dogfood_harness_not_imported_by_production`.
+> - **Real evidence it works**: `.planning/dogfood/runs/live_2026_05_07_r9` — DeepSeek V4 Pro,
+>   120 steps / ~3.7M tokens against a real imported case.
+>
+> Why this matters for positioning: the system is genuinely multi-agent, but its autonomous
+> LLM agency is confined here (a graded sandbox), while production keeps AI in the read-only
+> advisor seat. *Agentic where it's safe to be; deterministic where it counts.*
+
 ## What this is
 
 Orchestration backbone for letting **non-Opus persona subagents** drive
