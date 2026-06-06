@@ -72,29 +72,44 @@ def test_try_llm_enhance_degrades_to_false_when_provider_unimportable(monkeypatc
 
 
 def test_try_llm_enhance_source_has_no_provider_invocation():
-    """Import-path-ROBUST tripwire (Codex R0 ISSUE-3): the behavioral mock above patches the
-    package re-export, which a future `from ...factory import get_default_provider` + call
-    would slip past. This AST check asserts `_try_llm_enhance`'s body contains NO call to
-    `get_default_provider(...)` (by any name) and NO `.chat/.review/.complete(...)` provider
-    invocation — regardless of how the symbol is imported. DEC-V61-231."""
+    """Import-path-ROBUST tripwire (Codex R0 ISSUE-3 + R1 alias gap): the behavioral mock
+    above patches the package re-export; a future direct-from-factory OR ALIASED import
+    (`import get_default_provider as gdp; gdp()`) would slip past a naive name match. This
+    AST check first RESOLVES the local bindings of the provider factory / package from the
+    import statements inside `_try_llm_enhance` (honouring `asname` aliases), then asserts
+    none of those bound names is ever CALLED, plus no `.chat/.review/.complete(...)` provider
+    invocation. DEC-V61-231. (Residual: fully dynamic dispatch via getattr/eval is out of
+    scope for a static tripwire; the behavioral mock test is the complementary guard.)"""
     src = textwrap.dedent(inspect.getsource(ai_review_route._try_llm_enhance))
     tree = ast.parse(src)
+
+    # 1. Resolve every local name that could reach the provider factory, via ANY import form.
+    factory_aliases: set[str] = {"get_default_provider"}  # also catch a bare module-level name
+    package_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "get_default_provider":
+                    factory_aliases.add(alias.asname or alias.name)  # honour `as gdp`
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if "llm_provider" in alias.name:  # `import ...llm_provider [as p]`
+                    package_aliases.add(alias.asname or alias.name.split(".")[0])
+
+    INVOKE_ATTRS = {"get_default_provider", "chat", "review", "complete", "acomplete", "generate"}
     forbidden: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         fn = node.func
-        if isinstance(fn, ast.Name) and fn.id == "get_default_provider":
-            forbidden.append("get_default_provider()")
-        if isinstance(fn, ast.Attribute) and fn.attr in {
-            "get_default_provider",
-            "chat",
-            "review",
-            "complete",
-            "acomplete",
-            "generate",
-        }:
-            forbidden.append(f"...{fn.attr}()")
+        if isinstance(fn, ast.Name) and fn.id in factory_aliases:
+            forbidden.append(f"{fn.id}()")
+        elif isinstance(fn, ast.Attribute):
+            if fn.attr in INVOKE_ATTRS:
+                forbidden.append(f"...{fn.attr}()")
+            # attribute call on a provider-package alias, e.g. `p.get_default_provider()`
+            if isinstance(fn.value, ast.Name) and fn.value.id in package_aliases:
+                forbidden.append(f"{fn.value.id}.{fn.attr}()")
     assert not forbidden, (
         f"_try_llm_enhance invokes an LLM provider {forbidden} — violates the 4Q "
         f"zero-LLM-on-POST-/ai-review invariant (DEC-V61-231). The provider may only be "
