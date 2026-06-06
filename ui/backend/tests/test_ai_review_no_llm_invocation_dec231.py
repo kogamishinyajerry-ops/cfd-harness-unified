@@ -7,8 +7,11 @@ route (real LLM grounding is fanned out to /ai-chat and /cases/{id}/ai-review, w
 carry their own loopback + auth gating). This keeps the 4-question advisory-only gate
 honest: the advisor-stack base report is the whole payload; the LLM adds nothing on POST.
 
-Until now that invariant lived only in a source comment (ai_review.py:686-692). This test
-makes it MACHINE-CHECKED — a future edit that actually calls the provider here turns RED.
+Until now that invariant lived only in a source comment (ai_review.py:686-692). This module
+makes it MACHINE-CHECKED two complementary ways:
+  - a BEHAVIORAL guard (patch the provider factory, assert call_count==0);
+  - a STATIC import-path-robust tripwire (`_provider_invocations`) that is itself
+    proven non-hollow by `test_tripwire_is_not_hollow_*` (Codex R0→R2 hardening).
 """
 from __future__ import annotations
 
@@ -21,9 +24,70 @@ import ui.backend.services.llm_provider as llm_pkg
 from ui.backend.routes import ai_review as ai_review_route
 
 
+# --------------------------------------------------------------------------- #
+# Static detector — import-path-robust (Codex R0 ISSUE-3 + R1/R2 alias gaps).
+# --------------------------------------------------------------------------- #
+def _provider_invocations(source: str) -> list[str]:
+    """Return the provider-invocation sites in `source` (AST, no execution).
+
+    Robust against import aliasing AND AST-visible assignment rebinding:
+      1. resolve local bindings of `get_default_provider` from import statements
+         (honouring `as` aliases) + `llm_provider` package aliases;
+      2. follow assignment rebindings (`f = gdp` / `f = p.get_default_provider`) to a
+         FIXPOINT so a 1+-hop alias cannot launder the call;
+      3. flag any call to a bound factory name + any `.chat/.review/.complete(...)` etc.
+    Out of scope (NOT AST-visible): dynamic getattr/eval dispatch — guarded behaviorally.
+    """
+    tree = ast.parse(textwrap.dedent(source))
+    factory_aliases: set[str] = {"get_default_provider"}
+    package_aliases: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.name == "get_default_provider":
+                    factory_aliases.add(a.asname or a.name)
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                if "llm_provider" in a.name:
+                    package_aliases.add(a.asname or a.name.split(".")[0])
+
+    changed = True
+    while changed:  # fixpoint over assignment rebindings
+        changed = False
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            v = node.value
+            is_provider_expr = (
+                (isinstance(v, ast.Name) and v.id in factory_aliases)
+                or (isinstance(v, ast.Attribute) and v.attr == "get_default_provider")
+            )
+            if not is_provider_expr:
+                continue
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name) and tgt.id not in factory_aliases:
+                    factory_aliases.add(tgt.id)
+                    changed = True
+
+    invoke_attrs = {"get_default_provider", "chat", "review", "complete", "acomplete", "generate"}
+    hits: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if isinstance(fn, ast.Name) and fn.id in factory_aliases:
+            hits.append(f"{fn.id}()")
+        elif isinstance(fn, ast.Attribute) and fn.attr in invoke_attrs:
+            hits.append(f"...{fn.attr}()")
+    return hits
+
+
+# --------------------------------------------------------------------------- #
+# The invariant on the REAL route function.
+# --------------------------------------------------------------------------- #
 def test_try_llm_enhance_imports_but_never_invokes_provider(monkeypatch):
-    """_try_llm_enhance may IMPORT get_default_provider but must NOT call it, nor invoke
-    chat/review on any provider. Pins 'zero LLM call on POST /ai-review' (DEC-V61-231)."""
+    """BEHAVIORAL: _try_llm_enhance may IMPORT get_default_provider but must NOT call it,
+    nor invoke chat/review on any provider. Pins 'zero LLM call on POST /ai-review'."""
     factory_calls = {"n": 0}
     sentinel_provider = MagicMock(name="provider")
 
@@ -31,14 +95,10 @@ def test_try_llm_enhance_imports_but_never_invokes_provider(monkeypatch):
         factory_calls["n"] += 1
         return sentinel_provider
 
-    # `from ui.backend.services.llm_provider import get_default_provider` resolves via
-    # getattr on the package, so patching the package attr intercepts the late import.
     monkeypatch.setattr(llm_pkg, "get_default_provider", _tracking_factory, raising=False)
 
     ok, elapsed_ms = ai_review_route._try_llm_enhance({"verdict": "PASS", "advisors": []})
 
-    # Provider is importable → enhancement signal True, but the factory is the import-only
-    # probe and must NEVER be called (the invariant).
     assert ok is True
     assert factory_calls["n"] == 0, (
         "POST /ai-review invoked the LLM provider factory — violates the 4Q "
@@ -50,16 +110,14 @@ def test_try_llm_enhance_imports_but_never_invokes_provider(monkeypatch):
 
 
 def test_try_llm_enhance_degrades_to_false_when_provider_unimportable(monkeypatch):
-    """If the provider package is not importable, the route still returns a complete base
-    report (llm_enhanced=False) — the LLM is a pure addendum, never load-bearing."""
+    """BEHAVIORAL: if the provider package is not importable, the route still returns a
+    complete base report (llm_enhanced=False) — the LLM is a pure addendum, never load-bearing."""
     import builtins
 
     real_import = builtins.__import__
 
     def _blocked_import(name, *args, **kwargs):
-        if name == "ui.backend.services.llm_provider" or name.startswith(
-            "ui.backend.services.llm_provider"
-        ):
+        if name.startswith("ui.backend.services.llm_provider"):
             raise ImportError("simulated: provider unavailable")
         return real_import(name, *args, **kwargs)
 
@@ -67,51 +125,29 @@ def test_try_llm_enhance_degrades_to_false_when_provider_unimportable(monkeypatc
 
     ok, elapsed_ms = ai_review_route._try_llm_enhance({"verdict": "PASS"})
 
-    assert ok is False  # graceful degrade, no crash
+    assert ok is False
     assert isinstance(elapsed_ms, float)
 
 
-def test_try_llm_enhance_source_has_no_provider_invocation():
-    """Import-path-ROBUST tripwire (Codex R0 ISSUE-3 + R1 alias gap): the behavioral mock
-    above patches the package re-export; a future direct-from-factory OR ALIASED import
-    (`import get_default_provider as gdp; gdp()`) would slip past a naive name match. This
-    AST check first RESOLVES the local bindings of the provider factory / package from the
-    import statements inside `_try_llm_enhance` (honouring `asname` aliases), then asserts
-    none of those bound names is ever CALLED, plus no `.chat/.review/.complete(...)` provider
-    invocation. DEC-V61-231. (Residual: fully dynamic dispatch via getattr/eval is out of
-    scope for a static tripwire; the behavioral mock test is the complementary guard.)"""
-    src = textwrap.dedent(inspect.getsource(ai_review_route._try_llm_enhance))
-    tree = ast.parse(src)
+def test_try_llm_enhance_static_tripwire_finds_no_invocation():
+    """STATIC: the real _try_llm_enhance body contains ZERO provider invocation."""
+    assert _provider_invocations(inspect.getsource(ai_review_route._try_llm_enhance)) == []
 
-    # 1. Resolve every local name that could reach the provider factory, via ANY import form.
-    factory_aliases: set[str] = {"get_default_provider"}  # also catch a bare module-level name
-    package_aliases: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                if alias.name == "get_default_provider":
-                    factory_aliases.add(alias.asname or alias.name)  # honour `as gdp`
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if "llm_provider" in alias.name:  # `import ...llm_provider [as p]`
-                    package_aliases.add(alias.asname or alias.name.split(".")[0])
 
-    INVOKE_ATTRS = {"get_default_provider", "chat", "review", "complete", "acomplete", "generate"}
-    forbidden: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        fn = node.func
-        if isinstance(fn, ast.Name) and fn.id in factory_aliases:
-            forbidden.append(f"{fn.id}()")
-        elif isinstance(fn, ast.Attribute):
-            if fn.attr in INVOKE_ATTRS:
-                forbidden.append(f"...{fn.attr}()")
-            # attribute call on a provider-package alias, e.g. `p.get_default_provider()`
-            if isinstance(fn.value, ast.Name) and fn.value.id in package_aliases:
-                forbidden.append(f"{fn.value.id}.{fn.attr}()")
-    assert not forbidden, (
-        f"_try_llm_enhance invokes an LLM provider {forbidden} — violates the 4Q "
-        f"zero-LLM-on-POST-/ai-review invariant (DEC-V61-231). The provider may only be "
-        f"IMPORTED as an importability probe, never called on this route."
-    )
+# --------------------------------------------------------------------------- #
+# Prove the tripwire is NOT hollow (Codex R0→R2): it must flag every AST-visible bypass.
+# --------------------------------------------------------------------------- #
+def test_tripwire_is_not_hollow_catches_all_ast_visible_bypasses():
+    bypasses = {
+        "direct": "def f():\n from x.llm_provider import get_default_provider\n get_default_provider()\n",
+        "pkg-attr": "def f():\n import x.llm_provider as p\n p.get_default_provider()\n",
+        "import-alias": "def f():\n from x.llm_provider import get_default_provider as gdp\n gdp()\n",
+        "assign-1hop": "def f():\n from x.llm_provider import get_default_provider as gdp\n g = gdp\n g()\n",
+        "assign-2hop": "def f():\n from x.llm_provider import get_default_provider as gdp\n g = gdp\n h = g\n h()\n",
+        "chat-call": "def f():\n prov = make()\n prov.chat('x')\n",
+    }
+    for label, src in bypasses.items():
+        assert _provider_invocations(src), f"tripwire MISSED an AST-visible bypass: {label}"
+    # control: the real import-only probe pattern must NOT be flagged (non-trivial test).
+    clean = "def f():\n from x.llm_provider import get_default_provider  # probe only\n return True\n"
+    assert _provider_invocations(clean) == []
