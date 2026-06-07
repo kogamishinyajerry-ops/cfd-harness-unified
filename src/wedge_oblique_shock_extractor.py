@@ -225,21 +225,36 @@ def _find_xy(post_dir: Path, set_name: str, field: str) -> Path:
         )
     latest_key = max(_time_dir_key(p.parent.name) for p in all_xy)
     candidates = [p for p in all_xy if _time_dir_key(p.parent.name) == latest_key]
-    if len(candidates) == 1:
-        return candidates[0]
     token = field.lower()
     matching = [p for p in candidates if token in p.name.lower()]
+    # EVERY selection must positively carry the density-field token — including a lone
+    # file. A single non-matching .xy (e.g. only line_p.xy was emitted) must fail
+    # closed, not be measured as if it were density (Codex DEC-V61-232 R2 P1).
     if len(matching) == 1:
         return matching[0]
+    if not matching:
+        raise WedgeShockExtractorError(
+            f"no sampled-line file under {post_dir / set_name} (latest time) carries the "
+            f"density field token {field!r}: {sorted(p.name for p in candidates)} — refusing "
+            f"to measure beta from a possibly-wrong field; name the density profile to "
+            f"include {field!r}"
+        )
     raise WedgeShockExtractorError(
         f"ambiguous sampled-line files under {post_dir / set_name} (latest time): "
-        f"{sorted(p.name for p in candidates)} — need exactly one matching field "
-        f"{field!r} to locate the shock from density; refusing to guess"
+        f"{sorted(p.name for p in matching)} both match field {field!r}; need exactly one "
+        f"to locate the shock from density — refusing to guess"
     )
 
 
 def _read_distance_field(xy_path: Path) -> List[Tuple[float, float]]:
-    """Parse a 2-column ``distance value`` sampled-line file. Fail-closed on garbage."""
+    """Parse a 2-column ``distance value`` sampled-line file. Fail-closed on garbage.
+
+    Assumes the selected ``.xy`` is the single-field density profile (column 1 is rho).
+    A multi-field single ``.xy`` (e.g. ``setFormat raw`` writing distance,p,rho,U in one
+    file) is NOT column-resolved here — that depends on the live sampling layout and is
+    deferred to the live slice (DEC-V61-232 forward-hardening backlog). The
+    field-token selection in ``_find_xy`` keeps a per-field density file the contract.
+    """
     rows: List[Tuple[float, float]] = []
     for line in xy_path.read_text(encoding="utf-8").splitlines():
         s = line.strip()

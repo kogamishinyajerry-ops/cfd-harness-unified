@@ -378,6 +378,18 @@ def test_ambiguous_xy_without_density_match_fails_closed(tmp_path: Path) -> None
         extract_wedge_qois(case, x_shock_station=_X_STATION)
 
 
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_lone_wrong_field_xy_fails_closed(tmp_path: Path) -> None:
+    """Codex DEC-V61-232 R2 P1: if the ONLY sampled-line file is not the density field
+    (e.g. a misconfigured set emitted just line_p.xy), the extractor must fail closed
+    rather than measure beta from the wrong signal — a lone file is not a free pass."""
+    case = _copy_case(tmp_path)
+    time_dir = next((case / "postProcessing" / "shockLine").glob("*"))
+    (time_dir / "line_rho.xy").rename(time_dir / "line_p.xy")  # only a pressure profile remains
+    with pytest.raises(WedgeShockExtractorError):
+        extract_wedge_qois(case, x_shock_station=_X_STATION)
+
+
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
     """No silent default: an empty case dir raises rather than fabricating QoIs."""
     with pytest.raises((FileNotFoundError, WedgeShockExtractorError)):
