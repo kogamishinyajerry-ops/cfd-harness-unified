@@ -1,6 +1,40 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P3 W3.3b CONJUGATE BENCHMARK LIVE PASS → runnable-coverage 1→2 FLIPPED (read first)
+> ## ⏩ MOST RECENT — P4 V71.A WEDGE OBLIQUE-SHOCK V&V SCAFFOLDING LANDED (offline · NO coverage flip) (read first)
+>
+> **Status**: `P4_SCAFFOLDING_LANDED · LIVE_RUN_PENDING`. **HEAD = `cae939f`** (run `git log -1`).
+> **runnable-coverage STILL 2** — P4 authored the compressible/supersonic V&V *contract*
+> offline; it did NOT flip coverage 2→3 (that needs a LIVE rhoCentralFoam solve, blocked on
+> the DEC-V61-224 fork wall). Branch: `feat/agent-role-taxonomy-fence`. Commits LOCAL (not pushed).
+>
+> **What landed (DEC-V61-232, scaffolding-first · user-ratified: M=2.0 inviscid wedge, θ=15°+10°):**
+> - `knowledge/gold_standards/wedge_oblique_shock{,_theta10}.yaml` — analytical θ-β-M oblique-shock
+>   gold (β=45.34°, M2=1.446, p2/p1=2.195, ρ2/ρ1=1.729, T2/T1=1.269 @ θ=15°); references closed-form,
+>   `contract_status: ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING`.
+> - `src/wedge_oblique_shock_extractor.py` (Execution, PURE, anti-tautology, fail-closed) +
+>   `src/wedge_oblique_shock_gate.py` (Control, comparator + 5 hard gates). `_plane_assignment.py` +2.
+> - `tests/p4/` (28 green): self-verifying gold (re-derives θ-β-M) + anti-cheat (every hard gate
+>   + smearing-tolerant locator + density-field selection fail-closed). SYNTHETIC fixture
+>   `reports/showcase_aero/_w71a_wedge_probe_SYNTHETIC/` (honestly labeled non-solver).
+> - E22 eval β-bug fixed (42°→45.34°); capability matrix V71.A noted (no live anchor).
+>
+> **Verification trail**: in-house red-team workflow `wig61u2wt` HELD (0 holes). **Codex 86gs gpt-5.4
+> xhigh chain CLOSED within cap=3** (R0 2 → R1 2 → R2 P1 verbatim; all live-robustness gaps the
+> offline fixture hid — wall-β offset, multi-field probe contract, .xy density selection,
+> smeared-shock locator, lone-.xy validation). Report: `reports/codex_tool_reports/v61_232_p4_wedge_scaffolding_report.md`.
+>
+> **NEXT (the deferred gated slice — needs sponsor greenlight on Docker infra):**
+> - **P4 LIVE flip (coverage 2→3)**: provision an ESI image (`opencfd/openfoam-default:2312`, named in
+>   DEC-V61-224) that ships `rhoCentralFoam` + wire `foam_agent_adapter` to it (TRUST-CORE, Codex
+>   sync-gate). Run the wedge live → replace the SYNTHETIC fixture with a frozen real probe → flip
+>   coverage. Forward-hardenings to fold in then (DEC-V61-232 backlog): 6th β↔ratio cross-consistency
+>   gate; machine-readable `contract_status`; multi-field single-`.xy` column-resolution.
+> - **Session-end TODO**: Notion batch-sync Accepted DEC-V61-232 (+ still-pending V61-224..231 per
+>   prior RESUME). Push is a user call.
+>
+> ---
+>
+> ## ⏩ PRIOR — P3 W3.3b CONJUGATE BENCHMARK LIVE PASS → runnable-coverage 1→2 FLIPPED
 >
 > **Status**: `P3_IN_PROGRESS`. **HEAD = the W3.3b coverage-flip commit this session
 > (DEC-V61-228); run `git log -1`.** **runnable-coverage 1→2 FLIPPED** — the full
