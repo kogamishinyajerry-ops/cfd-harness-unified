@@ -47,6 +47,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.orchestrator": Plane.CONTROL,
     "src.cht_fin_gate": Plane.CONTROL,  # P3 W3.3a cht_analytical gate (extract+compare)
     "src.cht_conjugate_gate": Plane.CONTROL,  # P3 W3.3b cht_conjugate Gnielinski gate
+    "src.wedge_oblique_shock_gate": Plane.CONTROL,  # P4 V71.A wedge oblique-shock gate
     "src.notion_client": Plane.CONTROL,
     "src.notion_sync": Plane.CONTROL,
     "src.audit_package": Plane.CONTROL,
@@ -58,6 +59,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.airfoil_extractors": Plane.EXECUTION,  # DEC-V61-058 B2
     "src.cht_fin_extractor": Plane.EXECUTION,  # P3 W3.3a fin QoI extractor
     "src.cht_conjugate_extractor": Plane.EXECUTION,  # P3 W3.3b conjugate Nu extractor
+    "src.wedge_oblique_shock_extractor": Plane.EXECUTION,  # P4 V71.A wedge shock extractor
     "src.plane_channel_uplus_emitter": Plane.EXECUTION,
     "src.wall_gradient": Plane.EXECUTION,
     "src.dhc_extractors": Plane.EXECUTION,

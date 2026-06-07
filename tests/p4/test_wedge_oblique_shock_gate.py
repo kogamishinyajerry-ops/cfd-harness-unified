@@ -1,0 +1,237 @@
+"""P4 V71.A · coverage + anti-cheat test for the supersonic-wedge oblique-shock gate.
+
+Drives a SYNTHETIC offline fixture (reports/showcase_aero/_w71a_wedge_probe_SYNTHETIC/
+— NOT a solver run; see its _build_synthetic_fixture.py header) through the QoI
+extractor and the wedge_oblique_shock gate, and asserts the gate PASSES — with NO
+live Docker / OpenFOAM run.
+
+IMPORTANT — scope of what this proves: these tests exercise the gate's PARSING +
+FAIL-CLOSED LOGIC (does a doctored input get caught?). They do NOT validate physics
+and do NOT flip runnable-coverage 2->3 — that requires a LIVE rhoCentralFoam solve
+(blocked on an ESI image, DEC-V61-224 fork wall, deferred to a separate slice). The
+physics REFERENCE is locked separately by the self-verifying gold test
+(test_wedge_oblique_shock_gold.py). When the live slice lands, a genuine frozen
+rhoCentralFoam probe REPLACES this synthetic fixture.
+
+Honesty locks exercised here:
+  - the gate is REAL: a doctored shock-line (wrong density-jump location) flips beta
+    out of band -> FAIL;
+  - ideal-gas consistency is a HARD gate: a doctored single state probe breaks
+    T2/T1 == (p2/p1)/(rho2/rho1) -> FAIL even when that ratio still matches the gold;
+  - supersonic-inflow / downstream-supersonic / inflow-matches-target are HARD gates;
+  - the extractor MEASURES (does not echo the gold): extracted beta/M2 differ from
+    the committed reference yet land inside the 3% band;
+  - a flat density field refuses to fabricate a shock angle;
+  - missing artifacts raise rather than fabricate a default.
+"""
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+
+from src.wedge_oblique_shock_extractor import (
+    WedgeShockExtractorError,
+    extract_wedge_qois,
+    to_key_quantities,
+)
+from src.wedge_oblique_shock_gate import gate_wedge_against_gold
+
+_REPO = Path(__file__).resolve().parents[2]
+_PROBE = _REPO / "reports" / "showcase_aero" / "_w71a_wedge_probe_SYNTHETIC"
+_GOLD = _REPO / "knowledge" / "gold_standards" / "wedge_oblique_shock.yaml"
+_GOLD_T10 = _REPO / "knowledge" / "gold_standards" / "wedge_oblique_shock_theta10.yaml"
+_X_STATION = 0.5  # = wedge_inputs.x_shock_station
+
+# committed gold references (theta=15) — the extractor must DIFFER from these yet pass
+_GOLD_BETA = 45.3436
+_GOLD_M2 = 1.4457
+
+
+def _copy_case(tmp_path: Path) -> Path:
+    case = tmp_path / "case"
+    shutil.copytree(_PROBE, case)
+    return case
+
+
+def _probe_dat(case: Path, probe: str) -> Path:
+    """The (single) surfaceFieldValue.dat under a probe dir."""
+    return next((case / "postProcessing" / probe).glob("*/surfaceFieldValue.dat"))
+
+
+def _set_probe_value(case: Path, probe: str, value: float) -> None:
+    """Overwrite a surfaceFieldValue probe with a doctored area-average value."""
+    dat = _probe_dat(case, probe)
+    dat.write_text(
+        "# doctored fixture (test)\n# Time areaAverage\n"
+        f"0.0009\t{value:.10g}\n0.001\t{value:.10g}\n",
+        encoding="utf-8",
+    )
+
+
+def _set_shock_line(case: Path, y_shock: float, rho2: float, rho1: float) -> None:
+    """Rewrite the rho(y) sample so the density jump sits at a chosen y_shock."""
+    xy = next((case / "postProcessing" / "shockLine").glob("*/*.xy"))
+    lines = ["# doctored fixture (test) — distance rho"]
+    y = 0.01
+    while y < 1.0:
+        lines.append(f"{y:.4f}\t{(rho2 if y < y_shock else rho1):.10g}")
+        y += 0.02
+    xy.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# coverage: the gate passes on the synthetic fixture
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_extractor_reproduces_synthetic_fixture() -> None:
+    q = extract_wedge_qois(_PROBE, x_shock_station=_X_STATION)
+    assert q.shock_angle_beta_deg == pytest.approx(45.0, abs=1e-6)
+    assert q.mach_downstream == pytest.approx(1.44, abs=1e-9)
+    assert q.mach_freestream == pytest.approx(2.0, abs=1e-9)
+    assert q.pressure_ratio == pytest.approx(2.1947, abs=1e-3)
+    assert q.density_ratio == pytest.approx(1.7289, abs=1e-3)
+    assert q.temperature_ratio == pytest.approx(1.2694, abs=1e-3)
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_gate_passes_on_synthetic_fixture() -> None:
+    r = gate_wedge_against_gold(_PROBE, gold_path=_GOLD)
+    assert r.passed, r.summary
+    assert r.supersonic_inflow_ok
+    assert r.inflow_matches_target
+    assert r.downstream_supersonic_ok
+    assert r.beta_above_mach_angle_ok
+    assert r.ideal_gas_consistent_ok
+    names = {name for name, _ in r.comparisons}
+    assert names == {
+        "shock_angle_beta_deg",
+        "mach_downstream",
+        "pressure_ratio",
+        "density_ratio",
+        "temperature_ratio",
+    }
+    for name, cmp in r.comparisons:
+        assert cmp.passed, f"{name}: {cmp.summary}"
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_extractor_measures_does_not_echo_gold() -> None:
+    """Extracted beta/M2 come from the field, so they DIFFER from the committed
+    reference — yet land inside the 3% band. If the extractor echoed the gold this
+    would fail."""
+    q = extract_wedge_qois(_PROBE, x_shock_station=_X_STATION)
+    assert q.shock_angle_beta_deg != pytest.approx(_GOLD_BETA, abs=1e-3)
+    assert q.mach_downstream != pytest.approx(_GOLD_M2, abs=1e-3)
+    assert abs(q.shock_angle_beta_deg - _GOLD_BETA) / _GOLD_BETA < 0.03
+    assert abs(q.mach_downstream - _GOLD_M2) / _GOLD_M2 < 0.03
+
+
+# ---------------------------------------------------------------------------
+# anti-cheat: each hard gate independently fails-closed
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_gate_is_real_doctored_shock_line_wrong_beta_fails(tmp_path: Path) -> None:
+    """Move the density jump so the measured beta is wrong -> beta observable out of
+    band -> FAIL. Proves beta is measured from the field, not rubber-stamped."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    # push the jump far up the line: y_shock=0.85 -> beta=atan2(0.85,0.5)=59.5deg (>>45)
+    _set_shock_line(case, y_shock=0.85, rho2=q.rho2, rho1=q.rho1)
+    r = gate_wedge_against_gold(case, gold_path=_GOLD)
+    assert not r.passed, r.summary
+    beta_cmp = next(cmp for name, cmp in r.comparisons if name == "shock_angle_beta_deg")
+    assert not beta_cmp.passed
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_ideal_gas_consistency_is_a_hard_gate_doctored_pressure_fails(tmp_path: Path) -> None:
+    """Raise the post-shock pressure by ~2.5%: the pressure_ratio observable still
+    passes the 3% comparator, but the independently measured p2/rho2/T2 are no longer
+    ideal-gas consistent -> the thermodynamic-consistency hard gate FAILS the gate.
+    The shock analogue of the conjugate energy-balance hard gate."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    _set_probe_value(case, "postShock_p", q.p2 * 1.025)
+    r = gate_wedge_against_gold(case, gold_path=_GOLD)
+    # pressure_ratio still within the 3% comparator band ...
+    p_cmp = next(cmp for name, cmp in r.comparisons if name == "pressure_ratio")
+    assert p_cmp.passed, r.summary
+    # ... but the state is no longer ideal-gas consistent -> hard gate trips -> FAIL
+    assert not r.ideal_gas_consistent_ok
+    assert not r.passed, r.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_subsonic_inflow_is_a_hard_gate(tmp_path: Path) -> None:
+    """A subsonic freestream Mach cannot host an oblique shock -> FAIL."""
+    case = _copy_case(tmp_path)
+    _set_probe_value(case, "freestream_Ma", 0.8)
+    r = gate_wedge_against_gold(case, gold_path=_GOLD)
+    assert not r.supersonic_inflow_ok
+    assert not r.passed, r.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_inflow_must_match_gold_target_mach(tmp_path: Path) -> None:
+    """Still supersonic, but at the WRONG Mach (2.5 vs gold 2.0): the replayed case
+    is not the gold's operating point -> inflow_matches_target FAILS."""
+    case = _copy_case(tmp_path)
+    _set_probe_value(case, "freestream_Ma", 2.5)
+    r = gate_wedge_against_gold(case, gold_path=_GOLD)
+    assert r.supersonic_inflow_ok
+    assert not r.inflow_matches_target
+    assert not r.passed, r.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_detached_shock_downstream_subsonic_is_a_hard_gate(tmp_path: Path) -> None:
+    """A weak oblique shock leaves the flow supersonic; M2<1 (strong/detached root)
+    must FAIL even if a ratio matched."""
+    case = _copy_case(tmp_path)
+    _set_probe_value(case, "postShock_Ma", 0.8)
+    r = gate_wedge_against_gold(case, gold_path=_GOLD)
+    assert not r.downstream_supersonic_ok
+    assert not r.passed, r.summary
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_flat_density_field_refuses_to_fabricate_beta(tmp_path: Path) -> None:
+    """A flat rho(y) profile (no shock) must RAISE, not invent a shock angle."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    _set_shock_line(case, y_shock=2.0, rho2=q.rho1, rho1=q.rho1)  # all rho1 -> flat
+    with pytest.raises(WedgeShockExtractorError):
+        extract_wedge_qois(case, x_shock_station=_X_STATION)
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_to_key_quantities_uses_gold_quantity_names() -> None:
+    kq = to_key_quantities(extract_wedge_qois(_PROBE, x_shock_station=_X_STATION))
+    assert set(kq) == {
+        "shock_angle_beta_deg",
+        "mach_downstream",
+        "pressure_ratio",
+        "density_ratio",
+        "temperature_ratio",
+    }
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_secondary_theta10_gold_is_parameterised_and_runs(tmp_path: Path) -> None:
+    """The gate is gold_path-parameterised: it RUNS against the theta=10 gold. The
+    theta=15 fixture does not match the theta=10 references, so it does NOT pass —
+    proving the gate discriminates operating points rather than rubber-stamping."""
+    r = gate_wedge_against_gold(_PROBE, gold_path=_GOLD_T10)
+    assert not r.passed, r.summary  # theta=15 fixture vs theta=10 gold
+
+
+def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
+    """No silent default: an empty case dir raises rather than fabricating QoIs."""
+    with pytest.raises((FileNotFoundError, WedgeShockExtractorError)):
+        extract_wedge_qois(tmp_path, x_shock_station=_X_STATION)

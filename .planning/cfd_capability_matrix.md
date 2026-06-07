@@ -38,7 +38,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 | `rhoSimpleFoam` | COMP-RANS-STEADY | naca0012_transonic | ✅ PR |
 | `buoyantFoam` | INCOMP-BUOYANT (Boussinesq) | rayleigh_benard_convection | ✅ PR |
 | `chtMultiRegionFoam` | CONJUGATE-HEAT-TRANSFER | apu_bay_ventilation | ✅ PR (case_002a gold_pending) |
-| `rhoCentralFoam` | COMP-CENTRAL-EXPLICIT | (none — referenced in advisor surface only) | GAP-TRACKED: V71 candidate · no anchor case |
+| `rhoCentralFoam` | COMP-CENTRAL-EXPLICIT | wedge_oblique_shock (offline V&V only) | GAP-TRACKED: V71.A · **offline V&V scaffolding AUTHORED** (DEC-V61-232: analytical θ-β-M gold + PURE extractor + Control gate + anti-cheat tests, self-verifying) · **NO LIVE anchor yet** (coverage NOT flipped — blocked on ESI image, DEC-V61-224 fork wall, deferred) |
 | `rhoPimpleFoam` | COMP-RANS-TRANSIENT | (none — referenced in advisor surface only) | GAP-TRACKED: V71 candidate · no anchor case |
 | `interFoam` (VOF) | MULTI-PHASE | (not in scope) | GAP-TRACKED: V72+ candidate |
 | `sonicFoam` (super/transonic) | COMP-TRANSIENT | (not in scope) | GAP-TRACKED: V72+ candidate |
@@ -109,7 +109,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 
 ### V71 candidate work (most-impactful gaps to close next):
 
-- **V71.A · Anchor rhoCentralFoam with a supersonic case (M=2.0 wedge)** — closes "advisor references it but no anchor" gap
+- **V71.A · Anchor rhoCentralFoam with a supersonic case (M=2.0 wedge)** — closes "advisor references it but no anchor" gap. **STATUS (DEC-V61-232, scaffolding-first 2026-06-07): offline V&V scaffolding LANDED** — analytical θ-β-M oblique-shock gold (θ=15° + θ=10°, self-verifying), PURE anti-tautology extractor (`src/wedge_oblique_shock_extractor.py`), fail-closed Control gate with 5 hard gates (`src/wedge_oblique_shock_gate.py`), 21 p4 tests green. **NOT yet a LIVE coverage flip** (2→3): `rhoCentralFoam` cannot run on the local OF11 Foundation image (DEC-V61-224 fork wall); the ESI-image provision + adapter live-wiring is a separate deferred gated slice.
 - **V71.B · Anchor low-Re k-omega-SST with backward_facing_step Re=5000** — closes V69.2's `low_re_kOmegaSST_trigger` KNOWN_F_NEW skip
 - **V71.C · Spalart-Allmaras anchor on naca0012 stall (α=18°)** — adds 5th turbulence model
 - **V71.D · Mainline gmsh meshing strategy** — currently only sandbox

@@ -1,0 +1,178 @@
+# Gold Standard — Supersonic Wedge Oblique Shock (M1=2.0, theta=10 deg, inviscid)
+# ========================================================================
+# P4 V71.A SECONDARY sensitivity point (DEC-V61-232). Companion to
+# wedge_oblique_shock.yaml (theta=15 deg primary). A weaker deflection -> a weaker
+# shock (beta closer to the Mach angle 30 deg, smaller property jumps) — a second
+# analytical operating point that exercises the SAME closed form at a different
+# (M1, theta), so the self-verifying derivation test proves the gold-authoring
+# generalises across angles rather than matching a single hand-tuned number.
+#
+# Closed form (see wedge_oblique_shock.yaml header; Anderson Ch.4 / NACA 1135):
+#   M1=2.0, gamma=1.4, theta=10 deg ->
+#     beta = 39.3139 deg, M2 = 1.6405, p2/p1 = 1.7066, rho2/rho1 = 1.4584,
+#     T2/T1 = 1.1702   (re-derived in tests/p4/test_wedge_oblique_shock_gold.py)
+#
+# CONTRACT STATUS — `ANALYTICAL_REFERENCE_AUTHORED · LIVE_RUN_PENDING` (see primary).
+
+quantity: shock_angle_beta_deg
+reference_values:
+  - value: 39.3139
+    unit: degrees
+    description: "weak-shock beta from theta-beta-M, M1=2.0 theta=10 gamma=1.4 (Anderson Ch.4)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (oblique shock theta-beta-M relation); NACA Report 1135. Reference closed-form, re-derived in test (analytical, not experimental)."
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 0
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock_theta10
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 10.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.5
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+
+---
+
+quantity: mach_downstream
+reference_values:
+  - value: 1.6405
+    unit: dimensionless
+    description: "M2 = M2n/sin(beta-theta), M1n=1.2671 — analytical (weak oblique shock, M2>1)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (normal-shock + oblique-shock relations); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 0
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock_theta10
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 10.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.5
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+
+---
+
+quantity: pressure_ratio
+reference_values:
+  - value: 1.7066
+    unit: dimensionless
+    description: "p2/p1 = 1 + 2g/(g+1)(M1n^2-1), M1n=1.2671 — analytical (normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (static pressure ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 0
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock_theta10
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 10.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.5
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+
+---
+
+quantity: density_ratio
+reference_values:
+  - value: 1.4584
+    unit: dimensionless
+    description: "rho2/rho1 = (g+1)M1n^2/((g-1)M1n^2+2), M1n=1.2671 — analytical (normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (density ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 0
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock_theta10
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 10.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.5
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+
+---
+
+quantity: temperature_ratio
+reference_values:
+  - value: 1.1702
+    unit: dimensionless
+    description: "T2/T1 = (p2/p1)/(rho2/rho1) — analytical (ideal gas across normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (temperature ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 0
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock_theta10
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 10.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.5
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
