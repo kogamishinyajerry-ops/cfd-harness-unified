@@ -167,11 +167,14 @@ def _check_gates(case_id: str, fixture: Path) -> list[Check]:
     if not violations:
         checks.append(Check("gate battery", "pass", "G3/G4/G5 all clean"))
         return checks
-    # GateViolation has no per-instance hardness flag; treat G3/G4/G5 as
-    # hard-fail (per DEC-V61-036 these are the hard-contract gates), and
-    # any G-prefix beyond as warn.
+    # GateViolation has no per-instance hardness flag; treat G2/G3/G4/G5
+    # as hard-fail (per DEC-V61-036/059 these are the hard-contract gates),
+    # any G-prefix beyond as warn. G2 will silently no-op here because
+    # preflight does not load key_quantities — the canonical-band
+    # shortcut check belongs to the audit_real_run path which has kq
+    # in scope.
     for v in violations:
-        level = "fail" if str(v.gate_id).upper() in {"G3", "G4", "G5"} else "warn"
+        level = "fail" if str(v.gate_id).upper() in {"G2", "G3", "G4", "G5"} else "warn"
         checks.append(Check(f"gate {v.gate_id}", level,
                             f"{v.concern_type}: {v.summary}",
                             evidence=v.evidence))

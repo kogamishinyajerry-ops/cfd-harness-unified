@@ -202,6 +202,7 @@ immediately.
 | V61-050 (LDC) | I | 0.70 (late-arc) | 4 | APPROVE r4 | N/A | retrofit |
 | V61-052 (BFS) | II | 0.45 | 5 (incl. r4 back-fill) | APPROVE r5 | 1 (wall-shear provenance) | back-fill |
 | V61-053 (cyl) | I | **0.30** | **3 + 2 live fixes** | APPROVE r3 + live-run recalibration | **2 (accessor + solver)** | first-apply |
+| V61-059 (plane-channel) | II | 0.40 | **4 + Stage B sub-arc r1+r2** | APPROVE r4 + APPROVE_WITH_COMMENTS sub-arc r2 | **3 (OF10 file rename + solver-framework drift + FO output filename)** | first-apply |
 
 V61-053's 3-round Codex arc was genuinely clean on the code paths Codex
 could see. The post-R3 defects are a **blind spot category**, not a
@@ -209,13 +210,68 @@ Codex miss — no static review can catch an attribute-dereference bug
 on an object graph that isn't exercised, or a solver divergence in a
 numerical solver that isn't invoked.
 
+**V61-059 addendum (2026-04-25)**: 3 distinct hidden post-R3 defects,
+all variants of the same underlying class —
+**OpenFOAM-version-emitter API drift**:
+
+1. `constant/turbulenceProperties` → `constant/momentumTransport`
+   (OF10 incompressible rename; commit `a71e8ec`). Necessary fix
+   surfaced when Stage B crashed at 4.6s with FOAM FATAL ERROR
+   "Unable to find turbulence model in the database" from inside
+   the wallShearStress function-object.
+2. `icoFoam` → `pisoFoam` swap (commit `4af21a2`). Renaming the
+   file alone was insufficient because icoFoam is hard-coded
+   laminar PISO that does not register a momentumTransportModel
+   at all; pisoFoam is the laminar-capable PISO that does. Plus
+   fvSchemes additions (`div((nuEff*dev2(T(grad(U)))))`,
+   `interpolationSchemes`, `snGradSchemes`) that the
+   momentumTransport framework requires.
+3. `<set_name>_<field>.xy` → `<set_name>.xy` (OF10 sets-FO output
+   filename; commit `42158e2`). Reader was looking for the legacy
+   per-field naming; OF10 packs all components into one file. The
+   case ran cleanly but the emitter raised "uLine output absent"
+   on FO output that was right there.
+
+A 4th finding (commit `59198cf`) was a runtime-budget tuning
+regression — endTime=50, deltaT=0.002 burned 3-hour wall-clock on
+flow that converged at simulated t≈1.5s. Reduced to endTime=5,
+deltaT=0.05, p-solver PCG/DIC → GAMG/GaussSeidel; per-run wall now
+~9 minutes. Not a correctness defect, but it would have made the
+Stage B verdict cycle unworkable in batch.
+
+Codex round-5 (Stage B sub-arc round 1) caught two genuine static-
+review defects that the post-R3 fixes themselves introduced:
+
+- **F7**: the OF10-first reader silently returned packed-`U` data
+  when the caller asked for `field="p"` (`src/plane_channel_uplus_emitter.py`).
+- **F8**: three downstream consumers (`render_case_report.py`,
+  `metrics/residual.py`, `audit_package/manifest.py`) still
+  hard-coded the old solver/file names, so the Stage B
+  artifact dir didn't round-trip through report/manifest tooling.
+
+Codex even **empirically verified F8** by running probes against
+the actual artifact dir — that's the dynamic-vs-static frontier
+RETRO-V61-053 §10 was about. The sub-arc round 2 returned
+APPROVE_WITH_COMMENTS with two P3 nits (coexistence test gap and
+log-name preference order divergence across the 3 consumers); both
+landed in commit `efae759`.
+
+**The methodology lesson V61-059 hardens**: when Codex reaches
+APPROVE on a code path that depends on an **emitter-side API**
+(filenames, file conventions, registry objects, simulation-type
+keywords) of an external tool whose minor-version output format
+might have drifted, Codex APPROVE is a *static-review* clean
+verdict, not a *runtime-correctness* clean verdict. The Stage B
+executable smoke test is what closes that gap.
+
 ### Concrete action items for RETRO-V61-053 + successors
 
-1. **Write `.planning/intake/TEMPLATE.yaml`** with all 4 new risk_flag categories:
+1. **Write `.planning/intake/TEMPLATE.yaml`** with all 5 risk_flag categories:
    - `python_version_parity` (2026-04-24 R2 finding)
    - `mesh_density_on_domain_change` (2026-04-24 R1 finding)
    - `executable_smoke_test` (2026-04-24 post-R3 finding)
    - `solver_stability_on_novel_geometry` (2026-04-24 post-R3 finding)
+   - `openfoam_version_emitter_api_drift` (2026-04-25 V61-059 post-R3 — promoted to **HIGH** for any case that depends on OpenFOAM-generated auxiliary files or registry objects: function-object outputs, momentumTransport vs turbulenceProperties, solver-log naming, sets-FO `<set>.xy` vs `<set>_<field>.xy`)
 2. **Amend RETRO-V61-001 cadence rule**: add "post-R3 live-run defect" as a 4th retro trigger (currently 3: phase complete / counter≥20 / CHANGES_REQUIRED on PR).
 3. **Methodology page §10**: dedicate a section to "static review vs dynamic invocation" — be explicit that Codex can't catch what it can't exercise.
 

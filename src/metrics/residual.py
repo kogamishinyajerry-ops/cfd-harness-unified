@@ -91,11 +91,23 @@ def _resolve_log_path(artifacts: Any, observable_def: Dict[str, Any]) -> Optiona
         if base.is_file():
             return base
         if base.is_dir():
+            # Codex round-6 F10: shared log-name preference order
+            # across `_resolve_log_path`, `_find_latest_solver_log`
+            # (scripts/render_case_report.py), and `_load_run_outputs`
+            # (src/audit_package/manifest.py). Keeping the orders
+            # aligned ensures mixed-log artifact dirs resolve the
+            # same primary log everywhere. The order prioritizes
+            # the most-common production solvers (simpleFoam, icoFoam)
+            # then DEC-V61-059's pisoFoam (plane-channel laminar
+            # route), then transient/buoyant tail. `log` (no suffix)
+            # is a final fallback only.
             for name in (
-                "log.pimpleFoam",
                 "log.simpleFoam",
-                "log.buoyantFoam",
                 "log.icoFoam",
+                "log.pisoFoam",
+                "log.pimpleFoam",
+                "log.buoyantFoam",
+                "log.buoyantBoussinesqSimpleFoam",
                 "log",
             ):
                 candidate = base / name

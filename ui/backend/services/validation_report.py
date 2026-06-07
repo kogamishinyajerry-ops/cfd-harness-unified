@@ -584,22 +584,24 @@ def _derive_contract_status(
     if measurement is None:
         return ("UNKNOWN", None, None, lower, upper)
 
-    # DEC-V61-036 G1 + DEC-V61-036b G3/G4/G5 + DEC-V61-038 A1/A4:
-    # hard-FAIL concern codes. When any of these concerns are present,
-    # the measurement cannot be trusted regardless of whether it lies
-    # inside the gold tolerance band.
-    #   G1  MISSING_TARGET_QUANTITY    — schema mismatch (extractor missed gold quantity)
-    #   G3  VELOCITY_OVERFLOW           — |U|_max > 100·U_ref
-    #   G4  TURBULENCE_NEGATIVE         — k/eps/omega < 0 at last iter or overflow
-    #   G5  CONTINUITY_DIVERGED         — sum_local > 1e-2 or |cum| > 1
-    #   A1  SOLVER_CRASH_LOG            — FOAM FATAL / stack-trace in log
-    #   A4  SOLVER_ITERATION_CAP        — pressure loop hit cap ≥3 consecutive iters
+    # DEC-V61-036 G1 + DEC-V61-036b G3/G4/G5 + DEC-V61-038 A1/A4
+    # + DEC-V61-059 G2: hard-FAIL concern codes. When any of these
+    # concerns are present, the measurement cannot be trusted regardless
+    # of whether it lies inside the gold tolerance band.
+    #   G1  MISSING_TARGET_QUANTITY              — schema mismatch (extractor missed gold quantity)
+    #   G2  CANONICAL_BAND_SHORTCUT_LAMINAR_DNS  — laminar plane-channel emit lands in Moser DNS band
+    #   G3  VELOCITY_OVERFLOW                    — |U|_max > 100·U_ref
+    #   G4  TURBULENCE_NEGATIVE                  — k/eps/omega < 0 at last iter or overflow
+    #   G5  CONTINUITY_DIVERGED                  — sum_local > 1e-2 or |cum| > 1
+    #   A1  SOLVER_CRASH_LOG                     — FOAM FATAL / stack-trace in log
+    #   A4  SOLVER_ITERATION_CAP                 — pressure loop hit cap ≥3 consecutive iters
     # A2/A3/A5/A6 are HAZARD tier — the scalar may still be computable, but
     # the convergence state is suspect enough that "within band" is not a
     # meaningful PASS. Per-case thresholds can escalate selected concern
     # codes to FAIL via `promote_to_fail`.
     _HARD_FAIL_CONCERNS = {
         "MISSING_TARGET_QUANTITY",
+        "CANONICAL_BAND_SHORTCUT_LAMINAR_DNS",
         "VELOCITY_OVERFLOW",
         "TURBULENCE_NEGATIVE",
         "CONTINUITY_DIVERGED",

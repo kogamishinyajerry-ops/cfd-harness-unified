@@ -238,6 +238,110 @@ def test_read_uline_profile_returns_none_when_absent(tmp_path: Path) -> None:
     assert _read_uline_profile(tmp_path) is None
 
 
+def test_read_uline_profile_reads_of10_filename(tmp_path: Path) -> None:
+    """Stage B post-R3 fix: OpenFOAM 10's `sets` FO writes
+    `<set_name>.xy` (single packed file with all components),
+    not the legacy `<set_name>_<field>.xy` per-field naming.
+    The reader MUST find the OF10 form first; otherwise the case
+    dies with `uLine output absent` even though the file exists.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in rows)
+    # OF10 form: `channelCenter.xy` (no _U suffix)
+    (d / "channelCenter.xy").write_text("# y Ux Uy Uz\n" + body + "\n", encoding="utf-8")
+    loaded = _read_uline_profile(tmp_path)
+    assert loaded is not None
+    assert len(loaded) == 129
+
+
+def test_read_uline_profile_does_not_silently_return_u_when_pressure_requested(
+    tmp_path: Path,
+) -> None:
+    """Codex round-5 F7 regression: the OF10-form file
+    `channelCenter.xy` packs only `U` (columns: y Ux Uy Uz). If the
+    caller asks for `field="p"` with both files present, the reader
+    must NOT silently parse Ux out of the packed file and pretend
+    that's pressure — that's a wrong-field/wrong-column read. The
+    only correct source for non-U fields is the legacy
+    `<set_name>_<field>.xy` per-field file. If neither exists for
+    the requested field, return None.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in rows)
+    # Both files present, but the caller wants `p` — the OF10 packed
+    # file holds U only.
+    (d / "channelCenter.xy").write_text("# y Ux Uy Uz\n" + body + "\n", encoding="utf-8")
+    # No `channelCenter_p.xy` — pressure data is unavailable.
+    assert _read_uline_profile(tmp_path, field="p") is None, (
+        "Reader must not return Ux from the packed-U file when caller "
+        "explicitly requested `field=\"p\"`."
+    )
+
+
+def test_read_uline_profile_field_p_uses_legacy_per_field_file(
+    tmp_path: Path,
+) -> None:
+    """Companion to F7: when the legacy `<set_name>_p.xy` exists,
+    the reader should use it (and parse y + p columns)."""
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    rows = [(i * 0.01, 1.5 * i * 0.1) for i in range(-64, 65)]
+    body = "\n".join(f"{y} {p}" for y, p in rows)
+    (d / "channelCenter_p.xy").write_text("# y p\n" + body + "\n", encoding="utf-8")
+    loaded = _read_uline_profile(tmp_path, field="p")
+    assert loaded is not None
+    assert len(loaded) == 129
+
+
+def test_read_uline_profile_coexistence_routes_field_correctly(
+    tmp_path: Path,
+) -> None:
+    """Codex round-6 F9 regression: the original round-5 bug was a
+    mixed-file precedence issue (both `<set>.xy` and `<set>_p.xy`
+    present in the same time directory). Lock down that with both
+    files coexisting, `field="U"` → packed `<set>.xy` (column 2 =
+    Ux ≈ 0.1) and `field="p"` → legacy `<set>_p.xy` (pressure
+    column ≈ 0.15). Without F7's gating, the `p` request would
+    silently return the same Ux value from the packed file.
+    """
+    d = tmp_path / "postProcessing" / "uLine" / "50"
+    d.mkdir(parents=True)
+    n = 129
+    half = n // 2
+    u_rows = [(i * 0.01, i * 0.1, 0.0, 0.0) for i in range(-half, half + 1)]
+    p_rows = [(i * 0.01, i * 0.15) for i in range(-half, half + 1)]
+    (d / "channelCenter.xy").write_text(
+        "# y Ux Uy Uz\n" + "\n".join(f"{y} {ux} {uy} {uz}" for y, ux, uy, uz in u_rows) + "\n",
+        encoding="utf-8",
+    )
+    (d / "channelCenter_p.xy").write_text(
+        "# y p\n" + "\n".join(f"{y} {p}" for y, p in p_rows) + "\n",
+        encoding="utf-8",
+    )
+
+    u_loaded = _read_uline_profile(tmp_path, field="U")
+    p_loaded = _read_uline_profile(tmp_path, field="p")
+    assert u_loaded is not None and p_loaded is not None
+
+    # u-loaded came from packed `<set>.xy` (column 2 = i * 0.1).
+    # p-loaded came from legacy `<set>_p.xy` (column 2 = i * 0.15).
+    # Pick the same y-coordinate (i=10 → y=0.1) and verify the
+    # second-column values diverge per the source semantics.
+    by_y_u = {y: ux for y, ux in u_loaded}
+    by_y_p = {y: p for y, p in p_loaded}
+    target_y = 0.1
+    assert abs(by_y_u[target_y] - 1.0) < 1e-9, (
+        f"`field='U'` must read Ux from packed file → 1.0 at y=0.1, got {by_y_u[target_y]}"
+    )
+    assert abs(by_y_p[target_y] - 1.5) < 1e-9, (
+        f"`field='p'` must read pressure from legacy file → 1.5 at y=0.1, got {by_y_p[target_y]}"
+    )
+
+
 def test_read_uline_profile_raises_on_sparse(tmp_path: Path) -> None:
     """Codex DEC-V61-043 round-1 FLAG fix: threshold raised from 4 to
     64 (half the generator's 129-point default) to catch gross
