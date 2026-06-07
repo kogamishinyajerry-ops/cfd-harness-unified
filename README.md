@@ -4,6 +4,22 @@ A demo-first AI-CFD workbench. Ten canonical flow problems, each paired with
 its historical gold standard, tolerance band, and common pitfalls — so you can
 see the distance between *getting a number* and *getting it right*.
 
+cfd-harness-unified is an open-source trust layer for AI-assisted CFD: it turns
+solver output into reproducible evidence through canonical cases, gold standards,
+tolerance bands, audit reports, and explicit PASS/WARN gates.
+
+## Why this matters
+
+AI-assisted engineering can now generate solver setup, analysis code, and CFD
+reports quickly. The hard part is no longer only producing a plausible result;
+it is proving whether the result is physically meaningful, reproducible, and
+safe to hand to another maintainer, reviewer, or engineer.
+
+This project focuses on that trust boundary. It pairs classic CFD cases with
+known references, preserves solver artifacts, separates demo paths from evidence
+workflows, and uses hard gates to prevent a polished report from hiding missing
+or invalid physics.
+
 ## Quick start
 
 ```bash
@@ -53,6 +69,18 @@ Screens: Dashboard · Cases · Decisions · Runs · Audit Package.
 
 Not the right starting point for a demo. Reachable from every `/learn` page
 via `进入专业工作台 →` and from the top-nav `Pro Workbench →` link.
+
+## Open-source maintenance fit
+
+The maintainer workload is review-heavy: numerical regressions, evidence drift,
+dependency/security updates, release-readiness checks, documentation updates,
+and honest handling of PASS/WARN/FAIL claims. The repository is intended to make
+those responsibilities visible and automatable instead of relying on informal
+chat history or one-off solver runs.
+
+Useful Codex/Codex-Security tasks include PR review, test-failure diagnosis,
+regression triage, dependency and security review, report consistency checks,
+and release-readiness evidence review.
 
 ## Testing
 
@@ -106,3 +134,7 @@ knowledge/whitelist.yaml + knowledge/gold_standards/*.yaml
 - `knowledge/gold_standards/*.yaml` — one canonical file per case. Each now
   carries a `physics_contract` block (preconditions, contract_status) so a
   PASS is explicitly a physics-valid PASS.
+
+## License
+
+MIT — see [`LICENSE`](LICENSE).
