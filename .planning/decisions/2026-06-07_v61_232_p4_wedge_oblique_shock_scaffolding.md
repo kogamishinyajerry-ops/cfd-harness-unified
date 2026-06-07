@@ -76,7 +76,7 @@ Honesty-critical, all offline:
 3. `src/wedge_oblique_shock_extractor.py` (**Execution** plane) — PURE; measures β from the
    solver's own density-gradient locus + M₂/ratios from area-averaged pre/post-shock state;
    **NEVER reads the θ-β-M form** (anti-tautology); fail-closed on missing/NaN.
-4. `src/wedge_oblique_shock_gate.py` (**Control** plane) — comparator PASS AND 4 independent
+4. `src/wedge_oblique_shock_gate.py` (**Control** plane) — comparator PASS AND 5 independent
    HARD gates (supersonic-inflow + inflow-matches-target + downstream-supersonic + β-above-
    Mach-angle + ideal-gas thermodynamic consistency across the shock). Zero magic numbers
    (all from `wedge_inputs`).
@@ -127,5 +127,23 @@ M₁=2.0, γ=1.4, weak root:
   consumer until the live slice; adding now would be speculative.
 - Pulling the external `~/Desktop/case_006_*` rhoCentralFoam templates into the repo
   (auditability decision deferred with the live slice).
+
+## Forward-hardening backlog (from the adversarial red-team pass · workflow `wig61u2wt` · verdict HELD)
+
+The red team broke nothing (zero `is_real_hole`), but flagged two **non-blocking**
+hardenings to land WITH the live slice (premature offline — a synthetic fixture has
+no real discretization smearing to discriminate):
+- **6th cross-consistency hard gate** — tie the MEASURED β to the MEASURED p₂/p₁ via
+  the normal-shock relation `p₂/p₁ = 1 + 2γ/(γ+1)·((M₁·sinβ)²−1)` within a band tighter
+  than the 3% per-observable tolerance. The current 5 gates check each observable
+  independently, so an internally-contradictory tuple **within 3% of a real shock**
+  (red team's measured worst case: 2.988%) can pass. This is *inside* the documented
+  per-observable tolerance (not a contract violation; a real conservative solve is
+  self-consistent), but a physics-*locus* gate would reject it. Value is at live-run
+  time when real smearing must be told apart from a wrong solution.
+- **Machine-readable `contract_status`** — promote the gold's `contract_status` from a
+  YAML comment to a structured key + a test asserting it ≠ a LIVE/validated value, so
+  future coverage tooling can never machine-read the scaffolding as validated. (Today
+  the comment is honest and unread by any coverage consumer — verified inert.)
 
 — DEC-V61-232 · 2026-06-07 · scaffolding-first P4 anchor · LIVE_RUN_PENDING (no coverage flip)
