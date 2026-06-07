@@ -9,8 +9,8 @@ autonomous_governance: true
 confidence: high
 kogami_opt_in: false (scaffolding is offline + self-verifying + reversible; no §11.1 workbench-freeze paths touched; the high-risk Docker/TRUST-CORE live-flip is explicitly DEFERRED to a separate gated slice)
 round_cap: 3
-codex_review_relay: pending (charter-class new-domain V&V code — extractor/gate + gold; sync-gate per project rule)
-codex_verdict: pending
+codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline; codex review --base d966ba5)
+codex_verdict: APPROVE-equivalent — chain CLOSED within cap=3 (R0 CHANGES_REQUIRED 2 → fix 3c65256 → R1 CHANGES_REQUIRED 2 → fix 9f9d38f → R2 P1 applied verbatim 9ed18aa + R2 P2 pre-existing/out-of-scope). All P1 resolved; honesty invariants (anti-tautology / fail-closed / no-overclaim / self-verifying-gold / four-plane) never breached. Every finding was a live-replay-robustness gap the offline synthetic fixture could not expose.
 codex_tool_report_path: reports/codex_tool_reports/v61_232_p4_wedge_scaffolding_report.md
 touches_shared_dec: src/_plane_assignment.py (+2 module assignments → .importlinter regenerated) — four-plane SSOT is consumed by the runtime guard + lint-imports CI; new src.wedge_oblique_shock_{extractor,gate} modules
 notion_sync_status: pending_accepted (session-end batch)
@@ -145,5 +145,11 @@ no real discretization smearing to discriminate):
   YAML comment to a structured key + a test asserting it ≠ a LIVE/validated value, so
   future coverage tooling can never machine-read the scaffolding as validated. (Today
   the comment is honest and unread by any coverage consumer — verified inert.)
+- **Multi-field single `.xy` column-resolution** (Codex R2 follow-on) — a live
+  `setFormat raw` shockLine may write one `<set>_p_rho_U.xy` with rho in a non-first
+  column; `_read_distance_field` currently assumes a 2-column density file. The live
+  slice (which knows the exact sampling layout) resolves the rho column by header/name.
+  Today the field-token selection keeps a per-field density `.xy` the contract and the
+  extractor fails closed on anything ambiguous.
 
 — DEC-V61-232 · 2026-06-07 · scaffolding-first P4 anchor · LIVE_RUN_PENDING (no coverage flip)
