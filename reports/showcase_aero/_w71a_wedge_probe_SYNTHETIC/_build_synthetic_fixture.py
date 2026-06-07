@@ -55,15 +55,18 @@ BETA_DEG_MEASURED = 45.0       # gold ref 45.3436 (0.76% low)
 X_STATION = 0.5                # must equal wedge_inputs.x_shock_station in the gold
 
 
-def _write_surface_field(probe: str, value: float) -> None:
+def _write_region_probe(probe: str, p: float, rho: float, T: float, Ma: float) -> None:
+    """Write ONE multi-field surfaceFieldValue.dat (the natural OpenFOAM output: a
+    single areaAverage function object over fields (p rho T Ma)). Column order is
+    declared in the header so the extractor discovers it rather than assuming it."""
     d = _POST / probe / _TIME
     d.mkdir(parents=True, exist_ok=True)
     (d / "surfaceFieldValue.dat").write_text(
         "# SYNTHETIC fixture (NOT a solver run) — see _build_synthetic_fixture.py\n"
         "# Region type : patch\n"
-        "# Time        areaAverage\n"
-        f"0.0009\t{value:.10g}\n"
-        f"0.001\t{value:.10g}\n",
+        "# Time\tareaAverage(p)\tareaAverage(rho)\tareaAverage(T)\tareaAverage(Ma)\n"
+        f"0.0009\t{p:.10g}\t{rho:.10g}\t{T:.10g}\t{Ma:.10g}\n"
+        f"0.001\t{p:.10g}\t{rho:.10g}\t{T:.10g}\t{Ma:.10g}\n",
         encoding="utf-8",
     )
 
@@ -71,9 +74,10 @@ def _write_surface_field(probe: str, value: float) -> None:
 def _write_shock_line() -> None:
     """A vertical rho(y) sample at x=X_STATION: rho2 below the shock, rho1 above.
 
-    The shock crossing is the steepest density step; its midpoint is y_shock, and
-    beta = atan2(y_shock, x_station). We place sample points straddling y_shock so
-    the midpoint lands exactly there.
+    The line is APEX-LEVEL anchored (distance-0 point at y=0), matching the gold's
+    shock_line_origin_y=0.0; so distance == absolute height and the steepest-step
+    midpoint y_shock gives beta = atan2(y_shock, x_station). We place sample points
+    straddling y_shock so the midpoint lands exactly there.
     """
     y_shock = X_STATION * math.tan(math.radians(BETA_DEG_MEASURED))  # 0.5 for beta=45
     d = _POST / "shockLine" / _TIME
@@ -89,14 +93,9 @@ def _write_shock_line() -> None:
 
 
 def main() -> None:
-    _write_surface_field("freestream_p", P1)
-    _write_surface_field("freestream_rho", RHO1)
-    _write_surface_field("freestream_T", T1)
-    _write_surface_field("freestream_Ma", M1)
-    _write_surface_field("postShock_p", P2)
-    _write_surface_field("postShock_rho", RHO2)
-    _write_surface_field("postShock_T", T2)
-    _write_surface_field("postShock_Ma", M2_MEASURED)
+    # two multi-field region probes (matching the gold's freestream_probe / postshock_probe)
+    _write_region_probe("freestream", p=P1, rho=RHO1, T=T1, Ma=M1)
+    _write_region_probe("postShock", p=P2, rho=RHO2, T=T2, Ma=M2_MEASURED)
     _write_shock_line()
     print(f"wrote SYNTHETIC fixture under {_POST}")
     print(f"  rho1={RHO1:.6f} rho2={RHO2:.6f} rho2/rho1={RHO2/RHO1:.5f}")

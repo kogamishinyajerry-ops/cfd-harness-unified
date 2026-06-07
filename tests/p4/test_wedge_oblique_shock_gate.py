@@ -26,6 +26,8 @@ Honesty locks exercised here:
 """
 from __future__ import annotations
 
+import math
+import re
 import shutil
 from pathlib import Path
 
@@ -56,18 +58,35 @@ def _copy_case(tmp_path: Path) -> Path:
 
 
 def _probe_dat(case: Path, probe: str) -> Path:
-    """The (single) surfaceFieldValue.dat under a probe dir."""
+    """The (single) multi-field surfaceFieldValue.dat under a region-probe dir."""
     return next((case / "postProcessing" / probe).glob("*/surfaceFieldValue.dat"))
 
 
-def _set_probe_value(case: Path, probe: str, value: float) -> None:
-    """Overwrite a surfaceFieldValue probe with a doctored area-average value."""
+_AREA_AVG = re.compile(r"areaAverage\(([^)]+)\)")
+
+
+def _set_probe_field(case: Path, probe: str, field: str, value: float) -> None:
+    """Doctor ONE field's column in a multi-field surfaceFieldValue.dat in place."""
     dat = _probe_dat(case, probe)
-    dat.write_text(
-        "# doctored fixture (test)\n# Time areaAverage\n"
-        f"0.0009\t{value:.10g}\n0.001\t{value:.10g}\n",
-        encoding="utf-8",
-    )
+    lines = dat.read_text(encoding="utf-8").splitlines()
+    cols: list[str] = []
+    for ln in lines:
+        if ln.lstrip().startswith("#"):
+            labels = _AREA_AVG.findall(ln)
+            if labels:
+                cols = labels
+    assert field in cols, f"{field} not in {cols}"
+    idx = cols.index(field) + 1  # +1 for the leading Time column
+    out: list[str] = []
+    for ln in lines:
+        s = ln.strip()
+        if s and not s.startswith("#"):
+            parts = s.split()
+            parts[idx] = f"{value:.10g}"
+            out.append("\t".join(parts))
+        else:
+            out.append(ln)
+    dat.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
 def _set_shock_line(case: Path, y_shock: float, rho2: float, rho1: float) -> None:
@@ -157,7 +176,7 @@ def test_ideal_gas_consistency_is_a_hard_gate_doctored_pressure_fails(tmp_path: 
     The shock analogue of the conjugate energy-balance hard gate."""
     case = _copy_case(tmp_path)
     q = extract_wedge_qois(case, x_shock_station=_X_STATION)
-    _set_probe_value(case, "postShock_p", q.p2 * 1.025)
+    _set_probe_field(case, "postShock", "p", q.p2 * 1.025)
     r = gate_wedge_against_gold(case, gold_path=_GOLD)
     # pressure_ratio still within the 3% comparator band ...
     p_cmp = next(cmp for name, cmp in r.comparisons if name == "pressure_ratio")
@@ -171,7 +190,7 @@ def test_ideal_gas_consistency_is_a_hard_gate_doctored_pressure_fails(tmp_path: 
 def test_subsonic_inflow_is_a_hard_gate(tmp_path: Path) -> None:
     """A subsonic freestream Mach cannot host an oblique shock -> FAIL."""
     case = _copy_case(tmp_path)
-    _set_probe_value(case, "freestream_Ma", 0.8)
+    _set_probe_field(case, "freestream", "Ma", 0.8)
     r = gate_wedge_against_gold(case, gold_path=_GOLD)
     assert not r.supersonic_inflow_ok
     assert not r.passed, r.summary
@@ -182,7 +201,7 @@ def test_inflow_must_match_gold_target_mach(tmp_path: Path) -> None:
     """Still supersonic, but at the WRONG Mach (2.5 vs gold 2.0): the replayed case
     is not the gold's operating point -> inflow_matches_target FAILS."""
     case = _copy_case(tmp_path)
-    _set_probe_value(case, "freestream_Ma", 2.5)
+    _set_probe_field(case, "freestream", "Ma", 2.5)
     r = gate_wedge_against_gold(case, gold_path=_GOLD)
     assert r.supersonic_inflow_ok
     assert not r.inflow_matches_target
@@ -194,7 +213,7 @@ def test_detached_shock_downstream_subsonic_is_a_hard_gate(tmp_path: Path) -> No
     """A weak oblique shock leaves the flow supersonic; M2<1 (strong/detached root)
     must FAIL even if a ratio matched."""
     case = _copy_case(tmp_path)
-    _set_probe_value(case, "postShock_Ma", 0.8)
+    _set_probe_field(case, "postShock", "Ma", 0.8)
     r = gate_wedge_against_gold(case, gold_path=_GOLD)
     assert not r.downstream_supersonic_ok
     assert not r.passed, r.summary
@@ -229,6 +248,44 @@ def test_secondary_theta10_gold_is_parameterised_and_runs(tmp_path: Path) -> Non
     proving the gate discriminates operating points rather than rubber-stamping."""
     r = gate_wedge_against_gold(_PROBE, gold_path=_GOLD_T10)
     assert not r.passed, r.summary  # theta=15 fixture vs theta=10 gold
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_wall_anchored_line_needs_origin_offset_to_recover_beta(tmp_path: Path) -> None:
+    """Codex DEC-V61-232 R0 P1: a shock line sampled from the wedge WALL upward reports
+    height ABOVE THE WALL, not above the apex. Without shock_line_origin_y the angle is
+    wrong; WITH it (= x*tan(theta)) the absolute beta is recovered."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)  # apex-level, beta=45
+    origin = _X_STATION * math.tan(math.radians(15.0))  # wall height at the station
+    # re-anchor the SAME absolute shock (y=0.50) on the wall: wall-relative distance = 0.50-origin
+    _set_shock_line(case, y_shock=(0.50 - origin), rho2=q.rho2, rho1=q.rho1)
+    with_offset = extract_wedge_qois(case, x_shock_station=_X_STATION, shock_line_origin_y=origin)
+    without = extract_wedge_qois(case, x_shock_station=_X_STATION, shock_line_origin_y=0.0)
+    # the offset recovers ~45 (within sample-step quantisation); omitting it gives the ~36 bug
+    assert with_offset.shock_angle_beta_deg == pytest.approx(45.0, abs=1.0)
+    assert without.shock_angle_beta_deg < 40.0
+    assert with_offset.shock_angle_beta_deg - without.shock_angle_beta_deg > 5.0
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_extractor_honors_published_probe_names_and_discovers_column_order(tmp_path: Path) -> None:
+    """Codex DEC-V61-232 R0 P2: the extractor reads the region probes NAMED in the gold
+    contract (freestream / postShock) as multi-field surfaceFieldValue.dat, discovering
+    the field column order from the header (not assuming it). A probe name not present
+    fails closed."""
+    # (a) reordered columns are still read correctly (header-driven, not positional)
+    case = _copy_case(tmp_path)
+    dat = _probe_dat(case, "postShock")
+    cols = _AREA_AVG.findall(
+        next(l for l in dat.read_text(encoding="utf-8").splitlines() if "areaAverage" in l)
+    )
+    assert set(cols) == {"p", "rho", "T", "Ma"}  # the published 4 fields
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    assert q.pressure_ratio == pytest.approx(2.1947, abs=1e-3)
+    # (b) a probe name that isn't in the bundle fails closed (no fabricated default)
+    with pytest.raises(FileNotFoundError):
+        extract_wedge_qois(case, x_shock_station=_X_STATION, postshock_probe="does_not_exist")
 
 
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:

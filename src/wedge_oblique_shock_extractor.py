@@ -4,16 +4,21 @@ Parses OpenFOAM postProcessing artifacts from a solved supersonic-wedge case
 (``rhoCentralFoam``, density-based shock-capturing) and computes the five
 oblique-shock benchmark QoIs:
 
-    shock_angle_beta_deg = atan2(y_shock, x_shock_station)   # from the density jump
-    mach_downstream      = areaAverage(Ma) post-shock        # M2
+    shock_angle_beta_deg = atan2(y_shock_absolute, x_shock_station)  # from the density jump
+    mach_downstream      = areaAverage(Ma) post-shock               # M2
     pressure_ratio       = p2 / p1
     density_ratio        = rho2 / rho1
     temperature_ratio    = T2 / T1
 
-The post/pre-shock states (p, rho, T, Ma) are area-averaged surfaceFieldValue
-reductions; the shock angle ``beta`` is recovered from the LOCATION of the
-density jump along a sampled line that crosses the shock, combined with the
-known sample-line streamwise station — geometry, never the shock relations.
+The pre/post-shock states (p, rho, T, Ma) are read from two area-averaged
+``surfaceFieldValue`` probe regions (one multi-field ``.dat`` each, the natural
+OpenFOAM function-object output — column order discovered from the header). The
+shock angle ``beta`` is recovered from the LOCATION of the density jump along a
+sampled line that crosses the shock, combined with the known sample-line geometry.
+
+Probe / geometry names are taken from the gold's ``case_info.wedge_inputs`` so the
+extractor honors the PUBLISHED contract rather than an unpublished private layout
+(Codex DEC-V61-232 R0 P2).
 
 ADR-001 plane assignment: **Execution Plane** (reads OpenFOAM artifacts; NO
 Evaluation imports — the comparator wiring lives in ``src.wedge_oblique_shock_gate``,
@@ -26,7 +31,9 @@ Every QoI is computed from the solver's OWN field output:
 
   * ``beta`` is the angle to the point where DENSITY jumps in the solved field
     (max |d rho / d s| along the sampled line) — it is measured from WHERE the
-    shock sits, not computed from the theta-beta-M relation.
+    shock sits, then converted to an angle using only the KNOWN sample-line
+    geometry (its absolute origin height + the streamwise station). It is NEVER
+    computed from the theta-beta-M relation.
   * ``M2`` and the p/rho/T ratios are area-averages of the solved post-shock vs
     freestream regions.
 
@@ -37,6 +44,23 @@ gate FAILS (see tests/p4/test_wedge_oblique_shock_gate.py, the doctored cases).
 Missing / NaN / non-physical input -> raise, never a fabricated default
 (fail-closed audit discipline).
 
+GEOMETRY (Codex DEC-V61-232 R0 P1)
+----------------------------------
+The shock emanates from the wedge apex (taken as the origin) at angle ``beta``
+above the freestream direction, so at streamwise station ``x`` its ABSOLUTE height
+is ``x*tan(beta)``. A sampled line reports distance from ITS OWN origin, which need
+not be the apex level: for a solid wedge the line is typically anchored on the
+wedge WALL, whose height at the station is ``x*tan(theta)``. The extractor therefore
+adds ``shock_line_origin_y`` (the absolute y of the line's distance-0 point, from
+``wedge_inputs``) before taking the angle:
+
+    y_shock_absolute = shock_line_origin_y + measured_distance
+    beta = atan2(y_shock_absolute, x_shock_station)
+
+For an apex-level line ``shock_line_origin_y = 0``; for a wall-anchored line the
+live slice sets it to ``x_shock_station * tan(theta)``. Without this term a correct
+solver shock would be mis-measured (e.g. theta=15deg, x=0.5: 45deg read as ~36deg).
+
 Scope: validates a density-based shock-capturing solve against the EXACT inviscid
 oblique-shock reference. Does NOT flip runnable-coverage 2->3 — that needs a LIVE
 rhoCentralFoam solve on a provisioned ESI image (DEC-V61-224 fork wall, deferred).
@@ -44,24 +68,21 @@ rhoCentralFoam solve on a provisioned ESI image (DEC-V61-224 fork wall, deferred
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-# surfaceFieldValue probes: area-averaged state upstream (freestream) and behind
-# the oblique shock (post-shock). One scalar field per probe dir (mirrors the fin
-# extractor's single-value-per-probe convention).
-_FREESTREAM_P = "freestream_p"      # areaAverage(p)   upstream   -> p1
-_FREESTREAM_RHO = "freestream_rho"  # areaAverage(rho) upstream   -> rho1
-_FREESTREAM_T = "freestream_T"      # areaAverage(T)   upstream   -> T1
-_FREESTREAM_MA = "freestream_Ma"    # areaAverage(Ma)  upstream   -> M1 (measured)
-_POSTSHOCK_P = "postShock_p"        # areaAverage(p)   post-shock -> p2
-_POSTSHOCK_RHO = "postShock_rho"    # areaAverage(rho) post-shock -> rho2
-_POSTSHOCK_T = "postShock_T"        # areaAverage(T)   post-shock -> T2
-_POSTSHOCK_MA = "postShock_Ma"      # areaAverage(Ma)  post-shock -> M2
+# default probe / set names (overridable from case_info.wedge_inputs).
+_DEFAULT_FREESTREAM_PROBE = "freestream"  # surfaceFieldValue region, area-averaged p,rho,T,Ma upstream
+_DEFAULT_POSTSHOCK_PROBE = "postShock"    # surfaceFieldValue region, area-averaged p,rho,T,Ma post-shock
+_DEFAULT_SHOCK_LINE = "shockLine"         # sampled rho(distance) line crossing the shock
 
-# sampled line (set) that crosses the oblique shock; columns: distance, rho.
-_SHOCK_LINE = "shockLine"
+# the four fields each region probe must area-average.
+_REQUIRED_FIELDS = ("p", "rho", "T", "Ma")
+
+# header column label like "areaAverage(p)" or "areaAverage(Ma)"
+_AREA_AVG_LABEL = re.compile(r"areaAverage\(([^)]+)\)")
 
 
 class WedgeShockExtractorError(Exception):
@@ -90,12 +111,12 @@ class WedgeShockQoIs:
     p2: float
     rho2: float
     t2: float
-    y_shock_m: float         # measured shock height at the sample station
+    y_shock_m: float         # absolute shock height at the sample station (origin + measured distance)
     x_station_m: float       # the sample-line streamwise station (geometry input)
 
 
 # ---------------------------------------------------------------------------
-# surfaceFieldValue.dat parsing  (mirrors src/cht_fin_extractor.py)
+# surfaceFieldValue.dat parsing  (multi-field, column order from the header)
 # ---------------------------------------------------------------------------
 
 
@@ -120,35 +141,66 @@ def _find_surface_field_dat(post_dir: Path, probe: str) -> Path:
     return matches[-1]
 
 
-def _read_last_scalar(dat_path: Path) -> float:
-    """Return the value column of the LAST data row of a surfaceFieldValue.dat.
+def _read_area_average_fields(post_dir: Path, probe: str) -> Dict[str, float]:
+    """Parse a multi-field surfaceFieldValue.dat into ``{field: last_value}``.
 
-    Skips ``#``-comment lines. Raises ``WedgeShockExtractorError`` on an empty /
-    non-finite / malformed file — fail-closed, never a silent default.
+    Column order is discovered from the ``# ... areaAverage(<field>) ...`` header
+    line (NOT assumed), so the probe may list its fields in any order. The data row
+    used is the LAST one (converged tail). Fail-closed on a missing header / column
+    count mismatch / non-finite value — never a silent default.
     """
-    last_value: Optional[float] = None
+    dat_path = _find_surface_field_dat(post_dir, probe)
+    field_cols: Optional[List[str]] = None  # data-column index -> field name (col 0 = Time)
+    last_row: Optional[List[str]] = None
     for line in dat_path.read_text(encoding="utf-8").splitlines():
         s = line.strip()
-        if not s or s.startswith("#"):
+        if not s:
+            continue
+        if s.startswith("#"):
+            # a header line carrying areaAverage(...) labels defines the columns;
+            # the LAST such line wins (OpenFOAM prints the column header last).
+            labels = _AREA_AVG_LABEL.findall(s)
+            if labels:
+                field_cols = labels
             continue
         parts = s.split()
-        if len(parts) < 2:
-            continue
+        if len(parts) >= 2:
+            last_row = parts
+    if field_cols is None:
+        raise WedgeShockExtractorError(
+            f"no 'areaAverage(<field>)' column header in {dat_path}; cannot map fields"
+        )
+    if last_row is None:
+        raise WedgeShockExtractorError(f"no data rows in {dat_path}")
+    # data columns are [time, <field_cols...>]; require one value per labelled field
+    if len(last_row) != len(field_cols) + 1:
+        raise WedgeShockExtractorError(
+            f"column count mismatch in {dat_path}: header has {len(field_cols)} field(s) "
+            f"{field_cols} but data row has {len(last_row) - 1} value(s)"
+        )
+    out: Dict[str, float] = {}
+    for i, field in enumerate(field_cols):
         try:
-            last_value = float(parts[1])
+            v = float(last_row[i + 1])
         except ValueError as exc:
             raise WedgeShockExtractorError(
-                f"non-scalar / unparseable value column in {dat_path}: {parts[1]!r}"
+                f"non-numeric value for {field!r} in {dat_path}: {last_row[i + 1]!r}"
             ) from exc
-    if last_value is None:
-        raise WedgeShockExtractorError(f"no data rows in {dat_path}")
-    if not math.isfinite(last_value):
-        raise WedgeShockExtractorError(f"non-finite value in {dat_path}: {last_value}")
-    return last_value
+        if not math.isfinite(v):
+            raise WedgeShockExtractorError(f"non-finite {field!r} in {dat_path}: {v}")
+        out[field] = v
+    return out
 
 
-def _read_area_average(post_dir: Path, probe: str) -> float:
-    return _read_last_scalar(_find_surface_field_dat(post_dir, probe))
+def _require_fields(values: Dict[str, float], probe: str) -> Tuple[float, float, float, float]:
+    """Pull (p, rho, T, Ma) from a probe's parsed fields, fail-closed on any missing."""
+    missing = [f for f in _REQUIRED_FIELDS if f not in values]
+    if missing:
+        raise WedgeShockExtractorError(
+            f"probe {probe!r} is missing required area-averaged field(s) {missing} "
+            f"(present: {sorted(values)})"
+        )
+    return values["p"], values["rho"], values["T"], values["Ma"]
 
 
 # ---------------------------------------------------------------------------
@@ -242,34 +294,47 @@ def extract_wedge_qois(
     case_dir: Path,
     *,
     x_shock_station: float,
+    shock_line_origin_y: float = 0.0,
+    freestream_probe: str = _DEFAULT_FREESTREAM_PROBE,
+    postshock_probe: str = _DEFAULT_POSTSHOCK_PROBE,
+    shock_line: str = _DEFAULT_SHOCK_LINE,
 ) -> WedgeShockQoIs:
     """Extract oblique-shock QoIs from a solved supersonic-wedge case directory.
 
     Args:
-        case_dir: case root containing ``postProcessing/{freestream_*,postShock_*,
-            shockLine}/<time>/...``.
+        case_dir: case root containing ``postProcessing/{<freestream>,<postShock>,
+            <shockLine>}/<time>/...``.
         x_shock_station: streamwise distance (from the wedge apex) of the vertical
             density sample line [m] — geometry input from ``case_info.wedge_inputs``.
+        shock_line_origin_y: absolute y [m] of the sample line's distance-0 point
+            (0 for an apex-level line; ``x_shock_station*tan(theta)`` for a
+            wall-anchored line). Added to the measured distance before taking the
+            angle so beta is the ABSOLUTE shock angle, not the wall-relative one.
+        freestream_probe / postshock_probe / shock_line: postProcessing region/set
+            names (from ``wedge_inputs`` — honoring the published contract).
 
     The pre/post-shock states and the shock LOCATION come from the solver; the angle
-    is geometry (``atan2(y_shock, x_station)``). Raises ``FileNotFoundError`` if
-    probes are absent and ``WedgeShockExtractorError`` on non-physical values.
+    is geometry (``atan2(origin_y + measured_distance, x_station)``). Raises
+    ``FileNotFoundError`` if probes are absent and ``WedgeShockExtractorError`` on
+    non-physical values.
     """
     if not (math.isfinite(x_shock_station) and x_shock_station > 0.0):
         raise WedgeShockExtractorError(
             f"non-physical sample station x_shock_station={x_shock_station} (must be > 0)"
         )
+    if not math.isfinite(shock_line_origin_y) or shock_line_origin_y < 0.0:
+        raise WedgeShockExtractorError(
+            f"non-physical shock_line_origin_y={shock_line_origin_y} (must be finite, >= 0)"
+        )
 
     post_dir = case_dir / "postProcessing"
 
-    p1 = _read_area_average(post_dir, _FREESTREAM_P)
-    rho1 = _read_area_average(post_dir, _FREESTREAM_RHO)
-    t1 = _read_area_average(post_dir, _FREESTREAM_T)
-    m1 = _read_area_average(post_dir, _FREESTREAM_MA)
-    p2 = _read_area_average(post_dir, _POSTSHOCK_P)
-    rho2 = _read_area_average(post_dir, _POSTSHOCK_RHO)
-    t2 = _read_area_average(post_dir, _POSTSHOCK_T)
-    m2 = _read_area_average(post_dir, _POSTSHOCK_MA)
+    p1, rho1, t1, m1 = _require_fields(
+        _read_area_average_fields(post_dir, freestream_probe), freestream_probe
+    )
+    p2, rho2, t2, m2 = _require_fields(
+        _read_area_average_fields(post_dir, postshock_probe), postshock_probe
+    )
 
     for name, v in (
         ("p1", p1), ("rho1", rho1), ("T1", t1), ("M1", m1),
@@ -280,13 +345,15 @@ def extract_wedge_qois(
                 f"non-physical (<=0) area-averaged {name}={v} — cannot form a shock ratio"
             )
 
-    rows = _read_distance_field(_find_xy(post_dir, _SHOCK_LINE))
-    y_shock = _locate_shock_distance(rows)
-    if y_shock <= 0.0:
+    rows = _read_distance_field(_find_xy(post_dir, shock_line))
+    measured_distance = _locate_shock_distance(rows)
+    y_shock_absolute = shock_line_origin_y + measured_distance
+    if y_shock_absolute <= 0.0:
         raise WedgeShockExtractorError(
-            f"non-physical shock height y_shock={y_shock} at station x={x_shock_station}"
+            f"non-physical absolute shock height y={y_shock_absolute} at station "
+            f"x={x_shock_station} (origin_y={shock_line_origin_y}, dist={measured_distance})"
         )
-    beta_deg = math.degrees(math.atan2(y_shock, x_shock_station))
+    beta_deg = math.degrees(math.atan2(y_shock_absolute, x_shock_station))
 
     return WedgeShockQoIs(
         shock_angle_beta_deg=beta_deg,
@@ -301,7 +368,7 @@ def extract_wedge_qois(
         p2=p2,
         rho2=rho2,
         t2=t2,
-        y_shock_m=y_shock,
+        y_shock_m=y_shock_absolute,
         x_station_m=x_shock_station,
     )
 

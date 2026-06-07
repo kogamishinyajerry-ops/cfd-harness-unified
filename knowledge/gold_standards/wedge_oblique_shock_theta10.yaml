@@ -44,6 +44,7 @@ case_info:
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
+    shock_line_origin_y: 0.0
 
 ---
 
@@ -77,6 +78,7 @@ case_info:
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
+    shock_line_origin_y: 0.0
 
 ---
 
@@ -110,6 +112,7 @@ case_info:
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
+    shock_line_origin_y: 0.0
 
 ---
 
@@ -143,6 +146,7 @@ case_info:
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
+    shock_line_origin_y: 0.0
 
 ---
 
@@ -176,3 +180,4 @@ case_info:
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
+    shock_line_origin_y: 0.0

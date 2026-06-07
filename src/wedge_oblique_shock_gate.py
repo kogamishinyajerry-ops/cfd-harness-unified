@@ -103,6 +103,10 @@ def gate_wedge_against_gold(
     qois = extract_wedge_qois(
         case_dir,
         x_shock_station=float(wi["x_shock_station"]),
+        shock_line_origin_y=float(wi.get("shock_line_origin_y", 0.0)),
+        freestream_probe=str(wi.get("freestream_probe", "freestream")),
+        postshock_probe=str(wi.get("postshock_probe", "postShock")),
+        shock_line=str(wi.get("shock_line", "shockLine")),
     )
     result = ExecutionResult(
         success=True,
