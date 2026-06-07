@@ -208,17 +208,34 @@ def _require_fields(values: Dict[str, float], probe: str) -> Tuple[float, float,
 # ---------------------------------------------------------------------------
 
 
-def _find_xy(post_dir: Path, set_name: str) -> Path:
-    """Locate ``postProcessing/<set>/<time>/*.xy`` (latest time)."""
-    matches = sorted(
-        (post_dir / set_name).glob("*/*.xy"),
-        key=lambda p: _time_dir_key(p.parent.name),
-    )
-    if not matches:
+def _find_xy(post_dir: Path, set_name: str, field: str) -> Path:
+    """Locate the DENSITY sampled-line ``.xy`` under the latest time of ``<set>``.
+
+    A live OpenFOAM ``shockLine`` set normally writes one ``.xy`` per field (rho, p,
+    U, ...) all under the same time dir, so a bare ``matches[-1]`` would pick an
+    arbitrary file by filesystem order (Codex DEC-V61-232 R1 P2). We restrict to the
+    latest time, then select the file whose name carries the ``field`` token (e.g.
+    ``rho``). Exactly one ``.xy`` total is accepted as-is; an ambiguous set (multiple
+    files, none or several matching ``field``) fails closed rather than guessing.
+    """
+    all_xy = list((post_dir / set_name).glob("*/*.xy"))
+    if not all_xy:
         raise FileNotFoundError(
             f"no *.xy under {post_dir / set_name} (expected {set_name}/<time>/*.xy)"
         )
-    return matches[-1]
+    latest_key = max(_time_dir_key(p.parent.name) for p in all_xy)
+    candidates = [p for p in all_xy if _time_dir_key(p.parent.name) == latest_key]
+    if len(candidates) == 1:
+        return candidates[0]
+    token = field.lower()
+    matching = [p for p in candidates if token in p.name.lower()]
+    if len(matching) == 1:
+        return matching[0]
+    raise WedgeShockExtractorError(
+        f"ambiguous sampled-line files under {post_dir / set_name} (latest time): "
+        f"{sorted(p.name for p in candidates)} — need exactly one matching field "
+        f"{field!r} to locate the shock from density; refusing to guess"
+    )
 
 
 def _read_distance_field(xy_path: Path) -> List[Tuple[float, float]]:
@@ -247,12 +264,22 @@ def _read_distance_field(xy_path: Path) -> List[Tuple[float, float]]:
     return rows
 
 
-def _locate_shock_distance(rows: List[Tuple[float, float]]) -> float:
-    """Return the distance-along-line of the steepest density change (the shock).
+# a real shock is LOCALLY much steeper than the average slope across the line; a
+# smooth full-line ramp (no shock) has peak ~= mean. 3x is a conservative floor that
+# still admits a shock smeared over many cells (Codex DEC-V61-232 R1 P1).
+_SHOCK_LOCALISATION_MIN_RATIO = 3.0
 
-    The shock is the row interval with the largest ``|d rho / d s|``; the crossing
-    distance is the interval midpoint. Fail-closed if the field is essentially flat
-    (no shock present) — a flat profile must NOT yield a fabricated angle.
+
+def _locate_shock_distance(rows: List[Tuple[float, float]]) -> float:
+    """Return the distance-along-line of the density shock (peak-gradient location).
+
+    The shock is the interval of largest ``|d rho / d s|``; the crossing distance is
+    that interval's midpoint. This is robust to numerical SMEARING — a shock spread
+    over many cells still peaks at its centre. To stay fail-closed we require the peak
+    gradient to be much steeper than the line's MEAN slope (a localised steepening),
+    which rejects both a flat field and a smooth full-line ramp without rejecting a
+    legitimately smeared shock (the prior "steepest step carries >=25% of total
+    variation" rule did reject smeared shocks — Codex R1 P1).
     """
     rho_min = min(v for _, v in rows)
     rho_max = max(v for _, v in rows)
@@ -261,9 +288,15 @@ def _locate_shock_distance(rows: List[Tuple[float, float]]) -> float:
         raise WedgeShockExtractorError(
             "no density jump along the sample line (flat field) — cannot locate a shock"
         )
+    span = rows[-1][0] - rows[0][0]
+    if span <= 0.0:
+        raise WedgeShockExtractorError(
+            f"sample-line span not positive ({rows[0][0]} -> {rows[-1][0]})"
+        )
+    mean_slope = total_var / span  # average |d rho / d s| if the rise were uniform
+
     best_grad = -1.0
-    best_mid = float("nan")
-    best_jump = 0.0
+    best_grad_mid = float("nan")
     for (d0, v0), (d1, v1) in zip(rows, rows[1:]):
         ds = d1 - d0
         if ds <= 0.0:
@@ -273,16 +306,32 @@ def _locate_shock_distance(rows: List[Tuple[float, float]]) -> float:
         grad = abs(v1 - v0) / ds
         if grad > best_grad:
             best_grad = grad
-            best_mid = 0.5 * (d0 + d1)
-            best_jump = abs(v1 - v0)
-    # the steepest step must carry a meaningful fraction of the total variation;
-    # otherwise the "shock" is just discretisation noise on a smooth field.
-    if best_jump < 0.25 * total_var:
+            best_grad_mid = 0.5 * (d0 + d1)
+    # localisation guard: the shock must be locally much steeper than the mean slope —
+    # rejects a flat field and a smooth full-line ramp, admits a smeared shock.
+    if best_grad < _SHOCK_LOCALISATION_MIN_RATIO * mean_slope:
         raise WedgeShockExtractorError(
-            "no sharp density jump (steepest step carries <25% of the total density "
-            "variation) — refusing to fabricate a shock angle"
+            f"no localised density jump (peak slope {best_grad:.4g} < "
+            f"{_SHOCK_LOCALISATION_MIN_RATIO}x mean slope {mean_slope:.4g}) — the profile "
+            "is a smooth ramp / noise, not a shock; refusing to fabricate a shock angle"
         )
-    return best_mid
+    # LOCATE at the 50%-rise crossing (where rho crosses the mid value between the two
+    # plateaus). This is unbiased for a SMEARED front, where the peak-gradient step
+    # alone would sit at the smear edge, not its centre (Codex R1 P1). For a sharp
+    # 1-cell jump the crossing falls inside that cell, recovering the same midpoint.
+    mid_rho = 0.5 * (rho_min + rho_max)
+    crossings: List[float] = []
+    for (d0, v0), (d1, v1) in zip(rows, rows[1:]):
+        if v0 == v1:
+            continue
+        if (v0 - mid_rho) * (v1 - mid_rho) <= 0.0:  # straddles (or touches) mid_rho
+            t = (mid_rho - v0) / (v1 - v0)
+            crossings.append(d0 + t * (d1 - d0))
+    if not crossings:
+        return best_grad_mid  # defensive: total_var>0 guarantees a crossing in practice
+    # if the profile is noisy with several mid-crossings, take the one in the
+    # steepest (real-shock) region rather than a plateau ripple.
+    return min(crossings, key=lambda c: abs(c - best_grad_mid))
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +347,7 @@ def extract_wedge_qois(
     freestream_probe: str = _DEFAULT_FREESTREAM_PROBE,
     postshock_probe: str = _DEFAULT_POSTSHOCK_PROBE,
     shock_line: str = _DEFAULT_SHOCK_LINE,
+    shock_line_field: str = "rho",
 ) -> WedgeShockQoIs:
     """Extract oblique-shock QoIs from a solved supersonic-wedge case directory.
 
@@ -345,7 +395,7 @@ def extract_wedge_qois(
                 f"non-physical (<=0) area-averaged {name}={v} — cannot form a shock ratio"
             )
 
-    rows = _read_distance_field(_find_xy(post_dir, shock_line))
+    rows = _read_distance_field(_find_xy(post_dir, shock_line, shock_line_field))
     measured_distance = _locate_shock_distance(rows)
     y_shock_absolute = shock_line_origin_y + measured_distance
     if y_shock_absolute <= 0.0:

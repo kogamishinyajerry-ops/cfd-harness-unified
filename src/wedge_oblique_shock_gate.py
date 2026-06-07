@@ -107,6 +107,7 @@ def gate_wedge_against_gold(
         freestream_probe=str(wi.get("freestream_probe", "freestream")),
         postshock_probe=str(wi.get("postshock_probe", "postShock")),
         shock_line=str(wi.get("shock_line", "shockLine")),
+        shock_line_field=str(wi.get("shock_line_field", "rho")),
     )
     result = ExecutionResult(
         success=True,

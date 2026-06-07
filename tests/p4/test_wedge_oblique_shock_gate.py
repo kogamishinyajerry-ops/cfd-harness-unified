@@ -288,6 +288,96 @@ def test_extractor_honors_published_probe_names_and_discovers_column_order(tmp_p
         extract_wedge_qois(case, x_shock_station=_X_STATION, postshock_probe="does_not_exist")
 
 
+def _write_shock_line_rows(case: Path, rows: list[tuple[float, float]], fname: str = "line_rho.xy") -> Path:
+    """Write an arbitrary (distance, rho) profile to a named .xy under shockLine."""
+    d = next((case / "postProcessing" / "shockLine").glob("*"))  # the time dir
+    path = d / fname
+    path.write_text(
+        "# test profile\n" + "\n".join(f"{x:.4f}\t{v:.10g}" for x, v in rows) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_smeared_shock_is_accepted_and_located(tmp_path: Path) -> None:
+    """Codex DEC-V61-232 R1 P1: a numerically SMEARED shock (rise spread over ~6
+    cells, so no single step carries 25% of the total variation) must still be
+    accepted and located near its centre. The old 25%-single-step guard rejected it;
+    the localised-steepening guard does not."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    rho2, rho1 = q.rho2, q.rho1
+    old_xy = next((case / "postProcessing" / "shockLine").glob("*/*.xy"))
+    old_xy.unlink()
+    # rho2 below ~0.44, linear smear to rho1 across [0.44, 0.56] (6 cells), rho1 above
+    rows: list[tuple[float, float]] = []
+    x = 0.02
+    while x < 1.0:
+        if x <= 0.44:
+            v = rho2
+        elif x >= 0.56:
+            v = rho1
+        else:
+            frac = (x - 0.44) / 0.12
+            v = rho2 + frac * (rho1 - rho2)
+        rows.append((x, v))
+        x += 0.02
+    _write_shock_line_rows(case, rows)
+    qs = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    # centre of the smear is ~0.50 -> beta ~45, inside the 3% band
+    assert qs.shock_angle_beta_deg == pytest.approx(45.0, abs=1.5)
+    assert gate_wedge_against_gold(case, gold_path=_GOLD).passed
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_smooth_full_line_ramp_is_rejected(tmp_path: Path) -> None:
+    """A smooth density ramp across the WHOLE line (no localised shock) must fail
+    closed — peak slope ~= mean slope, so no shock to fabricate an angle from."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    old_xy = next((case / "postProcessing" / "shockLine").glob("*/*.xy"))
+    old_xy.unlink()
+    rows: list[tuple[float, float]] = []
+    x = 0.02
+    while x < 1.0:
+        frac = (x - 0.02) / (0.98 - 0.02)
+        rows.append((x, q.rho2 + frac * (q.rho1 - q.rho2)))  # uniform ramp
+        x += 0.02
+    _write_shock_line_rows(case, rows)
+    with pytest.raises(WedgeShockExtractorError):
+        extract_wedge_qois(case, x_shock_station=_X_STATION)
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_multiple_xy_files_selects_density_not_arbitrary(tmp_path: Path) -> None:
+    """Codex DEC-V61-232 R1 P2: when the shockLine set writes several fields (rho, p,
+    U) the extractor must select the DENSITY .xy deterministically, not an arbitrary
+    file by filesystem order."""
+    case = _copy_case(tmp_path)
+    q = extract_wedge_qois(case, x_shock_station=_X_STATION)  # rho-only fixture -> beta 45
+    # add a pressure profile whose 'shock' sits at a DIFFERENT location (distance 0.80)
+    p_rows = [(x, (2.0e5 if x < 0.80 else 1.0e5)) for x in [i * 0.02 + 0.01 for i in range(50)]]
+    _write_shock_line_rows(case, p_rows, fname="line_p.xy")
+    # density file still drives beta (45), not the pressure file (which would give ~58)
+    q2 = extract_wedge_qois(case, x_shock_station=_X_STATION)
+    assert q2.shock_angle_beta_deg == pytest.approx(q.shock_angle_beta_deg, abs=1e-6)
+    assert q2.shock_angle_beta_deg == pytest.approx(45.0, abs=1e-6)
+
+
+@pytest.mark.skipif(not _PROBE.is_dir(), reason="synthetic wedge fixture absent")
+def test_ambiguous_xy_without_density_match_fails_closed(tmp_path: Path) -> None:
+    """If several .xy exist and none unambiguously carries the density field, refuse
+    to guess — fail closed rather than measure beta from the wrong signal."""
+    case = _copy_case(tmp_path)
+    time_dir = next((case / "postProcessing" / "shockLine").glob("*"))
+    # rename the rho file so NOTHING matches 'rho', and add a second non-matching file
+    (time_dir / "line_rho.xy").rename(time_dir / "line_p.xy")
+    (time_dir / "line_U.xy").write_text("# x v\n0.1\t1.0\n0.2\t1.0\n", encoding="utf-8")
+    with pytest.raises(WedgeShockExtractorError):
+        extract_wedge_qois(case, x_shock_station=_X_STATION)
+
+
 def test_missing_postprocessing_is_honest_error(tmp_path: Path) -> None:
     """No silent default: an empty case dir raises rather than fabricating QoIs."""
     with pytest.raises((FileNotFoundError, WedgeShockExtractorError)):
