@@ -59,7 +59,14 @@ class AutoVerifier:
                     warnings=["out_of_scope_case"],
                 ),
                 physics_check=PhysicsCheck(status="WARN", warnings=["out_of_scope_case"]),
-                verdict="PASS_WITH_DEVIATIONS",
+                # DEC-V61-229-followup (V61-231): an out-of-scope case is NOT verified
+                # (convergence UNKNOWN, comparison SKIPPED) — it must NOT carry a pass-ish
+                # verdict. PASS_WITH_DEVIATIONS was fabricating an acceptable verdict with
+                # zero evidence; downstream report engines (data_collector success-bucket,
+                # visual_acceptance PASS_WITH_DEVIATIONS tally) then mis-counted it as
+                # pass-ish. "SKIPPED" is the honest "not verified" verdict (matches the
+                # gold_standard_comparison.overall="SKIPPED" already set above). 引擎不撒谎.
+                verdict="SKIPPED",
                 correction_spec_needed=False,
                 correction_spec=None,
                 out_of_scope_reason="Phase 8a is frozen to the Phase 7 coverage anchor set.",
@@ -163,6 +170,15 @@ class AutoVerifier:
             and physics.status == "PASS"
         ):
             return "PASS"
+        # DEC-V61-231 (Codex R0 ISSUE-2): when the gold-standard comparison was SKIPPED
+        # there is NO benchmark evidence — this must NOT collapse into the pass-ish
+        # PASS_WITH_DEVIATIONS default (that fabricates an acceptable verdict without
+        # evidence, the same defect as the out-of-scope path). Honest "not verified" =
+        # SKIPPED. PASS_WITH_DEVIATIONS is reserved for cases where a comparison WAS
+        # performed (overall PASS/PASS_WITH_DEVIATIONS) but deviations/non-convergence
+        # remain. 引擎不撒谎: 缺证据时保持 SKIPPED.
+        if comparison.overall == "SKIPPED":
+            return "SKIPPED"
         return "PASS_WITH_DEVIATIONS"
 
     @staticmethod

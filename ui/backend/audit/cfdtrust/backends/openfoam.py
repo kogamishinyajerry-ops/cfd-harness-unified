@@ -404,12 +404,68 @@ def _resolve_solver_timeout() -> int:
     return max(n, 60)
 
 
+# DEC-V61-234: the in-container env-setup snippet is image-fork-aware. The
+# OpenFOAM Foundation images (openfoam/*) source /opt/openfoam11/etc/bashrc; the
+# ESI / openfoam.com images (opencfd/*) source /openfoam/profile.rc (verified live
+# against opencfd/openfoam-default:2312 — see
+# reports/showcase_aero/_w71a_wedge_probe/REPRODUCE.md). Defaulting to the
+# Foundation path keeps every existing incompressible case byte-identical.
+_OF11_BASHRC = "/opt/openfoam11/etc/bashrc"
+_ESI_PROFILE_RC = "/openfoam/profile.rc"
+
+# DEC-V61-234: the manifest-declared solver name flows into the container
+# `bash -c` argv (it was previously a hardcoded literal), so it MUST be a bare
+# OpenFOAM application token. This fence parallels `_is_valid_docker_image_name`
+# (R15-F-03), which only guarded the image slot — never the solver verb.
+_SOLVER_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+
+
+def _env_setup_for_image(image: str) -> str:
+    """Return the ``source <path>`` env-setup for the given OpenFOAM image fork.
+
+    ESI / openfoam.com images (``opencfd/*``) ship their environment at
+    ``/openfoam/profile.rc``; OpenFOAM Foundation images (``openfoam/*``) at
+    ``/opt/openfoam11/etc/bashrc``. Anything unrecognised falls back to the
+    Foundation default (historical behaviour) so existing cases are unaffected;
+    an ESI case MUST carry an ``opencfd/*`` (or ``openfoam-default``) image string
+    to be routed to the ESI profile.
+    """
+    img = (image or "").lower()
+    if img.startswith("opencfd/") or "openfoam-default" in img:
+        return _ESI_PROFILE_RC
+    return _OF11_BASHRC
+
+
+def _resolve_solver_name(manifest: Dict[str, Any]) -> str:
+    """Return the sanitized OpenFOAM solver application to dispatch (DEC-V61-234).
+
+    Reads ``manifest['solver']`` — the SAME field the residual gate already trusts
+    (:func:`_compute_gate_from_residuals`) — falling back to ``'simpleFoam'`` when
+    absent/blank, preserving the behaviour of existing incompressible manifests
+    that omit-but-imply simpleFoam. A non-empty value that fails the
+    bare-identifier fence raises :class:`ValueError` (fail-closed: a metachar-laden
+    solver string must NOT reach the container ``bash -c`` argv).
+    """
+    raw = manifest.get("solver")
+    if not isinstance(raw, str) or not raw.strip():
+        return "simpleFoam"
+    candidate = raw.strip()
+    if not _SOLVER_NAME_RE.match(candidate):
+        raise ValueError(
+            f"manifest 'solver' {candidate!r} is not a bare OpenFOAM application "
+            "name (^[A-Za-z][A-Za-z0-9_]*$) — refusing to interpolate it into the "
+            "container command (DEC-V61-234 injection fence)."
+        )
+    return candidate
+
+
 def _run_docker_command(
     shell_args: str,
     case_dir: Path,
     image: str,
     *,
     timeout: int,
+    env_setup: str = _OF11_BASHRC,
 ) -> Tuple[int, str, str]:
     """Run a shell command inside the OpenFOAM container against `case_dir`.
 
@@ -422,9 +478,12 @@ def _run_docker_command(
 
     Subprocess args are list-form (no shell=True). The only string that
     enters a shell is `shell_args`, executed inside the container via
-    `bash -c`. Callers are responsible for sanitizing it; the
-    project-internal callers only ever pass literal strings like
-    `"blockMesh"` and `"simpleFoam"`.
+    `bash -c`. Callers are responsible for sanitizing it; the mesh callers
+    pass literal strings (`"blockMesh"`, `"checkMesh"`) and the solver caller
+    passes the manifest-declared application name pre-sanitized through
+    `_resolve_solver_name` (DEC-V61-234 bare-identifier fence) — never a raw
+    manifest value. `env_setup` selects the image-fork bashrc/profile to source
+    (Foundation OF11 default; ESI `/openfoam/profile.rc` via `_env_setup_for_image`).
     """
     full_cmd = [
         "docker", "run", "--rm",
@@ -432,7 +491,7 @@ def _run_docker_command(
         "-v", f"{case_dir.resolve()}:/case",
         "-w", "/case",
         image,
-        "-c", f"source /opt/openfoam11/etc/bashrc && {shell_args}",
+        "-c", f"source {env_setup} && {shell_args}",
     ]
     try:
         res = subprocess.run(
@@ -2074,6 +2133,32 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             },
         }
 
+    # DEC-V61-234: derive the image-fork env-setup + the manifest-declared solver
+    # ONCE, before any container call. The env-setup is sourced by blockMesh,
+    # checkMesh AND the solver (Foundation OF11 default; ESI /openfoam/profile.rc
+    # for opencfd/* images). The solver verb is no longer hardcoded simpleFoam —
+    # it is the sanitized manifest['solver'] so a compressible manifest (e.g.
+    # rhoCentralFoam) actually dispatches that solver. An ill-shaped solver name
+    # is a controlled BLOCK (injection fence), never a crash or a silent misrun.
+    env_setup = _env_setup_for_image(image)
+    try:
+        solver_name = _resolve_solver_name(manifest)
+    except ValueError as exc:
+        return {
+            "status": "BLOCKED",
+            "summary": "manifest.solver is not a valid OpenFOAM application name.",
+            "details": {
+                "execution": "skipped",
+                "real_solver_invoked": False,
+                "reason": "manifest_invalid_solver_name",
+                "detail": str(exc),
+                "next_step": (
+                    "Set `solver` to a bare OpenFOAM application token "
+                    "(^[A-Za-z][A-Za-z0-9_]*$), e.g. simpleFoam or rhoCentralFoam."
+                ),
+            },
+        }
+
     ok, reason = _docker_available()
     if not ok:
         return {
@@ -2136,7 +2221,7 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
 
     # --- blockMesh (idempotent in practice — re-runs are safe) ---
     rc, bm_stdout, bm_stderr = _run_docker_command(
-        "blockMesh", case_dir, image, timeout=timeout_s,
+        "blockMesh", case_dir, image, timeout=timeout_s, env_setup=env_setup,
     )
     if rc != 0:
         # R15-F-04 fix: distinguish OSError / timeout / real failure for
@@ -2237,7 +2322,7 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     # and persist mesh_quality.json regardless of outcome so the audit gate
     # can decide PASS/FAIL on evidence (not on rc).
     cm_rc, cm_stdout, cm_stderr = _run_docker_command(
-        "checkMesh", case_dir, image, timeout=timeout_s,
+        "checkMesh", case_dir, image, timeout=timeout_s, env_setup=env_setup,
     )
 
     cm_combined = cm_stdout
@@ -2281,9 +2366,9 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
             parsed=cm_parsed,
         )
 
-    # --- simpleFoam ---
+    # --- solver (DEC-V61-234: manifest-declared, NOT hardcoded simpleFoam) ---
     rc, sf_stdout, sf_stderr = _run_docker_command(
-        "simpleFoam", case_dir, image, timeout=timeout_s,
+        solver_name, case_dir, image, timeout=timeout_s, env_setup=env_setup,
     )
 
     # Persist combined log unconditionally — debugging needs it whether
@@ -2296,12 +2381,12 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
     if rc != 0:
         # Three distinct sub-cases. The marker-based discrimination is set by
         # `_run_docker_command` (R15-F-01 fix); previously OSError was
-        # mis-reported as `simplefoam_crashed` with `real_solver_invoked=True`
+        # mis-reported as `{solver}_crashed` with `real_solver_invoked=True`
         # even though the solver process never actually started.
         if rc == -1 and "OFA-OSERROR" in (sf_stderr or ""):
             return {
                 "status": "BLOCKED",
-                "summary": "docker invocation failed before simpleFoam could start.",
+                "summary": f"docker invocation failed before {solver_name} could start.",
                 "details": {
                     "execution": "skipped",
                     "real_solver_invoked": False,
@@ -2316,22 +2401,25 @@ def run(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         if rc == -1 and "OFA-TIMEOUT" in (sf_stderr or ""):
             return {
                 "status": "BLOCKED",
-                "summary": f"simpleFoam timed out after {timeout_s}s (set CFDTRUST_SOLVER_TIMEOUT_S to extend).",
+                "summary": f"{solver_name} timed out after {timeout_s}s (set CFDTRUST_SOLVER_TIMEOUT_S to extend).",
                 "details": {
                     "execution": "attempted",
                     "real_solver_invoked": True,
-                    "reason": "simplefoam_timed_out",
+                    # DEC-V61-234: reason code carries the actual solver name
+                    # (lowercased); for the simpleFoam default this is byte-stable
+                    # `simplefoam_timed_out` (existing consumers unchanged).
+                    "reason": f"{solver_name.lower()}_timed_out",
                     "timeout_s": timeout_s,
                     "log": str(log_path.relative_to(case_dir)),
                 },
             }
         return {
             "status": "BLOCKED",
-            "summary": f"simpleFoam exited non-zero (rc={rc}). See artifacts/solver.log.",
+            "summary": f"{solver_name} exited non-zero (rc={rc}). See artifacts/solver.log.",
             "details": {
                 "execution": "attempted",
                 "real_solver_invoked": True,
-                "reason": "simplefoam_crashed",
+                "reason": f"{solver_name.lower()}_crashed",
                 "returncode": rc,
                 "stderr_tail": (sf_stderr or "")[-2000:],
                 "log": str(log_path.relative_to(case_dir)),
@@ -3095,8 +3183,16 @@ def ingest(case_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
     # --- checkMesh on existing polyMesh (read-only operation) ---
+    # DEC-V61-234 R2 (Codex P2, verbatim): source the image-fork env-setup here
+    # too. run() already derives this for blockMesh/checkMesh/solver, but ingest()
+    # was still defaulting to the Foundation OF11 bashrc — so ingesting an
+    # ESI/opencfd case (e.g. an externally produced rhoCentralFoam wedge) would
+    # source a non-existent /opt/openfoam11/etc/bashrc inside the ESI container
+    # and false-BLOCK at checkMesh before any evidence is read. This completes
+    # the 224(b) image reconciliation across BOTH run() and ingest().
     cm_rc, cm_stdout, cm_stderr = _run_docker_command(
         "checkMesh", case_dir, image, timeout=timeout_s,
+        env_setup=_env_setup_for_image(image),
     )
     cm_combined = cm_stdout
     if cm_stderr:

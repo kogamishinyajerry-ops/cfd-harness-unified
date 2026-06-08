@@ -296,6 +296,39 @@ cases:
       # replace this stub.
       Re_design_inlet: 250000
 
+  # P4 V71.A · DEC-V61-234 — supersonic-wedge oblique-shock anchor.
+  # Registers the wedge as a runtime anchor so `KnowledgeDB.get_execution_chain
+  # ('wedge_oblique_shock')` resolves the geometry→solver→image chain the workbench
+  # uses (Codex R0 P2). geometry_type SUPERSONIC_WEDGE dispatches to
+  # `DockerOpenFOAMSolverExecutor._execute_supersonic_wedge` (rhoCentralFoam on ESI
+  # v2312). Like the CHT anchor (case_002a) this case carries NO inline `gold_standard`:
+  # its verification is a SPECIALIZED physics gate, not the generic residual
+  # comparator — `KnowledgeDB.load_gold_standard` correctly returns None (→ TaskRunner
+  # "no gold → no comparison"), and `src.wedge_oblique_shock_gate.gate_wedge_against_gold`
+  # loads the analytical θ-β-M gold (`gold_standard_file` below) DIRECTLY and applies
+  # the 6 fail-closed hard gates. The backend-launched e2e is frozen at
+  # reports/showcase_aero/_w71a_wedge_backend_e2e/ (gate PASS). Not in
+  # src/auto_verifier (its generic comparator cannot judge oblique-shock physics —
+  # the same design as the CHT specialized gate; an auto_verifier hook for
+  # specialized-physics gates is a pre-existing, CHT-shared follow-up, not a wedge gap).
+  - id: wedge_oblique_shock
+    name: "Supersonic Wedge Oblique Shock (M=2.0, 15°)"
+    reference: "Anderson, Modern Compressible Flow, θ-β-M oblique-shock relations (analytical)"
+    doi: null
+    flow_type: EXTERNAL
+    geometry_type: SUPERSONIC_WEDGE
+    compressibility: COMPRESSIBLE
+    steady_state: STEADY
+    solver: rhoCentralFoam
+    solver_docker_image: "opencfd/openfoam-default:2312"
+    turbulence_model: laminar
+    case_kind: specialized_gate_anchor
+    gold_standard_file: "knowledge/gold_standards/wedge_oblique_shock.yaml"
+    verification_gate: "src.wedge_oblique_shock_gate.gate_wedge_against_gold"
+    parameters:
+      Ma: 2.0
+      wedge_angle_deg: 15
+
   - id: rayleigh_benard_convection
     name: "Rayleigh-Bénard Convection (Ra=10^6)"
     reference: "Chaivat et al. 2006"

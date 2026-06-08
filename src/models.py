@@ -31,6 +31,13 @@ class GeometryType(Enum):
     # Name is geometry-agnostic (reusable for case_002b-class single-stream CHT
     # later) rather than over-fitting to a specific HX instance.
     CHT_MULTI_REGION = "CHT_MULTI_REGION"
+    # P4 V71.A (DEC-V61-234, parent DEC-V61-224(b) image-reconciliation provision):
+    # supersonic-wedge oblique-shock geometry. Dispatches to
+    # DockerOpenFOAMSolverExecutor._execute_supersonic_wedge() (a density-based
+    # rhoCentralFoam solve on the ESI v2312 image, M=2.0 inviscid 15° wedge). Name
+    # is geometry-agnostic (reusable for other oblique-shock anchors). The value
+    # string MUST byte-match knowledge/gold_standards/wedge_oblique_shock*.yaml.
+    SUPERSONIC_WEDGE = "SUPERSONIC_WEDGE"
     CUSTOM = "CUSTOM"
 
 

@@ -1,0 +1,19 @@
+{
+  "execution_time_s": 24.83,
+  "is_mock": false,
+  "key_quantities": {
+    "density_ratio": 1.7218643798596611,
+    "mach_downstream": 1.44447375,
+    "pressure_ratio": 2.18793578,
+    "shock_angle_beta_deg": 45.23716031895796,
+    "temperature_ratio": 1.26918603
+  },
+  "launcher": "src.foam_agent_adapter.DockerOpenFOAMSolverExecutor.execute()",
+  "success": true,
+  "task_spec": {
+    "Ma": 2.0,
+    "compressibility": "COMPRESSIBLE",
+    "geometry_type": "SUPERSONIC_WEDGE",
+    "name": "p4_v71a_wedge_backend_e2e"
+  }
+}

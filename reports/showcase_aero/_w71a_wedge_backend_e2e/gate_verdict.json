@@ -1,0 +1,5 @@
+{
+  "gate": "src.wedge_oblique_shock_gate.gate_wedge_against_gold",
+  "passed": true,
+  "summary": "wedge_oblique_shock gate PASS (beta=45.2372 deg (Mach angle 30.00), M2=1.4445, p2/p1=2.1879, rho2/rho1=1.7219, T2/T1=1.2692, M1_meas=2.0000 (target 2)) | shock_angle_beta_deg=PASS, mach_downstream=PASS, pressure_ratio=PASS, density_ratio=PASS, temperature_ratio=PASS, supersonic_inflow=PASS, inflow_matches_target=PASS, downstream_supersonic=PASS, beta_above_mach_angle=PASS, ideal_gas_consistent=PASS, shock_locus_consistent=PASS"
+}

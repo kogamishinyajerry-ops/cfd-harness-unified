@@ -1,0 +1,86 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : rhoCentralFoam
+Date   : Jun 07 2026
+Time   : 13:00:46
+Host   : ac6aa9fd2f3f
+PID    : 220
+I/O    : uncollated
+Case   : /work
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Reading thermophysical properties
+
+Selecting thermodynamics package 
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       const;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+Reading field U
+
+Creating turbulence model
+
+Selecting turbulence model type laminar
+Selecting laminar stress model Stokes
+fluxScheme: Kurganov
+
+Starting time loop
+
+surfaceFieldValue freestream:
+    operation     = areaAverage
+
+
+surfaceFieldValue postShock:
+    operation     = areaAverage
+
+
+Sampled set:
+    line -> raw
+
+...[truncated]...
+ExecutionTime = 19.51 s  ClockTime = 23 s
+
+deltaT = 0.00066884762
+Mean and max Courant Numbers = 0.45247636 0.50093487
+Time = 1.999030386477555
+
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoUx, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoUy, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoE, Initial residual = 0, Final residual = 0, No Iterations 0
+ExecutionTime = 19.51 s  ClockTime = 23 s
+
+deltaT = 0.00066759938
+Mean and max Courant Numbers = 0.45162929 0.50047573
+Time = 1.999697985860446
+
+diagonal:  Solving for rho, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoUx, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoUy, Initial residual = 0, Final residual = 0, No Iterations 0
+diagonal:  Solving for rhoE, Initial residual = 0, Final residual = 0, No Iterations 0
+ExecutionTime = 19.53 s  ClockTime = 23 s
+
+    functionObjects::MachNo MachNo1 writing field: Ma
+End
+

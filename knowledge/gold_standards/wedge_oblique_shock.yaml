@@ -1,0 +1,229 @@
+# Gold Standard — Supersonic Wedge Oblique Shock (M1=2.0, theta=15 deg, inviscid)
+# ========================================================================
+# P4 V71.A (DEC-V61-232, scaffolding-first 2026-06-07). The FIRST compressible /
+# density-based / shock-capturing coverage benchmark — the anchor that closes the
+# capability-matrix "rhoCentralFoam wired in advisor surface but no anchor case"
+# gap (V71.A). Chosen because its reference is ANALYTICALLY EXACT: every observable
+# is a CLOSED-FORM function of (M1, theta, gamma) via the oblique-shock theta-beta-M
+# + normal-shock relations — the single most important honesty property for a
+# coverage gate (cf. lid_driven_cavity.yaml: Phase-0 fabricated values were caught
+# only at real-solver time; we do not repeat that). Reference values here are NOT
+# transcribed from a table — they are re-derived from `case_info.wedge_inputs` by
+# `tests/p4/test_wedge_oblique_shock_gold.py`, which fails if any committed value
+# drifts from the formula. The benchmark cannot be silently fabricated or
+# engineered-to-pass.
+#
+# Closed form (Anderson, Modern Compressible Flow, 3rd ed., Ch. 4; NACA Report 1135):
+#     theta-beta-M:  tan(theta) = 2 cot(beta) (M1^2 sin^2 beta - 1)
+#                                  / (M1^2 (gamma + cos 2 beta) + 2)     [weak root]
+#     M1n = M1 sin(beta)
+#     p2/p1   = 1 + 2 gamma/(gamma+1) (M1n^2 - 1)
+#     rho2/rho1 = (gamma+1) M1n^2 / ((gamma-1) M1n^2 + 2)
+#     T2/T1   = (p2/p1) / (rho2/rho1)
+#     M2n     = sqrt( (1 + (gamma-1)/2 M1n^2) / (gamma M1n^2 - (gamma-1)/2) )
+#     M2      = M2n / sin(beta - theta)
+# with M1=2.0, gamma=1.4, theta=15 deg  ->
+#     beta = 45.3436 deg, M2 = 1.4457, p2/p1 = 2.1947, rho2/rho1 = 1.7289,
+#     T2/T1 = 1.2694   (derivation re-run in the test)
+#
+# CONTRACT STATUS — `LIVE_VALIDATED` (DEC-V61-233, 2026-06-07):
+#   The contract authored by DEC-V61-232 (self-verifying derivation test + PURE
+#   anti-tautology extractor + fail-closed Control-plane gate) is now backed by a
+#   REAL live `rhoCentralFoam` solve (OpenFOAM v2312, ESI, native ARM64): a M1=2.0
+#   inviscid 15-deg wedge, 12000-cell blockMesh, run to t=2.0 (~6.5 flow-throughs).
+#   The frozen probe lives at reports/showcase_aero/_w71a_wedge_probe/ (REPRODUCE.md
+#   + the solver-produced postProcessing artifacts; NOT authored). The gate MEASURES
+#   beta=45.24deg, M2=1.444, p2/p1=2.188, rho2/rho1=1.722, T2/T1=1.269 from those
+#   artifacts and validates them against the analytical reference below — every
+#   observable within 0.5% (tolerance 3%), all 6 hard gates PASS. This is a LIVE V&V
+#   VALIDATION of the rhoCentralFoam benchmark. It does NOT by itself flip
+#   runnable-coverage 2 -> 3: per Law-1 + DEC-V61-224(b), "runnable" requires the
+#   workbench backend (foam_agent_adapter + cfdtrust) wired to launch the solver
+#   end-to-end, which this slice deferred (it ran the solver DIRECTLY in a container).
+#   Coverage stays 2 until that backend wiring lands (Codex R0 P2-1). tolerance=0.03
+#   (3%) per the eval E22 signature; the analytical reference makes a tight gate honest.
+#   (The theta=10 sensitivity gold remains ANALYTICAL_REFERENCE_AUTHORED — analytical
+#   reference authored, no live run; a documented follow-up.)
+#   Machine-readable: case_info.validation_status below — a TEST-ENFORCED honesty
+#   invariant (the gold self-test reads it) + a forward hook coverage tooling CAN read
+#   structurally (no production consumer reads it today, Codex R0 P2-2). Named validation_status
+#   (NOT contract_status) to avoid colliding with the codebase's load-bearing
+#   physics_contract.contract_status (physics-compatibility axis: COMPATIBLE/INCOMPATIBLE/…).
+#
+# SCOPE CAVEAT: the closed form is exact for INVISCID flow with a sharp oblique
+# shock. The gate validates a density-based shock-capturing solver against this
+# exact reference. Viscous shock smearing / boundary-layer effects are out of scope
+# (they would forfeit the self-verifiability that justifies an analytical gold).
+
+quantity: shock_angle_beta_deg
+reference_values:
+  - value: 45.3436
+    unit: degrees
+    description: "weak-shock beta from theta-beta-M, M1=2.0 theta=15 gamma=1.4 (Anderson Ch.4)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (oblique shock theta-beta-M relation); NACA Report 1135. Reference is closed-form, re-derived in test (analytical, not experimental)."
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 12000  # blockMesh: 2 all-hex blocks (40+80)x100 (DEC-V61-233 live run); checkMesh OK
+  type: structured
+solver_info:
+  name: rhoCentralFoam  # density-based explicit central-upwind (Kurganov flux, vanLeer); LIVE_VALIDATED (DEC-V61-233)
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock
+  validation_status: LIVE_VALIDATED   # machine-readable run-validation status (DEC-V61-233: live rhoCentralFoam solve validated vs this gold). DISTINCT from physics_contract.contract_status (physics-compatibility axis, read by report_engine/contract_dashboard.py) — named to avoid that collision. TEST-ENFORCED honesty invariant (the gold self-test reads it + blocks an un-run gold being machine-read as validated) + a forward hook; NO production coverage consumer reads it yet (Codex R0 P2-2).
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:           # the SOLE source of the reference values (self-verified)
+    M1: 2.0               # freestream Mach number
+    theta_deg: 15.0       # wedge half-angle (flow deflection)
+    gamma: 1.4            # ratio of specific heats (air)
+    R_specific: 287.058   # J/(kg.K) air — context for the ideal-gas consistency gate
+    x_shock_station: 0.12  # m, x-coord (from apex) of the vertical density sample line
+    beta_validity_min_deg: 30.0  # Mach angle asin(1/M1)=30 deg — beta must exceed this
+    freestream_probe: freestream # surfaceFieldValue region (areaAverage p,rho,T,Ma upstream)
+    postshock_probe: postShock   # surfaceFieldValue region (areaAverage p,rho,T,Ma post-shock)
+    shock_line: shockLine        # sampled rho(distance) line crossing the shock
+    shock_line_origin_y: 0.05     # absolute y of the sample-line distance-0 point: apex-level=0, wall-anchored=x*tan(theta) (live slice sets per the actual sampling; Codex R0 P1)
+
+---
+
+quantity: mach_downstream
+reference_values:
+  - value: 1.4457
+    unit: dimensionless
+    description: "M2 = M2n/sin(beta-theta), M1n=1.4227 — analytical (weak oblique shock, M2>1)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (normal-shock + oblique-shock relations); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 12000
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock
+  validation_status: LIVE_VALIDATED   # machine-readable run-validation status (DEC-V61-233: live rhoCentralFoam solve validated vs this gold). DISTINCT from physics_contract.contract_status (physics-compatibility axis, read by report_engine/contract_dashboard.py) — named to avoid that collision. TEST-ENFORCED honesty invariant (the gold self-test reads it + blocks an un-run gold being machine-read as validated) + a forward hook; NO production coverage consumer reads it yet (Codex R0 P2-2).
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 15.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.12
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+    shock_line_origin_y: 0.05
+
+---
+
+quantity: pressure_ratio
+reference_values:
+  - value: 2.1947
+    unit: dimensionless
+    description: "p2/p1 = 1 + 2g/(g+1)(M1n^2-1), M1n=1.4227 — analytical (normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (static pressure ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 12000
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock
+  validation_status: LIVE_VALIDATED   # machine-readable run-validation status (DEC-V61-233: live rhoCentralFoam solve validated vs this gold). DISTINCT from physics_contract.contract_status (physics-compatibility axis, read by report_engine/contract_dashboard.py) — named to avoid that collision. TEST-ENFORCED honesty invariant (the gold self-test reads it + blocks an un-run gold being machine-read as validated) + a forward hook; NO production coverage consumer reads it yet (Codex R0 P2-2).
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 15.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.12
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+    shock_line_origin_y: 0.05
+
+---
+
+quantity: density_ratio
+reference_values:
+  - value: 1.7289
+    unit: dimensionless
+    description: "rho2/rho1 = (g+1)M1n^2/((g-1)M1n^2+2), M1n=1.4227 — analytical (normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (density ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 12000
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock
+  validation_status: LIVE_VALIDATED   # machine-readable run-validation status (DEC-V61-233: live rhoCentralFoam solve validated vs this gold). DISTINCT from physics_contract.contract_status (physics-compatibility axis, read by report_engine/contract_dashboard.py) — named to avoid that collision. TEST-ENFORCED honesty invariant (the gold self-test reads it + blocks an un-run gold being machine-read as validated) + a forward hook; NO production coverage consumer reads it yet (Codex R0 P2-2).
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 15.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.12
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+    shock_line_origin_y: 0.05
+
+---
+
+quantity: temperature_ratio
+reference_values:
+  - value: 1.2694
+    unit: dimensionless
+    description: "T2/T1 = (p2/p1)/(rho2/rho1) — analytical (ideal gas across normal-shock)"
+tolerance: 0.03
+source: "Anderson, Modern Compressible Flow 3rd ed. Ch.4 (temperature ratio across oblique shock); reference closed-form, re-derived in test"
+literature_doi: "ISBN-9780072424430"
+mesh_info:
+  cells: 12000
+  type: structured
+solver_info:
+  name: rhoCentralFoam
+  schemes: explicit-central-upwind
+case_info:
+  id: wedge_oblique_shock
+  validation_status: LIVE_VALIDATED   # machine-readable run-validation status (DEC-V61-233: live rhoCentralFoam solve validated vs this gold). DISTINCT from physics_contract.contract_status (physics-compatibility axis, read by report_engine/contract_dashboard.py) — named to avoid that collision. TEST-ENFORCED honesty invariant (the gold self-test reads it + blocks an un-run gold being machine-read as validated) + a forward hook; NO production coverage consumer reads it yet (Codex R0 P2-2).
+  flow_type: EXTERNAL
+  geometry_type: SUPERSONIC_WEDGE
+  steady_state: STEADY
+  radiation: false
+  wedge_inputs:
+    M1: 2.0
+    theta_deg: 15.0
+    gamma: 1.4
+    R_specific: 287.058
+    x_shock_station: 0.12
+    beta_validity_min_deg: 30.0
+    freestream_probe: freestream
+    postshock_probe: postShock
+    shock_line: shockLine
+    shock_line_origin_y: 0.05

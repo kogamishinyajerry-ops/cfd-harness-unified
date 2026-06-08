@@ -30,7 +30,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.foam_agent_adapter import FoamAgentExecutor  # noqa: E402
+from src.foam_agent_adapter import DockerOpenFOAMSolverExecutor  # noqa: E402
 from src.task_runner import TaskRunner  # noqa: E402
 from src.result_comparator import _lookup_with_alias  # noqa: E402
 
@@ -288,7 +288,7 @@ def main() -> int:
     print(f"[p2] fixture dir: {FIXTURE_DIR}")
     RAW_RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    runner = TaskRunner(executor=FoamAgentExecutor())
+    runner = TaskRunner(executor=DockerOpenFOAMSolverExecutor())
 
     raw_log: list[dict] = []
     for idx, case_id in enumerate(TARGET_CASES, 1):

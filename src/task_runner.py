@@ -19,7 +19,7 @@ from .executor import (
 )
 from .executor import MockExecutor as _ExecutorPlaneMockExecutor  # noqa: F401 (registry lookup)
 from .executor.base import RunReport as ExecutorRunReport
-from .foam_agent_adapter import FoamAgentExecutor, MockExecutor
+from .foam_agent_adapter import DockerOpenFOAMSolverExecutor, MockExecutor
 from .knowledge_db import KnowledgeDB
 from .metrics import (
     CaseProfileError,
@@ -382,7 +382,7 @@ class TaskRunner:
             if mode == "mock":
                 self._executor = MockExecutor()
             elif mode == "foam_agent":
-                self._executor = FoamAgentExecutor()
+                self._executor = DockerOpenFOAMSolverExecutor()
             else:
                 raise ValueError(
                     f'EXECUTOR_MODE must be "mock" or "foam_agent", got "{mode}"'
@@ -501,7 +501,7 @@ class TaskRunner:
             # CFDExecutor to grow a notes contract.
             exec_result = self._executor.execute(task_spec)
             if (
-                isinstance(self._executor, FoamAgentExecutor)
+                isinstance(self._executor, DockerOpenFOAMSolverExecutor)
                 and not exec_result.success
                 and exec_result.raw_output_path is None
             ):
@@ -535,6 +535,30 @@ class TaskRunner:
                         "correction_policy=%s: CorrectionSpec built but not persisted",
                         self._correction_policy,
                     )
+
+        # 4b. DEC-V61-234 R1 (Codex P1) · specialized-gate verification for the
+        #     supersonic-wedge anchor. It carries no inline generic gold
+        #     (``load_gold_standard`` → None above), so the generic comparison
+        #     block was skipped; its verdict is a SPECIALIZED Control-plane
+        #     oblique-shock physics gate (theta-beta-M + six independent hard
+        #     gates), NOT the residual comparator. Without this the case is
+        #     exposed via the whitelist (``GeometryType.SUPERSONIC_WEDGE`` is a
+        #     loadable enum — unlike the CHT ``COMPLEX`` sentinel — because the
+        #     adapter must dispatch on it) yet never verified: ``run_batch``
+        #     would report "No gold standard found" after a real solve. Gated on
+        #     ``geometry_type`` so no other case path is touched; mirrors the
+        #     generic guard (success + not ATTEST_FAIL). No CorrectionSpec is
+        #     synthesized on FAIL — a benchmark anchor's verdict is reported, not
+        #     auto-corrected, and the recorder expects generic-comparator
+        #     deviations the specialized gate does not emit.
+        if (
+            comparison is None
+            and task_spec.geometry_type is GeometryType.SUPERSONIC_WEDGE
+            and exec_result.success
+            and attestation.overall != "ATTEST_FAIL"
+        ):
+            comparison = self._verify_supersonic_wedge(exec_result)
+            logger.info("Wedge oblique-shock gate passed=%s", comparison.passed)
 
         # 6. AutoVerifier post-execute hook (SPEC §INT-1, additive)
         auto_verify_report: Any = None
@@ -905,6 +929,55 @@ class TaskRunner:
         if executor_notes:
             parts.append(f"Executor notes: {', '.join(executor_notes)}")
         return " | ".join(parts)
+
+    def _verify_supersonic_wedge(
+        self, exec_result: ExecutionResult
+    ) -> ComparisonResult:
+        """Verify a SUPERSONIC_WEDGE run via the specialized oblique-shock gate.
+
+        DEC-V61-234 R1 (Codex P1): the wedge anchor carries no inline generic
+        gold (``KnowledgeDB.load_gold_standard`` → None) because its verdict is
+        a SPECIALIZED Control-plane physics gate (theta-beta-M + six independent
+        hard gates), not the generic residual comparator. Wiring the gate into
+        the normal ``run_task`` / ``run_batch`` flow makes the whitelist-exposed
+        benchmark genuinely VERIFIED instead of silently skipped (which would
+        surface as "No gold standard found" after a real solve).
+
+        The ``WedgeGateResult`` is translated into a ``ComparisonResult``
+        (``passed`` + human ``summary``) so every downstream consumer (run_batch
+        pass/fail tally, ``_build_summary``, ``_build_trust_gate_report``,
+        attribution) sees a real verdict. Any gate error (missing case dir,
+        extraction failure, malformed output) is an honest FAIL — never a
+        fabricated pass. Plane: Control → Control (the gate is Control-plane,
+        same as task_runner); the gate internally orchestrates the
+        Execution-plane extractor + Evaluation-plane comparator.
+        """
+        from .wedge_oblique_shock_gate import gate_wedge_against_gold  # noqa: PLC0415
+
+        raw = exec_result.raw_output_path
+        if not raw:
+            return ComparisonResult(
+                passed=False,
+                summary=(
+                    "wedge oblique-shock gate skipped: execution produced no "
+                    "raw_output_path"
+                ),
+                gold_standard_id="wedge_oblique_shock",
+            )
+        try:
+            gate = gate_wedge_against_gold(Path(raw))
+        except Exception as exc:  # noqa: BLE001 — gate failure is an honest FAIL, not a crash
+            logger.exception("wedge oblique-shock gate raised; reporting FAIL")
+            return ComparisonResult(
+                passed=False,
+                summary=f"wedge oblique-shock gate error: {type(exc).__name__}: {exc}",
+                gold_standard_id="wedge_oblique_shock",
+            )
+        return ComparisonResult(
+            passed=gate.passed,
+            summary=gate.summary,
+            gold_standard_id="wedge_oblique_shock",
+        )
 
     def _compute_attestation(
         self,

@@ -145,7 +145,7 @@ def test_mock_driver_works_with_various_case_ids(case_id: str) -> None:
 # --- RealSolverDriver (M1) -------------------------------------------------
 # Mocks `FoamAgentExecutor.execute()` at the module-level import boundary
 # inside `RealSolverDriver.run()`. The deferred-import pattern means we patch
-# `src.foam_agent_adapter.FoamAgentExecutor` directly — that's the symbol the
+# `src.foam_agent_adapter.DockerOpenFOAMSolverExecutor` directly — that's the symbol the
 # driver looks up at call time.
 
 
@@ -175,7 +175,7 @@ def test_get_driver_real_name_returns_real_driver() -> None:
 def test_real_driver_unknown_case_id_emits_run_done_with_exit_code_2() -> None:
     """Unknown case_id (not in whitelist) — graceful run_done, no executor invocation."""
     drv = RealSolverDriver()
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         events = asyncio.run(_collect_events(drv, "case_definitely_not_in_whitelist_xyz"))
     # executor must NOT have been instantiated/called for unknown case_id
     MockExec.assert_not_called()
@@ -194,7 +194,7 @@ def test_real_driver_happy_path_lid_driven_cavity() -> None:
     (possibly) heartbeat log, metrics, phase_done ok, run_done exit 0."""
     drv = RealSolverDriver()
     fake_result = _stub_execution_result(success=True)
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     MockExec.return_value.execute.assert_called_once()
@@ -224,7 +224,7 @@ def test_real_driver_executor_raises_emits_fail_run_done() -> None:
     crash, etc.), driver must catch and emit phase_done fail + run_done
     with exit_code=1, level=error, summarising the exception type."""
     drv = RealSolverDriver()
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.side_effect = RuntimeError("docker daemon not reachable")
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     last = events[-1]
@@ -245,7 +245,7 @@ def test_real_driver_execution_result_failure_uses_result_exit_code() -> None:
         exit_code=137,  # OOM kill convention
         error_message="solver diverged at t=4.2s, max(Co)=98.7",
     )
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     last = events[-1]
@@ -266,7 +266,7 @@ def test_real_driver_non_numeric_key_quantity_falls_through_as_log() -> None:
             "u_max": 0.61,  # numeric, should still emit metric
         },
     )
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     metric_keys = {e["metric_key"] for e in events if e["type"] == "metric"}
@@ -345,7 +345,7 @@ def test_real_driver_honors_user_draft_override_over_whitelist(tmp_path, monkeyp
         captured_spec["it"] = spec
         return fake_result
 
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.side_effect = _record
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -367,7 +367,7 @@ def test_real_driver_emits_run_id_on_every_event_after_resolve() -> None:
     when multiple runs are in flight."""
     drv = RealSolverDriver()
     fake_result = _stub_execution_result()
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -393,7 +393,7 @@ def test_real_driver_writes_run_history_on_success(write_artifacts_capture) -> N
         key_quantities={"u_max": 0.61},
         execution_time_s=12.5,
     )
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -415,7 +415,7 @@ def test_real_driver_writes_run_history_on_executor_exception(write_artifacts_ca
     """Failure-by-exception path → write_run_artifacts called with
     success=False, exit_code=1, error_message populated."""
     drv = RealSolverDriver()
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.side_effect = RuntimeError("Docker daemon offline")
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -445,7 +445,7 @@ def test_real_driver_writeback_failure_does_not_block_run_done(
     def _raise(**_kw):
         raise OSError("read-only filesystem")
 
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         with patch(
             "ui.backend.services.run_history.write_run_artifacts",
@@ -476,7 +476,7 @@ def test_real_driver_consumer_disconnect_still_persists(write_artifacts_capture)
     fake_result = _stub_execution_result(success=True)
 
     async def _drain_then_abort():
-        with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+        with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
             MockExec.return_value.execute.return_value = fake_result
             agen = drv.run("lid_driven_cavity")
             # Drain a few events past phase_start so the coroutine has
@@ -584,7 +584,7 @@ def test_real_driver_failure_emits_classified_category(write_artifacts_capture) 
         exit_code=1,
         error_message="FOAM FATAL ERROR continuity error 1e62 max(Co)=98.7",
     )
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -605,7 +605,7 @@ def test_real_driver_executor_exception_classified_as_docker_missing(
     """A RuntimeError mentioning 'docker daemon' should classify as
     docker_missing, not bubble up as unknown_error."""
     drv = RealSolverDriver()
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.side_effect = RuntimeError(
             "Cannot connect to the Docker daemon at unix:///var/run/docker.sock"
         )
@@ -622,7 +622,7 @@ def test_real_driver_success_omits_failure_category(write_artifacts_capture) -> 
     semantic 'this is a healthy run' signal for the run-history table."""
     drv = RealSolverDriver()
     fake_result = _stub_execution_result(success=True)
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = fake_result
         events = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
 
@@ -637,11 +637,11 @@ def test_real_driver_terminates_with_run_done_for_all_paths() -> None:
     """Regression: every code path must emit exactly one run_done event."""
     drv = RealSolverDriver()
     # Happy path
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.return_value = _stub_execution_result()
         events_ok = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     # Fail-from-exception path
-    with patch("src.foam_agent_adapter.FoamAgentExecutor") as MockExec:
+    with patch("src.foam_agent_adapter.DockerOpenFOAMSolverExecutor") as MockExec:
         MockExec.return_value.execute.side_effect = OSError("Cannot connect to Docker")
         events_exc = asyncio.run(_collect_events(drv, "lid_driven_cavity"))
     # Unknown case path

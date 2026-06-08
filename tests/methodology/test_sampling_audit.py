@@ -104,6 +104,27 @@ def test_detect_surfaces_covers_all_seven_audit_required_surfaces():
     assert "7.case_profiles_write_paths" in new_seven
 
 
+def test_surface1_catches_renamed_executor_dec_v61_229():
+    """DEC-V61-229 regression guard: after the class rename
+    FoamAgentExecutor -> DockerOpenFOAMSolverExecutor, the §10.5.4a surface-#1
+    gate MUST still fire on the new class name. If the regex were not widened,
+    real call sites (spelled with the new name) would slip past the gate while
+    the test fixture (old name) kept it green — a silent governance false-negative.
+    """
+    base = (
+        "diff --git a/ui/backend/services/runner.py b/ui/backend/services/runner.py\n"
+        "+++ b/ui/backend/services/runner.py\n"
+        "+    result = {name}.execute(spec, mode='real')\n"
+    )
+    legacy = base.format(name="FoamAgentExecutor")
+    renamed = base.format(name="DockerOpenFOAMSolverExecutor")
+    assert "1.FoamAgentExecutor_call_sites" in sa.detect_surfaces(legacy)
+    assert "1.FoamAgentExecutor_call_sites" in sa.detect_surfaces(renamed), (
+        "§10.5.4a surface-#1 gate went BLIND to the renamed executor — the regex "
+        "in sampling_audit.py must match DockerOpenFOAMSolverExecutor.execute( too."
+    )
+
+
 def test_quiet_diff_flags_no_surfaces():
     """Sanity inverse: a doc-only diff touching no audit surfaces returns []."""
     quiet = (
