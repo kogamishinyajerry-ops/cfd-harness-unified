@@ -12,7 +12,7 @@ round_cap: 3
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline; codex review --uncommitted)
 codex_verdict: APPROVE (cap=3 closed, 0 P1 at chain close; R0 3×P2+1×P3 addressed; R1 1×P1 — TaskRunner ⟷ specialized-gate wiring — addressed; R2 1×P2 fixed verbatim (ingest env-fork) + 1×P3 → retro queue. 86gs gpt-5.4 xhigh.)
 codex_tool_report_path: reports/codex_tool_reports/v61_234_p4_wedge_backend_wiring_report.md
-notion_sync_status: pending_accepted (session-end batch)
+notion_sync_status: synced 2026-06-08 (https://app.notion.com/p/379c68942bed81bfb5a6c6c692b4f2cb)
 touches_shared_dec: src/models.py (GeometryType +SUPERSONIC_WEDGE enum member) · src/foam_agent_adapter.py (early SUPERSONIC_WEDGE short-circuit + _execute_supersonic_wedge runner + _docker_run_esi_rm --rm ESI helper + ESI class constants) · src/task_runner.py (R1 P1: _verify_supersonic_wedge + geometry-gated run_task branch wiring the specialized oblique-shock gate into the normal verification flow) · ui/backend/audit/cfdtrust/backends/openfoam.py (manifest-driven solver verb _resolve_solver_name + image-fork env-setup _env_setup_for_image in BOTH run() and ingest() [R2 P2] + solver-name injection fence) · .planning/cfd_capability_matrix.md (rhoCentralFoam GAP-TRACKED→✅ PR · runnable-coverage 2→3 · coupled counters)
 date: 2026-06-08
 ---
