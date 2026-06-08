@@ -1,0 +1,25 @@
+    lower_wall          220      442      ok (non-closed singly connected)  
+    upper_wall          160      322      ok (non-closed singly connected)  
+    front               12320    12573    ok (non-closed singly connected)  
+    back                12320    12573    ok (non-closed singly connected)  
+
+Checking geometry...
+    Overall domain bounding box (-10 0 0) (30 9 0.1)
+    Mesh has 2 geometric (non-empty/wedge) directions (1 1 0)
+    Mesh has 2 solution (non-empty) directions (1 1 0)
+    All edges aligned with or perpendicular to non-empty directions.
+    Boundary openness (2.68836e-19 1.15355e-18 5.58709e-16) OK.
+    Max cell openness = 1.63057e-16 OK.
+    Max aspect ratio = 845.009 OK.
+    Minimum face area = 5.46143e-05. Maximum face area = 0.77627.  Face area magnitudes OK.
+    Min volume = 6.30107e-06. Max volume = 0.077627.  Total volume = 35.  Cell volumes OK.
+    Mesh non-orthogonality Max: 0 average: 0
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 7.97206e-14 OK.
+    Coupled point location match (average 0) OK.
+
+Mesh OK.
+
+End
+

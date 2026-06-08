@@ -109,10 +109,12 @@ def _parse_rule_firings(text: str) -> list[tuple[str, str, str]]:
 # tables as expected fires; harness must NOT fail on them — they're
 # documented F-NEW rule gaps awaiting a future arc to implement.
 #
-# V69 batch (V66-B inheritance): cf_canonical_choice / low_re_kOmegaSST_trigger /
-# yplus_regime_match / yplus_target_validation / substrate_inspection /
-# residual_gate_qualifier · tracked in
-# `.planning/followups/v69_v66b_planned_advisors_not_landed.md`.
+# V69 batch (V66-B inheritance): cf_canonical_choice / yplus_regime_match /
+# yplus_target_validation / substrate_inspection / residual_gate_qualifier ·
+# tracked in `.planning/followups/v69_v66b_planned_advisors_not_landed.md`.
+# Note: low_re_kOmegaSST_trigger REMOVED from this list 2026-06-08 (DEC-V61-235
+# landed low_re_komegasst_trigger_advisor; E21 row re-parsed under new
+# lowercase token).
 #
 # V70 batch (V70.2 regime breadth · 11 new advisors anchoring 10 new cases):
 # bc_type_validator / compressibility_regime_advisor / dimensionality_check /
@@ -126,8 +128,6 @@ KNOWN_F_NEW_ADVISORS: frozenset[str] = frozenset(
         # V69 batch
         "cf_canonical_choice",
         "cf_canonical_choice_advisor",
-        "low_re_kOmegaSST_trigger",
-        "low_re_kOmegaSST_trigger_advisor",
         "yplus_regime_match",
         "yplus_regime_match_advisor",
         "yplus_target_validation",

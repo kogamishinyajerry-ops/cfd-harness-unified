@@ -1,0 +1,87 @@
+# Gold Standard — Backward-Facing Step (low-Re k-omega-SST, wall-RESOLVED)
+#
+# V71.B (DEC-V61-235) sibling of `backward_facing_step` (high-Re). Same geometry
+# (ER=1.125, H=1, 3-block mesh) and same observable (reattachment length Xr/H);
+# the ONLY difference is the near-wall mesh regime:
+#   - high-Re sibling: Spalding wall function, first-cell y+≈5 (wall-functioned).
+#   - this anchor:     wall-RESOLVED, first-cell y+<1 (integrate-to-wall).
+# "low-Re" here is the TURBULENCE-MODELING sense (integrate-to-wall), NOT a low
+# Reynolds number; the flow is Re_H=5000, chosen to land on the Le/Moin/Kim DNS.
+#
+# Anchor choice (INHERITED, NOT re-shopped):
+#   Xr/H=6.26 is the SAME blended engineering anchor as the high-Re BFS gold
+#   (DEC-V61-046 R2-M2): Le/Moin/Kim 1997 DNS @ Re_H=5100 reports 6.28; Driver &
+#   Seegmiller 1985 experiment @ Re_H≈37500 reports 6.26; the 0.02 (0.32%) spread
+#   is inside the 10% tolerance. V71.B runs Re_H=5000 (the closest-regime point to
+#   the 5100 DNS) but RETAINS the blended anchor for sibling consistency — this is
+#   NOT a per-slice reference swap to manufacture margin (cfd-vv-director Q1). The
+#   10% tolerance is UNCHANGED from the high-Re sibling — not widened for V71.B.
+#
+# Value added by the resolved mesh (the honest story):
+#   Resolving the boundary layer (y+<1, no wall-function reliance on the floor)
+#   moves the MEASURED wall-shear reattachment from 5.647 (high-Re, -9.8%) to
+#   5.881 (resolved, -6.05%) — CLOSER to the 6.26 anchor. The ~6% residual is the
+#   documented kOmegaSST separated-flow under-prediction (V104); it is reported,
+#   not tuned away. Both anchor brackets are now inside the band: -6.05% vs 6.26,
+#   -6.35% vs the DNS 6.28.
+
+physics_contract:
+  geometry_assumption: "Backward-facing step, canonical 3-block mesh (DEC-V61-052), IDENTICAL topology to the high-Re sibling: step height H=1, inlet channel 8·H, full downstream channel 9·H (ER=9/8=1.125), L_up=10·H, L_down=30·H, 2D empty front/back. The ONLY change vs high-Re is the near-wall y-grading + ncy: block A (40 32 1) simpleGrading (0.25 1500 1); B1 (120 60 1) simpleGrading (4 150 1); B2 (120 32 1) simpleGrading (4 1500 1) → 12320 cells (vs 7360 high-Re), checkMesh OK. Emitted by src/foam_agent_adapter.py _render_bfs_block_mesh_dict when boundary_conditions.wall_treatment='resolved'; x-grading/ncx unchanged so the high-Re blockMeshDict is byte-identical."
+  reference_correlation_context: "Stored reference_values[].value=6.26 is the blended engineering anchor inherited verbatim from the high-Re BFS gold (see header). Reported against BOTH brackets in plain sight: MEASURED Xr/H=5.881 is -6.05% vs Driver&Seegmiller 6.26 (inside 10%) and -6.35% vs Le/Moin/Kim DNS 6.28 (inside 10%). The 0.32% spread between the two anchors is far smaller than the ~6% kOmegaSST under-prediction; the verdict is decided by the documented model-bias band the 10% tolerance was sized for, NOT by the reference choice. Tolerance 0.10 unchanged from the high-Re sibling."
+  physics_precondition:
+    - condition: "Re_H=5000 lands on the Le/Moin/Kim DNS reference regime (Re_H=5100), where Xr/H is weakly Re-sensitive"
+      satisfied_by_current_adapter: true
+      evidence_ref: "src/foam_agent_adapter.py _generate_backward_facing_step: nu=1/Re=2e-4 with U_bulk=1 → Re_H=5000. The 100-unit gap to the 5100 DNS is within the plateau's weak Re-sensitivity, well inside 10%."
+    - condition: "kOmegaSST integrated to the wall (low-Re-capable) — no log-layer wall-function reliance on the reattachment floor"
+      satisfied_by_current_adapter: true
+      evidence_ref: "kOmegaSST is low-Re-capable by construction (F1/F2 blending integrates through the viscous sublayer). 0/nut=nutUSpaldingWallFunction + 0/omega=omegaWallFunction are CONTINUOUS blending forms valid into the sublayer (integrate-to-wall where y+<1); they are NOT high-Re log-only wall functions. The y+<1 measurement (below), not the BC name, settles that the floor is resolved."
+    - condition: "Reattachment-zone near-wall mesh RESOLVED at first-cell y+<1 (no wall functions on the QoI floor)"
+      satisfied_by_current_adapter: true
+      evidence_ref: "MEASURED floor y+ max=0.0661 over 119 reattachment-floor faces (filter y<0.05 AND x>0.05 AND x<29.5, src.bfs_floor_region, byte-identical to the reattachment extractor's mask). Frozen evidence reports/showcase_aero/_v71b_bfs_lowre_probe/proof/floor_faces.csv. The high-Re sibling measures ~4.22 here — this gate (floor y+<1) is exactly what distinguishes the two regimes."
+    - condition: "Reattachment is the wall-shear tau_x zero-crossing (the physical definition), not a grid-height-biased U_x proxy"
+      satisfied_by_current_adapter: true
+      evidence_ref: "Measured via the established Path-1a wall-shear tau_x pos→neg zero-crossing on the allPatches VTK (src.bfs_lowre_extractor, same method + sign convention as foam_agent_adapter). On the high-Re mesh the y=0.02 U_x proxy sits in the first cell and agrees with wall-shear to the 4th digit; on the resolved mesh y=0.02 is ~15-20 cells up so the U_x proxy is height-biased (5.43→5.88 as the probe height→wall, converging to the wall-shear value). The wall-shear definition is height-independent and is what the experiment/DNS report."
+    - condition: "Residual + reattachment plateau convergence"
+      satisfied_by_current_adapter: true
+      evidence_ref: "1500→3000-iter simpleFoam (foamRun -solver incompressibleFluid, OF11). Reattachment plateau ΔXr<1e-4 over t=2800→3000 (U_x-proxy ladder; wall-shear measured at the converged t=3000 field). Final Ux residual ~5.1e-6, continuity sum_local ~5e-9 (logs in reports/showcase_aero/_v71b_bfs_lowre_probe/logs/)."
+  yplus_precondition:
+    status: PASS
+    claim: "reattachment-zone resolved-mode (integrate-to-wall, y+<1)"
+    gate: "max(yPlus) over the QoI reattachment-floor faces (filter y<0.05 AND x>0.05 AND x<29.5, byte-identical to the Path-1a reattachment extractor via src.bfs_floor_region) < 1.0; fail-closed"
+    measured_max_floor_yplus: 0.0661
+    near_wall_treatment: "nutUSpaldingWallFunction + omegaWallFunction (low-Re-capable continuous blending; integrate-to-wall where y+<1)"
+    disclosed_out_of_claim:
+      step_corner: {yplus_max: 3.39, reason: "geometric shear singularity at the sharp step corner; NOT read by the reattachment extractor (outside the floor mask)"}
+      upper_wall: {yplus: 200, reason: "attached BL, wall-functioned; does NOT enter the reattachment QoI (outside the floor mask)"}
+    claim_text: "The near-wall layer in the reattachment zone (downstream floor) is resolved at y+<1 (integrate-to-wall mode), so the reattachment location does not rely on log-layer wall-function modeling. Spalding/omega wall functions are used in low-Re-capable integrate-to-wall mode; the sharp step corner (y+~3.4, geometric singularity) and the attached upper wall (y+~200) are wall-functioned and disclosed — neither is read by the reattachment extractor."
+    fail_closed: true
+  contract_status: "LIVE_VALIDATED through the adapter. A fresh `docker run` OF11 (openfoam/openfoam11-paraview510) solve of the ADAPTER-generated case (foam_agent_adapter._generate_backward_facing_step with wall_treatment='resolved') ran blockMesh (12320 cells, checkMesh OK) + foamRun -solver incompressibleFluid (to t=3000) + foamToVTK -allPatches. The Control-plane gate (src.bfs_lowre_gate.gate_bfs_lowre_against_gold) MEASURES Xr/H=5.881 via the wall-shear tau_x pos→neg zero-crossing on the allPatches VTK floor faces (the established Path-1a method) = -6.05% vs the blended anchor 6.26 (-6.35% vs the DNS 6.28), INSIDE the 10% band; floor y+ max=0.0661<1 (RESOLVED, hard gate); exactly one wall-shear crossing (hard gate); 119 floor faces (hard gate). The resolved mesh improves reattachment from the high-Re 5.647 (-9.8%) to 5.881 (-6.05%) — the value-added of resolving the BL; the residual ~6% is the documented kOmegaSST separated-flow under-prediction (V104), reported not tuned. Frozen evidence reports/showcase_aero/_v71b_bfs_lowre_probe/ (case_definition + allPatches VTK + proof/floor_faces.csv + logs + SHA256SUMS). Does NOT change runnable-coverage (stays 3 — same incompressible-RANS compute type as the high-Re BFS / NACA0012; this is a turbulence-TREATMENT breadth anchor, not a new compute type)."
+  precondition_last_reviewed: "2026-06-08 (DEC-V61-235 · adapter-generated live run + cfd-vv-director y+ gate review)"
+
+quantity: reattachment_length
+reference_values:
+  - value: 6.26
+    unit: Xr/H
+    description: "Reattachment length normalized by step height H — blended engineering anchor INHERITED from the high-Re BFS gold (DEC-V61-046 R2-M2). Brackets: Le/Moin/Kim 1997 DNS @ Re_H=5100 reports 6.28; Driver & Seegmiller 1985 experiment @ Re_H≈37500 reports 6.26. The 0.02 (0.32%) spread is inside the 10% band. V71.B runs Re_H=5000 (closest-regime to the 5100 DNS); the SAME blended anchor is retained for sibling consistency, NOT a per-slice reference swap. MEASURED Xr/H=5.881 = -6.05% vs 6.26, -6.35% vs the DNS 6.28 — both inside the band."
+tolerance: 0.10
+source: "Le, Moin & Kim 1997 DNS @ Re_H=5100 (Xr/H=6.28), blended with Driver & Seegmiller 1985 (Xr/H=6.26) — inherited blended anchor, see gold-file header"
+literature_doi: "10.1017/S0022112096003941"
+mesh_info:
+  cells: 12320
+  type: structured
+  note: "resolved near-wall y-grading (first-cell y+<1 on the reattachment floor); vs 7360 cells / y+≈5 for the high-Re sibling"
+solver_info:
+  name: simpleFoam
+  schemes: SIMPLE
+  note: "foamRun -solver incompressibleFluid (OF11) at runtime; kOmegaSST + nutUSpaldingWallFunction + omegaWallFunction (low-Re-capable integrate-to-wall)"
+case_info:
+  id: backward_facing_step_lowre
+  Re: 5000
+  flow_type: INTERNAL
+  geometry_type: BACKWARD_FACING_STEP
+  steady_state: STEADY
+  expansion_ratio: 1.125
+  wall_treatment: resolved
+  turbulence_model: kOmegaSST
+  reattachment_method: wall_shear_tau_x_zero_crossing
+  validation_status: LIVE_VALIDATED

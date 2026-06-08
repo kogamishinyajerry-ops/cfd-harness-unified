@@ -31,7 +31,7 @@ V70-DONE-2, F-NEW-kOmegaSST-lowRe.
 |---|---|---|
 | `solver_block_advisor` | ✓ info | simpleFoam + kOmegaSST |
 | `yplus_regime_match_advisor` | ✓ **info** | y+~0.5-1 confirms low-Re resolved regime · no wall fn |
-| `low_re_kOmegaSST_trigger_advisor` | ✓ **info** | anchors V66-B planned advisor (was KNOWN_F_NEW in V69) |
+| `low_re_komegasst_trigger` | ✓ **info** | anchors V66-B planned advisor (was KNOWN_F_NEW in V69; canonicalized to lowercase for regex-parse enforcement) |
 | `cf_canonical_choice_advisor` | ✓ info | Cf compared to Driver-Seegmiller 1985 |
 
 ## Anchor

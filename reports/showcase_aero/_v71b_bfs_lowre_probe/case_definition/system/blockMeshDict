@@ -1,0 +1,134 @@
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+convertToMeters 1;
+
+vertices
+(
+    (-10.0 1.0 0.0)
+    (0.0 1.0 0.0)
+    (0.0 9.0 0.0)
+    (-10.0 9.0 0.0)
+    (0.0 0.0 0.0)
+    (30.0 0.0 0.0)
+    (30.0 1.0 0.0)
+    (30.0 9.0 0.0)
+    (-10.0 1.0 0.1)
+    (0.0 1.0 0.1)
+    (0.0 9.0 0.1)
+    (-10.0 9.0 0.1)
+    (0.0 0.0 0.1)
+    (30.0 0.0 0.1)
+    (30.0 1.0 0.1)
+    (30.0 9.0 0.1)
+);
+
+blocks
+(
+    // DEC-V61-052 round 2c: x-grading concentrates cells near the step corner.
+    // y-grading kept uniform to avoid inconsistent shared-edge spacings between
+    // the three blocks (blockMesh requires matching vertex locations at all
+    // inter-block interfaces).
+    //
+    //   block A (upstream):  last x-cell 1/4 of first → cells bunch toward x=0
+    //   block B1 (recirc):   last x-cell 4× first      → cells bunch toward x=0 (the step)
+    //   block B2 (upper):    last x-cell 4× first      → same x-distribution as B1
+    //
+    // This puts the finest x-resolution in the shear-layer zone (first ~1H
+    // downstream of the step), which controls reattachment location under
+    // kOmegaSST. Reviewers: this is "a bounded matrix" item from Codex round 1 #4.
+    //
+    // V71.B (DEC-V61-235) wall_treatment=resolved OVERRIDE: the
+    // y-grading is NOT uniform — it bunches the first cell to y+<1
+    // on the reattachment floor (integrate-to-wall, no log-layer
+    // reliance). gy A=1500 / B1=150 / B2=1500 toward the lower wall;
+    // ncy A=B2=32, B1=60. Shared-edge spacings still match (A & B2
+    // share the x=0 face with identical ncy+grading; B1's y-grading
+    // is independent). x-grading/ncx are unchanged vs the high-Re mesh.
+    hex (0 1 2 3 8 9 10 11) (40 32 1) simpleGrading (0.25 1500 1)
+    hex (4 5 6 1 12 13 14 9) (120 60 1) simpleGrading (4 150 1)
+    hex (1 6 7 2 9 14 15 10) (120 32 1) simpleGrading (4 1500 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    inlet
+    {
+        type            patch;
+        faces
+        (
+            (0 8 11 3)  // block A west face, y∈[h_s,H_ch], x=-L_up
+        );
+    }
+    outlet
+    {
+        type            patch;
+        faces
+        (
+            (5 6 14 13) // block B1 east face, y∈[0,h_s], x=+L_down
+            (6 7 15 14) // block B2 east face, y∈[h_s,H_ch], x=+L_down
+        );
+    }
+    lower_wall
+    {
+        type            wall;
+        faces
+        (
+            (0 1 9 8)   // block A south face (inlet channel floor, y=h_s, x∈[-L_up,0])
+            (4 12 9 1)  // block B1 west face (the step face, x=0, y∈[0,h_s])
+            (4 5 13 12) // block B1 south face (downstream floor, y=0, x∈[0,L_down])
+        );
+    }
+    upper_wall
+    {
+        type            wall;
+        faces
+        (
+            (3 11 10 2) // block A north face, y=H_ch, x∈[-L_up,0]
+            (2 10 15 7) // block B2 north face, y=H_ch, x∈[0,L_down]
+        );
+    }
+    front
+    {
+        type            empty;
+        faces
+        (
+            (8 9 10 11)  // block A  z=+L_z
+            (12 13 14 9) // block B1 z=+L_z
+            (9 14 15 10) // block B2 z=+L_z
+        );
+    }
+    back
+    {
+        type            empty;
+        faces
+        (
+            (0 3 2 1)  // block A  z=0
+            (4 1 6 5)  // block B1 z=0
+            (1 2 7 6)  // block B2 z=0
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

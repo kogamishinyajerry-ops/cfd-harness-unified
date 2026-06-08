@@ -560,6 +560,22 @@ class TaskRunner:
             comparison = self._verify_supersonic_wedge(exec_result)
             logger.info("Wedge oblique-shock gate passed=%s", comparison.passed)
 
+        # NOTE (DEC-V61-235 · Codex R0 P1): a TaskRunner verification branch for the
+        # wall-RESOLVED low-Re backward_facing_step anchor is DEFERRED to a future
+        # BFS-lowre *wiring* slice. Per the wedge precedent, the analogous
+        # ``_verify_supersonic_wedge`` branch above landed in the WIRING slice
+        # (DEC-V61-234), NOT the V&V-anchor slice (DEC-V61-233): it works only because
+        # ``_execute_supersonic_wedge`` produces a PERSISTENT ``raw_output_path`` with
+        # the gate's postProcessing artifacts. V71.B has no equivalent adapter runner
+        # yet (no ``_execute_backward_facing_step_lowre`` writing ``proof/floor_faces.csv``
+        # + ``VTK/allPatches`` to a persistent path), so a branch here would FAIL-CLOSED
+        # on every real solve (the executor's temp dir is rmtree'd before the gate runs).
+        # The gate is validated via the frozen LIVE probe + offline gate tests
+        # (``tests/p4/test_bfs_lowre_gate.py``); live ``execute()``/TaskRunner wiring is
+        # the disclosed follow-up. The gate is recorded canonically in
+        # ``knowledge/whitelist.yaml`` (``verification_gate:
+        # src.bfs_lowre_gate.gate_bfs_lowre_against_gold``).
+
         # 6. AutoVerifier post-execute hook (SPEC §INT-1, additive)
         auto_verify_report: Any = None
         if self._post_execute_hook is not None:

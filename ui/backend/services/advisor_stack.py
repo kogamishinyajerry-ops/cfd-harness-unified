@@ -169,6 +169,7 @@ extra_body_advisor = _load_advisor("extra_body_advisor")
 face_orientation_advisor = _load_advisor("face_orientation_advisor")
 inlet_outlet_validator = _load_advisor("inlet_outlet_validator")
 shm_dict_validator = _load_advisor("shm_dict_validator")
+low_re_komegasst_trigger_advisor = _load_advisor("low_re_komegasst_trigger_advisor")
 solver_block_advisor = _load_advisor("solver_block_advisor")
 stl_face_label_validator = _load_advisor("stl_face_label_validator")
 thermo_polynomial_range_advisor = _load_advisor("thermo_polynomial_range_advisor")
@@ -186,6 +187,7 @@ _V_ROWS_PER_ADVISOR: dict[str, tuple[str, ...]] = {
     "face_orientation_advisor": ("V79", "V87"),
     "inlet_outlet_validator": ("V81",),
     "shm_dict_validator": ("V52", "V86", "V99", "V100"),
+    "low_re_komegasst_trigger_advisor": ("V104",),
     "solver_block_advisor": ("V27", "V28"),
     "stl_face_label_validator": ("V94",),
     "thermo_polynomial_range_advisor": ("V41", "V93"),
@@ -456,6 +458,25 @@ def _normalize_solver_block(
     )
 
 
+def _normalize_low_re_komegasst(
+    report: low_re_komegasst_trigger_advisor.LowReKOmegaSSTReport,
+) -> tuple[Finding, ...]:
+    advisor = "low_re_komegasst_trigger_advisor"
+    rows = _V_ROWS_PER_ADVISOR[advisor]
+    return tuple(
+        Finding(
+            source_advisor=advisor,
+            severity=f.severity,
+            code=f.code,
+            message=f.detail,
+            location=f.location,
+            evidence_v_rows=rows,
+            raw=f,
+        )
+        for f in report.findings
+    )
+
+
 def _normalize_thin_wall(
     warnings: Sequence[thin_wall_advisor.ThinWallWarning],
 ) -> tuple[Finding, ...]:
@@ -671,6 +692,7 @@ def assemble_stack(
     stl_bbox_set: Mapping[str, Any] | None = None,
     extra_body_containment_tol_mm: float = 0.0,
     solver_block_snapshot: solver_block_advisor.SolverBlockSnapshot | None = None,
+    low_re_komegasst_inputs: low_re_komegasst_trigger_advisor.LowReKOmegaSSTSnapshot | None = None,
     **_unused: Any,  # forward-compatible (silently ignored, NOT logged)
 ) -> AdvisorStackReport:
     """Dispatch all applicable advisors based on provided artifacts.
@@ -934,6 +956,28 @@ def assemble_stack(
             args=(solver_block_snapshot,),
             kwargs={},
             normalize=_normalize_solver_block,
+            advisor_calls=advisor_calls,
+            findings=findings,
+        )
+
+    # low_re_komegasst_trigger_advisor dispatch (DEC-V61-235 · V104 evidence row ·
+    # V71.B slice wall-resolved kOmegaSST BFS bias). Pure config-time
+    # advisory: fires only when caller supplies a LowReKOmegaSSTSnapshot.
+    # Severity is always "info" — never blocks solver or mesh step.
+    if low_re_komegasst_inputs is not None:
+        advisors_dispatched.add("low_re_komegasst_trigger_advisor")
+        _dispatch(
+            advisor_name="low_re_komegasst_trigger_advisor",
+            module=low_re_komegasst_trigger_advisor,
+            input_summary=(
+                f"turbulence_model={low_re_komegasst_inputs.turbulence_model!r}, "
+                f"wall_treatment={low_re_komegasst_inputs.wall_treatment!r}, "
+                f"first_cell_yplus={low_re_komegasst_inputs.first_cell_yplus!r}"
+            ),
+            func=low_re_komegasst_trigger_advisor.check_low_re_komegasst,
+            args=(low_re_komegasst_inputs,),
+            kwargs={},
+            normalize=_normalize_low_re_komegasst,
             advisor_calls=advisor_calls,
             findings=findings,
         )

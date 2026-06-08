@@ -1652,8 +1652,27 @@ fields          (U);
             turbulence_model = "kOmegaSST"
         use_komega = turbulence_model == "kOmegaSST"
 
+        # V71.B (DEC-V61-235) — wall_treatment selects the near-wall mesh regime.
+        # Default "wall_function" keeps the high-Re Re=7600 anchor byte-identical
+        # (Spalding wall function at first-cell y+≈5). "resolved" emits a near-wall
+        # y-graded mesh that drives first-cell y+<1 on the reattachment floor
+        # (integrate-to-wall) for the low-Re Re=5000 kOmegaSST anchor. The only
+        # deltas vs the high-Re mesh are the 3-block y-grading + ncy and a longer
+        # endTime; the 0/ BCs (nutUSpaldingWallFunction + omegaWallFunction, both
+        # low-Re-capable continuous blending forms) are unchanged. Reattachment is
+        # MEASURED by the authoritative wall-shear tau_x zero-crossing on the
+        # allPatches VTK (the existing BFS Path-1a extractor), NOT a fixed-height
+        # Ux proxy (which is grid-height-biased on the resolved mesh). VALIDATED
+        # live through this adapter: 12320 cells, Xr/H=5.881 (-6.05% vs
+        # Driver&Seegmiller 6.26; -6.35% vs Le/Moin/Kim DNS 6.28 — both inside the
+        # 10% band). See knowledge/gold_standards/backward_facing_step_lowre.yaml.
+        wall_treatment = str(bc.get("wall_treatment", "wall_function"))
+        resolved = wall_treatment == "resolved"
+
         # 1. system/blockMeshDict — 3-block BFS topology with real step at x=0
-        block_mesh = self._render_bfs_block_mesh_dict(task_spec, H, channel_height, self._ncx, self._ncy)
+        block_mesh = self._render_bfs_block_mesh_dict(
+            task_spec, H, channel_height, self._ncx, self._ncy, resolved=resolved
+        )
         (case_dir / "system" / "blockMeshDict").write_text(block_mesh, encoding="utf-8")
 
         # 2. constant/physicalProperties — 牛顿流体物性
@@ -1685,8 +1704,13 @@ nu              [0 2 -1 0 0 0 0] {nu_val};
             encoding="utf-8",
         )
 
-        # 3. system/controlDict — simpleFoam, steady-state
-        (case_dir / "system" / "controlDict").write_text(
+        # 3. system/controlDict — simpleFoam, steady-state.
+        # V71.B (DEC-V61-235): when wall_treatment="resolved" the controlDict is
+        # post-processed below to (a) override endTime 1500→3000 (the validated
+        # Xr-plateau window) and (b) append a floorProfile Ux line sampler (the
+        # dual-method reattachment cross-check). The literal below is the high-Re
+        # form and stays byte-identical (no replace fires when resolved=False).
+        control_dict_text = (
             """\
 /*--------------------------------*- C++ -*---------------------------------*\\
 | =========                 |                                                 |
@@ -1768,8 +1792,22 @@ functions
 }
 
 // ************************************************************************* //
-""",
-            encoding="utf-8",
+"""
+        )
+        if resolved:
+            # Longer settling window for the resolved low-Re Xr plateau (the
+            # high-Re mesh converges Xr by t=1500; the finer near-wall cells need
+            # t=3000 — VALIDATED plateau ΔXr<1e-4 over t=2800→3000). The
+            # wallShearStress + yPlus FOs already in the literal above are the
+            # gate inputs: foamToVTK -allPatches stages them co-located on the
+            # lower_wall faces, where the authoritative reattachment (wall-shear
+            # tau_x zero-crossing) and the first-cell y+<1 precondition are both
+            # MEASURED under the same floor mask. High-Re path is untouched.
+            control_dict_text = control_dict_text.replace(
+                "endTime         1500;", "endTime         3000;"
+            )
+        (case_dir / "system" / "controlDict").write_text(
+            control_dict_text, encoding="utf-8"
         )
 
         # 4. system/fvSchemes — SIMPLE pressure-velocity coupling
@@ -8589,7 +8627,7 @@ boundaryField
 
     def _render_bfs_block_mesh_dict(
         self, task_spec: TaskSpec, H: float, channel_height: float,
-        ncx: int = 40, ncy: int = 20,
+        ncx: int = 40, ncy: int = 20, resolved: bool = False,
     ) -> str:
         """Render a canonical 3-block BFS blockMeshDict with a real step at x=0.
 
@@ -8659,11 +8697,35 @@ boundaryField
         z0 = 0.0
         z1 = L_z
 
-        # Cell counts (see docstring — legacy single-block ncx/ncy ignored)
+        # Cell counts (see docstring — legacy single-block ncx/ncy ignored).
+        # V71.B (DEC-V61-235): wall_treatment="resolved" refines the near-wall
+        # y-resolution (ncy + y-grading) so the reattachment-floor first cell
+        # lands at y+<1 (integrate-to-wall, no log-layer reliance). Only ncy and
+        # the y-grading change; x-grading/ncx are identical, so the high-Re
+        # (resolved=False) blockMeshDict stays byte-for-byte unchanged. VALIDATED
+        # live: 12320 cells (vs 7360 high-Re), reattachment-floor first-cell y+
+        # max <1. See knowledge/gold_standards/backward_facing_step_lowre.yaml.
         ncx_A = 40
-        ncy_A = 16          # must equal ncy_B2 (A-B2 interface at x=0)
         ncx_B = 120
-        ncy_B1 = 40
+        if resolved:
+            ncy_A = 32          # must equal ncy_B2 (A-B2 interface at x=0)
+            ncy_B1 = 60
+            gy_A, gy_B1, gy_B2 = 1500, 150, 1500
+            ygrading_extra = (
+                "    //\n"
+                "    // V71.B (DEC-V61-235) wall_treatment=resolved OVERRIDE: the\n"
+                "    // y-grading is NOT uniform — it bunches the first cell to y+<1\n"
+                "    // on the reattachment floor (integrate-to-wall, no log-layer\n"
+                "    // reliance). gy A=1500 / B1=150 / B2=1500 toward the lower wall;\n"
+                "    // ncy A=B2=32, B1=60. Shared-edge spacings still match (A & B2\n"
+                "    // share the x=0 face with identical ncy+grading; B1's y-grading\n"
+                "    // is independent). x-grading/ncx are unchanged vs the high-Re mesh.\n"
+            )
+        else:
+            ncy_A = 16          # must equal ncy_B2 (A-B2 interface at x=0)
+            ncy_B1 = 40
+            gy_A, gy_B1, gy_B2 = 1, 1, 1
+            ygrading_extra = ""
         ncy_B2 = ncy_A
 
         # 16 vertices: 8 (x,y) grid points × 2 z-levels.
@@ -8722,9 +8784,9 @@ blocks
     // This puts the finest x-resolution in the shear-layer zone (first ~1H
     // downstream of the step), which controls reattachment location under
     // kOmegaSST. Reviewers: this is "a bounded matrix" item from Codex round 1 #4.
-    hex (0 1 2 3 8 9 10 11) ({ncx_A} {ncy_A} 1) simpleGrading (0.25 1 1)
-    hex (4 5 6 1 12 13 14 9) ({ncx_B} {ncy_B1} 1) simpleGrading (4 1 1)
-    hex (1 6 7 2 9 14 15 10) ({ncx_B} {ncy_B2} 1) simpleGrading (4 1 1)
+{ygrading_extra}    hex (0 1 2 3 8 9 10 11) ({ncx_A} {ncy_A} 1) simpleGrading (0.25 {gy_A} 1)
+    hex (4 5 6 1 12 13 14 9) ({ncx_B} {ncy_B1} 1) simpleGrading (4 {gy_B1} 1)
+    hex (1 6 7 2 9 14 15 10) ({ncx_B} {ncy_B2} 1) simpleGrading (4 {gy_B2} 1)
 );
 
 edges
@@ -9605,9 +9667,11 @@ mergePatchPairs
                         # upper bound strips them without losing any
                         # meaningful floor-face. Works independently of
                         # patchID ordering (varies across OpenFOAM builds).
-                        floor_mask = ((centres_ap[:, 1] < 0.05)
-                                      & (centres_ap[:, 0] > 0.05)
-                                      & (centres_ap[:, 0] < 29.5))
+                        # DEC-V61-235: the floor filter is the SINGLE SOURCE OF
+                        # TRUTH in src.bfs_floor_region so the V71.B resolved-wall
+                        # y+<1 gate masks byte-identical floor faces (no drift).
+                        from .bfs_floor_region import bfs_floor_mask  # noqa: PLC0415
+                        floor_mask = bfs_floor_mask(centres_ap)
                         if floor_mask.sum() >= 5:
                             xs_floor = centres_ap[floor_mask, 0]
                             tx_floor = wss_ap[floor_mask, 0]

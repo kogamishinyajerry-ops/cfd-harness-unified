@@ -1,0 +1,100 @@
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     simpleFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+// DEC-V61-052 round 2d: endTime bumped to 1500 so residuals have room to
+// fall into the 1e-6 range — late-window Xr drift is then read straight
+// off the persisted write snapshots at t=800/1000/1200/1500. Prior
+// endTime=1000 left Ux at 1e-5 still dropping ~80% in the last 200
+// iterations; the visual/scalar gates were all passing, but the
+// stationarity claim (Codex round 1 #5) required a larger margin.
+endTime         3000;
+
+deltaT          1;
+
+writeControl    runTime;
+
+writeInterval   100;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  6;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+maxCo           0.5;
+
+// DEC-V61-052 Batch C round 2: wallShearStress FO so the solver writes
+// tau_w on all walls at each writeTime. The lower_wall patch — which
+// merges the inlet-floor + vertical-step-face + downstream-floor — is
+// where BFS reattachment is defined (tau_x sign change on the y=0,
+// x>0 faces). Without this FO, the extractor was falling back to a
+// cell-centre Ux probe at y=0.5 which picked up the bottom half of
+// the recirculation bubble rather than wall shear (Codex round-1 #1).
+functions
+{
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         (lower_wall upper_wall);
+    }
+    yPlus
+    {
+        type            yPlus;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+    }
+    floorProfile
+    {
+        type            sets;
+        libs            ("libsampling.so");
+        writeControl    writeTime;
+        interpolationScheme cellPoint;
+        setFormat       raw;
+        fields          (U);
+        sets
+        (
+            floorLine
+            {
+                type    lineUniform;
+                axis    x;
+                start   (0.05 0.02 0.05);
+                end     (29.95 0.02 0.05);
+                nPoints 600;
+            }
+        );
+    }
+}
+
+// ************************************************************************* //

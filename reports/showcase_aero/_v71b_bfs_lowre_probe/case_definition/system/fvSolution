@@ -1,0 +1,97 @@
+/*--------------------------------*- C++ -*---------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  10                                    |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+solvers
+{
+    p
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        tolerance       1e-6;
+        relTol          0.01;
+    }
+
+    pFinal
+    {
+        $p;
+        relTol          0;
+    }
+
+    U
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+
+    k
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+
+    epsilon
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+
+    omega
+    {
+        solver          smoothSolver;
+        smoother        GaussSeidel;
+        tolerance       1e-8;
+        relTol          0.01;
+    }
+}
+
+SIMPLE
+{
+    nNonOrthogonalCorrectors 0;
+    // DEC-V61-052: residualControl removed — BFS k-ε false-converges in ~17 iters
+    // when k/ε are bouncing around at 1e+33 but residuals (which are normalized
+    // to current magnitude) come in tiny. Let the solver run endTime=1000 iters
+    // and rely on monotone residual descent + post-run gate battery for sanity.
+    // consistent=yes enables SIMPLEC, which permits higher URFs with less drift.
+    consistent      yes;
+}
+
+relaxationFactors
+{
+    // DEC-V61-052: gentle BFS defaults. k-ε on a recirculating mesh with
+    // steep gradients at the step corner needs p relaxation (absent
+    // originally, effectively p=1.0) and tighter U/k/ε. Values here are
+    // the standard Fluent/CFX-style SIMPLEC defaults for separated flow.
+    fields
+    {
+        p               0.3;
+    }
+    equations
+    {
+        U               0.7;
+        k               0.5;
+        epsilon         0.5;
+        omega           0.5;
+    }
+}
+
+// ************************************************************************* //

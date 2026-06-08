@@ -68,6 +68,20 @@ cases:
         - {value: 6.26, unit: "Xr/H"}
       tolerance: 0.10  # 10% 相对误差
 
+  # P4 V71.B · DEC-V61-235 — the low-Re (wall-RESOLVED, y+<1) k-omega-SST sibling of
+  # backward_facing_step (backward_facing_step_lowre) is INTENTIONALLY NOT whitelisted
+  # in this V&V-anchor slice. Per the wedge precedent (its whitelist entry landed in the
+  # WIRING slice DEC-V61-234, not the V&V slice DEC-V61-233), a selectable whitelist entry
+  # MUST land together with its adapter dispatch + TaskRunner verification branch — else
+  # KnowledgeDB.list_whitelist_cases exposes it via run_batch with no verification path
+  # (load_gold_standard → None → "No gold standard found"; Codex R1 P1). The gate is
+  # validated here via the frozen LIVE probe + offline gate tests; the whitelist entry +
+  # live wiring are deferred to V71B-FOLLOWUP-1
+  # (.planning/followups/v71b_bfs_lowre_live_wiring_deferred.md). Gold + gate live at
+  # knowledge/gold_standards/backward_facing_step_lowre.yaml +
+  # src.bfs_lowre_gate.gate_bfs_lowre_against_gold; frozen evidence at
+  # reports/showcase_aero/_v71b_bfs_lowre_probe/.
+
   - id: circular_cylinder_wake
     name: "Circular Cylinder Wake"
     reference: "Williamson 1996"

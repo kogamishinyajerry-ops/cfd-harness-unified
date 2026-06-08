@@ -1,0 +1,84 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+Build  : 11-e1fc8c682ae6
+Exec   : blockMesh
+Date   : Jun 08 2026
+Time   : 09:42:14
+Host   : "cd1e85d72d8a"
+PID    : 570
+I/O    : uncollated
+Case   : /tmp/cfd-harness-cases/bfs_lowre
+nProcs : 1
+sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 10)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Reading "blockMeshDict"
+
+Creating block mesh from
+    "system/blockMeshDict"
+Creating block edges
+No non-planar block faces defined
+Creating topology blocks
+Creating topology patches
+
+Creating block mesh topology
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 2
+		Number of boundary faces : 14
+		Number of defined boundary faces : 14
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list .
+
+Creating polyMesh from blockMesh
+Creating patches
+Creating cells
+Creating points with scale 1
+    Block 0 cell size :
+        i : 0.460265 .. 0.115066
+        j : 0.00112138 .. 1.68207
+        k : 0.1
+    Block 1 cell size :
+        i : 0.115374 .. 0.461496
+        j : 0.000546143 .. 0.0819214
+        k : 0.1
+    Block 2 cell size :
+        i : 0.115374 .. 0.461496
+        j : 0.00112138 .. 1.68207
+        k : 0.1
+
+Writing polyMesh
+----------------
+Mesh Information
+----------------
+  boundingBox: (-10 0 0) (30 9 0.1)
+  nPoints: 25146
+  nCells: 12320
+  nFaces: 49532
+  nInternalFaces: 24388
+----------------
+Patches
+----------------
+  patch 0 (start: 24388 size: 32) name: inlet
+  patch 1 (start: 24420 size: 92) name: outlet
+  patch 2 (start: 24512 size: 220) name: lower_wall
+  patch 3 (start: 24732 size: 160) name: upper_wall
+  patch 4 (start: 24892 size: 12320) name: front
+  patch 5 (start: 37212 size: 12320) name: back
+
+End
+

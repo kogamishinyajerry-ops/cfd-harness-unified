@@ -1,0 +1,66 @@
+/*---------------------------------------------------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  11
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+Build  : 11-e1fc8c682ae6
+Exec   : foamRun -solver incompressibleFluid
+Date   : Jun 08 2026
+Time   : 09:42:16
+Host   : "cd1e85d72d8a"
+PID    : 576
+I/O    : uncollated
+Case   : /tmp/cfd-harness-cases/bfs_lowre
+nProcs : 1
+sigFpe : Enabling floating point exception trapping (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 10)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+Selecting solver incompressibleFluid
+Selecting viscosity model Newtonian
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.555556;
+...[trimmed]...
+smoothSolver:  Solving for k, Initial residual = 3.43863e-07, Final residual = 3.51232e-09, No Iterations 4
+ExecutionTime = 63.8666 s  ClockTime = 64 s
+
+Time = 2999s
+
+smoothSolver:  Solving for Ux, Initial residual = 8.93882e-08, Final residual = 6.04373e-09, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 1.57027e-07, Final residual = 7.47355e-09, No Iterations 4
+GAMG:  Solving for p, Initial residual = 8.74413e-07, Final residual = 8.74413e-07, No Iterations 0
+time step continuity errors : sum local = 7.45809e-09, global = -4.37475e-11, cumulative = -8.38638e-05
+smoothSolver:  Solving for omega, Initial residual = 9.94984e-09, Final residual = 9.94984e-09, No Iterations 0
+smoothSolver:  Solving for k, Initial residual = 3.42995e-07, Final residual = 3.50312e-09, No Iterations 4
+ExecutionTime = 63.8786 s  ClockTime = 64 s
+
+Time = 3000s
+
+smoothSolver:  Solving for Ux, Initial residual = 8.9019e-08, Final residual = 6.03117e-09, No Iterations 4
+smoothSolver:  Solving for Uy, Initial residual = 1.55607e-07, Final residual = 7.48183e-09, No Iterations 4
+GAMG:  Solving for p, Initial residual = 1.02592e-06, Final residual = 5.2816e-07, No Iterations 1
+time step continuity errors : sum local = 4.50481e-09, global = -4.57962e-11, cumulative = -8.38639e-05
+smoothSolver:  Solving for omega, Initial residual = 9.94998e-09, Final residual = 9.94998e-09, No Iterations 0
+smoothSolver:  Solving for k, Initial residual = 3.42154e-07, Final residual = 3.4942e-09, No Iterations 4
+ExecutionTime = 63.9276 s  ClockTime = 64 s
+
+End
+
