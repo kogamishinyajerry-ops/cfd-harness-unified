@@ -1,11 +1,106 @@
 # RESUME.md · cfd-harness-unified next-session pickup
 
-> ## ⏩ MOST RECENT — P4 V71.A WEDGE OBLIQUE-SHOCK V&V SCAFFOLDING LANDED (offline · NO coverage flip) (read first)
+> ## ⏩ MOST RECENT — P4 V71.A runnable-coverage FLIPPED 2→3 (DEC-V61-234 · the workbench now launches a supersonic case end-to-end) (read first)
 >
-> **Status**: `P4_SCAFFOLDING_LANDED · LIVE_RUN_PENDING`. **HEAD = `cae939f`** (run `git log -1`).
-> **runnable-coverage STILL 2** — P4 authored the compressible/supersonic V&V *contract*
-> offline; it did NOT flip coverage 2→3 (that needs a LIVE rhoCentralFoam solve, blocked on
-> the DEC-V61-224 fork wall). Branch: `feat/agent-role-taxonomy-fence`. Commits LOCAL (not pushed).
+> **Status**: `P4_COVERAGE_3 · runnable-coverage=3`. **Changes UNCOMMITTED** (staged; push/commit is a user call).
+> Branch: `feat/agent-role-taxonomy-fence`. **runnable-coverage 2→3 FLIPPED** — the deferred backend wiring
+> from DEC-V61-233/224(b) is now landed: the workbench EXECUTION BACKEND launches the supersonic wedge
+> end-to-end (NOT a hand-typed `docker run`), so it genuinely meets Law-1 "runnable".
+>
+> **What landed (DEC-V61-234):**
+> - **`GeometryType.SUPERSONIC_WEDGE`** (src/models.py) → routed in `foam_agent_adapter.execute()` via an
+>   EARLY short-circuit (before the OF11 persistent-container connect) to a new dedicated runner
+>   **`_execute_supersonic_wedge`** + **`_docker_run_esi_rm`**: stages the frozen `case_definition/` and runs
+>   `blockMesh && checkMesh && rhoCentralFoam` in a FRESH `--rm` ESI v2312 container (`/openfoam/profile.rc`),
+>   independent of the Foundation-OF11 incompressible runtime + its `_OF11_INCOMPRESSIBLE_SOLVERS` fence
+>   (which is left byte-identical — rhoCentralFoam is NOT added to it).
+> - **LIVE e2e PASS (25s)**: `foam_agent_adapter.execute(SUPERSONIC_WEDGE)` → real solve → the Control-plane
+>   gate `gate_wedge_against_gold` PASSES on the BACKEND output (β=45.24°, M₂=1.444, p₂/p₁=2.188, ρ₂/ρ₁=1.722,
+>   T₂/T₁=1.269, all 6 hard gates). Backend-e2e evidence + tamper manifest (6/6 SHA OK)
+>   `reports/showcase_aero/_w71a_wedge_backend_e2e/` — DISTINCT from `_w71a_wedge_probe` (that was a direct
+>   container run; this proves a BACKEND launched it — the delta DEC-V61-233 was failed on).
+> - **`cfdtrust/backends/openfoam.py` reconciled** (DEC-V61-224(b) "not divergent"): solver verb is now
+>   manifest-driven (`_resolve_solver_name`, NOT hardcoded simpleFoam) + image-fork-aware env-setup
+>   (`_env_setup_for_image`: ESI `/openfoam/profile.rc` for opencfd/*, OF11 default else) + an injection fence
+>   on the manifest solver string (the image fence never covered the solver slot).
+> - **Plane discipline**: the Execution-plane adapter calls the Execution-plane EXTRACTOR (allowed); the
+>   Control-plane GATE is run by the test, never imported by the adapter (no Execution⇄Control cycle).
+>   Four-plane import-linter **5 KEPT, 0 broken**; `gen_importlinter.py --check` byte-repro exit 0.
+> - **Tests**: 8 adapter dispatch + 6 cfdtrust dispatch (fast, mocked-docker) + 1 opt-in gated live e2e
+>   (`tests/p4/test_supersonic_wedge_live.py`, `CFDTRUST_LIVE_WEDGE_E2E=1`). `test_models` enum assertion added.
+> - **Capability matrix flipped (LAGS the working code)**: rhoCentralFoam GAP-TRACKED→✅ PR, Solvers PR
+>   6→7/10, runnable-coverage compute types **2→3**, §1 laminar×COMP-STEADY cell→PR, §8 cells PR 33→35/59.
+>   breadth-score audit 100, no failures.
+>
+> **Codex round-cap=3 chain**: **CLOSED · DEC-V61-234 Accepted** (86gs gpt-5.4 xhigh). R0 (3×P2+1×P3
+> addressed) → R1 (**1×P1**: the whitelist registration made the wedge loadable-but-unverifiable via
+> TaskRunner — `GeometryType.SUPERSONIC_WEDGE` MUST be a loadable enum since the adapter dispatches on it,
+> so unlike CHT's `COMPLEX` sentinel it can't hide from the loader, so it MUST be verifiable. Fixed:
+> `src/task_runner.py` `_verify_supersonic_wedge` + a geometry-gated `run_task()` branch wiring the
+> specialized oblique-shock gate into the normal flow; `tests/p4/test_supersonic_wedge_taskrunner.py` 5
+> hermetic locks) → R2 (final, **NO P1**: P2 ingest env-fork fixed **verbatim** — reconciliation now covers
+> `run()` AND `ingest()`, 2 ingest-mode locks; P3 `case_export` specialized-gate metadata → retro queue,
+> CHT-shared/pre-existing, quick-fix would regress R1). **0 P1 at close.** Regression: cfdtrust 498p/1s ·
+> p4+adapter+models+cfdtrust 746p/2s · consumer 181p/1s · four-plane lint 5 KEPT/0 broken · byte-repro
+> exit 0. Retro queue: `.planning/retrospectives/codex_round3_overflow_v61_234.md`.
+>
+> **Session-end TODO (awaiting explicit user authorization — NOT auto)**: commit/push the slice; Notion
+> batch-sync Accepted DEC-V61-232 + V61-233 + V61-234.
+> **Documented follow-ups**: θ=10° secondary LIVE run (stays ANALYTICAL); a parametric wedge generator for
+> varying M1/θ (reuses the single frozen case verbatim); **[retro queue]** `case_export` fallback to the
+> file-backed multi-observable gold for specialized-gate anchors (Codex R2 P3); **[retro queue]**
+> `auto_verifier` hook for specialized-physics gates (CHT-shared). ESI-image `ingest()` env-fork is now
+> CLOSED (R2 P2).
+>
+> ---
+>
+> ## ⏩ PRIOR — P4 V71.A rhoCentralFoam V&V benchmark LIVE-VALIDATED (the V&V half · coverage flip now EARNED by DEC-V61-234 above)
+>
+> **Status**: `P4_VNV_LIVE_VALIDATED · coverage=2 (UNCHANGED)`. **Changes UNCOMMITTED** (staged; push/commit is a user call).
+> Branch: `feat/agent-role-taxonomy-fence`. **runnable-coverage STAYS 2** — Codex R0 P2-1 correctly caught
+> that a LIVE solve in a raw container does NOT meet Law-1 "runnable" (which, per DEC-V61-224(b), requires
+> the workbench `foam_agent_adapter` wired + reconciled with the `cfdtrust` backend). This slice
+> LIVE-VALIDATES the rhoCentralFoam **V&V benchmark**; the **coverage flip 2→3 is deferred** to the
+> backend-wiring slice.
+>
+> **What landed (DEC-V61-233 · user-ratified intent: flip; Codex-corrected outcome: V&V validation):**
+> - **LIVE `rhoCentralFoam` solve** (ESI `opencfd/openfoam-default:2312`, native ARM64 — the
+>   DEC-V61-224 fork wall resolved by provisioning ESI, not Foundation OF11): M=2.0 inviscid 15° wedge,
+>   12000-cell blockMesh (checkMesh OK), endTime=2.0 (~6.5 flow-throughs), in a FRESH `--rm` container
+>   (the running `cfd_v12_run`/`of11_run`/`of11_probe` containers untouched). Top raised to y=0.35 so the
+>   shock exits the OUTLET (no reflected-shock contamination).
+> - **Gate PASS, measured from the field**: β=45.24° (gold 45.34, −0.23%), M2=1.444 (−0.08%),
+>   p2/p1=2.188 (−0.31%), ρ2/ρ1=1.722 (−0.41%), T2/T1=1.269 (−0.02%), M1_meas=2.0000. All 5 observables
+>   <0.5% (tol 3%); **all 6 hard gates PASS**.
+> - **Frozen real probe** `reports/showcase_aero/_w71a_wedge_probe/` (REPRODUCE.md + solver-produced
+>   postProcessing + case_definition + SHA256SUMS). REPLACED & removed the SYNTHETIC fixture. Gate test now
+>   drives the real probe (20 gate tests + 12 gold = **32 p4 green**; p3 **367 green** no-regression).
+> - **2 forward-hardenings landed** (DEC-V61-232 backlog, scheduled "with the live slice"): 6th hard gate
+>   = β↔p2/p1 shock-locus cross-consistency (`src/wedge_oblique_shock_gate.py`); machine-readable
+>   structured `validation_status` (theta15=LIVE_VALIDATED, theta10=ANALYTICAL_REFERENCE_AUTHORED; named to
+>   avoid colliding with the load-bearing `physics_contract.contract_status`).
+> - **Capability matrix (Codex-corrected, honest)**: rhoCentralFoam STAYS GAP-TRACKED + "V&V LIVE-VALIDATED"
+>   note (NOT ✅ PR — workbench can't launch supersonic end-to-end); Solvers PR stays 6/10; coverage STAYS 2.
+>
+> **Verification trail**: in-house red-team workflow `wjjm4tbtp` (5 lenses + triage) verdict **HELD** (0 real
+> holes, 2 cosmetic nits fixed) + Codex 86gs gpt-5.4 xhigh `--uncommitted` **chain CLOSED cap=3, NO P1, code
+> APPROVE-equivalent**: R0 2×P2 (coverage-flip overclaim → honest correction; `validation_status` reframed)
+> → R1 1×P2 (θ=10 discrimination test passed on geometry artifact → θ=10 gold given live geometry so it fails
+> on reference-value mismatch) → R2 CLEAN on code (2×P3 doc-hygiene on the report only). 414 tests green.
+> See `reports/codex_tool_reports/v61_233_p4_wedge_live_flip_report.md`.
+>
+> **THE GAP to an ACTUAL coverage flip (next slice)**: wire `foam_agent_adapter` + reconcile TRUST-CORE
+> `cfdtrust/backends/openfoam.py` (hardcodes `simpleFoam`) to dispatch `rhoCentralFoam` via the ESI image,
+> so the workbench launches a supersonic case end-to-end — THEN coverage flips 2→3. Also: θ=10° secondary
+> LIVE run (stays ANALYTICAL). **Session-end TODO**: Notion batch-sync Accepted DEC-V61-232 + V61-233.
+>
+> ---
+>
+> ## ⏩ PRIOR — P4 V71.A WEDGE OBLIQUE-SHOCK V&V SCAFFOLDING LANDED (offline · superseded by the flip above)
+>
+> **Status**: `P4_SCAFFOLDING_LANDED · LIVE_RUN_PENDING` (superseded 2026-06-07 by DEC-V61-233). **HEAD = `cae939f`**.
+> **runnable-coverage was STILL 2** — P4 authored the compressible/supersonic V&V *contract*
+> offline; it did NOT flip coverage 2→3 (that needed the LIVE rhoCentralFoam solve, since landed).
 >
 > **What landed (DEC-V61-232, scaffolding-first · user-ratified: M=2.0 inviscid wedge, θ=15°+10°):**
 > - `knowledge/gold_standards/wedge_oblique_shock{,_theta10}.yaml` — analytical θ-β-M oblique-shock

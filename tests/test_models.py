@@ -28,6 +28,10 @@ class TestEnums:
         assert GeometryType.BACKWARD_FACING_STEP.value == "BACKWARD_FACING_STEP"
         assert GeometryType.BODY_IN_CHANNEL.value == "BODY_IN_CHANNEL"
         assert GeometryType.CUSTOM.value == "CUSTOM"
+        # P4 V71.A (DEC-V61-234): the value string is the load-bearing contract
+        # that GeometryType("SUPERSONIC_WEDGE") construction from the gold YAML /
+        # Notion / task-chain depends on — must byte-match the gold's geometry_type.
+        assert GeometryType.SUPERSONIC_WEDGE.value == "SUPERSONIC_WEDGE"
 
     def test_steady_state_values(self):
         assert SteadyState.STEADY.value == "STEADY"

@@ -2980,3 +2980,62 @@ def test_alpha_dotted_residual_already_parsed():
     )
     assert "p_rgh" in res
     assert "Ux" in res
+
+
+# ---------- DEC-V61-234 R2 (Codex P2): ingest() image-fork env-setup ----------
+
+
+def _capture_checkmesh_shell(monkeypatch) -> dict:
+    """Fake docker for ingest that RECORDS the checkMesh ``-c`` shell string so a
+    test can assert which env-setup profile/bashrc was sourced."""
+    monkeypatch.setattr(ofa.shutil, "which", lambda cmd: "/usr/local/bin/docker")
+    captured: dict = {}
+
+    def fake_run(args, **kwargs):
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        if "version" in args:
+            R.stdout = "26.0.0\n"
+            return R()
+        if "inspect" in args:
+            return R()
+        cmd_str = args[-1] if args else ""
+        if "checkMesh" in cmd_str:
+            captured["checkmesh"] = cmd_str
+            R.stdout = _CANONICAL_CHECKMESH_OK
+            return R()
+        return R()
+
+    monkeypatch.setattr(ofa.subprocess, "run", fake_run)
+    return captured
+
+
+def test_ingest_sources_esi_profile_on_opencfd_image(monkeypatch, tmp_path: Path):
+    """An ESI/opencfd image must make ingest() source the ESI profile, NOT the
+    Foundation OF11 bashrc — else checkMesh false-BLOCKs inside the ESI container
+    by sourcing a non-existent /opt/openfoam11/etc/bashrc. (DEC-V61-234 R2 P2 —
+    completes the 224(b) reconciliation across run() AND ingest().)"""
+    _make_ingestable_case(tmp_path)
+    captured = _capture_checkmesh_shell(monkeypatch)
+
+    manifest = _ingest_manifest_fixture()
+    manifest["solver_docker_image"] = "opencfd/openfoam-default:2312"
+    ofa.ingest(tmp_path, manifest)
+
+    assert "checkmesh" in captured, "ingest must invoke checkMesh"
+    assert "source /openfoam/profile.rc" in captured["checkmesh"]      # ESI profile
+    assert "/opt/openfoam11/etc/bashrc" not in captured["checkmesh"]   # NOT OF11 bashrc
+
+
+def test_ingest_defaults_to_foundation_bashrc_when_image_omitted(monkeypatch, tmp_path: Path):
+    """Byte-stability: an ingest manifest with no ESI image keeps the Foundation
+    OF11 bashrc — the historical default must not change for existing cases."""
+    _make_ingestable_case(tmp_path)
+    captured = _capture_checkmesh_shell(monkeypatch)
+
+    ofa.ingest(tmp_path, _ingest_manifest_fixture())  # no solver_docker_image → default
+
+    assert "checkmesh" in captured
+    assert "source /opt/openfoam11/etc/bashrc" in captured["checkmesh"]

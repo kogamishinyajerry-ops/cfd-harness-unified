@@ -18,13 +18,13 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 
 | Turbulence | INCOMP-STEADY | INCOMP-TRANSIENT | COMP-STEADY | COMP-TRANSIENT | WEAK-COMP-STEADY | WEAK-COMP-TRANS |
 |---|---|---|---|---|---|---|
-| **laminar** | ✅ PR (lid_driven_cavity Re=100 · icoFoam · Ghia 1982) | ✅ PR (rayleigh_benard_convection Ra=1e6 · buoyantFoam · long-time-avg) | GAP-TRACKED: low-Mach laminar not yet anchored | GAP-TRACKED: V71 candidate — chtMultiRegionFoam laminar substrate | GAP-TRACKED: weakly-compressible laminar regime not yet defined | GAP-TRACKED: V71 candidate |
+| **laminar** | ✅ PR (lid_driven_cavity Re=100 · icoFoam · Ghia 1982) | ✅ PR (rayleigh_benard_convection Ra=1e6 · buoyantFoam · long-time-avg) | ✅ PR (wedge_oblique_shock M=2.0 15° · rhoCentralFoam · θ-β-M · **supersonic inviscid**, DEC-V61-234 · low-Mach laminar sub-regime still unanchored) | GAP-TRACKED: V71 candidate — chtMultiRegionFoam laminar substrate | GAP-TRACKED: weakly-compressible laminar regime not yet defined | GAP-TRACKED: V71 candidate |
 | **k-epsilon** | ✅ PR (backward_facing_step Re=36000 · simpleFoam · Driver-Seegmiller 1985) | GAP-TRACKED: V71 candidate — pimpleFoam k-epsilon transient | GAP-TRACKED: V71 candidate | GAP-TRACKED: V71 candidate | GAP-TRACKED: not in V69 scope | GAP-TRACKED: not in V69 scope |
 | **k-omega SST** | ✅ PR (naca0012_airfoil Re=3M α=10° · simpleFoam · NASA TMR) | ✅ PR (circular_cylinder_wake Re=3900 · pimpleFoam · Norberg 1987) | ✅ PR (NACA0012 transonic M=0.8 · rhoSimpleFoam · AGARD AR-138) | GAP-TRACKED: V71 candidate · rhoPimpleFoam transient compressible | GAP-TRACKED: low-Mach steady not yet anchored | GAP-TRACKED: V71 candidate |
 | **DNS / resolved-scale** | ✅ PR (plane_channel_flow Re_tau=180 · icoFoam · Moser-Kim-Mansour 1999) | GAP-TRACKED: V71 candidate — pimpleFoam DNS transient | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope |
 
-**Cells PR**: 7/24 (29%)
-**Cells GAP-TRACKED**: 17/24 (71%)
+**Cells PR**: 8/24 (33%)
+**Cells GAP-TRACKED**: 16/24 (67%)
 **Cells empty**: 0/24 (0%)
 **PR + GAP-TRACKED**: 24/24 (100%) → V70 charter §3 ≥80% threshold EXCEEDED
 
@@ -38,14 +38,15 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 | `rhoSimpleFoam` | COMP-RANS-STEADY | naca0012_transonic | ✅ PR |
 | `buoyantFoam` | INCOMP-BUOYANT (Boussinesq) | rayleigh_benard_convection | ✅ PR |
 | `chtMultiRegionFoam` | CONJUGATE-HEAT-TRANSFER | apu_bay_ventilation | ✅ PR (case_002a gold_pending) |
-| `rhoCentralFoam` | COMP-CENTRAL-EXPLICIT | wedge_oblique_shock (offline V&V only) | GAP-TRACKED: V71.A · **offline V&V scaffolding AUTHORED** (DEC-V61-232: analytical θ-β-M gold + PURE extractor + Control gate + anti-cheat tests, self-verifying) · **NO LIVE anchor yet** (coverage NOT flipped — blocked on ESI image, DEC-V61-224 fork wall, deferred) |
+| `rhoCentralFoam` | COMP-CENTRAL-EXPLICIT | wedge_oblique_shock (M=2.0 15° wedge) | ✅ PR (V71.A · **workbench-runnable end-to-end**, DEC-V61-234: `foam_agent_adapter.execute(SUPERSONIC_WEDGE)` launches a LIVE rhoCentralFoam solve on ESI v2312 in a fresh `--rm` container, and the Control-plane oblique-shock gate PASSES on the backend output — every observable within 0.5% of analytical θ-β-M, all 6 hard gates · backend-e2e evidence + tamper manifest `reports/showcase_aero/_w71a_wedge_backend_e2e/` · `cfdtrust` backend reconciled to dispatch the same solver+image+profile per DEC-V61-224(b)) |
 | `rhoPimpleFoam` | COMP-RANS-TRANSIENT | (none — referenced in advisor surface only) | GAP-TRACKED: V71 candidate · no anchor case |
 | `interFoam` (VOF) | MULTI-PHASE | (not in scope) | GAP-TRACKED: V72+ candidate |
 | `sonicFoam` (super/transonic) | COMP-TRANSIENT | (not in scope) | GAP-TRACKED: V72+ candidate |
 
-**Solvers PR**: 6/10 (60%)
-**Solvers GAP-TRACKED**: 4/10 (40%)
-**Solvers wired in advisor without anchor case**: 2 (`rhoCentralFoam` · `rhoPimpleFoam`)
+**Solvers PR**: 7/10 (70%)
+**Solvers GAP-TRACKED**: 3/10 (30%)
+**Solvers wired in advisor without anchor case**: 1 (`rhoPimpleFoam`)  *(rhoCentralFoam is now workbench-runnable end-to-end with a backend-launched e2e anchor, DEC-V61-234)*
+**Runnable-coverage compute types**: 3 (incompressible RANS · conjugate-heat-transfer · compressible supersonic shock-capturing). *rhoCentralFoam FLIPPED 2→3 (DEC-V61-234): the workbench execution backend (`foam_agent_adapter`) launches a live supersonic-wedge rhoCentralFoam solve on the ESI image end-to-end with the oblique-shock gate PASS, reconciled with the `cfdtrust` V&V backend, satisfying Law-1 + DEC-V61-224(b). The earlier DEC-V61-233 V&V LIVE_VALIDATED milestone (direct-container solve) is the V&V half; this slice added the backend-launch half.*
 
 ## 3 · Boundary condition types
 
@@ -100,7 +101,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 ### What the workbench CANNOT do yet (≥1 V70 charter promise unmet):
 
 1. **Multi-phase flows (`interFoam` / VOF / Euler-Lagrange)** — entirely out of scope through V70; needs V72+ multi-phase arc
-2. **Supersonic / transonic shock-capturing** — `sonicFoam` / `rhoCentralFoam` referenced in advisor surface but no anchor case validates them; the rhoSimpleFoam transonic NACA0012 is M=0.8 just below shock-formation threshold
+2. **Supersonic shock-capturing (TRANSIENT · `sonicFoam`)** — steady oblique-shock is **NOW RUNNABLE end-to-end** (`rhoCentralFoam` V71.A, DEC-V61-234: the workbench backend launches a live supersonic-wedge solve on ESI + Control-plane gate PASS; runnable-coverage flipped 2→3). The remaining gap is TRANSIENT super/transonic — `sonicFoam` is still referenced in the advisor surface without an anchor case. (The rhoSimpleFoam transonic NACA0012 is M=0.8, just below shock-formation threshold.)
 3. **Sliding-mesh / rotating geometries (e.g., turbomachinery)** — no AMI/cyclic-AMI integration tested
 4. **Advanced turbulence models (Spalart-Allmaras / Reynolds Stress / LES Smagorinsky)** — only k-epsilon / k-omega SST / DNS resolved-scale anchored; LES grep-detected in advisor surface but no canonical case fires LES rule (KNOWN_F_NEW from V69.2 has `low_re_kOmegaSST_trigger` open)
 5. **Adaptive mesh refinement (AMR)** — not in workbench scope
@@ -109,7 +110,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 
 ### V71 candidate work (most-impactful gaps to close next):
 
-- **V71.A · Anchor rhoCentralFoam with a supersonic case (M=2.0 wedge)** — closes "advisor references it but no anchor" gap. **STATUS (DEC-V61-232, scaffolding-first 2026-06-07): offline V&V scaffolding LANDED** — analytical θ-β-M oblique-shock gold (θ=15° + θ=10°, self-verifying), PURE anti-tautology extractor (`src/wedge_oblique_shock_extractor.py`), fail-closed Control gate with 5 hard gates (`src/wedge_oblique_shock_gate.py`), 21 p4 tests green. **NOT yet a LIVE coverage flip** (2→3): `rhoCentralFoam` cannot run on the local OF11 Foundation image (DEC-V61-224 fork wall); the ESI-image provision + adapter live-wiring is a separate deferred gated slice.
+- **V71.A · Anchor rhoCentralFoam with a supersonic case (M=2.0 wedge)** — **✅ DONE · runnable-coverage FLIPPED 2→3** (DEC-V61-234, 2026-06-08). The three-slice arc: DEC-V61-232 landed offline scaffolding (analytical θ-β-M gold θ=15°+θ=10° self-verifying · PURE anti-tautology extractor `src/wedge_oblique_shock_extractor.py` · fail-closed Control gate `src/wedge_oblique_shock_gate.py`); DEC-V61-233 LIVE-VALIDATED the V&V benchmark (direct-container `rhoCentralFoam` solve on ESI v2312, every observable within 0.5% of analytical θ-β-M, 6 hard gates); **DEC-V61-234 wired the workbench** — new `GeometryType.SUPERSONIC_WEDGE` → `foam_agent_adapter._execute_supersonic_wedge` launches a live rhoCentralFoam solve in a fresh `--rm` ESI container (`/openfoam/profile.rc`), the Control-plane gate PASSES on the backend-produced output (β=45.24°, M₂=1.444, p₂/p₁=2.188, ρ₂/ρ₁=1.722, T₂/T₁=1.269, all 6 hard gates), and the `cfdtrust` backend is reconciled (manifest-driven solver + image-fork-aware env-setup) per DEC-V61-224(b). Backend-e2e evidence + tamper manifest `reports/showcase_aero/_w71a_wedge_backend_e2e/`; opt-in gated live test `tests/p4/test_supersonic_wedge_live.py`; fast dispatch regression locks `tests/p4/test_supersonic_wedge_dispatch.py` + `ui/backend/audit/cfdtrust_tests/test_supersonic_wedge_backend.py`. (θ=10° sensitivity gold remains ANALYTICAL_REFERENCE_AUTHORED — a documented follow-up; ESI-image ingest in the cfdtrust ingest path is a documented follow-up.)
 - **V71.B · Anchor low-Re k-omega-SST with backward_facing_step Re=5000** — closes V69.2's `low_re_kOmegaSST_trigger` KNOWN_F_NEW skip
 - **V71.C · Spalart-Allmaras anchor on naca0012 stall (α=18°)** — adds 5th turbulence model
 - **V71.D · Mainline gmsh meshing strategy** — currently only sandbox
@@ -130,8 +131,8 @@ bash scripts/governance/v70_fleet/score_cfd_breadth.sh | jq '.subscores'
 ## 8 · Counter & telemetry
 
 - **Cells declared**: 24 (turbulence × compressibility × steadiness) + 10 (solvers) + 12 (BCs) + 5 (meshing) + 8 (post-proc) = 59 total
-- **Cells PR**: 33 / 59 (56%)
-- **Cells GAP-TRACKED**: 26 / 59 (44%)
+- **Cells PR**: 35 / 59 (59%)
+- **Cells GAP-TRACKED**: 24 / 59 (41%)
 - **Cells empty (no status)**: 0 / 59 (0%)
 - **V70-DONE-1 PR + GAP-TRACKED coverage ≥80%**: ✅ MET (100%)
 

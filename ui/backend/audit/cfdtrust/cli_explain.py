@@ -294,10 +294,14 @@ def _explain_bc(gate: Dict[str, Any], manifest: Dict[str, Any]) -> Tuple[str, Op
 def _explain_solver(gate: Dict[str, Any], manifest: Dict[str, Any]) -> Tuple[str, Optional[str], str]:
     status = gate.get("status", "UNKNOWN")
     det = gate.get("details", {}) or {}
+    # DEC-V61-234: the solver verb is manifest-declared (no longer hardcoded
+    # simpleFoam in the backend run()), so the explainer must name the ACTUAL
+    # solver — a rhoCentralFoam run must not be explained to the user as simpleFoam.
+    solver = manifest.get("solver") or "simpleFoam"
     if status == "PASS":
         n = det.get("final_iter", "?")
         return (
-            f"simpleFoam converged at iteration {n} with all residual targets met.",
+            f"{solver} converged at iteration {n} with all residual targets met.",
             None,
             "info",
         )
@@ -321,7 +325,7 @@ def _explain_solver(gate: Dict[str, Any], manifest: Dict[str, Any]) -> Tuple[str
             final_iter = det.get("final_iter", "?")
             max_iter = det.get("max_iter", "?")
             bits = [
-                f"simpleFoam ran {final_iter}/{max_iter} iterations but {len(failed)} "
+                f"{solver} ran {final_iter}/{max_iter} iterations but {len(failed)} "
                 f"field(s) did not reach residual target"
             ]
             for f in failed[:3]:
