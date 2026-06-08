@@ -1,0 +1,40 @@
+Checking patch topology for multiply connected surfaces...
+    Patch               Faces    Points     Surface topology
+    inlet               100      202      ok (non-closed singly connected)  
+    outlet              100      202      ok (non-closed singly connected)  
+    bottom              40       82       ok (non-closed singly connected)  
+    top                 120      242      ok (non-closed singly connected)  
+    obstacle            80       162      ok (non-closed singly connected)  
+    defaultFaces        24000    24442    ok (non-closed singly connected)  
+    ".*"                24440    24442    ok (closed singly connected)      
+
+
+Checking faceZone topology for multiply connected surfaces...
+    No faceZones found.
+
+Checking basic cellZone addressing...
+    No cellZones found.
+
+Checking basic pointZone addressing...
+    No pointZones found.
+
+Checking geometry...
+    Overall domain bounding box (-0.15242 0 -0.005) (0.3048 0.35 0.005)
+    Mesh has 2 geometric (non-empty/wedge) directions (1 1 0)
+    Mesh has 2 solution (non-empty) directions (1 1 0)
+    All edges aligned with or perpendicular to non-empty directions.
+    Boundary openness (2.3322347e-17 -1.788992e-17 -1.5444237e-15) OK.
+    Max cell openness = 2.8138312e-16 OK.
+    Max aspect ratio = 1.4145166 OK.
+    Minimum face area = 1.0242786e-05. Maximum face area = 3.9444022e-05.  Face area magnitudes OK.
+    Min volume = 1.0242786e-07. Max volume = 1.333675e-07.  Total volume = 0.0014758035.  Cell volumes OK.
+    Mesh non-orthogonality Max: 14.928356 average: 7.1185755
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 0.37879787 OK.
+    Coupled point location match (average 0) OK.
+
+Mesh OK.
+
+End
+

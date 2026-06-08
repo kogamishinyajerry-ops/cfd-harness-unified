@@ -4,6 +4,7 @@ title: P4 charter (scaffolding-first) — rhoCentralFoam supersonic-wedge obliqu
 status: Accepted
 accepted_date: 2026-06-07
 parent_dec: V61-224
+followed_by: V61-233 (LIVE rhoCentralFoam solve PASS → V&V benchmark LIVE-VALIDATED, 2026-06-07 — the deferred live slice; folded in the 6th cross-consistency gate + machine-readable validation_status forward-hardenings. NOTE: per Codex R0 P2-1, the live solve does NOT flip runnable-coverage 2→3 — Law-1 "runnable" needs the workbench backend wired per DEC-V61-224(b); coverage stays 2, the flip is a further deferred slice.)
 phase: P4 compressible/supersonic coverage · V71.A rhoCentralFoam anchor (scaffolding slice)
 autonomous_governance: true
 confidence: high
@@ -129,6 +130,14 @@ M₁=2.0, γ=1.4, weak root:
   (auditability decision deferred with the live slice).
 
 ## Forward-hardening backlog (from the adversarial red-team pass · workflow `wig61u2wt` · verdict HELD)
+
+> **UPDATE (DEC-V61-233, 2026-06-07)**: all three items addressed with the live slice —
+> ✅ 6th cross-consistency gate LANDED (`shock_locus_consistent_ok` in
+> `src/wedge_oblique_shock_gate.py`); ✅ machine-readable `contract_status` LANDED
+> (structured `case_info.contract_status` key + tests); the multi-field single-`.xy`
+> column-resolution item is MOOT for the live layout (the live `shockLine` uses
+> `setFormat raw` with `fields (rho)`, emitting a per-field 2-column `line_rho.xy` —
+> the field-token selection already keeps that the contract; no multi-column file arises).
 
 The red team broke nothing (zero `is_real_hole`), but flagged two **non-blocking**
 hardenings to land WITH the live slice (premature offline — a synthetic fixture has

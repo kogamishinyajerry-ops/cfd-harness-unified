@@ -30,6 +30,7 @@ solver_info:
   schemes: explicit-central-upwind
 case_info:
   id: wedge_oblique_shock_theta10
+  validation_status: ANALYTICAL_REFERENCE_AUTHORED   # machine-readable run-validation status: reference authored, NO live run (theta=10 sensitivity; coverage tooling must NOT read this as validated). DISTINCT from physics_contract.contract_status (named to avoid collision).
   flow_type: EXTERNAL
   geometry_type: SUPERSONIC_WEDGE
   steady_state: STEADY
@@ -39,12 +40,12 @@ case_info:
     theta_deg: 10.0
     gamma: 1.4
     R_specific: 287.058
-    x_shock_station: 0.5
+    x_shock_station: 0.12   # same sampling station as the live theta=15 probe (a valid station for a 10deg wedge too: shock at y=0.12*tan(39.31)=0.098, above origin 0.05) so the discrimination test fails on REFERENCE-VALUE mismatch, not geometry (Codex R1 P2)
     beta_validity_min_deg: 30.0
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
-    shock_line_origin_y: 0.0
+    shock_line_origin_y: 0.05
 
 ---
 
@@ -64,6 +65,7 @@ solver_info:
   schemes: explicit-central-upwind
 case_info:
   id: wedge_oblique_shock_theta10
+  validation_status: ANALYTICAL_REFERENCE_AUTHORED   # machine-readable run-validation status: reference authored, NO live run (theta=10 sensitivity; coverage tooling must NOT read this as validated). DISTINCT from physics_contract.contract_status (named to avoid collision).
   flow_type: EXTERNAL
   geometry_type: SUPERSONIC_WEDGE
   steady_state: STEADY
@@ -73,12 +75,12 @@ case_info:
     theta_deg: 10.0
     gamma: 1.4
     R_specific: 287.058
-    x_shock_station: 0.5
+    x_shock_station: 0.12   # same sampling station as the live theta=15 probe (a valid station for a 10deg wedge too: shock at y=0.12*tan(39.31)=0.098, above origin 0.05) so the discrimination test fails on REFERENCE-VALUE mismatch, not geometry (Codex R1 P2)
     beta_validity_min_deg: 30.0
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
-    shock_line_origin_y: 0.0
+    shock_line_origin_y: 0.05
 
 ---
 
@@ -98,6 +100,7 @@ solver_info:
   schemes: explicit-central-upwind
 case_info:
   id: wedge_oblique_shock_theta10
+  validation_status: ANALYTICAL_REFERENCE_AUTHORED   # machine-readable run-validation status: reference authored, NO live run (theta=10 sensitivity; coverage tooling must NOT read this as validated). DISTINCT from physics_contract.contract_status (named to avoid collision).
   flow_type: EXTERNAL
   geometry_type: SUPERSONIC_WEDGE
   steady_state: STEADY
@@ -107,12 +110,12 @@ case_info:
     theta_deg: 10.0
     gamma: 1.4
     R_specific: 287.058
-    x_shock_station: 0.5
+    x_shock_station: 0.12   # same sampling station as the live theta=15 probe (a valid station for a 10deg wedge too: shock at y=0.12*tan(39.31)=0.098, above origin 0.05) so the discrimination test fails on REFERENCE-VALUE mismatch, not geometry (Codex R1 P2)
     beta_validity_min_deg: 30.0
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
-    shock_line_origin_y: 0.0
+    shock_line_origin_y: 0.05
 
 ---
 
@@ -132,6 +135,7 @@ solver_info:
   schemes: explicit-central-upwind
 case_info:
   id: wedge_oblique_shock_theta10
+  validation_status: ANALYTICAL_REFERENCE_AUTHORED   # machine-readable run-validation status: reference authored, NO live run (theta=10 sensitivity; coverage tooling must NOT read this as validated). DISTINCT from physics_contract.contract_status (named to avoid collision).
   flow_type: EXTERNAL
   geometry_type: SUPERSONIC_WEDGE
   steady_state: STEADY
@@ -141,12 +145,12 @@ case_info:
     theta_deg: 10.0
     gamma: 1.4
     R_specific: 287.058
-    x_shock_station: 0.5
+    x_shock_station: 0.12   # same sampling station as the live theta=15 probe (a valid station for a 10deg wedge too: shock at y=0.12*tan(39.31)=0.098, above origin 0.05) so the discrimination test fails on REFERENCE-VALUE mismatch, not geometry (Codex R1 P2)
     beta_validity_min_deg: 30.0
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
-    shock_line_origin_y: 0.0
+    shock_line_origin_y: 0.05
 
 ---
 
@@ -166,6 +170,7 @@ solver_info:
   schemes: explicit-central-upwind
 case_info:
   id: wedge_oblique_shock_theta10
+  validation_status: ANALYTICAL_REFERENCE_AUTHORED   # machine-readable run-validation status: reference authored, NO live run (theta=10 sensitivity; coverage tooling must NOT read this as validated). DISTINCT from physics_contract.contract_status (named to avoid collision).
   flow_type: EXTERNAL
   geometry_type: SUPERSONIC_WEDGE
   steady_state: STEADY
@@ -175,9 +180,9 @@ case_info:
     theta_deg: 10.0
     gamma: 1.4
     R_specific: 287.058
-    x_shock_station: 0.5
+    x_shock_station: 0.12   # same sampling station as the live theta=15 probe (a valid station for a 10deg wedge too: shock at y=0.12*tan(39.31)=0.098, above origin 0.05) so the discrimination test fails on REFERENCE-VALUE mismatch, not geometry (Codex R1 P2)
     beta_validity_min_deg: 30.0
     freestream_probe: freestream
     postshock_probe: postShock
     shock_line: shockLine
-    shock_line_origin_y: 0.0
+    shock_line_origin_y: 0.05

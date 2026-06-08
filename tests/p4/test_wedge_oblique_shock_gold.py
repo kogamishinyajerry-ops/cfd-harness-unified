@@ -155,3 +155,46 @@ def test_two_angles_give_distinct_references() -> None:
     assert p_beta["reference_values"][0]["value"] != s_beta["reference_values"][0]["value"]
     # weaker deflection -> smaller shock angle
     assert s_beta["reference_values"][0]["value"] < p_beta["reference_values"][0]["value"]
+
+
+# ---------------------------------------------------------------------------
+# machine-readable validation_status (DEC-V61-232 forward-hardening, landed with the
+# DEC-V61-233 live slice): the run-validation status is a STRUCTURED key, not a YAML
+# comment. These tests are its CURRENT consumer (a test-enforced honesty invariant that
+# blocks an un-run reference being machine-read as validated); it is also a forward hook
+# coverage tooling CAN read (no production consumer reads it yet — Codex R0 P2-2). Named
+# validation_status (NOT contract_status) to avoid colliding with the codebase's
+# load-bearing physics_contract.contract_status (physics-compatibility axis, read by
+# src/report_engine/contract_dashboard.py + src/error_attributor.py).
+# ---------------------------------------------------------------------------
+
+_LIVE_VALIDATED = "LIVE_VALIDATED"
+_PENDING_STATUSES = {"ANALYTICAL_REFERENCE_AUTHORED"}  # explicitly NOT a validated value
+
+
+def test_primary_gold_is_machine_readable_live_validated() -> None:
+    """The primary (theta=15) gold carries a structured case_info.validation_status =
+    LIVE_VALIDATED on every observable doc — the live rhoCentralFoam solve (DEC-V61-233)
+    backs it. This test reads the STRUCTURED key (not the header comment); coverage
+    tooling CAN read it the same way (no production consumer does yet)."""
+    statuses = {d["case_info"]["validation_status"] for d in _docs(_GOLDS[0])}
+    assert statuses == {_LIVE_VALIDATED}
+
+
+def test_secondary_gold_is_not_machine_readable_as_validated() -> None:
+    """The theta=10 sensitivity gold has NO live run: its structured validation_status
+    must NOT be a validated value, so coverage tooling can never read the un-run
+    reference as validated — the exact reason the status was promoted from a comment."""
+    statuses = {d["case_info"]["validation_status"] for d in _docs(_GOLDS[1])}
+    assert _LIVE_VALIDATED not in statuses
+    assert statuses == _PENDING_STATUSES
+
+
+def test_every_gold_doc_has_a_structured_validation_status() -> None:
+    """No doc may silently omit the machine-readable status (a missing key would let
+    tooling fall back to guessing). Distinct from physics_contract.contract_status."""
+    for gold in _GOLDS:
+        for doc in _docs(gold):
+            assert "validation_status" in doc["case_info"], (gold.stem, doc["quantity"])
+            # must NOT shadow the load-bearing physics-compatibility key name
+            assert "contract_status" not in doc["case_info"], (gold.stem, doc["quantity"])

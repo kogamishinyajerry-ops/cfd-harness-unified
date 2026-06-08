@@ -1,0 +1,86 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : blockMesh
+Date   : Jun 07 2026
+Time   : 12:58:44
+Host   : 9ab59b09df0f
+PID    : 223
+I/O    : uncollated
+Case   : /work
+nProcs : 1
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Creating block mesh from "system/blockMeshDict"
+Creating block edges
+No non-planar block faces defined
+Creating topology blocks
+
+Creating topology patches - from boundary section
+
+Creating block mesh topology
+--> FOAM Warning : 
+    From Foam::polyMesh::polyMesh(const Foam::IOobject&, Foam::pointField&&, const cellShapeList&, const faceListList&, const wordList&, const Foam::PtrList<Foam::dictionary>&, const Foam::word&, const Foam::word&, bool)
+    in file meshes/polyMesh/polyMeshFromShapeMesh.C at line 915
+    Found 4 undefined faces in mesh; adding to default patch defaultFaces
+
+Check topology
+
+	Basic statistics
+		Number of internal faces : 1
+		Number of boundary faces : 10
+		Number of defined boundary faces : 10
+		Number of undefined boundary faces : 0
+	Checking patch -> block consistency
+
+Creating block offsets
+Creating merge list (topological search)...
+
+Creating polyMesh from blockMesh
+Creating points with scale (1 1 1)
+    Block 0 cell size :
+        i : 0.0038105 .. 0.0038105
+        j : 0.0035 .. 0.0035
+        k : 0.01 .. 0.01
+
+    Block 1 cell size :
+        i : 0.0039444022 .. 0.0039444022
+        j : 0.0035 .. 0.0035
+        k : 0.01 .. 0.01
+
+Creating cells
+Creating patches
+No patch pairs to merge
+
+Writing polyMesh with 0 cellZones
+----------------
+Mesh Information
+----------------
+  boundingBox: (-0.15242 0 -0.005) (0.3048 0.35 0.005)
+  nPoints: 24442
+  nCells: 12000
+  nFaces: 48220
+  nInternalFaces: 23780
+----------------
+Patches
+----------------
+  patch 0 (start: 23780 size: 100) name: inlet
+  patch 1 (start: 23880 size: 100) name: outlet
+  patch 2 (start: 23980 size: 40) name: bottom
+  patch 3 (start: 24020 size: 120) name: top
+  patch 4 (start: 24140 size: 80) name: obstacle
+  patch 5 (start: 24220 size: 24000) name: defaultFaces
+
+End
+

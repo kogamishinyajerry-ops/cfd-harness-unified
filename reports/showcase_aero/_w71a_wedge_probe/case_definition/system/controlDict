@@ -1,0 +1,122 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2312                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     rhoCentralFoam;
+
+startFrom       startTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         2.0;
+
+deltaT          1e-5;
+
+writeControl    runTime;
+
+writeInterval   0.1;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+adjustTimeStep  yes;
+
+maxCo           0.5;
+
+maxDeltaT       1e-3;
+
+
+functions
+{
+    // Mach number field (writes "Ma") so the area-average probes below can
+    // average it; MUST be listed first so Ma exists when the probes execute.
+    MachNo1
+    {
+        type            MachNo;
+        libs            (fieldFunctionObjects);
+        writeControl    writeTime;
+    }
+
+    // Freestream state: area-average over the inlet patch (undisturbed M=2 inflow).
+    freestream
+    {
+        type            surfaceFieldValue;
+        libs            (fieldFunctionObjects);
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          (p rho T Ma);
+        writeControl    writeTime;
+        writeFields     false;
+        surfaceFormat   none;
+        log             false;
+    }
+
+    // Post-shock state: area-average over the wedge (obstacle) surface. With the
+    // raised top the entire surface sees the single-shock uniform post-shock state.
+    postShock
+    {
+        type            surfaceFieldValue;
+        libs            (fieldFunctionObjects);
+        regionType      patch;
+        name            obstacle;
+        operation       areaAverage;
+        fields          (p rho T Ma);
+        writeControl    writeTime;
+        writeFields     false;
+        surfaceFormat   none;
+        log             false;
+    }
+
+    // Vertical density profile across the shock at x=0.12 (apex origin): from
+    // y=0.05 (post-shock) up to y=0.30 (freestream). Writes line_rho.xy; the
+    // extractor locates the density jump => beta = atan2(0.05+dist, 0.12).
+    shockLine
+    {
+        type            sets;
+        libs            (sampling);
+        writeControl    writeTime;
+        interpolationScheme cellPoint;
+        setFormat       raw;
+        fields          (rho);
+        sets
+        (
+            line
+            {
+                type    uniform;
+                axis    distance;
+                start   (0.12 0.05 0);
+                end     (0.12 0.30 0);
+                nPoints 300;
+            }
+        );
+    }
+}
+
+
+// ************************************************************************* //

@@ -1,5 +1,0 @@
-# SYNTHETIC fixture (NOT a solver run) — see _build_synthetic_fixture.py
-# Region type : patch
-# Time	areaAverage(p)	areaAverage(rho)	areaAverage(T)	areaAverage(Ma)
-0.0009	219470	2.007639632	380.82	1.44
-0.001	219470	2.007639632	380.82	1.44

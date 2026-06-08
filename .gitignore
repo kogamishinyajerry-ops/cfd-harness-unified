@@ -144,3 +144,6 @@ ui/frontend/playwright-report/
 # (review.md/json), invoke_meta, and the prompt_sha256 integrity anchor only.
 .planning/reviews/kogami/*/prompt.txt
 .planning/reviews/kogami/*/briefing_manifest.json
+
+# P4 live-flip scratch (never commit raw run; freeze the probe into reports/)
+.wedge_scratch/

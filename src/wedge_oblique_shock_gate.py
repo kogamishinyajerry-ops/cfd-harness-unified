@@ -12,7 +12,7 @@ come from the gold's ``case_info.wedge_inputs`` — the SAME contract the
 self-verifying derivation test locks — so the gate carries no independent magic
 numbers (only documented relative-tolerance module constants).
 
-Five HARD gate components backstop the 3% comparator tolerance, each independent of
+Six HARD gate components backstop the 3% comparator tolerance, each independent of
 the comparator and of each other:
 
   1. **Supersonic inflow** — the MEASURED freestream Mach (areaAverage Ma upstream)
@@ -32,6 +32,17 @@ the comparator and of each other:
      A doctored single state probe (e.g. a tampered post-shock pressure) breaks this
      even when the comparator's per-ratio check passes — it is the shock analogue of
      the conjugate gate's energy-balance hard gate.
+  6. **Shock-locus cross-consistency** (DEC-V61-232 forward-hardening, landed with the
+     DEC-V61-233 live slice) — the MEASURED beta and the MEASURED p2/p1 must lie on the
+     SAME normal-shock locus: ``p2/p1 == 1 + 2 gamma/(gamma+1) ((M1 sin beta)^2 - 1)``
+     within a band TIGHTER than the 3% per-observable tolerance. The first five gates
+     check each observable independently, so an internally-CONTRADICTORY tuple (a beta
+     and a p2/p1 each within 3% of the real shock but inconsistent with EACH OTHER —
+     the red team's measured 2.988% worst case) can slip through. A real conservative
+     solve is self-consistent on the locus (the live probe: 0.17%); a wrong solution
+     that happened to match each observable separately is not. This is the gate that
+     tells real discretisation smearing apart from a wrong-but-lucky tuple, which is
+     why it was deferred to live-run time (a synthetic fixture has no real smearing).
 
 ADR-001 plane assignment: **Control Plane** — the only plane permitted to import
 BOTH Execution (the extractor) and Evaluation (the comparator), same posture as
@@ -66,6 +77,12 @@ _INFLOW_MATCH_REL_TOL = 0.02
 # while still tripping a doctored single state probe.
 _IDEAL_GAS_REL_TOL = 0.02
 
+# The measured beta and measured p2/p1 must lie on the SAME normal-shock locus:
+# p2/p1 == 1 + 2g/(g+1)((M1 sin beta)^2 - 1). 2% (< the 3% per-observable tolerance)
+# admits real discretisation (live probe residual 0.17%) while tripping an internally
+# contradictory tuple whose beta and p2/p1 are each within 3% but not of EACH OTHER.
+_SHOCK_LOCUS_REL_TOL = 0.02
+
 
 @dataclass(frozen=True)
 class WedgeGateResult:
@@ -79,6 +96,7 @@ class WedgeGateResult:
     downstream_supersonic_ok: bool   # M2 > 1 (weak oblique-shock root)
     beta_above_mach_angle_ok: bool   # beta > asin(1/M1) (physical oblique shock)
     ideal_gas_consistent_ok: bool    # T2/T1 == (p2/p1)/(rho2/rho1) (no doctored state probe)
+    shock_locus_consistent_ok: bool  # measured p2/p1 == normal-shock(M1, beta) (cross-consistency)
     summary: str
 
 
@@ -96,7 +114,7 @@ def gate_wedge_against_gold(
     """Run the ``wedge_oblique_shock`` gate: extract QoIs, gate vs theta-beta-M + hard checks.
 
     PASSES only if (a) every gold observable is within tolerance via the canonical
-    scalar path, AND (b) all five independent hard gates hold.
+    scalar path, AND (b) all six independent hard gates hold.
     """
     docs = _load_wedge_gold_docs(gold_path)
     wi = docs[0]["case_info"]["wedge_inputs"]
@@ -130,6 +148,7 @@ def gate_wedge_against_gold(
 
     m1_target = float(wi["M1"])
     beta_floor = float(wi["beta_validity_min_deg"])
+    gamma = float(wi["gamma"])
 
     # HARD gate 1+2: supersonic inflow, and it is the gold's operating point.
     supersonic_inflow_ok = qois.mach_freestream > 1.0
@@ -151,6 +170,17 @@ def gate_wedge_against_gold(
         <= _IDEAL_GAS_REL_TOL * abs(qois.temperature_ratio)
     )
 
+    # HARD gate 6: the measured beta and measured p2/p1 must lie on the SAME normal-shock
+    # locus (cross-consistency); catches an internally contradictory tuple that passes
+    # each observable's 3% band but not the physics relation between them.
+    m1n = qois.mach_freestream * math.sin(math.radians(qois.shock_angle_beta_deg))
+    p_ratio_from_locus = 1.0 + (2.0 * gamma / (gamma + 1.0)) * (m1n * m1n - 1.0)
+    shock_locus_consistent_ok = (
+        p_ratio_from_locus > 0.0
+        and abs(qois.pressure_ratio - p_ratio_from_locus)
+        <= _SHOCK_LOCUS_REL_TOL * abs(qois.pressure_ratio)
+    )
+
     passed = (
         observables_ok
         and supersonic_inflow_ok
@@ -158,6 +188,7 @@ def gate_wedge_against_gold(
         and downstream_supersonic_ok
         and beta_above_mach_angle_ok
         and ideal_gas_consistent_ok
+        and shock_locus_consistent_ok
     )
 
     parts = [f"{name}={'PASS' if cmp.passed else 'FAIL'}" for name, cmp in comparisons]
@@ -166,6 +197,7 @@ def gate_wedge_against_gold(
     parts.append(f"downstream_supersonic={'PASS' if downstream_supersonic_ok else 'FAIL'}")
     parts.append(f"beta_above_mach_angle={'PASS' if beta_above_mach_angle_ok else 'FAIL'}")
     parts.append(f"ideal_gas_consistent={'PASS' if ideal_gas_consistent_ok else 'FAIL'}")
+    parts.append(f"shock_locus_consistent={'PASS' if shock_locus_consistent_ok else 'FAIL'}")
     mach_angle_deg = math.degrees(math.asin(1.0 / m1_target)) if m1_target > 1.0 else float("nan")
     summary = (
         f"wedge_oblique_shock gate {'PASS' if passed else 'FAIL'} "
@@ -184,5 +216,6 @@ def gate_wedge_against_gold(
         downstream_supersonic_ok=downstream_supersonic_ok,
         beta_above_mach_angle_ok=beta_above_mach_angle_ok,
         ideal_gas_consistent_ok=ideal_gas_consistent_ok,
+        shock_locus_consistent_ok=shock_locus_consistent_ok,
         summary=summary,
     )
