@@ -152,7 +152,28 @@ floor-face data rows are identical; only a cosmetic header-comment path label di
 
 ## Codex review trail (round-cap = 3 · 86gs gpt-5.4 xhigh · `codex review --commit`)
 
-- **R0** (commit <PENDING>) — PENDING.
+Full trail: `reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md`.
+
+- **R0** (commit 462902e) — **CHANGES_REQUIRED**: 1 P1 + 1 P2, both production-path
+  reachability (the runtime-emergent class the cross-family review exists to catch).
+  - **P1**: `pyvista` (imported lazily by `bfs_lowre_extractor.write_floor_faces_csv`
+    for the live VTK read) was UNDECLARED in `pyproject.toml`/`uv.lock` — so
+    `backward_facing_step_lowre` was not runnable end-to-end on a clean env / CI; the
+    runner's `except` did not catch the resulting `ImportError`.
+  - **P2**: the dispatch keyed ONLY on `name=='backward_facing_step_lowre'`; a
+    display-title caller (`NotionClient._parse_task` sets `name` from the page title,
+    `boundary_conditions={}`) would fall through to the high-Re branch.
+  - **R1 fix**: (P1) declared `pyvista>=0.44` in the `cfd-real-solver` extra (the
+    `docker` precedent; offline gate-replay is stdlib so CI stays pyvista-free) +
+    regenerated `uv.lock` (pyvista 0.48.4 + vtk 9.6.2) + added an explicit
+    `except ImportError` → actionable BLOCK. (P2) broadened the dispatch to
+    `name==slug OR boundary_conditions.wall_treatment=='resolved'` (strictly safer; no
+    high-Re false-positive) + documented that the display-title concern is the RETIRED
+    + already-dormant Notion path (`run_all`→`list_pending_tasks` raises
+    NotImplementedError → `[]`); the supported whitelist/batch + direct paths reach the
+    wiring. +1 routing test, fixed the high-Re collision test to a realistic
+    wall-function spec. Regression: tests/p4 67 passed/2 skipped · full suite 2085
+    passed/5 skipped · import-linter 5 kept/0 broken · high-Re BFS byte-identical.
 
 (Trail appended as rounds complete; `codex_verdict` frontmatter flips to APPROVE +
 `status: Accepted` + the capability-matrix cell flips to DONE on close. Per the

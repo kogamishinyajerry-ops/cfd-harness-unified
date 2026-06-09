@@ -90,7 +90,10 @@ def test_execute_routes_lowre_to_dedicated_runner(tmp_path, monkeypatch):
 
 def test_execute_does_not_route_high_re_bfs_to_lowre_runner(tmp_path, monkeypatch):
     """The high-Re sibling (name='backward_facing_step', SAME geometry_type) must NOT
-    route to the low-Re runner — identity-keying, not geometry-keying (Codex R1)."""
+    route to the low-Re runner — identity-keying, not geometry-keying (Codex R1).
+
+    A GENUINE high-Re BFS uses a wall FUNCTION, never the resolved treatment, so it
+    matches NEITHER disjunct (name!=slug AND wall_treatment!='resolved')."""
     ex = DockerOpenFOAMSolverExecutor(work_dir=str(tmp_path))
     called = {"v": False}
 
@@ -98,11 +101,49 @@ def test_execute_does_not_route_high_re_bfs_to_lowre_runner(tmp_path, monkeypatc
         called["v"] = True
         return ExecutionResult(success=True, is_mock=False, raw_output_path="X", execution_time_s=0.1)
 
+    high_re = TaskSpec(
+        name="backward_facing_step",
+        geometry_type=GeometryType.BACKWARD_FACING_STEP,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Re=7600.0,
+        boundary_conditions={"wall_treatment": "wall_function", "turbulence_model": "kEpsilon"},
+    )
     monkeypatch.setattr(ex, "_execute_backward_facing_step_lowre", _recorder)
     monkeypatch.setattr(faa.docker, "from_env", _raise_no_daemon)  # block the generic path
-    result = ex.execute(_bfs_spec(name="backward_facing_step"))
+    result = ex.execute(high_re)
     assert called["v"] is False, "high-Re BFS must NOT route to the low-Re runner"
     assert result.success is False  # generic path blocked → honest fail, not a fabricated pass
+
+
+def test_execute_routes_display_title_with_resolved_bc(tmp_path, monkeypatch):
+    """A direct / display-title caller that names the case ANYTHING but explicitly sets
+    boundary_conditions.wall_treatment='resolved' STILL routes to the low-Re runner —
+    the second dispatch disjunct (Codex DEC-V61-236 R0 P2). Robustness beyond the
+    whitelist-slug name (the retired Notion path used a page title, not the slug)."""
+    ex = DockerOpenFOAMSolverExecutor(work_dir=str(tmp_path))
+    sentinel = ExecutionResult(success=True, is_mock=False, raw_output_path="SENTINEL", execution_time_s=0.1)
+    seen = {}
+
+    def _recorder(spec, t0):
+        seen["spec"] = spec
+        return sentinel
+
+    display_title = TaskSpec(
+        name="Low-Re BFS validation run",  # NOT the slug — a human display title
+        geometry_type=GeometryType.BACKWARD_FACING_STEP,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Re=5000.0,
+        boundary_conditions={"wall_treatment": "resolved", "turbulence_model": "kOmegaSST"},
+    )
+    monkeypatch.setattr(ex, "_execute_backward_facing_step_lowre", _recorder)
+    monkeypatch.setattr(faa.docker, "from_env", _raise_no_daemon)
+    result = ex.execute(display_title)
+    assert result is sentinel, "resolved-treatment BFS must route to the low-Re runner"
+    assert seen["spec"].name == "Low-Re BFS validation run"
 
 
 # ---------------------------------------------------------------------------

@@ -66,6 +66,17 @@ cfd-real-solver = [
     # solver path has a documented install command.
     # Install: `.venv/bin/pip install -e '.[cfd-real-solver]'`
     "docker>=7.0",
+    # pyvista reads the live solver's `VTK/allPatches/allPatches_*.vtk` surface
+    # output — required by the P4 V71.B low-Re BFS runner
+    # (`_execute_backward_facing_step_lowre` → `bfs_lowre_extractor`) and the
+    # high-Re reattachment / comparator VTK paths. Like `docker` above it was
+    # previously IMPLICIT (installed out-of-band), so a clean
+    # `pip install .[cfd-real-solver]` would crash after the solve at the
+    # `write_floor_faces_csv` import (DEC-V61-236 Codex R0 P1). Declared here,
+    # NOT in core deps, because the OFFLINE gate-replay path reads the frozen
+    # `proof/floor_faces.csv` with stdlib only — MOCK-mode + CI unit tests stay
+    # pyvista-free. Validated against 0.48.4.
+    "pyvista>=0.44",
 ]
 workbench = [
     # M5 STL case import (geometry_ingest + case_scaffold). trimesh is the

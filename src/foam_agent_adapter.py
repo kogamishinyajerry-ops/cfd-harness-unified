@@ -620,16 +620,29 @@ class DockerOpenFOAMSolverExecutor:
         # 1.6. P4 V71B-FOLLOWUP-1 (DEC-V61-236) — the wall-RESOLVED low-Re kOmegaSST
         # backward_facing_step dispatches to a DEDICATED runner that uses its OWN fresh
         # `docker run --rm` OF11 container (bind-mounted → VTK/allPatches lands on the
-        # host). Keyed on CASE IDENTITY (name), NOT geometry_type alone — BACKWARD_FACING_STEP
-        # COLLIDES with the generic high-Re BFS branch below; and NOT on
-        # boundary_conditions.wall_treatment, which the Notion path sets to {} (Codex
-        # DEC-V61-235 R1 P2). The whitelist sets id==name==`backward_facing_step_lowre`,
-        # so TaskSpec.name is this literal on BOTH the list_whitelist_cases and
-        # run_batch→_task_spec_from_case_id paths (knowledge_db `case_name`=case.name).
+        # host). geometry_type alone CANNOT key this — BACKWARD_FACING_STEP COLLIDES with
+        # the generic high-Re BFS branch below — so it is keyed on a DISJUNCTION of two
+        # case-identity signals, EITHER of which routes here (Codex DEC-V61-236 R0 P2):
+        #   (a) name == 'backward_facing_step_lowre' — the whitelist sets
+        #       id==name==this literal, so TaskSpec.name carries it on BOTH the
+        #       list_whitelist_cases and run_batch→_task_spec_from_case_id paths
+        #       (knowledge_db `case_name`=case.name); AND
+        #   (b) boundary_conditions.wall_treatment == 'resolved' — covers a direct /
+        #       display-title caller that names the case anything but explicitly asks
+        #       for the resolved treatment (the API + e2e construction path).
+        # The high-Re sibling (name='backward_facing_step', no 'resolved' treatment)
+        # matches NEITHER → still routes to the generic branch (no false-positive); the
+        # runner re-FORCES resolved+kOmegaSST and the gate MACHINE-ENFORCES y+<1, so a
+        # mislabelled coarse mesh cannot fake a resolved PASS. NOTE: a Notion
+        # display-title task (name=page title, boundary_conditions={}) would match
+        # neither — but that path is RETIRED (sponsor 2026-06-09) and already dormant
+        # (`TaskRunner.run_all`→`NotionClient.list_pending_tasks` raises
+        # NotImplementedError → returns []), so it is not a live mis-dispatch vector.
         # Short-circuit BEFORE the persistent-container connect (its own --rm container).
-        if (
-            task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP
-            and (task_spec.name or "").strip() == "backward_facing_step_lowre"
+        _bfs_bc = task_spec.boundary_conditions or {}
+        if task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP and (
+            (task_spec.name or "").strip() == "backward_facing_step_lowre"
+            or str(_bfs_bc.get("wall_treatment", "")).strip().lower() == "resolved"
         ):
             return self._execute_backward_facing_step_lowre(task_spec, t0)
 
@@ -3626,6 +3639,18 @@ fields          (U);
             (work_dir / "proof").mkdir(parents=True, exist_ok=True)
             try:
                 write_floor_faces_csv(latest_vtk, work_dir / "proof" / "floor_faces.csv")
+            except ImportError as exc:
+                # DEC-V61-236 Codex R0 P1: reading the live allPatches VTK needs
+                # pyvista (declared in the `cfd-real-solver` extra). A real-solver
+                # env that has Docker but NOT pyvista must get an ACTIONABLE BLOCK,
+                # not the generic belt-and-braces catch below.
+                return self._fail(
+                    f"backward_facing_step_lowre solve completed but VTK reading is "
+                    f"unavailable ({exc!r}; DEC-V61-236) — install the real-solver "
+                    "extra: `pip install -e '.[cfd-real-solver]'` (pyvista); honest BLOCK.",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
             except (FileNotFoundError, ValueError, KeyError) as exc:
                 return self._fail(
                     f"backward_facing_step_lowre solve completed but floor-face "
