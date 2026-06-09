@@ -624,31 +624,18 @@ class DockerOpenFOAMSolverExecutor:
         if task_spec.geometry_type == GeometryType.SUPERSONIC_WEDGE:
             return self._execute_supersonic_wedge(task_spec, t0)
 
-        # 1.6. P4 V71B-FOLLOWUP-1 (DEC-V61-236) — the wall-RESOLVED low-Re kOmegaSST
-        # backward_facing_step dispatches to a DEDICATED runner that uses its OWN fresh
+        # 1.6. P4 V71B-FOLLOWUP-1 (DEC-V61-236) — THE canonical backward_facing_step_lowre
+        # benchmark anchor dispatches to a DEDICATED runner that uses its OWN fresh
         # `docker run --rm` OF11 container (bind-mounted → VTK/allPatches lands on the
-        # host). geometry_type alone CANNOT key this — BACKWARD_FACING_STEP COLLIDES with
-        # the generic high-Re BFS branch below — so it is keyed on a DISJUNCTION of two
-        # case-identity signals, EITHER of which routes here (Codex DEC-V61-236 R0 P2):
-        #   (a) name == 'backward_facing_step_lowre' — the whitelist sets
-        #       id==name==this literal, so TaskSpec.name carries it on BOTH the
-        #       list_whitelist_cases and run_batch→_task_spec_from_case_id paths
-        #       (knowledge_db `case_name`=case.name); AND
-        #   (b) boundary_conditions.wall_treatment == 'resolved' — covers a direct /
-        #       display-title caller that names the case anything but explicitly asks
-        #       for the resolved treatment (the API + e2e construction path).
-        # The high-Re sibling (name='backward_facing_step', no 'resolved' treatment)
-        # matches NEITHER → still routes to the generic branch (no false-positive); the
-        # runner re-FORCES resolved+kOmegaSST and the gate MACHINE-ENFORCES y+<1, so a
-        # mislabelled coarse mesh cannot fake a resolved PASS. NOTE: a Notion
-        # display-title task (name=page title, boundary_conditions={}) would match
-        # neither — but that path is RETIRED (sponsor 2026-06-09) and already dormant
-        # (`TaskRunner.run_all`→`NotionClient.list_pending_tasks` raises
-        # NotImplementedError → returns []), so it is not a live mis-dispatch vector.
+        # host). Keyed on CASE IDENTITY via the SHARED ``is_bfs_lowre_dispatch`` SSOT —
+        # the IDENTICAL predicate the TaskRunner verification branch uses, so a spec that
+        # EXECUTES here is also VERIFIED there; the two cannot drift (Codex R1 P1). The
+        # predicate is name-only (whitelist slug), NOT a wall_treatment disjunct: the
+        # gate compares against the SPECIFIC Re=5000 anchor, so a non-anchor user/workbench
+        # resolved-BFS draft must NOT be routed here and mis-graded against the benchmark
+        # (Codex R2 P2); it stays on the generic branch below. geometry_type alone cannot
+        # key it (BACKWARD_FACING_STEP collides with the high-Re sibling).
         # Short-circuit BEFORE the persistent-container connect (its own --rm container).
-        # The dispatch predicate is the SHARED ``is_bfs_lowre_dispatch`` SSOT — the
-        # IDENTICAL predicate the TaskRunner verification branch uses, so a spec that
-        # EXECUTES here cannot have its y+<1 gate silently skipped (Codex R1 P1).
         if is_bfs_lowre_dispatch(task_spec):
             return self._execute_backward_facing_step_lowre(task_spec, t0)
 

@@ -123,4 +123,46 @@ import-linter 5 kept / 0 broken · high-Re BFS byte-identical.
 
 ---
 
-## R2 — commit `<PENDING>` — verdict PENDING
+## R2 — commit `8d18727` — CHANGES_REQUIRED (1 P2, no P1) · CAP REACHED
+
+### [P2] Benchmark gate over-broadened to non-anchor resolved drafts — `src/task_runner.py`
+
+> When a workbench/user-draft BFS spec has `boundary_conditions.wall_treatment: resolved`
+> but a custom `name` (so `load_gold_standard(task_spec.name)` returns None), this new
+> condition sends `run_task()` through `_verify_bfs_lowre()`. That verifier always compares
+> against the `backward_facing_step_lowre` anchor, so a non-anchor resolved BFS draft (for
+> example with different `Re`) will now be reported as PASS/FAIL against the benchmark
+> instead of remaining unverified. The previous name-only check avoided this.
+
+**Verified VALID — and it exposes that the R1 `wall_treatment` disjunct was an
+over-correction.** The original R0 P2 (display-title reachability) was about the RETIRED +
+already-dormant Notion path — a non-issue. The R1 disjunct, added to "fix" it, instead (i)
+created the R1 P1 asymmetry and now (ii) mis-grades arbitrary resolved-BFS drafts against the
+Re=5000 benchmark. The correct design was **name-only all along** (where R0 started).
+
+**R2-followup fix (commit the R2-followup commit (this commit)).** Narrowed the SHARED `is_bfs_lowre_dispatch`
+predicate BODY to **name-only** (`geometry==BACKWARD_FACING_STEP AND
+name=='backward_facing_step_lowre'`) — the whitelist slug. This:
+- resolves R2 P2 (the gate fires ONLY for THE Re=5000 anchor; non-anchor drafts stay
+  unverified by it — they fall through to the generic path);
+- PRESERVES the R1 P1 structural fix (execute + verify still call the ONE shared predicate,
+  so they remain symmetric and cannot drift — only the predicate body narrowed);
+- dispositions R0 P2 (display-title/Notion) as a documented non-issue (retired + dormant).
+The pyvista declarations (R0 P1 + R1 P2) are unchanged. Tests inverted to match: a non-anchor
+resolved draft does NOT route (`test_execute_does_not_route_nonanchor_resolved_bfs_draft`) and
+is NOT benchmarked (`test_run_task_nonanchor_resolved_draft_not_benchmarked`); the slug anchor
+IS verified symmetrically (`test_run_task_anchor_is_verified_symmetrically`); predicate 4-case
+test updated.
+
+**R2-followup regression**: tests/p4 14 wiring/taskrunner passed · full suite 2088 passed /
+5 skipped · import-linter 5 kept / 0 broken · high-Re BFS byte-identical.
+
+### Round-cap = 3 status
+
+R0 + R1 + R2 = **3 rounds (cap reached)**. R2 carried **no P1** (one P2). Per the project rule
+(`第 3 轮仍有 P1 → 交用户裁决；剩余 P2/P3 → retro 队列`), the lone P2 does not block — but it
+was a genuine correctness bug, so it was FIXED (name-only revert to the R0-reviewed state)
+rather than queued. Per the cap, NO 4th (R3) Codex round is auto-run; the R2-followup fix is
+surfaced to the user (final authority) to either ratify as-is or authorise one confirmatory
+review. The fix is a low-risk revert of the specific aspect R2 flagged; all R0/R1/R2 findings
+are resolved.

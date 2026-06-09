@@ -117,29 +117,37 @@ class TaskSpec:
 
 
 def is_bfs_lowre_dispatch(task_spec: "TaskSpec") -> bool:
-    """True iff this spec is the wall-RESOLVED (y+<1) low-Re kOmegaSST
-    ``backward_facing_step`` anchor (DEC-V61-236).
+    """True iff this spec is THE canonical ``backward_facing_step_lowre`` benchmark
+    anchor (DEC-V61-236) — the wall-RESOLVED (y+<1) low-Re kOmegaSST BFS at Re_H=5000.
 
     SINGLE SOURCE OF TRUTH for BOTH the Execution-plane ``execute()`` dispatch
     (``foam_agent_adapter``) AND the Control-plane verification branch
-    (``task_runner`` → ``_verify_bfs_lowre``). The two MUST agree: Codex
-    DEC-V61-236 R1 P1 caught the asymmetry where ``execute()`` routed a
-    resolved-BC display-title spec to the low-Re runner but the verify branch
-    (keyed name-only) silently skipped the y+<1 gate, reporting a real run as
-    success with ``comparison_result=None``. Keying here, once, makes that drift
-    impossible.
+    (``task_runner`` → ``_verify_bfs_lowre``). The two MUST stay in lock-step:
+    Codex DEC-V61-236 R1 P1 caught the asymmetry where one site routed a spec the
+    other did not, reporting a real run as success with ``comparison_result=None``
+    (the y+<1 gate silently skipped). Keying here, ONCE, makes that drift impossible.
 
-    ``geometry_type`` alone cannot key it (BACKWARD_FACING_STEP collides with the
-    high-Re sibling); the disjunction routes EITHER the whitelist slug-name OR an
-    explicit ``boundary_conditions.wall_treatment == 'resolved'``. The high-Re
-    sibling (wall_function, never 'resolved') matches neither — no false-positive.
+    Keyed on CASE IDENTITY (the whitelist slug ``name``), NOT on
+    ``boundary_conditions.wall_treatment`` (Codex DEC-V61-236 R2 P2): the
+    ``_verify_bfs_lowre`` gate compares against the SPECIFIC Re=5000 anchor, so a
+    non-anchor user/workbench BFS draft that merely sets ``wall_treatment='resolved'``
+    (custom name, possibly different Re) must NOT be graded against this benchmark —
+    it stays unverified by this gate (the generic path handles it). The whitelist
+    sets ``id == name == 'backward_facing_step_lowre'``, so ``TaskSpec.name`` carries
+    this literal on BOTH the ``list_whitelist_cases`` and
+    ``run_batch`` → ``_task_spec_from_case_id`` paths.
+
+    NOTE on the retired Notion path: ``NotionClient._parse_task`` set ``name`` from
+    the page title (not the slug), so a Notion task could not reach this anchor — but
+    that path is RETIRED (sponsor 2026-06-09) AND already dormant
+    (``run_all`` → ``list_pending_tasks`` raises NotImplementedError → ``[]``), so it
+    is not a live entrypoint. The R1 attempt to also route on ``wall_treatment`` was
+    an over-correction (it mis-graded non-anchor drafts — R2 P2) and is reverted here.
     """
-    if task_spec.geometry_type is not GeometryType.BACKWARD_FACING_STEP:
-        return False
-    if (task_spec.name or "").strip() == "backward_facing_step_lowre":
-        return True
-    bc = task_spec.boundary_conditions or {}
-    return str(bc.get("wall_treatment", "")).strip().lower() == "resolved"
+    return (
+        task_spec.geometry_type is GeometryType.BACKWARD_FACING_STEP
+        and (task_spec.name or "").strip() == "backward_facing_step_lowre"
+    )
 
 
 @dataclass

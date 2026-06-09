@@ -575,8 +575,11 @@ class TaskRunner:
         #     The dispatch predicate is the SHARED ``is_bfs_lowre_dispatch`` SSOT — the
         #     IDENTICAL predicate the adapter's execute() dispatch uses, so EVERY spec
         #     that EXECUTES via the low-Re runner is also VERIFIED here; the asymmetry
-        #     where a resolved-BC display-title spec ran but skipped the gate (Codex
-        #     DEC-V61-236 R1 P1) cannot recur.
+        #     where one site fired and the other did not (Codex DEC-V61-236 R1 P1) cannot
+        #     recur. The predicate is name-only (the whitelist slug), so this gate fires
+        #     ONLY for THE Re=5000 benchmark anchor — a non-anchor resolved-BFS user draft
+        #     is NOT mis-graded against the benchmark (Codex DEC-V61-236 R2 P2); it stays
+        #     unverified by this gate.
         if (
             comparison is None
             and is_bfs_lowre_dispatch(task_spec)

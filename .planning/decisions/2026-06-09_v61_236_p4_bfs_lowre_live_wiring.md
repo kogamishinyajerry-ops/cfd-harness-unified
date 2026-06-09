@@ -10,7 +10,7 @@ confidence: high
 kogami_opt_in: false (sub-DEC class · live-wiring of an already-validated V&V anchor on a cell already PR; the binding gate is the Codex round-cap=3 chain on the adapter dispatch / runner / TaskRunner branch / whitelist surface. Not a charter trigger; user may invoke Kogami at will per V133.)
 round_cap: 3
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline; codex review --commit)
-codex_verdict: PENDING
+codex_verdict: CHANGES_REQUIRED (R0 P1+P2 → R1 P1+P2 → R2 P2; cap=3 reached. R2's lone P2 fixed by name-only predicate revert. All R0/R1/R2 findings resolved; NO 4th round auto-run per cap. Pending user ratification or one confirmatory review.)
 codex_tool_report_path: reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md
 notion_sync_status: retired (Notion deprecated per sponsor 2026-06-09 — no DEC sync)
 touches_shared_dec: src/foam_agent_adapter.py (NEW _docker_run_of11_rm fresh --rm OF11 helper · NEW _execute_backward_facing_step_lowre persistent-output runner · execute() identity-keyed dispatch short-circuit) · src/task_runner.py (re-added _verify_bfs_lowre + the 4c identity-keyed verification branch removed in DEC-V61-235 R1) · knowledge/whitelist.yaml (the backward_facing_step_lowre specialized_gate_anchor entry — deferred from V61-235, lands here WITH its verification path) · tests/p4/test_bfs_lowre_wiring.py (NEW offline dispatch/collision/whitelist-load/verify regression) · tests/p4/test_bfs_lowre_live.py (NEW opt-in live e2e) · reports/showcase_aero/_v71b_bfs_lowre_backend_e2e/ (NEW frozen backend-launched evidence + tamper manifest) · .planning/cfd_capability_matrix.md (within-cell wiring note · counts UNCHANGED) · .planning/followups/v71b_bfs_lowre_live_wiring_deferred.md (item 1 marked LANDED · item 2 still open)
@@ -190,6 +190,27 @@ Full trail: `reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md`.
     4-case predicate). (P2) declared `pyvista>=0.44` in the `workbench` extra too (the
     `docker` precedent). Regression: tests/p4 13 wiring/taskrunner passed · full suite
     2087 passed/5 skipped · import-linter 5 kept/0 broken · high-Re BFS byte-identical.
+- **R2** (commit 8d18727) — **CHANGES_REQUIRED**: 1 P2, NO P1 (escalated down). **Cap
+  reached** (R0 + R1 + R2 = 3 rounds).
+  - **P2** (benchmark over-broadening): the R1 `wall_treatment` disjunct meant a
+    non-anchor user/workbench resolved-BFS draft (custom name, possibly different Re)
+    would be mis-graded against the Re=5000 benchmark by `_verify_bfs_lowre` instead of
+    staying unverified. The R1 disjunct was an OVER-CORRECTION for the R0 P2 display-title
+    concern (which was the retired+dormant Notion path — a non-issue).
+  - **R2-followup fix** (commit the R2-followup commit (this commit)): narrowed the SHARED `is_bfs_lowre_dispatch`
+    predicate BODY to **name-only** (the whitelist slug) — the gate fires ONLY for THE
+    Re=5000 anchor (resolves R2 P2); the R1 P1 structural fix is PRESERVED (execute+verify
+    still share the ONE predicate, symmetric, cannot drift — only the body narrowed); R0 P2
+    dispositioned as documented non-issue; pyvista declarations (R0 P1 + R1 P2) unchanged.
+    Tests inverted/added accordingly. Regression: tests/p4 14 passed · full suite 2088
+    passed/5 skipped · import-linter 5 kept/0 broken · high-Re BFS byte-identical.
+
+**Cap=3 disposition**: R2 had no P1, so the project rule does not require user ratification
+to advance; but because R2's lone P2 was a genuine correctness bug it was FIXED (name-only
+revert), not retro-queued. Per cap=3 NO 4th Codex round is auto-run — the fix is surfaced to
+the user (final authority) to ratify as-is or authorise one confirmatory review. `status`
+stays Proposed / `codex_verdict: CHANGES_REQUIRED (R2 P2 fixed name-only · cap reached ·
+pending user ratification)` until the user decides.
 
 (Trail appended as rounds complete; `codex_verdict` frontmatter flips to APPROVE +
 `status: Accepted` + the capability-matrix cell flips to DONE on close. Per the

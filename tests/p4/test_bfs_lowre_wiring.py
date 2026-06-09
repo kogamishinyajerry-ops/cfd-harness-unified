@@ -118,33 +118,33 @@ def test_execute_does_not_route_high_re_bfs_to_lowre_runner(tmp_path, monkeypatc
     assert result.success is False  # generic path blocked → honest fail, not a fabricated pass
 
 
-def test_execute_routes_display_title_with_resolved_bc(tmp_path, monkeypatch):
-    """A direct / display-title caller that names the case ANYTHING but explicitly sets
-    boundary_conditions.wall_treatment='resolved' STILL routes to the low-Re runner —
-    the second dispatch disjunct (Codex DEC-V61-236 R0 P2). Robustness beyond the
-    whitelist-slug name (the retired Notion path used a page title, not the slug)."""
+def test_execute_does_not_route_nonanchor_resolved_bfs_draft(tmp_path, monkeypatch):
+    """A NON-anchor user/workbench BFS draft (custom name + wall_treatment='resolved',
+    possibly a different Re) must NOT route to the dedicated benchmark runner — the
+    runner+gate are specific to the Re=5000 anchor, so grading an arbitrary resolved
+    draft against it would be a wrong verdict (Codex DEC-V61-236 R2 P2). Dispatch is
+    name-only (the whitelist slug), NOT a wall_treatment disjunct."""
     ex = DockerOpenFOAMSolverExecutor(work_dir=str(tmp_path))
-    sentinel = ExecutionResult(success=True, is_mock=False, raw_output_path="SENTINEL", execution_time_s=0.1)
-    seen = {}
+    called = {"v": False}
 
     def _recorder(spec, t0):
-        seen["spec"] = spec
-        return sentinel
+        called["v"] = True
+        return ExecutionResult(success=True, is_mock=False, raw_output_path="X", execution_time_s=0.1)
 
-    display_title = TaskSpec(
-        name="Low-Re BFS validation run",  # NOT the slug — a human display title
+    draft = TaskSpec(
+        name="my custom resolved BFS draft",  # NOT the slug — a user display title
         geometry_type=GeometryType.BACKWARD_FACING_STEP,
         flow_type=FlowType.INTERNAL,
         steady_state=SteadyState.STEADY,
         compressibility=Compressibility.INCOMPRESSIBLE,
-        Re=5000.0,
+        Re=20000.0,  # a DIFFERENT Re — definitely not the 6.26@Re=5000 benchmark
         boundary_conditions={"wall_treatment": "resolved", "turbulence_model": "kOmegaSST"},
     )
     monkeypatch.setattr(ex, "_execute_backward_facing_step_lowre", _recorder)
-    monkeypatch.setattr(faa.docker, "from_env", _raise_no_daemon)
-    result = ex.execute(display_title)
-    assert result is sentinel, "resolved-treatment BFS must route to the low-Re runner"
-    assert seen["spec"].name == "Low-Re BFS validation run"
+    monkeypatch.setattr(faa.docker, "from_env", _raise_no_daemon)  # block the generic path
+    result = ex.execute(draft)
+    assert called["v"] is False, "a non-anchor resolved BFS draft must NOT route to the benchmark runner"
+    assert result.success is False  # generic path blocked → honest fail, not a benchmark verdict
 
 
 # ---------------------------------------------------------------------------
@@ -196,16 +196,18 @@ def test_whitelist_entry_loads_and_gold_is_none():
 
 
 # ---------------------------------------------------------------------------
-# shared dispatch predicate + verify/execute symmetry (R2 · Codex DEC-V61-236 R1 P1)
+# shared dispatch predicate + verify/execute symmetry (R2 · Codex DEC-V61-236 R1 P1 + R2 P2)
 # ---------------------------------------------------------------------------
 
 
 def test_is_bfs_lowre_dispatch_shared_predicate():
-    """The SSOT predicate both planes key on: slug-name OR resolved-treatment routes;
-    the high-Re wall-function sibling and non-BFS geometries do NOT."""
-    # (a) whitelist slug name → routes
+    """The SSOT predicate both planes key on: name-only (the whitelist slug). The
+    high-Re sibling, a NON-anchor resolved draft, and non-BFS geometries do NOT route —
+    the gate compares against the SPECIFIC Re=5000 anchor (Codex R2 P2)."""
+    # (a) whitelist slug name → routes (THE benchmark anchor)
     assert is_bfs_lowre_dispatch(_bfs_spec(name="backward_facing_step_lowre")) is True
-    # (b) display-title name BUT resolved treatment → routes (the second disjunct)
+    # (b) NON-anchor draft: resolved treatment but a custom name → does NOT route
+    #     (must not be mis-graded against the Re=5000 benchmark — Codex R2 P2)
     assert is_bfs_lowre_dispatch(
         TaskSpec(
             name="Low-Re BFS validation run",
@@ -213,10 +215,10 @@ def test_is_bfs_lowre_dispatch_shared_predicate():
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
             compressibility=Compressibility.INCOMPRESSIBLE,
-            Re=5000.0,
+            Re=20000.0,
             boundary_conditions={"wall_treatment": "resolved"},
         )
-    ) is True
+    ) is False
     # (c) genuine high-Re sibling (wall_function) → does NOT route (no false-positive)
     assert is_bfs_lowre_dispatch(
         TaskSpec(
@@ -229,10 +231,10 @@ def test_is_bfs_lowre_dispatch_shared_predicate():
             boundary_conditions={"wall_treatment": "wall_function"},
         )
     ) is False
-    # (d) different geometry → never routes
+    # (d) different geometry → never routes (name alone must not override geometry)
     assert is_bfs_lowre_dispatch(
         TaskSpec(
-            name="backward_facing_step_lowre",  # name alone must not override geometry
+            name="backward_facing_step_lowre",
             geometry_type=GeometryType.SIMPLE_GRID,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
@@ -241,25 +243,39 @@ def test_is_bfs_lowre_dispatch_shared_predicate():
     ) is False
 
 
-def test_run_task_verifies_display_title_resolved_bc_lowre():
-    """Codex DEC-V61-236 R1 P1 regression: a display-title spec with resolved BC that
-    EXECUTES via the low-Re runner MUST also be VERIFIED — the y+<1 gate cannot be
-    silently skipped (comparison_result is populated, not None). execute() dispatch and
-    the TaskRunner verify branch share ONE predicate, so they cannot drift."""
-    display_title = TaskSpec(
-        name="Low-Re BFS validation run",  # NOT the slug
+def test_run_task_anchor_is_verified_symmetrically():
+    """Codex DEC-V61-236 R1 P1 regression: THE benchmark anchor (slug name) that
+    EXECUTES via the low-Re runner MUST also be VERIFIED — execute() dispatch and the
+    TaskRunner verify branch share ONE predicate, so a real run can never report success
+    with the y+<1 gate silently skipped (comparison_result populated, not None)."""
+    runner = TaskRunner(executor=_StubExecutor(str(_FROZEN_PROBE)))
+    report = runner.run_task(_bfs_spec(name="backward_facing_step_lowre"))
+    assert report.comparison_result is not None, (
+        "the anchor executed but the gate was SKIPPED (the execute/verify asymmetry "
+        "Codex R1 P1 flagged)"
+    )
+    assert report.comparison_result.passed is True
+    assert report.comparison_result.gold_standard_id == "backward_facing_step_lowre"
+
+
+def test_run_task_nonanchor_resolved_draft_not_benchmarked():
+    """Codex DEC-V61-236 R2 P2 regression: a NON-anchor resolved-BFS draft (custom name,
+    different Re) must NOT be graded against the Re=5000 benchmark — the specialized gate
+    fires ONLY for the slug anchor, so the draft is NOT given a (wrong) benchmark verdict."""
+    draft = TaskSpec(
+        name="my custom resolved BFS draft",  # NOT the slug
         geometry_type=GeometryType.BACKWARD_FACING_STEP,
         flow_type=FlowType.INTERNAL,
         steady_state=SteadyState.STEADY,
         compressibility=Compressibility.INCOMPRESSIBLE,
-        Re=5000.0,
+        Re=20000.0,
         boundary_conditions={"wall_treatment": "resolved", "turbulence_model": "kOmegaSST"},
     )
     runner = TaskRunner(executor=_StubExecutor(str(_FROZEN_PROBE)))
-    report = runner.run_task(display_title)
-    assert report.comparison_result is not None, (
-        "resolved-BC display-title low-Re run executed but the gate was SKIPPED "
-        "(the execute/verify asymmetry Codex R1 P1 flagged)"
+    report = runner.run_task(draft)
+    # The specialized benchmark gate must NOT have produced a verdict for this draft.
+    cr = report.comparison_result
+    assert cr is None or cr.gold_standard_id != "backward_facing_step_lowre", (
+        "a non-anchor resolved BFS draft was mis-graded against the Re=5000 benchmark "
+        "(Codex R2 P2)"
     )
-    assert report.comparison_result.passed is True
-    assert report.comparison_result.gold_standard_id == "backward_facing_step_lowre"
