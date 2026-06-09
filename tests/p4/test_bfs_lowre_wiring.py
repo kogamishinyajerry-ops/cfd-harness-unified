@@ -196,21 +196,50 @@ def test_whitelist_entry_loads_and_gold_is_none():
 
 
 # ---------------------------------------------------------------------------
-# shared dispatch predicate + verify/execute symmetry (R2 · Codex DEC-V61-236 R1 P1 + R2 P2)
+# shared dispatch predicate + verify/execute symmetry
+# (R2 · Codex DEC-V61-236 R1 P1 + R2 P2 · R3 P1 case_id identity)
 # ---------------------------------------------------------------------------
 
 
 def test_is_bfs_lowre_dispatch_shared_predicate():
-    """The SSOT predicate both planes key on: name-only (the whitelist slug). The
-    high-Re sibling, a NON-anchor resolved draft, and non-BFS geometries do NOT route —
-    the gate compares against the SPECIFIC Re=5000 anchor (Codex R2 P2)."""
-    # (a) whitelist slug name → routes (THE benchmark anchor)
+    """The SSOT predicate both planes key on: the STABLE case identity (case_id when
+    present, else name). The high-Re sibling, a NON-anchor resolved draft, and non-BFS
+    geometries do NOT route — the gate compares against the SPECIFIC Re=5000 anchor."""
+    # (a) direct construction: slug name, no case_id → routes via the name fallback
     assert is_bfs_lowre_dispatch(_bfs_spec(name="backward_facing_step_lowre")) is True
-    # (b) NON-anchor draft: resolved treatment but a custom name → does NOT route
+    # (a2) R3 P1: the canonical anchor RENAMED in the editor — stable case_id is the
+    #      slug, display name is edited → STILL routes (keyed on case_id, not name)
+    assert is_bfs_lowre_dispatch(
+        TaskSpec(
+            name="My Renamed Benchmark",  # editor-edited display name
+            case_id="backward_facing_step_lowre",  # stable id preserved
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=5000.0,
+            boundary_conditions={"wall_treatment": "resolved"},
+        )
+    ) is True
+    # (b) NON-anchor draft: resolved treatment + custom name → does NOT route
     #     (must not be mis-graded against the Re=5000 benchmark — Codex R2 P2)
     assert is_bfs_lowre_dispatch(
         TaskSpec(
             name="Low-Re BFS validation run",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=20000.0,
+            boundary_conditions={"wall_treatment": "resolved"},
+        )
+    ) is False
+    # (b2) R3 P1 inverse: a NON-anchor draft whose stable case_id is something else —
+    #      even if its display name were the slug, the case_id wins → does NOT route
+    assert is_bfs_lowre_dispatch(
+        TaskSpec(
+            name="backward_facing_step_lowre",  # misleading display name
+            case_id="my_custom_resolved_draft",  # stable id is NOT the anchor
             geometry_type=GeometryType.BACKWARD_FACING_STEP,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
@@ -231,16 +260,42 @@ def test_is_bfs_lowre_dispatch_shared_predicate():
             boundary_conditions={"wall_treatment": "wall_function"},
         )
     ) is False
-    # (d) different geometry → never routes (name alone must not override geometry)
+    # (d) different geometry → never routes (identity alone must not override geometry)
     assert is_bfs_lowre_dispatch(
         TaskSpec(
             name="backward_facing_step_lowre",
+            case_id="backward_facing_step_lowre",
             geometry_type=GeometryType.SIMPLE_GRID,
             flow_type=FlowType.INTERNAL,
             steady_state=SteadyState.STEADY,
             compressibility=Compressibility.INCOMPRESSIBLE,
         )
     ) is False
+
+
+def test_run_task_renamed_anchor_still_verified():
+    """Codex DEC-V61-236 R3 P1 regression: the canonical anchor launched with an
+    editor-EDITED display name (but its stable case_id intact) MUST still route to the
+    runner AND be verified — a renamed benchmark can never become a silent unverified
+    success. Keyed on case_id, not the editable name."""
+    renamed = TaskSpec(
+        name="My Renamed Benchmark",  # editor display rename
+        case_id="backward_facing_step_lowre",  # stable id preserved by the loader
+        geometry_type=GeometryType.BACKWARD_FACING_STEP,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Re=5000.0,
+        boundary_conditions={"wall_treatment": "resolved", "turbulence_model": "kOmegaSST"},
+    )
+    runner = TaskRunner(executor=_StubExecutor(str(_FROZEN_PROBE)))
+    report = runner.run_task(renamed)
+    assert report.comparison_result is not None, (
+        "a RENAMED canonical anchor executed but the gate was SKIPPED — silent "
+        "unverified pass (Codex R3 P1)"
+    )
+    assert report.comparison_result.passed is True
+    assert report.comparison_result.gold_standard_id == "backward_facing_step_lowre"
 
 
 def test_run_task_anchor_is_verified_symmetrically():

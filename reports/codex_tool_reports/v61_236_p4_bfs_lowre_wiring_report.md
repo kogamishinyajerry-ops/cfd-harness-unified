@@ -166,3 +166,51 @@ rather than queued. Per the cap, NO 4th (R3) Codex round is auto-run; the R2-fol
 surfaced to the user (final authority) to either ratify as-is or authorise one confirmatory
 review. The fix is a low-risk revert of the specific aspect R2 flagged; all R0/R1/R2 findings
 are resolved.
+
+**User decision (2026-06-09)**: authorised ONE confirmatory review (a cap override — user is
+final authority) on the R2-followup commit f62aa1d.
+
+---
+
+## R3 (user-authorised confirmatory) — commit `f62aa1d` — CHANGES_REQUIRED (1 P1)
+
+### [P1] Name-only key escapes the renamed canonical anchor — `src/models.py` ↔ `wizard_drivers`
+
+> If a saved `ui/backend/user_drafts/backward_facing_step_lowre.yaml` changes only the
+> human-readable `name`, `wizard_drivers._task_spec_from_case_id()` still launches that canonical
+> case_id but populates `TaskSpec.name` from the edited field. With this name-only predicate, the
+> run no longer reaches `_execute_backward_facing_step_lowre` or `_verify_bfs_lowre`; it falls back
+> to the generic BFS path, and because `load_gold_standard()` has no inline gold for this anchor,
+> `run_task()` reports a successful run with `comparison_result=None`. This is a live regression for
+> the draft/editor path of the benchmark anchor.
+
+**Verified VALID and reachable.** `_task_spec_from_case_id` reads `user_drafts/{case_id}.yaml`
+first (the workbench editor's `PUT /api/cases/{id}/yaml` save surface) and sets
+`name=entry.get("name", case_id)` — so a renamed anchor draft carries the edited display `name`
+while still launched under the stable `case_id`. A name-only dispatch then lets it escape the
+runner + gate → a SILENT UNVERIFIED PASS on the benchmark (the cardinal trust-harness sin). NOTE:
+this is a LATENT pre-existing edge of the name-only approach (the same dispatch R0 shipped), not a
+regression introduced by the followup; it surfaced only under the confirmatory deep read.
+
+**Structural fix (user-chosen — closes the whole identity class).** Added a stable
+`case_id: Optional[str]` field to `TaskSpec` (distinct from the editable `name`) and keyed
+`is_bfs_lowre_dispatch` on `case_id or name` (case_id preferred; name fallback for direct
+constructors that don't set it). Populated `case_id` at the three loaders that know the stable id:
+`wizard_drivers._task_spec_from_case_id` (=case_id param — the R3 P1 site), `knowledge_db.list_whitelist_cases`
+(=case["id"]), `task_runner._task_spec_from_case_id` (=case_id param). Now a renamed anchor draft
+carries `case_id='backward_facing_step_lowre'` → routes + verifies; a non-anchor draft carries its
+own case_id → stays unverified by this gate (R2 P2 preserved); direct constructors (e2e test) keep
+working via the name fallback. The field defaults None → backward-compatible.
+
+Tests: `test_renamed_canonical_anchor_draft_preserves_case_id_for_dispatch` (REAL
+`_task_spec_from_case_id` loader: a renamed anchor draft → `case_id` preserved → routes) +
+predicate cases a2 (renamed anchor routes) and b2 (case_id wins over a misleading display name) +
+`test_run_task_renamed_anchor_still_verified`.
+
+**R3-fix regression**: tests/p4 + wizard rename regression passed · full suite (tests/ +
+ui/backend/tests/) tests/ 2088 passed/5 skipped + the real-loader rename regression passes; ui/backend/tests/ has 9 PRE-EXISTING failures (baseline-confirmed identical at b6d6151 — ZERO net-new from DEC-236: stale catalog-count + artifact/Docker real-run tests) · import-linter 5 kept / 0 broken · high-Re BFS byte-identical.
+
+### Final round-cap status
+
+R0 + R1 + R2 (cap) + R3 (user-authorised confirmatory) = 4 rounds. The structural fix above
+(user-chosen) is followed by ONE final confirmatory review per the same user authorisation.

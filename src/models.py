@@ -115,6 +115,17 @@ class TaskSpec:
     mesh_already_provided: bool = False
     case_dir_override: Optional[str] = None
 
+    # DEC-V61-236 R3 (Codex P1) — the STABLE case identity, distinct from the
+    # human-editable ``name``. The workbench editor (`PUT /api/cases/{id}/yaml` →
+    # `user_drafts/{case_id}.yaml`) lets a user rename the DISPLAY ``name`` of a
+    # canonical case while it is still launched under its fixed case_id; keying
+    # specialized dispatch (e.g. ``is_bfs_lowre_dispatch``) on ``name`` then lets a
+    # renamed benchmark anchor escape its runner + gate (a silent unverified pass).
+    # Construction sites that KNOW the stable id (whitelist / draft / batch loaders)
+    # populate this; direct constructors may leave it None and the predicates fall
+    # back to ``name``. Defaults None → backward-compatible for all existing specs.
+    case_id: Optional[str] = None
+
 
 def is_bfs_lowre_dispatch(task_spec: "TaskSpec") -> bool:
     """True iff this spec is THE canonical ``backward_facing_step_lowre`` benchmark
@@ -127,27 +138,27 @@ def is_bfs_lowre_dispatch(task_spec: "TaskSpec") -> bool:
     other did not, reporting a real run as success with ``comparison_result=None``
     (the y+<1 gate silently skipped). Keying here, ONCE, makes that drift impossible.
 
-    Keyed on CASE IDENTITY (the whitelist slug ``name``), NOT on
-    ``boundary_conditions.wall_treatment`` (Codex DEC-V61-236 R2 P2): the
+    Keyed on the STABLE case identity — ``case_id`` when present, else ``name`` —
+    NOT on the human-editable ``name`` alone (Codex DEC-V61-236 R3 P1: the workbench
+    editor can rename a canonical anchor's display ``name`` while it is still launched
+    under its fixed ``case_id``; a name-only key would let the renamed benchmark escape
+    its runner + gate — a silent unverified pass) and NOT on
+    ``boundary_conditions.wall_treatment`` (Codex DEC-V61-236 R2 P2: the
     ``_verify_bfs_lowre`` gate compares against the SPECIFIC Re=5000 anchor, so a
-    non-anchor user/workbench BFS draft that merely sets ``wall_treatment='resolved'``
-    (custom name, possibly different Re) must NOT be graded against this benchmark —
-    it stays unverified by this gate (the generic path handles it). The whitelist
-    sets ``id == name == 'backward_facing_step_lowre'``, so ``TaskSpec.name`` carries
-    this literal on BOTH the ``list_whitelist_cases`` and
-    ``run_batch`` → ``_task_spec_from_case_id`` paths.
+    non-anchor draft that merely sets ``wall_treatment='resolved'`` must NOT be graded
+    against this benchmark). The whitelist / draft / batch loaders set
+    ``case_id == 'backward_facing_step_lowre'`` for the anchor; direct constructors
+    (e.g. the e2e test) may leave ``case_id`` None and the ``name`` fallback applies.
 
     NOTE on the retired Notion path: ``NotionClient._parse_task`` set ``name`` from
-    the page title (not the slug), so a Notion task could not reach this anchor — but
-    that path is RETIRED (sponsor 2026-06-09) AND already dormant
-    (``run_all`` → ``list_pending_tasks`` raises NotImplementedError → ``[]``), so it
-    is not a live entrypoint. The R1 attempt to also route on ``wall_treatment`` was
-    an over-correction (it mis-graded non-anchor drafts — R2 P2) and is reverted here.
+    the page title and no ``case_id``, so a Notion task could not reach this anchor —
+    but that path is RETIRED (sponsor 2026-06-09) AND already dormant
+    (``run_all`` → ``list_pending_tasks`` raises NotImplementedError → ``[]``).
     """
-    return (
-        task_spec.geometry_type is GeometryType.BACKWARD_FACING_STEP
-        and (task_spec.name or "").strip() == "backward_facing_step_lowre"
-    )
+    if task_spec.geometry_type is not GeometryType.BACKWARD_FACING_STEP:
+        return False
+    identity = (task_spec.case_id or task_spec.name or "").strip()
+    return identity == "backward_facing_step_lowre"
 
 
 @dataclass

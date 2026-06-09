@@ -77,11 +77,17 @@ deferred whitelist entry WITH its verification path (never selectable-but-unveri
    The runner imports ONLY the Execution-plane extractor — NEVER the Control gate (no
    Execution⇄Control cycle; four-plane import-linter KEPT).
 
-3. **Identity-keyed `execute()` dispatch.** A short-circuit keyed on
-   `task_spec.name == 'backward_facing_step_lowre'` (NOT `geometry_type`, which
-   collides with the high-Re BFS — the DEC-V61-235 R1 collision lesson) routes to the
-   dedicated runner BEFORE the persistent-container connect. The high-Re sibling
-   (`name='backward_facing_step'`, SAME geometry_type) is proven NOT to route here.
+3. **Identity-keyed `execute()` dispatch via a shared SSOT predicate.** A short-circuit
+   keyed on `is_bfs_lowre_dispatch(task_spec)` (in `src.models`, the four-plane leaf)
+   routes to the dedicated runner BEFORE the persistent-container connect. The predicate
+   keys on the STABLE case identity — `case_id` when present, else `name` — NOT on
+   `geometry_type` alone (collides with the high-Re BFS — DEC-V61-235 R1) and NOT on
+   `name` alone (the workbench editor can rename a canonical anchor's display name —
+   Codex R3 P1; `TaskSpec` gained a stable `case_id` field set by the whitelist / draft /
+   batch loaders). The SAME predicate guards the TaskRunner verify branch (below), so
+   execute() and verify can never drift (Codex R1 P1). The high-Re sibling and non-anchor
+   resolved drafts route to neither (no false-positive; R2 P2). See the Codex trail for
+   the R1→R2→R3 evolution from name-only to `case_id`-based identity.
 
 4. **TaskRunner verification branch** (`src/task_runner.py`). The `_verify_bfs_lowre`
    method + the `4c` branch (both REMOVED in DEC-V61-235 R1 because they ran against
@@ -207,10 +213,27 @@ Full trail: `reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md`.
 
 **Cap=3 disposition**: R2 had no P1, so the project rule does not require user ratification
 to advance; but because R2's lone P2 was a genuine correctness bug it was FIXED (name-only
-revert), not retro-queued. Per cap=3 NO 4th Codex round is auto-run — the fix is surfaced to
-the user (final authority) to ratify as-is or authorise one confirmatory review. `status`
-stays Proposed / `codex_verdict: CHANGES_REQUIRED (R2 P2 fixed name-only · cap reached ·
-pending user ratification)` until the user decides.
+revert), not retro-queued. Per cap=3 NO 4th Codex round is auto-run — the fix was surfaced to
+the user.
+
+- **User decision (2026-06-09)**: authorised ONE confirmatory review (a cap override; user is
+  final authority) on f62aa1d.
+- **R3 (user-authorised confirmatory)** (commit f62aa1d) — **CHANGES_REQUIRED**: 1 P1. The
+  name-only key let a canonical anchor RENAMED in the workbench editor
+  (`user_drafts/{case_id}.yaml` with an edited `name`, launched under the stable case_id) escape
+  the runner + gate → a silent unverified pass. A LATENT pre-existing edge of the name-only
+  approach (not a followup regression), but a severe failure mode. Surfaced to the user; user
+  chose the **structural fix**.
+  - **R3 fix** (commit the R3-fix commit (this commit)): added a stable `case_id` field to `TaskSpec` (distinct
+    from the editable `name`) and keyed `is_bfs_lowre_dispatch` on `case_id or name`; populated
+    `case_id` at the three loaders that know the stable id (wizard_drivers / knowledge_db /
+    task_runner). A renamed anchor draft now carries `case_id='backward_facing_step_lowre'` →
+    routes + verifies; a non-anchor draft keeps its own case_id → unverified by this gate (R2 P2
+    preserved); direct constructors use the name fallback. +3 tests (incl. the REAL-loader
+    rename regression). Followed by ONE final confirmatory review per the same authorisation.
+
+`status` stays Proposed / `codex_verdict` reflects the chain until the final confirmatory review
+returns APPROVE (then → Accepted + capability-matrix DONE).
 
 (Trail appended as rounds complete; `codex_verdict` frontmatter flips to APPROVE +
 `status: Accepted` + the capability-matrix cell flips to DONE on close. Per the

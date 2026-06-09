@@ -810,6 +810,9 @@ class TaskRunner:
         parameters = chain.get("parameters", {})
         return TaskSpec(
             name=chain.get("case_name", case_id),
+            # DEC-V61-236 R3 (Codex P1): carry the STABLE case_id so specialized
+            # dispatch keys on it, not the display case_name.
+            case_id=case_id,
             geometry_type=GeometryType(chain.get("geometry_type", "SIMPLE_GRID")),
             flow_type=FlowType(chain.get("flow_type", "INTERNAL")),
             steady_state=SteadyState(chain.get("steady_state", "STEADY")),

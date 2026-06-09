@@ -417,6 +417,12 @@ def _task_spec_from_case_id(case_id: str):
     bcs = entry.get("boundary_conditions") or {}
     return TaskSpec(
         name=entry.get("name", case_id),
+        # DEC-V61-236 R3 (Codex P1): carry the STABLE case_id so specialized dispatch
+        # (e.g. is_bfs_lowre_dispatch) keys on it, NOT the editor-editable display
+        # `name` above. Without this, a draft of the canonical benchmark anchor whose
+        # `name` was renamed in the editor would escape its runner + gate (silent
+        # unverified pass) — even though it is still launched under this case_id.
+        case_id=case_id,
         geometry_type=GeometryType[entry["geometry_type"]],
         flow_type=FlowType[entry["flow_type"]],
         steady_state=SteadyState[entry.get("steady_state", "STEADY")],

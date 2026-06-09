@@ -65,6 +65,9 @@ class KnowledgeDB:
             try:
                 spec = TaskSpec(
                     name=case["name"],
+                    # DEC-V61-236 R3 (Codex P1): carry the STABLE whitelist id so
+                    # specialized dispatch keys on it, not the display `name`.
+                    case_id=case.get("id", case["name"]),
                     geometry_type=GeometryType(case.get("geometry_type", "SIMPLE_GRID")),
                     flow_type=FlowType(case.get("flow_type", "INTERNAL")),
                     steady_state=SteadyState(case.get("steady_state", "STEADY")),

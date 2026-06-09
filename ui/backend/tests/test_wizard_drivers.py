@@ -651,3 +651,40 @@ def test_real_driver_terminates_with_run_done_for_all_paths() -> None:
         run_dones = [e for e in events if e["type"] == "run_done"]
         assert len(run_dones) == 1, f"expected exactly one run_done, got {len(run_dones)}"
         assert events[-1]["type"] == "run_done"
+
+
+def test_renamed_canonical_anchor_draft_preserves_case_id_for_dispatch() -> None:
+    """Codex DEC-V61-236 R3 P1 regression (REAL loader): a user_drafts/ draft of the
+    canonical backward_facing_step_lowre anchor whose DISPLAY ``name`` was edited in the
+    workbench editor must still carry the STABLE ``case_id`` — so ``is_bfs_lowre_dispatch``
+    routes it to its runner + gate and a renamed benchmark can NEVER become a silent
+    unverified success. Exercises the real ``_task_spec_from_case_id`` (not a re-impl)."""
+    from pathlib import Path
+
+    from src.models import is_bfs_lowre_dispatch
+    from ui.backend.services.wizard_drivers import _task_spec_from_case_id
+
+    repo_root = Path(__file__).resolve().parents[3]
+    draft = repo_root / "ui" / "backend" / "user_drafts" / "backward_facing_step_lowre.yaml"
+    assert not draft.exists(), "precondition: no real anchor draft to clobber"
+    draft.write_text(
+        "id: backward_facing_step_lowre\n"
+        "name: My Renamed Benchmark\n"  # the editor display rename — the R3 P1 trigger
+        "geometry_type: BACKWARD_FACING_STEP\n"
+        "flow_type: INTERNAL\n"
+        "compressibility: INCOMPRESSIBLE\n"
+        "steady_state: STEADY\n"
+        "parameters:\n"
+        "  Re: 5000\n"
+        "boundary_conditions:\n"
+        "  wall_treatment: resolved\n"
+        "  turbulence_model: kOmegaSST\n",
+        encoding="utf-8",
+    )
+    try:
+        spec = _task_spec_from_case_id("backward_facing_step_lowre")
+        assert spec.name == "My Renamed Benchmark"  # display rename honored
+        assert spec.case_id == "backward_facing_step_lowre"  # STABLE id preserved
+        assert is_bfs_lowre_dispatch(spec) is True  # routes despite the rename
+    finally:
+        draft.unlink(missing_ok=True)
