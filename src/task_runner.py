@@ -560,21 +560,29 @@ class TaskRunner:
             comparison = self._verify_supersonic_wedge(exec_result)
             logger.info("Wedge oblique-shock gate passed=%s", comparison.passed)
 
-        # NOTE (DEC-V61-235 · Codex R0 P1): a TaskRunner verification branch for the
-        # wall-RESOLVED low-Re backward_facing_step anchor is DEFERRED to a future
-        # BFS-lowre *wiring* slice. Per the wedge precedent, the analogous
-        # ``_verify_supersonic_wedge`` branch above landed in the WIRING slice
-        # (DEC-V61-234), NOT the V&V-anchor slice (DEC-V61-233): it works only because
-        # ``_execute_supersonic_wedge`` produces a PERSISTENT ``raw_output_path`` with
-        # the gate's postProcessing artifacts. V71.B has no equivalent adapter runner
-        # yet (no ``_execute_backward_facing_step_lowre`` writing ``proof/floor_faces.csv``
-        # + ``VTK/allPatches`` to a persistent path), so a branch here would FAIL-CLOSED
-        # on every real solve (the executor's temp dir is rmtree'd before the gate runs).
-        # The gate is validated via the frozen LIVE probe + offline gate tests
-        # (``tests/p4/test_bfs_lowre_gate.py``); live ``execute()``/TaskRunner wiring is
-        # the disclosed follow-up. The gate is recorded canonically in
-        # ``knowledge/whitelist.yaml`` (``verification_gate:
-        # src.bfs_lowre_gate.gate_bfs_lowre_against_gold``).
+        # 4c. DEC-V61-236 (P4 V71B-FOLLOWUP-1) · specialized-gate verification for the
+        #     wall-RESOLVED (y+<1) low-Re backward_facing_step anchor — the wiring that
+        #     DEC-V61-235 deferred. Same posture as the wedge branch above: the case
+        #     carries NO inline gold (case_kind specialized_gate_anchor →
+        #     ``load_gold_standard`` → None → generic block skipped), so its verdict is
+        #     the SPECIALIZED Control-plane gate that MACHINE-ENFORCES the y+<1 resolved
+        #     precondition. Keyed on CASE IDENTITY (name), NOT geometry_type alone
+        #     (BACKWARD_FACING_STEP collides with the generic high-Re BFS) and NOT
+        #     boundary_conditions (Notion specs set it to {}; Codex DEC-V61-235 R1 P2).
+        #     The adapter's persistent ``_execute_backward_facing_step_lowre`` runner
+        #     (DEC-V61-236) leaves proof/floor_faces.csv + VTK/allPatches under
+        #     raw_output_path, so the gate reads real solver output (not the frozen
+        #     fixture). Without this branch a whitelisted anchor would report
+        #     "No gold standard found" after a real solve.
+        if (
+            comparison is None
+            and task_spec.geometry_type is GeometryType.BACKWARD_FACING_STEP
+            and (task_spec.name or "").strip() == "backward_facing_step_lowre"
+            and exec_result.success
+            and attestation.overall != "ATTEST_FAIL"
+        ):
+            comparison = self._verify_bfs_lowre(exec_result)
+            logger.info("BFS low-Re resolved-wall gate passed=%s", comparison.passed)
 
         # 6. AutoVerifier post-execute hook (SPEC §INT-1, additive)
         auto_verify_report: Any = None
@@ -993,6 +1001,44 @@ class TaskRunner:
             passed=gate.passed,
             summary=gate.summary,
             gold_standard_id="wedge_oblique_shock",
+        )
+
+    def _verify_bfs_lowre(self, exec_result: ExecutionResult) -> ComparisonResult:
+        """Verify a wall-RESOLVED low-Re BFS run via the specialized gate (DEC-V61-236).
+
+        Mirrors ``_verify_supersonic_wedge``: the ``backward_facing_step_lowre`` anchor
+        carries no inline generic gold (``load_gold_standard`` → None) because its
+        verdict is a SPECIALIZED Control-plane gate that MACHINE-ENFORCES the y+<1
+        resolved-wall precondition on top of the reattachment comparison — the generic
+        residual comparator cannot judge "resolved". The adapter's persistent
+        ``_execute_backward_facing_step_lowre`` runner leaves ``proof/floor_faces.csv``
+        + ``VTK/allPatches`` under ``raw_output_path`` (the case dir), which the gate
+        reads. Any gate error is an honest FAIL, never a fabricated pass. Plane: Control
+        → Control (the gate internally orchestrates the Execution extractor + Evaluation
+        comparator).
+        """
+        from .bfs_lowre_gate import gate_bfs_lowre_against_gold  # noqa: PLC0415
+
+        raw = exec_result.raw_output_path
+        if not raw:
+            return ComparisonResult(
+                passed=False,
+                summary="bfs_lowre gate skipped: execution produced no raw_output_path",
+                gold_standard_id="backward_facing_step_lowre",
+            )
+        try:
+            gate = gate_bfs_lowre_against_gold(Path(raw))
+        except Exception as exc:  # noqa: BLE001 — gate failure is an honest FAIL, not a crash
+            logger.exception("bfs_lowre resolved-wall gate raised; reporting FAIL")
+            return ComparisonResult(
+                passed=False,
+                summary=f"bfs_lowre gate error: {type(exc).__name__}: {exc}",
+                gold_standard_id="backward_facing_step_lowre",
+            )
+        return ComparisonResult(
+            passed=gate.passed,
+            summary=gate.summary,
+            gold_standard_id="backward_facing_step_lowre",
         )
 
     def _compute_attestation(

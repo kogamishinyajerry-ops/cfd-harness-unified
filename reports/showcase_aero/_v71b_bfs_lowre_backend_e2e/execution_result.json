@@ -1,0 +1,23 @@
+{
+  "execution_time_s": 63.4,
+  "is_mock": false,
+  "key_quantities": {
+    "floor_yplus_max": 0.0660837,
+    "n_floor_faces": 119.0,
+    "n_pos_neg_crossings": 1.0,
+    "reattachment_length": 5.881157633143892,
+    "reattachment_method": "wall_shear_tau_x_zero_crossing"
+  },
+  "launcher": "src.foam_agent_adapter.DockerOpenFOAMSolverExecutor.execute()",
+  "success": true,
+  "task_spec": {
+    "Re": 5000.0,
+    "boundary_conditions": {
+      "turbulence_model": "kOmegaSST",
+      "wall_treatment": "resolved"
+    },
+    "compressibility": "INCOMPRESSIBLE",
+    "geometry_type": "BACKWARD_FACING_STEP",
+    "name": "backward_facing_step_lowre"
+  }
+}

@@ -4,11 +4,26 @@ title: V71.B low-Re BFS — live execute()/TaskRunner gate wiring + advisor live
 opened: 2026-06-08
 opened_by: Codex R0 review of DEC-V61-235 (86gs gpt-5.4 xhigh · 1 P1 + 1 P2 dispositioned as deferred wiring)
 priority: medium
-status: open
+status: item-1-LANDED (DEC-V61-236, 2026-06-09) · item-2 still open
 parent_dec: V61-235
+closing_dec: V61-236 (item 1 — the gate live-wiring slice)
 ---
 
 # V71B-FOLLOWUP-1 · low-Re BFS live wiring (deferred from the V&V-anchor slice)
+
+> **Item 1 LANDED — DEC-V61-236 (2026-06-09).** The gate live-wiring exists:
+> `foam_agent_adapter._execute_backward_facing_step_lowre` (fresh `--rm` OF11,
+> persistent `raw_output_path`) + identity-keyed `execute()` dispatch +
+> `TaskRunner._verify_bfs_lowre` branch + the `backward_facing_step_lowre`
+> `specialized_gate_anchor` whitelist entry, all landed together (the wedge
+> precedent). Backend-e2e evidence + tamper manifest:
+> `reports/showcase_aero/_v71b_bfs_lowre_backend_e2e/` — `execute()` launched a
+> REAL OF11 solve (Xr/H=5.8812, floor y+ max=0.0661<1), the Control gate PASSED
+> on the backend output, and the surface VTK is **byte-identical** to the
+> DEC-V61-235 hand-typed probe (SHA `fd25bfce…`). Opt-in live test
+> `tests/p4/test_bfs_lowre_live.py`; offline dispatch/collision/whitelist-load
+> regression `tests/p4/test_bfs_lowre_wiring.py`. **Item 2 (advisor live-caller
+> wiring) remains OPEN** — see below.
 
 DEC-V61-235 landed the **V&V-anchor** half of the wall-RESOLVED low-Re kOmegaSST
 backward_facing_step: the gate (`src.bfs_lowre_gate`), gold, whitelist
@@ -19,7 +34,7 @@ paths — mirroring the wedge arc, where DEC-V61-233 landed the V&V validation a
 DEC-V61-234 (a separate slice) wired the workbench backend. Codex R0 on V61-235
 correctly flagged the two live-path gaps below; both are deferred here, not hidden.
 
-## Deferred item 1 — gate live wiring (Codex R0 P1)
+## Deferred item 1 — gate live wiring (Codex R0 P1) — ✅ LANDED (DEC-V61-236, 2026-06-09)
 
 A `TaskRunner` verification branch + an adapter runner that produces a **persistent**
 `raw_output_path` containing `proof/floor_faces.csv` + `VTK/allPatches` (so

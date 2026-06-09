@@ -561,6 +561,18 @@ class DockerOpenFOAMSolverExecutor:
     _WEDGE_X_SHOCK_STATION = 0.12
     _WEDGE_SHOCK_LINE_ORIGIN_Y = 0.05
 
+    # P4 V71B-FOLLOWUP-1 (DEC-V61-236): the wall-RESOLVED low-Re kOmegaSST
+    # backward_facing_step (backward_facing_step_lowre) runs end-to-end through a
+    # DEDICATED runner on a FRESH `docker run --rm` OF11-Foundation container —
+    # mirroring the wedge's ESI runner but for the incompressible OF11 runtime. The
+    # fresh --rm container BIND-MOUNTS the host work dir (NOT the persistent
+    # `cfd-openfoam` put_archive path), which is the load-bearing difference: it makes
+    # `foamToVTK -allPatches` land on the HOST under raw_output_path so the Control-
+    # plane gate can read VTK/allPatches/. Disturbs no running container
+    # (~/CLAUDE.md hard rule) — the --rm container is OURS, force-removed in finally.
+    OF11_FOUNDATION_IMAGE = "openfoam/openfoam11-paraview510"
+    OF11_PROFILE_RC = "/opt/openfoam11/etc/bashrc"
+
     def __init__(
         self,
         work_dir: Optional[str] = None,
@@ -604,6 +616,22 @@ class DockerOpenFOAMSolverExecutor:
         # CHT bypasses the single-region path, but even earlier (its own container).
         if task_spec.geometry_type == GeometryType.SUPERSONIC_WEDGE:
             return self._execute_supersonic_wedge(task_spec, t0)
+
+        # 1.6. P4 V71B-FOLLOWUP-1 (DEC-V61-236) — the wall-RESOLVED low-Re kOmegaSST
+        # backward_facing_step dispatches to a DEDICATED runner that uses its OWN fresh
+        # `docker run --rm` OF11 container (bind-mounted → VTK/allPatches lands on the
+        # host). Keyed on CASE IDENTITY (name), NOT geometry_type alone — BACKWARD_FACING_STEP
+        # COLLIDES with the generic high-Re BFS branch below; and NOT on
+        # boundary_conditions.wall_treatment, which the Notion path sets to {} (Codex
+        # DEC-V61-235 R1 P2). The whitelist sets id==name==`backward_facing_step_lowre`,
+        # so TaskSpec.name is this literal on BOTH the list_whitelist_cases and
+        # run_batch→_task_spec_from_case_id paths (knowledge_db `case_name`=case.name).
+        # Short-circuit BEFORE the persistent-container connect (its own --rm container).
+        if (
+            task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP
+            and (task_spec.name or "").strip() == "backward_facing_step_lowre"
+        ):
+            return self._execute_backward_facing_step_lowre(task_spec, t0)
 
         # 2. Docker daemon reachable and container running?
         try:
@@ -3288,6 +3316,66 @@ fields          (U);
                 except Exception:
                     pass
 
+    def _docker_run_of11_rm(
+        self,
+        host_dir: Path,
+        command: str,
+        timeout: int,
+    ) -> Tuple[int, str]:
+        """Run ``command`` in a FRESH ``--rm`` OF11-Foundation container (DEC-V61-236).
+
+        Structural clone of :meth:`_docker_run_esi_rm` for the incompressible OF11
+        runtime — BIND-MOUNTS ``host_dir`` at ``/work`` and sources
+        ``/opt/openfoam11/etc/bashrc``::
+
+            docker run --rm --entrypoint bash -v {host_dir}:/work \\
+              openfoam/openfoam11-paraview510 -c \\
+              'source /opt/openfoam11/etc/bashrc >/dev/null 2>&1; cd /work && {command}'
+
+        The bind-mount (NOT the persistent `cfd-openfoam` container's put_archive/
+        exec_run path) is the load-bearing difference: it makes ``foamToVTK
+        -allPatches`` output land on the HOST under ``host_dir`` so the downstream gate
+        can read ``VTK/allPatches/``. Uses the docker SDK (``detach`` → ``wait`` →
+        ``logs`` → ``remove``) on a brand-new container, so NO already-running
+        container is ever touched (~/CLAUDE.md hard rule). Returns ``(exit_code,
+        combined_logs)``; on any docker-level error returns ``(-1, diagnostic)`` so the
+        caller emits an honest BLOCK rather than a fabricated success. The ``--rm``
+        container we create is always force-removed in ``finally`` (it is OURS).
+        """
+        client = self._docker_client or docker.from_env()
+        bash_cmd = (
+            f"source {self.OF11_PROFILE_RC} >/dev/null 2>&1; "
+            f"cd /work && {command}"
+        )
+        container = None
+        try:
+            container = client.containers.run(
+                self.OF11_FOUNDATION_IMAGE,
+                command=["-c", bash_cmd],
+                entrypoint="bash",
+                volumes={str(host_dir.resolve()): {"bind": "/work", "mode": "rw"}},
+                working_dir="/work",
+                detach=True,
+            )
+            result = container.wait(timeout=timeout)
+            exit_code = (
+                int(result.get("StatusCode", -1))
+                if isinstance(result, dict)
+                else -1
+            )
+            logs = container.logs(stdout=True, stderr=True).decode(
+                "utf-8", errors="replace"
+            )
+            return exit_code, logs
+        except Exception as exc:  # docker error / timeout / image-missing
+            return -1, f"OF11 --rm incompressibleFluid run failed: {exc!r}"
+        finally:
+            if container is not None:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+
     def _execute_supersonic_wedge(
         self,
         task_spec: TaskSpec,
@@ -3416,6 +3504,154 @@ fields          (U);
             return self._fail(
                 f"supersonic-wedge runner raised unexpectedly ({exc!r}; "
                 "DEC-V61-234) — honest BLOCK.",
+                time.monotonic() - t0,
+                raw_output_path=raw_output_path,
+            )
+
+    def _execute_backward_facing_step_lowre(
+        self,
+        task_spec: TaskSpec,
+        t0: float,
+    ) -> ExecutionResult:
+        """LIVE wall-RESOLVED low-Re kOmegaSST BFS run via a FRESH ``--rm`` OF11
+        incompressibleFluid solve (DEC-V61-236, P4 V71B-FOLLOWUP-1 — the
+        ``foam_agent_adapter`` wiring that DEC-V61-235 explicitly DEFERRED).
+
+        Mirrors :meth:`_execute_supersonic_wedge` (the persistence template), with the
+        BFS-specific deltas:
+
+          (a) PERSISTENT work dir via ``mkdtemp`` under ``self._work_dir`` with NO
+              ``finally: rmtree`` — so the Control-plane gate
+              (``src.bfs_lowre_gate.gate_bfs_lowre_against_gold``) can read
+              ``proof/floor_faces.csv`` + ``VTK/allPatches/`` off ``raw_output_path``.
+          (b) GENERATE (not copytree): the resolved case is synthesized by the adapter
+              generator ``_generate_backward_facing_step`` with FORCED
+              ``wall_treatment='resolved'`` (so an empty Notion BC dict still yields the
+              12320-cell y-graded mesh) — unlike the wedge, which stages a frozen def.
+          (c) ONE fresh ``--rm`` OF11-Foundation container chaining
+              ``blockMesh && checkMesh && foamRun -solver incompressibleFluid &&
+              foamToVTK -latestTime -allPatches`` under ``set -e`` (verbatim from
+              ``reports/showcase_aero/_v71b_bfs_lowre_probe/REPRODUCE.md``).
+          (d) DERIVE the frozen floor CSV from the allPatches VTK via the Execution-
+              plane ``write_floor_faces_csv`` (shared mask), then EXTRACT the QoIs.
+
+        Plane discipline (four-plane law): this Execution-plane runner imports ONLY the
+        Execution-plane extractor (``src.bfs_lowre_extractor``), NEVER the Control-plane
+        gate (``src.bfs_lowre_gate``) — the gate is run by the Control-plane caller
+        (``TaskRunner._verify_bfs_lowre``). ``success=True`` means "a real solve produced
+        extractable QoIs", NOT "physics matches gold". On ANY failure returns
+        ``self._fail(...)`` (honest BLOCK with ``raw_output_path``) — never a fabricated
+        PASS, never a silent reroute to the generic incompressible path.
+        """
+        from dataclasses import replace as _dc_replace  # noqa: PLC0415
+        # Execution→Execution import (allowed by the import-linter); lazy so the
+        # adapter module import graph is unchanged. NEVER import the Control gate.
+        from .bfs_lowre_extractor import (  # noqa: PLC0415
+            extract_bfs_lowre,
+            to_key_quantities,
+            write_floor_faces_csv,
+        )
+
+        self._work_dir.mkdir(parents=True, exist_ok=True)
+        # UNIQUE per-run dir (mkdtemp) — never a fixed name that a concurrent launch
+        # could rmtree while a caller is still reading raw_output_path (wedge R0 P2).
+        work_dir = Path(
+            tempfile.mkdtemp(prefix="backward_facing_step_lowre_", dir=str(self._work_dir))
+        )
+        raw_output_path = str(work_dir)
+        try:
+            # (b) GENERATE the resolved case. FORCE wall_treatment='resolved' (forced
+            # keys win over any inbound BC — this runner is only reached for the
+            # definitionally-resolved anchor; Notion sets boundary_conditions={}).
+            resolved_bc = {
+                **(task_spec.boundary_conditions or {}),
+                "wall_treatment": "resolved",
+                "turbulence_model": "kOmegaSST",
+            }
+            resolved_spec = _dc_replace(task_spec, boundary_conditions=resolved_bc)
+            self._generate_backward_facing_step(work_dir, resolved_spec)
+
+            # (c) ONE fresh --rm OF11 container: mesh + solve + allPatches VTK export,
+            # chained under set -e so the FIRST failing step aborts (honest BLOCK).
+            compound = (
+                "{ set -e; blockMesh; checkMesh; "
+                "foamRun -solver incompressibleFluid; "
+                "foamToVTK -latestTime -noZero -allPatches -noFaceZones; }"
+            )
+            exit_code, run_log = self._docker_run_of11_rm(
+                work_dir, compound, self._timeout
+            )
+            # Persist the solver log under raw_output_path (both the dedicated name and
+            # the solver-keyed alias the generic log parser/_resolve_log_path expects);
+            # fail-tolerant (a non-writable dir must not crash the run).
+            for log_name in ("log.foamRun", "log.simpleFoam"):
+                try:
+                    (work_dir / log_name).write_text(run_log, encoding="utf-8")
+                except OSError:
+                    pass
+            if exit_code != 0:
+                return self._fail(
+                    f"backward_facing_step_lowre OF11 incompressibleFluid run failed "
+                    f"(exit={exit_code}; DEC-V61-236). Log tail:\n{run_log[-2000:]}",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            # (d) DERIVE the frozen floor CSV from the allPatches VTK (shared mask),
+            # so the offline stdlib gate-replay input co-exists with the live VTK.
+            vtk_dir = work_dir / "VTK" / "allPatches"
+            vtks = (
+                sorted(vtk_dir.glob("allPatches_*.vtk"))
+                if vtk_dir.is_dir()
+                else []
+            )
+            if not vtks:
+                return self._fail(
+                    "backward_facing_step_lowre solve completed but produced no "
+                    "VTK/allPatches/allPatches_*.vtk (foamToVTK -allPatches did not "
+                    "emit; DEC-V61-236) — honest BLOCK (never a fabricated PASS).",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+            # latest snapshot by numeric timestep (foamToVTK -latestTime → one file,
+            # but be robust to multiple); write_floor_faces_csv re-applies the shared
+            # mask, so the CSV is a faithful co-located serialization of the VTK.
+            def _ts(p: Path) -> float:
+                import re as _re  # noqa: PLC0415
+
+                m = _re.search(r"allPatches_([0-9]+(?:\.[0-9]+)?)\.vtk$", p.name)
+                return float(m.group(1)) if m else float("-inf")
+
+            latest_vtk = max(vtks, key=_ts)
+            (work_dir / "proof").mkdir(parents=True, exist_ok=True)
+            try:
+                write_floor_faces_csv(latest_vtk, work_dir / "proof" / "floor_faces.csv")
+            except (FileNotFoundError, ValueError, KeyError) as exc:
+                return self._fail(
+                    f"backward_facing_step_lowre solve completed but floor-face "
+                    f"derivation failed ({exc!r}; DEC-V61-236) — the allPatches VTK "
+                    "lacks yPlus/wallShearStress on the floor; honest BLOCK.",
+                    time.monotonic() - t0,
+                    raw_output_path=raw_output_path,
+                )
+
+            # (e) Execution-plane QoI extraction (NOT the Control-plane gate). The
+            # extractor resolves proof/floor_faces.csv first; fails closed on
+            # missing/non-crossing data, so success genuinely means "real run produced
+            # valid, extractable QoIs".
+            metrics = extract_bfs_lowre(work_dir)
+            return ExecutionResult(
+                success=True,
+                is_mock=False,
+                residuals={},
+                key_quantities=to_key_quantities(metrics),
+                execution_time_s=time.monotonic() - t0,
+                raw_output_path=raw_output_path,
+            )
+        except Exception as exc:  # belt-and-braces: never crash the caller
+            return self._fail(
+                f"backward_facing_step_lowre runner raised unexpectedly ({exc!r}; "
+                "DEC-V61-236) — honest BLOCK.",
                 time.monotonic() - t0,
                 raw_output_path=raw_output_path,
             )

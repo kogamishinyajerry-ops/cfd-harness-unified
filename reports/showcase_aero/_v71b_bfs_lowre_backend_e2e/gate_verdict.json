@@ -1,0 +1,5 @@
+{
+  "gate": "src.bfs_lowre_gate.gate_bfs_lowre_against_gold",
+  "passed": true,
+  "summary": "backward_facing_step_lowre gate PASS (Xr/H=5.8812 = -6.05% vs 6.26, floor y+ max=0.0661 (<1 resolved), crossings=1, floor_faces=119, method=wall_shear_tau_x_zero_crossing) | reattachment_within_tol=PASS, resolved_near_wall=PASS, single_reattachment=PASS, floor_mask_nondegenerate=PASS"
+}

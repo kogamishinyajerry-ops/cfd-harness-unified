@@ -68,19 +68,38 @@ cases:
         - {value: 6.26, unit: "Xr/H"}
       tolerance: 0.10  # 10% 相对误差
 
-  # P4 V71.B · DEC-V61-235 — the low-Re (wall-RESOLVED, y+<1) k-omega-SST sibling of
-  # backward_facing_step (backward_facing_step_lowre) is INTENTIONALLY NOT whitelisted
-  # in this V&V-anchor slice. Per the wedge precedent (its whitelist entry landed in the
-  # WIRING slice DEC-V61-234, not the V&V slice DEC-V61-233), a selectable whitelist entry
-  # MUST land together with its adapter dispatch + TaskRunner verification branch — else
-  # KnowledgeDB.list_whitelist_cases exposes it via run_batch with no verification path
-  # (load_gold_standard → None → "No gold standard found"; Codex R1 P1). The gate is
-  # validated here via the frozen LIVE probe + offline gate tests; the whitelist entry +
-  # live wiring are deferred to V71B-FOLLOWUP-1
-  # (.planning/followups/v71b_bfs_lowre_live_wiring_deferred.md). Gold + gate live at
-  # knowledge/gold_standards/backward_facing_step_lowre.yaml +
-  # src.bfs_lowre_gate.gate_bfs_lowre_against_gold; frozen evidence at
-  # reports/showcase_aero/_v71b_bfs_lowre_probe/.
+  # P4 V71B-FOLLOWUP-1 · DEC-V61-236 — low-Re (wall-RESOLVED, y+<1) k-omega-SST sibling
+  # of backward_facing_step, NOW WIRED (DEC-V61-235 deferred it; this is the wiring slice,
+  # mirroring how the wedge whitelist entry landed in DEC-V61-234 not 233). The entry +
+  # the adapter dispatch (foam_agent_adapter._execute_backward_facing_step_lowre) + the
+  # TaskRunner `_verify_bfs_lowre` branch land ATOMICALLY (Codex DEC-V61-235 R1 P1: a
+  # selectable entry without a verification branch reports "No gold standard found").
+  # CRITICAL: name == id == `backward_facing_step_lowre` — the adapter/TaskRunner dispatch
+  # is keyed on TaskSpec.name (NOT geometry_type, which collides with the high-Re BFS;
+  # NOT boundary_conditions, which the Notion path sets to {}). list_whitelist_cases sets
+  # name=case["name"]; run_batch→_task_spec_from_case_id sets name=chain.case_name(=case.name);
+  # both yield `backward_facing_step_lowre` only if name==id here. Like the wedge/CHT anchors
+  # this case carries NO inline gold_standard → load_gold_standard returns None → the
+  # specialized Control gate (src.bfs_lowre_gate) runs via the TaskRunner branch.
+  - id: backward_facing_step_lowre
+    name: backward_facing_step_lowre        # MUST equal id (identity-keyed dispatch)
+    reference: "Le, Moin & Kim 1997 (DNS Re_H=5100) / Driver & Seegmiller 1985 (blended anchor)"
+    doi: "10.1017/S0022112096003941"
+    flow_type: INTERNAL
+    geometry_type: BACKWARD_FACING_STEP
+    compressibility: INCOMPRESSIBLE
+    steady_state: STEADY
+    solver: simpleFoam                       # OF11 compat token (NEVER the literal 'foamRun -solver incompressibleFluid')
+    turbulence_model: kOmegaSST              # bare token (byte-matches the adapter)
+    case_kind: specialized_gate_anchor
+    gold_standard_file: "knowledge/gold_standards/backward_facing_step_lowre.yaml"
+    verification_gate: "src.bfs_lowre_gate.gate_bfs_lowre_against_gold"
+    parameters:
+      Re: 5000                              # nu=2e-4, U_bulk=1 — lands on the Le/Moin/Kim DNS Re_H=5100
+      expansion_ratio: 1.125
+    boundary_conditions:
+      turbulence_model: kOmegaSST
+      wall_treatment: resolved              # y+<1 resolved-wall flag → adapter low-Re mesh grading (runner also FORCES it)
 
   - id: circular_cylinder_wake
     name: "Circular Cylinder Wake"
