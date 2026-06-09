@@ -47,6 +47,7 @@ from .models import (
     SteadyState,
     SystematicPattern,
     TaskSpec,
+    is_bfs_lowre_dispatch,
 )
 from .notion_client import NotionClient
 from .result_comparator import ResultComparator
@@ -566,18 +567,19 @@ class TaskRunner:
         #     carries NO inline gold (case_kind specialized_gate_anchor →
         #     ``load_gold_standard`` → None → generic block skipped), so its verdict is
         #     the SPECIALIZED Control-plane gate that MACHINE-ENFORCES the y+<1 resolved
-        #     precondition. Keyed on CASE IDENTITY (name), NOT geometry_type alone
-        #     (BACKWARD_FACING_STEP collides with the generic high-Re BFS) and NOT
-        #     boundary_conditions (Notion specs set it to {}; Codex DEC-V61-235 R1 P2).
-        #     The adapter's persistent ``_execute_backward_facing_step_lowre`` runner
-        #     (DEC-V61-236) leaves proof/floor_faces.csv + VTK/allPatches under
+        #     precondition. The adapter's persistent ``_execute_backward_facing_step_lowre``
+        #     runner (DEC-V61-236) leaves proof/floor_faces.csv + VTK/allPatches under
         #     raw_output_path, so the gate reads real solver output (not the frozen
         #     fixture). Without this branch a whitelisted anchor would report
         #     "No gold standard found" after a real solve.
+        #     The dispatch predicate is the SHARED ``is_bfs_lowre_dispatch`` SSOT — the
+        #     IDENTICAL predicate the adapter's execute() dispatch uses, so EVERY spec
+        #     that EXECUTES via the low-Re runner is also VERIFIED here; the asymmetry
+        #     where a resolved-BC display-title spec ran but skipped the gate (Codex
+        #     DEC-V61-236 R1 P1) cannot recur.
         if (
             comparison is None
-            and task_spec.geometry_type is GeometryType.BACKWARD_FACING_STEP
-            and (task_spec.name or "").strip() == "backward_facing_step_lowre"
+            and is_bfs_lowre_dispatch(task_spec)
             and exec_result.success
             and attestation.overall != "ATTEST_FAIL"
         ):

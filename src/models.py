@@ -116,6 +116,32 @@ class TaskSpec:
     case_dir_override: Optional[str] = None
 
 
+def is_bfs_lowre_dispatch(task_spec: "TaskSpec") -> bool:
+    """True iff this spec is the wall-RESOLVED (y+<1) low-Re kOmegaSST
+    ``backward_facing_step`` anchor (DEC-V61-236).
+
+    SINGLE SOURCE OF TRUTH for BOTH the Execution-plane ``execute()`` dispatch
+    (``foam_agent_adapter``) AND the Control-plane verification branch
+    (``task_runner`` → ``_verify_bfs_lowre``). The two MUST agree: Codex
+    DEC-V61-236 R1 P1 caught the asymmetry where ``execute()`` routed a
+    resolved-BC display-title spec to the low-Re runner but the verify branch
+    (keyed name-only) silently skipped the y+<1 gate, reporting a real run as
+    success with ``comparison_result=None``. Keying here, once, makes that drift
+    impossible.
+
+    ``geometry_type`` alone cannot key it (BACKWARD_FACING_STEP collides with the
+    high-Re sibling); the disjunction routes EITHER the whitelist slug-name OR an
+    explicit ``boundary_conditions.wall_treatment == 'resolved'``. The high-Re
+    sibling (wall_function, never 'resolved') matches neither — no false-positive.
+    """
+    if task_spec.geometry_type is not GeometryType.BACKWARD_FACING_STEP:
+        return False
+    if (task_spec.name or "").strip() == "backward_facing_step_lowre":
+        return True
+    bc = task_spec.boundary_conditions or {}
+    return str(bc.get("wall_treatment", "")).strip().lower() == "resolved"
+
+
 @dataclass
 class ExecutionResult:
     """CFD 执行结果"""

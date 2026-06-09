@@ -28,6 +28,7 @@ from src.models import (
     GeometryType,
     SteadyState,
     TaskSpec,
+    is_bfs_lowre_dispatch,
 )
 from src.task_runner import TaskRunner
 
@@ -192,3 +193,73 @@ def test_whitelist_entry_loads_and_gold_is_none():
     assert spec.Re == 5000
     assert spec.boundary_conditions.get("wall_treatment") == "resolved"
     assert db.load_gold_standard("backward_facing_step_lowre") is None
+
+
+# ---------------------------------------------------------------------------
+# shared dispatch predicate + verify/execute symmetry (R2 · Codex DEC-V61-236 R1 P1)
+# ---------------------------------------------------------------------------
+
+
+def test_is_bfs_lowre_dispatch_shared_predicate():
+    """The SSOT predicate both planes key on: slug-name OR resolved-treatment routes;
+    the high-Re wall-function sibling and non-BFS geometries do NOT."""
+    # (a) whitelist slug name → routes
+    assert is_bfs_lowre_dispatch(_bfs_spec(name="backward_facing_step_lowre")) is True
+    # (b) display-title name BUT resolved treatment → routes (the second disjunct)
+    assert is_bfs_lowre_dispatch(
+        TaskSpec(
+            name="Low-Re BFS validation run",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=5000.0,
+            boundary_conditions={"wall_treatment": "resolved"},
+        )
+    ) is True
+    # (c) genuine high-Re sibling (wall_function) → does NOT route (no false-positive)
+    assert is_bfs_lowre_dispatch(
+        TaskSpec(
+            name="backward_facing_step",
+            geometry_type=GeometryType.BACKWARD_FACING_STEP,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+            Re=7600.0,
+            boundary_conditions={"wall_treatment": "wall_function"},
+        )
+    ) is False
+    # (d) different geometry → never routes
+    assert is_bfs_lowre_dispatch(
+        TaskSpec(
+            name="backward_facing_step_lowre",  # name alone must not override geometry
+            geometry_type=GeometryType.SIMPLE_GRID,
+            flow_type=FlowType.INTERNAL,
+            steady_state=SteadyState.STEADY,
+            compressibility=Compressibility.INCOMPRESSIBLE,
+        )
+    ) is False
+
+
+def test_run_task_verifies_display_title_resolved_bc_lowre():
+    """Codex DEC-V61-236 R1 P1 regression: a display-title spec with resolved BC that
+    EXECUTES via the low-Re runner MUST also be VERIFIED — the y+<1 gate cannot be
+    silently skipped (comparison_result is populated, not None). execute() dispatch and
+    the TaskRunner verify branch share ONE predicate, so they cannot drift."""
+    display_title = TaskSpec(
+        name="Low-Re BFS validation run",  # NOT the slug
+        geometry_type=GeometryType.BACKWARD_FACING_STEP,
+        flow_type=FlowType.INTERNAL,
+        steady_state=SteadyState.STEADY,
+        compressibility=Compressibility.INCOMPRESSIBLE,
+        Re=5000.0,
+        boundary_conditions={"wall_treatment": "resolved", "turbulence_model": "kOmegaSST"},
+    )
+    runner = TaskRunner(executor=_StubExecutor(str(_FROZEN_PROBE)))
+    report = runner.run_task(display_title)
+    assert report.comparison_result is not None, (
+        "resolved-BC display-title low-Re run executed but the gate was SKIPPED "
+        "(the execute/verify asymmetry Codex R1 P1 flagged)"
+    )
+    assert report.comparison_result.passed is True
+    assert report.comparison_result.gold_standard_id == "backward_facing_step_lowre"

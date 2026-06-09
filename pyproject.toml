@@ -104,6 +104,15 @@ workbench = [
     # makes the `.[workbench]`-only install path runnable end-to-end
     # without a hidden cross-extras dependency.
     "docker>=7.0",
+    # pyvista is *also* declared in [cfd-real-solver]; listed here for the
+    # SAME reason as docker above — `ui/backend/services/wizard_drivers`
+    # `RealSolverDriver` wraps `FoamAgentExecutor.execute()`, which can launch
+    # the live `backward_facing_step_lowre` low-Re runner, and that runner reads
+    # the allPatches VTK via pyvista. Without this the `.[workbench]`-only
+    # install would crash after the solve (DEC-V61-236 Codex R1 P2) — the
+    # workbench-only path must be runnable end-to-end without a hidden
+    # cross-extras dependency on [cfd-real-solver].
+    "pyvista>=0.44",
     # Phase-1A (DEC-V61-097): server-rendered visualization PNGs for
     # Steps 3-5 (bc-overlay, residual-history, velocity-slice). Pillow
     # stays for the lightweight overlays (bc-overlay) where matplotlib

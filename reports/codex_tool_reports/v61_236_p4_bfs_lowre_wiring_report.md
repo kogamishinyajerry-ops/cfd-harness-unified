@@ -76,4 +76,51 @@ controlDict 9710a9da976b5fae).
 
 ---
 
-## R1 — commit `<PENDING>` — verdict PENDING
+## R1 — commit `53d8ca0` — CHANGES_REQUIRED (1 P1 + 1 P2)
+
+Both findings are the symmetric consequences of the R1 fixes — exactly the runtime
+reachability class the review is for.
+
+### [P1] execute/verify dispatch ASYMMETRY — `src/foam_agent_adapter.py` ↔ `src/task_runner.py`
+
+> For callers that go through `TaskRunner.run_task()` with a display-title BFS spec
+> (`geometry_type=BACKWARD_FACING_STEP`, `boundary_conditions.wall_treatment='resolved'`),
+> this new branch now executes `_execute_backward_facing_step_lowre()`, but `TaskRunner`
+> still invokes `_verify_bfs_lowre()` only when `task_spec.name == 'backward_facing_step_lowre'`.
+> The result is a real low-Re run reported as success but with `comparison_result=None`, so
+> the specialized y+<1 / reattachment gate is silently skipped on the very caller class this
+> change is trying to support.
+
+**Verified VALID — a real bug the R1 P2 fix introduced.** Broadening the *execute* dispatch
+(R1) without broadening the *verify* branch left them asymmetric: a resolved-BC display-title
+spec executed a real solve but skipped the gate (`comparison_result=None`).
+
+**R2 fix (root cause).** Extracted ONE shared predicate `is_bfs_lowre_dispatch(task_spec)` into
+`src/models.py` (the four-plane leaf both planes already import — import-linter 5 kept/0 broken)
+and made BOTH `execute()` dispatch AND the TaskRunner 4c branch call it. The two sites now
+share a single SSOT predicate and cannot drift. +`test_run_task_verifies_display_title_resolved_bc_lowre`
+(run_task on a display-title resolved-BC spec → `comparison_result` populated, gate PASS) +
+`test_is_bfs_lowre_dispatch_shared_predicate` (4 cases: slug-name routes, resolved-BC routes,
+high-Re wall_function does NOT, non-BFS geometry does NOT).
+
+### [P2] pyvista also needed on the `workbench` install surface — `pyproject.toml`
+
+> In a clean environment installed with `pip install -e '.[workbench]'`,
+> `ui/backend/services/wizard_drivers.RealSolverDriver` can still launch
+> `backward_facing_step_lowre`, but the dedicated runner will fail after the solve because it
+> now imports `pyvista` and this dependency is only declared in `cfd-real-solver`.
+
+**Verified VALID.** The `workbench` extra carries `docker>=7.0` explicitly so the
+workbench-only install is runnable end-to-end; `RealSolverDriver` wraps
+`FoamAgentExecutor.execute()`, which reaches the low-Re runner. pyvista was missing from
+`workbench`, so `.[workbench]` would crash at the VTK read.
+
+**R2 fix.** Declared `pyvista>=0.44` in the `workbench` extra too (same pattern + comment as its
+`docker` line — no hidden cross-extras dependency on `cfd-real-solver`).
+
+**R2 regression**: tests/p4 13 wiring/taskrunner passed · full suite 2087 passed / 5 skipped ·
+import-linter 5 kept / 0 broken · high-Re BFS byte-identical.
+
+---
+
+## R2 — commit `<PENDING>` — verdict PENDING

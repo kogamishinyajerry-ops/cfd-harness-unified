@@ -13,7 +13,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .models import CFDExecutor, ExecutionResult, FlowType, GeometryType, TaskSpec
+from .models import (
+    CFDExecutor,
+    ExecutionResult,
+    FlowType,
+    GeometryType,
+    TaskSpec,
+    is_bfs_lowre_dispatch,
+)
 
 # ---------------------------------------------------------------------------
 # MockExecutor — unchanged, used for testing
@@ -639,11 +646,10 @@ class DockerOpenFOAMSolverExecutor:
         # (`TaskRunner.run_all`→`NotionClient.list_pending_tasks` raises
         # NotImplementedError → returns []), so it is not a live mis-dispatch vector.
         # Short-circuit BEFORE the persistent-container connect (its own --rm container).
-        _bfs_bc = task_spec.boundary_conditions or {}
-        if task_spec.geometry_type == GeometryType.BACKWARD_FACING_STEP and (
-            (task_spec.name or "").strip() == "backward_facing_step_lowre"
-            or str(_bfs_bc.get("wall_treatment", "")).strip().lower() == "resolved"
-        ):
+        # The dispatch predicate is the SHARED ``is_bfs_lowre_dispatch`` SSOT — the
+        # IDENTICAL predicate the TaskRunner verification branch uses, so a spec that
+        # EXECUTES here cannot have its y+<1 gate silently skipped (Codex R1 P1).
+        if is_bfs_lowre_dispatch(task_spec):
             return self._execute_backward_facing_step_lowre(task_spec, t0)
 
         # 2. Docker daemon reachable and container running?

@@ -174,6 +174,22 @@ Full trail: `reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md`.
     wiring. +1 routing test, fixed the high-Re collision test to a realistic
     wall-function spec. Regression: tests/p4 67 passed/2 skipped · full suite 2085
     passed/5 skipped · import-linter 5 kept/0 broken · high-Re BFS byte-identical.
+- **R1** (commit 53d8ca0) — **CHANGES_REQUIRED**: 1 P1 + 1 P2, the symmetric
+  consequences of the R1 fixes (the R0 findings resolved).
+  - **P1** (execute/verify ASYMMETRY): broadening the execute() dispatch (R1) without
+    broadening the TaskRunner 4c verify branch left them asymmetric — a resolved-BC
+    display-title spec EXECUTED a real low-Re solve but the gate was SILENTLY SKIPPED
+    (`comparison_result=None`).
+  - **P2** (workbench extra): pyvista was declared only in `cfd-real-solver`, but
+    `.[workbench]` (`RealSolverDriver`) can also launch the low-Re case → crash at the
+    VTK read.
+  - **R2 fix**: (P1, root cause) extracted ONE shared predicate
+    `is_bfs_lowre_dispatch(task_spec)` into `src/models.py` (the four-plane leaf) and
+    made BOTH `execute()` dispatch AND the TaskRunner 4c branch call it — they can no
+    longer drift (+2 tests: the display-title run_task gate-fires regression + the
+    4-case predicate). (P2) declared `pyvista>=0.44` in the `workbench` extra too (the
+    `docker` precedent). Regression: tests/p4 13 wiring/taskrunner passed · full suite
+    2087 passed/5 skipped · import-linter 5 kept/0 broken · high-Re BFS byte-identical.
 
 (Trail appended as rounds complete; `codex_verdict` frontmatter flips to APPROVE +
 `status: Accepted` + the capability-matrix cell flips to DONE on close. Per the
