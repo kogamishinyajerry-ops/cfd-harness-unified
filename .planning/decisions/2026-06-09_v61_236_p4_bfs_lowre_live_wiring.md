@@ -1,7 +1,7 @@
 ---
 decision_id: V61-236
 title: P4 V71B-FOLLOWUP-1 item 1 — live execute()/TaskRunner gate wiring for the wall-RESOLVED low-Re kOmegaSST backward_facing_step anchor (the WIRING slice · runnable-coverage STAYS 3)
-status: Proposed
+status: Accepted (by USER RATIFICATION 2026-06-09 — NOT a Codex APPROVE; see codex_verdict)
 parent_dec: V61-235 (the V&V-anchor slice this wires — gold + gate + extractor + frozen LIVE probe + advisor) · V61-234 (the wedge WIRING precedent: whitelist + dispatch + TaskRunner branch land in the wiring slice, NOT the V&V slice)
 sibling_decs: V61-235 (the immediately prior V71.B V&V-anchor slice — this is its deferred live-wiring half, exactly as DEC-V61-234 was the live-wiring half of DEC-V61-233) · V61-088 (pre-implementation surface-scan discipline this slice followed)
 phase: P4 (compressible/supersonic vertical) · V71B-FOLLOWUP-1 item 1 — the low-Re BFS live-wiring slice (turbulence-treatment breadth · NOT a coverage flip)
@@ -10,7 +10,7 @@ confidence: high
 kogami_opt_in: false (sub-DEC class · live-wiring of an already-validated V&V anchor on a cell already PR; the binding gate is the Codex round-cap=3 chain on the adapter dispatch / runner / TaskRunner branch / whitelist surface. Not a charter trigger; user may invoke Kogami at will per V133.)
 round_cap: 3
 codex_review_relay: 86gs gpt-5.4 xhigh (governance baseline; codex review --commit)
-codex_verdict: CHANGES_REQUIRED (R0 P1+P2 → R1 P1+P2 → R2 P2; cap=3 reached. R2's lone P2 fixed by name-only predicate revert. All R0/R1/R2 findings resolved; NO 4th round auto-run per cap. Pending user ratification or one confirmatory review.)
+codex_verdict: CHANGES_REQUIRED → USER-RATIFIED CLOSE (5 rounds, every round a real finding. R0 P1+P2 → R1 P1+P2 → R2 P2 [cap] → R3 P1 [user confirmatory] → R4 P1 [user final]. ALL primary-path findings RESOLVED. Residual = the SECONDARY workbench-editor benchmark-identity edge [R4 P1: a draft that edits a benchmark-defining param is mis-graded against the frozen gold] — user-ratified 2026-06-09 as a KNOWN LIMITATION + V71B-FOLLOWUP-2, NOT a Codex APPROVE. Accepted by user ratification per the cap-rule 交用户裁决 path.)
 codex_tool_report_path: reports/codex_tool_reports/v61_236_p4_bfs_lowre_wiring_report.md
 notion_sync_status: retired (Notion deprecated per sponsor 2026-06-09 — no DEC sync)
 touches_shared_dec: src/foam_agent_adapter.py (NEW _docker_run_of11_rm fresh --rm OF11 helper · NEW _execute_backward_facing_step_lowre persistent-output runner · execute() identity-keyed dispatch short-circuit) · src/task_runner.py (re-added _verify_bfs_lowre + the 4c identity-keyed verification branch removed in DEC-V61-235 R1) · knowledge/whitelist.yaml (the backward_facing_step_lowre specialized_gate_anchor entry — deferred from V61-235, lands here WITH its verification path) · tests/p4/test_bfs_lowre_wiring.py (NEW offline dispatch/collision/whitelist-load/verify regression) · tests/p4/test_bfs_lowre_live.py (NEW opt-in live e2e) · reports/showcase_aero/_v71b_bfs_lowre_backend_e2e/ (NEW frozen backend-launched evidence + tamper manifest) · .planning/cfd_capability_matrix.md (within-cell wiring note · counts UNCHANGED) · .planning/followups/v71b_bfs_lowre_live_wiring_deferred.md (item 1 marked LANDED · item 2 still open)
@@ -231,11 +231,36 @@ the user.
     routes + verifies; a non-anchor draft keeps its own case_id → unverified by this gate (R2 P2
     preserved); direct constructors use the name fallback. +3 tests (incl. the REAL-loader
     rename regression). Followed by ONE final confirmatory review per the same authorisation.
+- **R4 (user-authorised final)** (commit 8606b3b) — **CHANGES_REQUIRED**: 1 P1 — the
+  symmetric twin of R3 and the whack-a-mole signal. Keying on stable `case_id` is too BROAD
+  for the editor path: a draft that KEEPS `case_id='backward_facing_step_lowre'` but EDITS a
+  benchmark-defining param (`parameters.Re`) is still routed + graded against the frozen
+  Re=5000 gold — a WRONG verdict on a self-created variant (lower severity than R3: a wrong
+  verdict, not a silent pass; narrow + secondary editor path).
+  - **Disposition — USER-RATIFIED (accept + scoped follow-up)**: five rounds in, well past
+    cap, each point-fix revealing the next edge of the same mutable-draft-vs-frozen-benchmark
+    identity problem, the user chose to SHIP the wiring (primary whitelist/batch path
+    correct + green) and track R4 P1 + the broader param-edit class as a KNOWN LIMITATION +
+    `V71B-FOLLOWUP-2` (`.planning/followups/v61_236_draft_editor_benchmark_identity.md`).
+    NO 6th review; NO further code change (8606b3b accepted as-is).
 
-`status` stays Proposed / `codex_verdict` reflects the chain until the final confirmatory review
-returns APPROVE (then → Accepted + capability-matrix DONE).
+## Known limitation (user-ratified · V71B-FOLLOWUP-2)
 
-(Trail appended as rounds complete; `codex_verdict` frontmatter flips to APPROVE +
-`status: Accepted` + the capability-matrix cell flips to DONE on close. Per the
-DEC-V61-235 test-red-team P1-1 lesson, the matrix reads "LANDED · pending Codex
-APPROVE" until then.)
+The frozen-benchmark dispatch (`is_bfs_lowre_dispatch`) is keyed on case identity
+(`case_id`-or-`name`). On the SECONDARY workbench-editor path, a user can save a draft of the
+benchmark anchor (`user_drafts/backward_facing_step_lowre.yaml`) that keeps the `case_id` but
+EDITS a benchmark-defining field (e.g. `parameters.Re`); that variant is still routed to the
+dedicated runner and graded by `_verify_bfs_lowre` against the frozen Re=5000 gold — a WRONG
+verdict on a self-created variant (Codex R4 P1). This does NOT affect the PRIMARY deliverable:
+the benchmark anchor run+verified through the whitelist / `run_batch` path (where `case_id` and
+params come from the frozen whitelist) is unambiguous and green. The holistic fix (preferred:
+source-gate so drafts are variants, never benchmarked) is tracked in V71B-FOLLOWUP-2, to be
+decided deliberately — not as a round-cap point-fix.
+
+## Closure
+
+`status: Accepted` by **USER RATIFICATION** (2026-06-09) — explicitly NOT a Codex APPROVE (the
+final R4 verdict was CHANGES_REQUIRED on the ratified-as-follow-up editor-identity edge). This is
+the cap-rule `交用户裁决` path: 5 Codex rounds (every one a real finding), all primary-path
+findings resolved, the residual secondary-path edge ratified as a documented limitation +
+V71B-FOLLOWUP-2. The capability-matrix cell flips to DONE (primary path) with the limitation noted.

@@ -210,7 +210,42 @@ predicate cases a2 (renamed anchor routes) and b2 (case_id wins over a misleadin
 **R3-fix regression**: tests/p4 + wizard rename regression passed · full suite (tests/ +
 ui/backend/tests/) tests/ 2088 passed/5 skipped + the real-loader rename regression passes; ui/backend/tests/ has 9 PRE-EXISTING failures (baseline-confirmed identical at b6d6151 — ZERO net-new from DEC-236: stale catalog-count + artifact/Docker real-run tests) · import-linter 5 kept / 0 broken · high-Re BFS byte-identical.
 
-### Final round-cap status
+---
 
-R0 + R1 + R2 (cap) + R3 (user-authorised confirmatory) = 4 rounds. The structural fix above
-(user-chosen) is followed by ONE final confirmatory review per the same user authorisation.
+## R4 (user-authorised final) — commit `8606b3b` — CHANGES_REQUIRED (1 P1) · USER-RATIFIED CLOSE
+
+### [P1] case_id too broad for the editor path — `src/models.py:160-161`
+
+> If the editable `user_drafts/backward_facing_step_lowre.yaml` changes benchmark-defining
+> fields such as `parameters.Re`, `_task_spec_from_case_id()` still passes those overrides
+> through, but this predicate now treats the draft as canonical solely because its `case_id`
+> stays `backward_facing_step_lowre`. The run is sent through the dedicated low-Re path and
+> the shared TaskRunner branch verifies it against the frozen Re=5000 gold even though the
+> draft is no longer the canonical benchmark — reintroducing the wrong-benchmark problem for
+> the editor path.
+
+**Verified VALID — the symmetric twin of R3 P1, and the whack-a-mole signal.** The chain
+R2 P2 (wall_treatment too broad) → R3 P1 (name too fragile) → R4 P1 (case_id too broad) is the
+same root: a mutable draft of a frozen benchmark has no clean single-key identity; each param
+the predicate doesn't check is an escape hatch. Severity is LOWER than R3 (a WRONG verdict on a
+deliberately-edited variant, NOT a silent unverified pass), and the trigger is narrow + on the
+SECONDARY workbench-editor path. The PRIMARY whitelist/batch path (the actual deliverable) is
+unambiguous and green.
+
+**Disposition — USER-RATIFIED (2026-06-09): accept + scoped follow-up.** Five rounds in, well
+past cap=3, with each point-fix revealing the next edge of the same draft-editor identity
+problem, the user (final authority) chose to **ship the wiring** (primary path correct/green)
+and treat R4 P1 + the broader param-edit class as a **known narrow limitation** with a dedicated
+follow-up (`.planning/followups/v61_236_draft_editor_benchmark_identity.md`, V71B-FOLLOWUP-2 —
+preferred direction: source-gate the benchmark so drafts are variants, never benchmarked) rather
+than round-6 whack-a-mole. NO 6th review; NO further code change (8606b3b accepted as-is).
+
+### Final chain summary (honest)
+
+R0 → R1 → R2 → R3 (user confirmatory) → R4 (user final) = 5 rounds, EVERY round a real finding.
+All PRIMARY-path findings RESOLVED (R0 P1 pyvista, R0/R1 P2 deps, R1 P1 execute/verify symmetry,
+R2 P2 over-broad, R3 P1 renamed-anchor identity). The residual is the SECONDARY editor-path
+benchmark-identity edge (R4 P1), **user-ratified** as a documented known limitation +
+V71B-FOLLOWUP-2. The DEC advances to Accepted by USER RATIFICATION — **not** a Codex APPROVE
+(the final verdict was CHANGES_REQUIRED on the ratified-as-follow-up edge). This is the cap-rule
+`交用户裁决` path made explicit.
