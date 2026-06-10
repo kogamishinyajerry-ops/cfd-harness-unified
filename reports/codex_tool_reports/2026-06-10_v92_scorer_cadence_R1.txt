@@ -1,0 +1,2321 @@
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: OpenAI
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019eaf5a-002f-7340-a3d8-6eef32e68173
+--------
+user
+commit 2d06799
+exec
+/bin/zsh -lc "printf 'Using skill: gsd-code-review (reviewing changed source for bugs)\\n' && sed -n '1,220p' /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md && printf '\\n---COMMIT---\\n' && git rev-parse --show-toplevel && git show --stat --oneline --decorate=short 2d06799 && printf '\\n---DIFF---\\n' && git show --unified=80 --no-ext-diff 2d06799" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 6514ms:
+2026-06-10 10:26:20.501 xcodebuild[14534:2020655]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:20.665 xcodebuild[14534:2020653] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-yP6y5XuC' (errno=Operation not permitted)
+2026-06-10 10:26:21.239 xcodebuild[14536:2020668]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:21.397 xcodebuild[14536:2020667] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+/Users/Zhuanz/Desktop/cfd-harness-unified
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-RlYTvIWu' (errno=Operation not permitted)
+2026-06-10 10:26:22.631 xcodebuild[14541:2020709]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:22.796 xcodebuild[14541:2020708] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-lV19hj9j' (errno=Operation not permitted)
+2026-06-10 10:26:23.410 xcodebuild[14563:2020753]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:23.574 xcodebuild[14563:2020750] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+2d06799 (HEAD -> codex/v4-import-blueprint-fidelity) fix(v92): pw_vote spec-level aggregation across playwright projects · confidence:h
+ scripts/governance/v92_fleet/pw_vote.py  | 33 +++++++++++++++++++++-----------
+ tests/governance/test_v92_scorer_vote.py | 22 +++++++++++++++++++++
+ 2 files changed, 44 insertions(+), 11 deletions(-)
+
+---DIFF---
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-fcF6dQoa' (errno=Operation not permitted)
+2026-06-10 10:26:24.855 xcodebuild[14570:2020777]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:25.031 xcodebuild[14570:2020776] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-QmXmvtwU' (errno=Operation not permitted)
+2026-06-10 10:26:25.603 xcodebuild[14750:2021006]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:25.766 xcodebuild[14750:2021005] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+commit 2d067999f39d525180bedee60b5f884ebf5d66b6
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Wed Jun 10 10:26:02 2026 +0800
+
+    fix(v92): pw_vote spec-level aggregation across playwright projects · confidence:h
+    
+    Codex R0 P2 (cadence review of a448e9d): vote unit was per tests[] entry,
+    so a CROSSBROWSER=1 matrix counted one logical spec once per project —
+    inflating total/flaky/confirmed_failed and able to spuriously trip the
+    D4 flaky>=3 mini-retro guard.
+    
+    Fix: instance-level confirm-on-retry first (any attempt passed = instance
+    ok), then aggregate to spec: all instances ok -> passed (flaky if any
+    instance retried); ANY instance with no passing attempt -> confirmed_failed
+    (hard fail on one browser is never masked by a pass on another).
+    Single-project reports behave identically to before. Empty-results
+    instances stay fail-closed.
+    
+    Tests: +2 regression pins (multi-project flaky counted once · cross-browser
+    hard fail not masked); pytest -q tests/governance/ 17/17 green.
+    
+    Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+diff --git a/scripts/governance/v92_fleet/pw_vote.py b/scripts/governance/v92_fleet/pw_vote.py
+index 9744d4f..0951735 100644
+--- a/scripts/governance/v92_fleet/pw_vote.py
++++ b/scripts/governance/v92_fleet/pw_vote.py
+@@ -1,73 +1,84 @@
+ #!/usr/bin/env python3
+ """V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
+ 
+-A spec PASSES if ANY attempt passed (playwright --retries semantics).
+-  - flaky          = eventually passed, but >=1 failed attempt (telemetry, 0 penalty)
+-  - confirmed_fail = no attempt passed (drives the pro-rate penalty)
++Vote unit = spec (not test instance). Each tests[] entry (one per
++playwright project, e.g. CROSSBROWSER=1 matrix) votes instance-level
++first — instance ok if ANY attempt passed (--retries semantics) — then
++aggregates to the spec:
++  - passed         = every project instance has >=1 passing attempt
++  - flaky          = passed, but >=1 instance needed a retry (telemetry, 0 penalty)
++  - confirmed_fail = >=1 instance where NO attempt passed (drives the
++                     pro-rate penalty; a hard fail on one browser is
++                     never masked by a pass on another)
++A spec is counted exactly once regardless of project count (Codex R0 P2).
+ 
+ Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
+ spec on a single load-induced transient (V90/V91 retro Open Q #1).
+ 
+ Usage: pw_vote.py <playwright_report.json>
+ Emits one JSON object on stdout:
+   {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+    "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+ On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+ """
+ import json
+ import sys
+ 
+ 
+ def walk(suites):
+     for s in suites:
+         for sp in s.get("specs", []):
+-            for t in sp.get("tests", []):
+-                yield sp.get("title", "?"), t
++            if sp.get("tests", []):
++                yield sp.get("title", "?"), sp["tests"]
+         yield from walk(s.get("suites", []))
+ 
+ 
+ def vote(report: dict) -> dict:
+     out = {
+         "passed": 0,
+         "total": 0,
+         "flaky": 0,
+         "confirmed_failed": 0,
+         "flaky_titles": [],
+         "failed_titles": [],
+         "parse_error": None,
+     }
+-    for title, t in walk(report.get("suites", [])):
+-        results = t.get("results", [])
++    for title, tests in walk(report.get("suites", [])):
+         out["total"] += 1
+-        any_pass = any(r.get("status") == "passed" for r in results)
+-        any_fail = any(r.get("status") != "passed" for r in results)
+-        if any_pass:
++        inst_ok, inst_flaky = [], []
++        for t in tests:
++            results = t.get("results", [])
++            any_pass = any(r.get("status") == "passed" for r in results)
++            any_fail = any(r.get("status") != "passed" for r in results)
++            inst_ok.append(any_pass)
++            inst_flaky.append(any_pass and any_fail)
++        if all(inst_ok):
+             out["passed"] += 1
+-            if any_fail:
++            if any(inst_flaky):
+                 out["flaky"] += 1
+                 out["flaky_titles"].append(title)
+         else:
+             out["confirmed_failed"] += 1
+             out["failed_titles"].append(title)
+     return out
+ 
+ 
+ def main(path: str) -> dict:
+     try:
+         with open(path) as f:
+             report = json.load(f)
+         return vote(report)
+     except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
+         return {
+             "passed": 0,
+             "total": 0,
+             "flaky": 0,
+             "confirmed_failed": 0,
+             "flaky_titles": [],
+             "failed_titles": [],
+             "parse_error": str(exc),
+         }
+ 
+ 
+ if __name__ == "__main__":
+     print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+diff --git a/tests/governance/test_v92_scorer_vote.py b/tests/governance/test_v92_scorer_vote.py
+index 81086f2..b0e2c4a 100644
+--- a/tests/governance/test_v92_scorer_vote.py
++++ b/tests/governance/test_v92_scorer_vote.py
+@@ -1,138 +1,160 @@
+ """V92 confirm-on-retry scorer semantics (DEC-V92-charter).
+ 
+ Covers:
+   1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+      nested suites / parse-error (fail-closed 0/0).
+   2. score_stability.sh integration via STABILITY_TEST_CMD fake command —
+      fail-once (transient, 0 penalty) vs fail-always (confirmed, −30 each).
+ """
+ import json
+ import os
+ import subprocess
+ import sys
+ from pathlib import Path
+ 
+ import pytest
+ 
+ REPO = Path(__file__).resolve().parents[2]
+ PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+ STABILITY = REPO / "scripts" / "governance" / "v71_fleet" / "score_stability.sh"
+ 
+ sys.path.insert(0, str(PW_VOTE.parent))
+ from pw_vote import vote, main as pw_vote_main  # noqa: E402
+ 
+ 
+ def _spec(title, statuses):
+     return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
+ 
+ 
++def _multi_spec(title, *per_project_statuses):
++    """One spec with one tests[] entry per playwright project (CROSSBROWSER matrix)."""
++    return {
++        "title": title,
++        "tests": [{"results": [{"status": s} for s in statuses]} for statuses in per_project_statuses],
++    }
++
++
+ def _report(specs, nested=None):
+     suite = {"specs": specs, "suites": nested or []}
+     return {"suites": [suite]}
+ 
+ 
+ class TestPwVote:
+     def test_all_pass(self):
+         r = vote(_report([_spec("a", ["passed"]), _spec("b", ["passed"])]))
+         assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+ 
+     def test_flaky_eventual_pass_is_not_penalized(self):
+         # V91 class: spec #50 timed out under load, passed on retry
+         r = vote(_report([_spec("visual #50", ["timedOut", "passed"]), _spec("b", ["passed"])]))
+         assert r["passed"] == 2  # flaky spec COUNTS as passed (V92 vote)
+         assert r["confirmed_failed"] == 0
+         assert r["flaky"] == 1
+         assert r["flaky_titles"] == ["visual #50"]
+ 
+     def test_confirmed_fail_all_attempts(self):
+         r = vote(_report([_spec("broken", ["failed", "failed", "failed"]), _spec("b", ["passed"])]))
+         assert r["passed"] == 1
+         assert r["confirmed_failed"] == 1
+         assert r["failed_titles"] == ["broken"]
+         assert r["flaky"] == 0
+ 
+     def test_nested_suites_walked(self):
+         inner = {"specs": [_spec("deep", ["failed", "passed"])], "suites": []}
+         r = vote(_report([_spec("top", ["passed"])], nested=[inner]))
+         assert r["total"] == 2
+         assert r["passed"] == 2
+         assert r["flaky"] == 1
+ 
+     def test_v78_regression_class_would_have_scored_86(self):
+         # 184 clean + 1 flaky-pass: V78 rule → 184/185 (pro-rate 59 → min 86);
+         # V92 vote → 185/185 (full 60).
+         specs = [_spec(f"s{i}", ["passed"]) for i in range(184)]
+         specs.append(_spec("s50", ["timedOut", "passed"]))
+         r = vote(_report(specs))
+         assert r["passed"] == r["total"] == 185
+         v78_passed = 184  # old all()-rule
+         assert v78_passed * 60 // 185 == 59  # documents the V91 dip this fixes
+ 
++    def test_multi_project_flaky_counted_once(self):
++        # Codex R0 P2: CROSSBROWSER matrix — same spec flaky on both projects
++        # must count 1 spec / 1 flaky, not 2 (else D4 flaky>=3 guard inflates)
++        r = vote(_report([_multi_spec("x", ["timedOut", "passed"], ["failed", "passed"])]))
++        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 1, 0)
++        assert r["flaky_titles"] == ["x"]
++
++    def test_multi_project_hard_fail_not_masked_by_other_project(self):
++        # chromium passes, firefox never passes → spec is confirmed_failed
++        # (a pass on one browser must not retry-away a hard cross-browser fail)
++        r = vote(_report([_multi_spec("y", ["passed"], ["failed", "failed", "failed"])]))
++        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
++        assert r["failed_titles"] == ["y"]
++
+     def test_parse_error_fails_closed(self, tmp_path):
+         bad = tmp_path / "bad.json"
+         bad.write_text("{not json")
+         r = pw_vote_main(str(bad))
+         assert (r["passed"], r["total"]) == (0, 0)
+         assert r["parse_error"] is not None
+ 
+     def test_cli_emits_json(self, tmp_path):
+         f = tmp_path / "rep.json"
+         f.write_text(json.dumps(_report([_spec("a", ["passed"])])))
+         out = subprocess.run(
+             [sys.executable, str(PW_VOTE), str(f)], capture_output=True, text=True, check=True
+         )
+         assert json.loads(out.stdout)["passed"] == 1
+ 
+ 
+ @pytest.fixture
+ def fake_test_cmd(tmp_path):
+     """Returns a cmd that fails on invocation numbers listed in FAIL_ON."""
+     counter = tmp_path / "count"
+     counter.write_text("0")
+     script = tmp_path / "fake.sh"
+     script.write_text(
+         "#!/usr/bin/env bash\n"
+         f'c=$(cat "{counter}"); c=$((c+1)); echo "$c" > "{counter}"\n'
+         'for n in $FAIL_ON; do [ "$c" -eq "$n" ] && exit 1; done\n'
+         "exit 0\n"
+     )
+     script.chmod(0o755)
+     return str(script)
+ 
+ 
+ def _run_stability(cmd, fail_on):
+     env = dict(os.environ, STABILITY_TEST_CMD=cmd, FAIL_ON=fail_on)
+     out = subprocess.run(
+         ["bash", str(STABILITY)], capture_output=True, text=True, env=env, cwd=str(REPO)
+     )
+     assert out.returncode == 0, out.stderr
+     return json.loads(out.stdout)
+ 
+ 
+ @pytest.mark.skipif(not (REPO / "ui" / "frontend").is_dir(), reason="ui/frontend required")
+ class TestStabilityConfirmOnRetry:
+     def test_transient_flake_zero_penalty(self, fake_test_cmd):
+         # run1 fails, its retry (invocation 2) passes → transient, score 100
+         r = _run_stability(fake_test_cmd, "1")
+         assert r["score"] == 100
+         assert r["subscores"]["flake_count"] == 0
+         assert r["subscores"]["transient_flake_count"] == 1
+ 
+     def test_clean_run_score_100(self, fake_test_cmd):
+         r = _run_stability(fake_test_cmd, "")
+         assert r["score"] == 100
+         assert r["subscores"]["transient_flake_count"] == 0
+ 
+     def test_confirmed_fail_full_penalty(self, fake_test_cmd):
+         # every invocation fails → 3 confirmed fails → 100 − 3×30 = 10
+         r = _run_stability(fake_test_cmd, "1 2 3 4 5 6")
+         assert r["score"] == 10
+         assert r["subscores"]["flake_count"] == 3
+         assert r["subscores"]["transient_flake_count"] == 0
+ 
+     def test_d4_guard_flags_two_transients(self, fake_test_cmd):
+         # run1 + run2 fail, both retries pass → 2 transients → D4 mini-retro flag
+         r = _run_stability(fake_test_cmd, "1 3")
+         assert r["score"] == 100
+         assert r["subscores"]["transient_flake_count"] == 2
+         assert any("mini-retro" in f for f in r["failures"])
+
+exec
+/bin/zsh -lc "sed -n '1,240p' scripts/governance/v71_fleet/score_stability.sh && printf '\\n---\\n' && sed -n '1,240p' scripts/governance/v92_fleet/pw_vote.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V67-C Fleet Agent #7: Stability
+# Repeated vitest runs (N=3) — detect flake. Memory growth via repeated build.
+# Score = 100 - confirmed_fail*30 - mem_growth_pct*5 (clip [0,100])
+#
+# V92 (DEC-V92-charter D1 · confirm-on-retry): a failing run gets exactly
+# ONE isolation retry. Penalty only on CONFIRMED fail (initial FAIL + retry
+# FAIL). Transient flake (retry PASS) = telemetry subscore, 0 penalty.
+# Closes V90/V91 retro Open Q #1 (1-vote-veto on 1-in-N statistical noise).
+# STABILITY_TEST_CMD env overrides the test command (testability hook).
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="stability"
+dim="稳定性"
+weight=0.08
+evidence=()
+failures=()
+
+flake_count=0            # V92: confirmed fails only
+transient_flake_count=0  # V92: retry-cleared noise (0 penalty, audited)
+runs=3
+results=()
+test_cmd="${STABILITY_TEST_CMD:-npm run test}"
+
+if [ -d "ui/frontend" ]; then
+  cd ui/frontend
+  for i in 1 2 3; do
+    if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
+      results+=("run${i}=PASS")
+    else
+      # V92 confirm-on-retry: single isolation retry before penalizing
+      if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}_retry.log" 2>&1; then
+        results+=("run${i}=TRANSIENT(retry PASS)")
+        transient_flake_count=$((transient_flake_count + 1))
+      else
+        results+=("run${i}=CONFIRMED_FAIL")
+        flake_count=$((flake_count + 1))
+      fi
+    fi
+  done
+
+  if [ "$flake_count" -eq 0 ]; then
+    if [ "$transient_flake_count" -eq 0 ]; then
+      evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
+    else
+      evidence+=("stability: 0 confirmed fail · ${transient_flake_count} transient flake(s) retry-cleared (V92 confirm-on-retry · 0 penalty · audited)")
+    fi
+  else
+    failures+=("stability: ${flake_count}/${runs} runs CONFIRMED FAIL · " "${results[@]}")
+  fi
+  if [ "$transient_flake_count" -ge 2 ]; then
+    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+  fi
+  cd - > /dev/null
+else
+  failures+=("ui/frontend not found")
+  flake_count=$runs
+fi
+
+# Memory growth: track 2 sequential build sizes; if dist size differs > 5%, flag.
+mem_growth_pct=0
+# (Baseline iter 0: skip mem check; iter 1+ will compare to baseline)
+evidence+=("memory growth check deferred to iter 1+ (needs baseline)")
+
+score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+if [ "$score" -lt 0 ]; then score=0; fi
+
+python3 - <<PYEOF
+import json
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "vitest_runs": $runs,
+    "flake_count": $flake_count,
+    "transient_flake_count": $transient_flake_count,
+    "memory_growth_pct": $mem_growth_pct,
+  },
+  "evidence": $(printf '%s\n' "${evidence[@]}" | jq -R . | jq -sc .),
+  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+---
+#!/usr/bin/env python3
+"""V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
+
+Vote unit = spec (not test instance). Each tests[] entry (one per
+playwright project, e.g. CROSSBROWSER=1 matrix) votes instance-level
+first — instance ok if ANY attempt passed (--retries semantics) — then
+aggregates to the spec:
+  - passed         = every project instance has >=1 passing attempt
+  - flaky          = passed, but >=1 instance needed a retry (telemetry, 0 penalty)
+  - confirmed_fail = >=1 instance where NO attempt passed (drives the
+                     pro-rate penalty; a hard fail on one browser is
+                     never masked by a pass on another)
+A spec is counted exactly once regardless of project count (Codex R0 P2).
+
+Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
+spec on a single load-induced transient (V90/V91 retro Open Q #1).
+
+Usage: pw_vote.py <playwright_report.json>
+Emits one JSON object on stdout:
+  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+"""
+import json
+import sys
+
+
+def walk(suites):
+    for s in suites:
+        for sp in s.get("specs", []):
+            if sp.get("tests", []):
+                yield sp.get("title", "?"), sp["tests"]
+        yield from walk(s.get("suites", []))
+
+
+def vote(report: dict) -> dict:
+    out = {
+        "passed": 0,
+        "total": 0,
+        "flaky": 0,
+        "confirmed_failed": 0,
+        "flaky_titles": [],
+        "failed_titles": [],
+        "parse_error": None,
+    }
+    for title, tests in walk(report.get("suites", [])):
+        out["total"] += 1
+        inst_ok, inst_flaky = [], []
+        for t in tests:
+            results = t.get("results", [])
+            any_pass = any(r.get("status") == "passed" for r in results)
+            any_fail = any(r.get("status") != "passed" for r in results)
+            inst_ok.append(any_pass)
+            inst_flaky.append(any_pass and any_fail)
+        if all(inst_ok):
+            out["passed"] += 1
+            if any(inst_flaky):
+                out["flaky"] += 1
+                out["flaky_titles"].append(title)
+        else:
+            out["confirmed_failed"] += 1
+            out["failed_titles"].append(title)
+    return out
+
+
+def main(path: str) -> dict:
+    try:
+        with open(path) as f:
+            report = json.load(f)
+        return vote(report)
+    except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
+        return {
+            "passed": 0,
+            "total": 0,
+            "flaky": 0,
+            "confirmed_failed": 0,
+            "flaky_titles": [],
+            "failed_titles": [],
+            "parse_error": str(exc),
+        }
+
+
+if __name__ == "__main__":
+    print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+
+exec
+/bin/zsh -lc "git grep -n \"pw_vote.py\\|confirmed_failed\\|flaky_titles\\|failed_titles\\|parse_error\" -- scripts tests | sed -n '1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 2232ms:
+2026-06-10 10:26:37.734 xcodebuild[14797:2021244]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:37.900 xcodebuild[14797:2021236] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-ufmCmwBC' (errno=Operation not permitted)
+2026-06-10 10:26:38.507 xcodebuild[14984:2021506]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:38.669 xcodebuild[14984:2021505] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+scripts/governance/v78_fleet/score_ux.sh:9:# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
+scripts/governance/v78_fleet/score_ux.sh:43:  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+scripts/governance/v78_fleet/score_ux.sh:47:  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+scripts/governance/v78_fleet/score_ux.sh:48:  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
+scripts/governance/v78_fleet/score_ux.sh:51:    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
+scripts/governance/v78_fleet/score_ux.sh:84:    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+scripts/governance/v78_fleet/score_ux.sh:87:      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+scripts/governance/v78_fleet/score_ux.sh:90:      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+scripts/governance/v78_fleet/score_ux.sh:120:    "confirmed_failed_count": ${confirmed_failed:-0},
+scripts/governance/v92_fleet/pw_vote.py:18:Usage: pw_vote.py <playwright_report.json>
+scripts/governance/v92_fleet/pw_vote.py:20:  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+scripts/governance/v92_fleet/pw_vote.py:21:   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+scripts/governance/v92_fleet/pw_vote.py:22:On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+scripts/governance/v92_fleet/pw_vote.py:41:        "confirmed_failed": 0,
+scripts/governance/v92_fleet/pw_vote.py:42:        "flaky_titles": [],
+scripts/governance/v92_fleet/pw_vote.py:43:        "failed_titles": [],
+scripts/governance/v92_fleet/pw_vote.py:44:        "parse_error": None,
+scripts/governance/v92_fleet/pw_vote.py:59:                out["flaky_titles"].append(title)
+scripts/governance/v92_fleet/pw_vote.py:61:            out["confirmed_failed"] += 1
+scripts/governance/v92_fleet/pw_vote.py:62:            out["failed_titles"].append(title)
+scripts/governance/v92_fleet/pw_vote.py:76:            "confirmed_failed": 0,
+scripts/governance/v92_fleet/pw_vote.py:77:            "flaky_titles": [],
+scripts/governance/v92_fleet/pw_vote.py:78:            "failed_titles": [],
+scripts/governance/v92_fleet/pw_vote.py:79:            "parse_error": str(exc),
+scripts/governance/verify_q1_canary.py:76:            "_parse_error": "stdout not valid JSON",
+tests/governance/test_v92_scorer_vote.py:4:  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+tests/governance/test_v92_scorer_vote.py:18:PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+tests/governance/test_v92_scorer_vote.py:45:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+tests/governance/test_v92_scorer_vote.py:51:        assert r["confirmed_failed"] == 0
+tests/governance/test_v92_scorer_vote.py:53:        assert r["flaky_titles"] == ["visual #50"]
+tests/governance/test_v92_scorer_vote.py:58:        assert r["confirmed_failed"] == 1
+tests/governance/test_v92_scorer_vote.py:59:        assert r["failed_titles"] == ["broken"]
+tests/governance/test_v92_scorer_vote.py:83:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 1, 0)
+tests/governance/test_v92_scorer_vote.py:84:        assert r["flaky_titles"] == ["x"]
+tests/governance/test_v92_scorer_vote.py:87:        # chromium passes, firefox never passes → spec is confirmed_failed
+tests/governance/test_v92_scorer_vote.py:90:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
+tests/governance/test_v92_scorer_vote.py:91:        assert r["failed_titles"] == ["y"]
+tests/governance/test_v92_scorer_vote.py:93:    def test_parse_error_fails_closed(self, tmp_path):
+tests/governance/test_v92_scorer_vote.py:98:        assert r["parse_error"] is not None
+
+exec
+/bin/zsh -lc "sed -n '1,260p' scripts/governance/v92_fleet/score_visual_regression.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ exited 1 in 0ms:
+sed: scripts/governance/v92_fleet/score_visual_regression.sh: No such file or directory
+
+exec
+/bin/zsh -lc "git grep -n \"pw_vote.py\\|confirmed_failed\\|flun?\" -- scripts tests" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "find . -path '*playwright*json' -o -name '*report*.json' | sed -n '1,200p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 2161ms:
+2026-06-10 10:26:52.397 xcodebuild[15021:2021752]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:52.551 xcodebuild[15021:2021751] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-3oBmBf5X' (errno=Operation not permitted)
+2026-06-10 10:26:53.121 xcodebuild[15023:2021760]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:26:53.291 xcodebuild[15023:2021759] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+scripts/governance/v78_fleet/score_ux.sh:9:# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
+scripts/governance/v78_fleet/score_ux.sh:43:  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+scripts/governance/v78_fleet/score_ux.sh:47:  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+scripts/governance/v78_fleet/score_ux.sh:84:    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+scripts/governance/v78_fleet/score_ux.sh:87:      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+scripts/governance/v78_fleet/score_ux.sh:90:      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+scripts/governance/v78_fleet/score_ux.sh:120:    "confirmed_failed_count": ${confirmed_failed:-0},
+scripts/governance/v92_fleet/pw_vote.py:18:Usage: pw_vote.py <playwright_report.json>
+scripts/governance/v92_fleet/pw_vote.py:20:  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+scripts/governance/v92_fleet/pw_vote.py:41:        "confirmed_failed": 0,
+scripts/governance/v92_fleet/pw_vote.py:61:            out["confirmed_failed"] += 1
+scripts/governance/v92_fleet/pw_vote.py:76:            "confirmed_failed": 0,
+tests/governance/test_v92_scorer_vote.py:4:  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+tests/governance/test_v92_scorer_vote.py:18:PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+tests/governance/test_v92_scorer_vote.py:45:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+tests/governance/test_v92_scorer_vote.py:51:        assert r["confirmed_failed"] == 0
+tests/governance/test_v92_scorer_vote.py:58:        assert r["confirmed_failed"] == 1
+tests/governance/test_v92_scorer_vote.py:83:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 1, 0)
+tests/governance/test_v92_scorer_vote.py:87:        # chromium passes, firefox never passes → spec is confirmed_failed
+tests/governance/test_v92_scorer_vote.py:90:        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
+
+ succeeded in 5763ms:
+./ui/frontend/node_modules/@playwright/test/package.json
+./ui/frontend/node_modules/playwright-core/package.json
+./ui/frontend/node_modules/playwright-core/browsers.json
+./ui/frontend/node_modules/playwright-core/lib/server/deviceDescriptorsSource.json
+./ui/frontend/node_modules/playwright/node_modules/fsevents/package.json
+./ui/frontend/node_modules/playwright/package.json
+./ui/frontend/node_modules/playwright/lib/mcp/terminal/help.json
+./ui/frontend/node_modules/@axe-core/playwright/package.json
+./_external_substudies/cfd-s4-rbc/reports/deep_acceptance/visual_acceptance_report_manifest.json
+./_external_substudies/cfd-s2-naca-sas/reports/deep_acceptance/visual_acceptance_report_manifest.json
+./_external_substudies/cfd-s2-naca-cgrid/reports/deep_acceptance/visual_acceptance_report_manifest.json
+./_external_substudies/cfd-s2-naca-transition/reports/deep_acceptance/visual_acceptance_report_manifest.json
+./_external_substudies/cfd-s3-pc/reports/deep_acceptance/visual_acceptance_report_manifest.json
+./_industrial_substrates/demo_ahmed_2026/assets/final/demo_full_run_report.json
+./_industrial_substrates/demo_ahmed_2026/assets/final/01_mesh_generation_run_report.json
+./_industrial_substrates/demo_ahmed_2026/assets/final/_master_report.json
+./_industrial_substrates/demo_ahmed_2026/assets/final/02_solver_run_run_report.json
+./scripts/stack_track_c_case_ext_1/stack_report_http.json
+./scripts/stack_track_c_case_ext_1/stack_report_python.json
+./scripts/v63_case_006_substrate/stack_report_python_extended.json
+./scripts/stack_track_c_session_3/stack_report_http.json
+./scripts/stack_track_c_session_3/stack_report_python.json
+./scripts/v63_case_011_substrate/stack_report_python_extended.json
+./scripts/v63_case_011_substrate/stack_report_http_path_a_b48.json
+./scripts/stack_track_c_session_3_rerun/stack_report_http.json
+./scripts/stack_track_c_session_3_rerun/stack_report_python.json
+./scripts/stack_track_c_session_1_rerun/stack_report_http_rerun.json
+./scripts/stack_track_c_session_1_rerun/stack_report_python_rerun.json
+./scripts/v63_case_016_validation_b50/stack_report_python_extended.json
+./scripts/v63_case_016_validation_b50/stack_report_http_path_a_b50.json
+./scripts/stack_track_c_case_ext_2/stack_report_http.json
+./scripts/stack_track_c_case_ext_2/stack_report_python.json
+./scripts/v63_case_004_substrate/stack_report_python_extended.json
+./scripts/stack_track_c_session_1/stack_report_http.json
+./scripts/stack_track_c_session_1/stack_report_python.json
+./scripts/v64_case_006_substrate_v2/stack_report_python_extended_v2.json
+./.planning/reviews/kogami/w3_blind_control_report.json
+./.planning/reviews/kogami/w0_q1_canary_report.json
+./.planning/reviews/kogami/w2_q4_counter_truth_table_report.json
+./.planning/reviews/kogami/w0_q5_keyword_report.json
+./_sandboxes/case_015_vattenfall_t_junction/case/artifacts/mesh_report.json
+./_sandboxes/case_015_vattenfall_t_junction/case/artifacts/trust_report.json
+./_sandboxes/case_015_vattenfall_t_junction/case/artifacts/geometry_report.json
+./_sandboxes/case_027_hagen_poiseuille_pipe/case_v65/artifacts/mesh_report.json
+./_sandboxes/case_027_hagen_poiseuille_pipe/case_v65/artifacts/trust_report.json
+./_sandboxes/case_027_hagen_poiseuille_pipe/case_v65/artifacts/geometry_report.json
+./_sandboxes/case_028_apu_bay_ventilation/case/artifacts/mesh_report.json
+./_sandboxes/case_028_apu_bay_ventilation/case/artifacts/trust_report.json
+./_sandboxes/case_028_apu_bay_ventilation/case/artifacts/geometry_report.json
+./_sandboxes/case_007_kcs_ship_vof/case/artifacts/mesh_report.json
+./_sandboxes/case_007_kcs_ship_vof/case/artifacts/trust_report.json
+./_sandboxes/case_007_kcs_ship_vof/case/artifacts/geometry_report.json
+./_sandboxes/case_009_sandia_flame_d/case/artifacts/mesh_report.json
+./_sandboxes/case_009_sandia_flame_d/case/artifacts/trust_report.json
+./_sandboxes/case_009_sandia_flame_d/case/artifacts/geometry_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/mesh_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/trust_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts/geometry_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts.cycle1_baseline_backup/mesh_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts.cycle1_baseline_backup/trust_report.json
+./_sandboxes/case_011_plate_fin_compact_hx/case/artifacts.cycle1_baseline_backup/geometry_report.json
+./_sandboxes/case_006_onera_m6_transonic/case/artifacts/mesh_report.json
+./_sandboxes/case_006_onera_m6_transonic/case/artifacts/trust_report.json
+./_sandboxes/case_006_onera_m6_transonic/case/artifacts/geometry_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts/mesh_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts/trust_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts/geometry_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts.cycle1_baseline_backup/mesh_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts.cycle1_baseline_backup/trust_report.json
+./_sandboxes/case_010_drivaer_fastback_les/case/artifacts.cycle1_baseline_backup/geometry_report.json
+./_sandboxes/case_004_nrel_phase_vi_mrf/case/artifacts/mesh_report.json
+./_sandboxes/case_004_nrel_phase_vi_mrf/case/artifacts/trust_report.json
+./_sandboxes/case_004_nrel_phase_vi_mrf/case/artifacts/geometry_report.json
+./reports/deep_acceptance/visual_acceptance_report_manifest.json
+
+exec
+/bin/zsh -lc "sed -n '1,220p' scripts/governance/v78_fleet/score_ux.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V78 Fleet Agent #3: UX / Playability (V78 TIGHTENED · 100% specs PASS)
+# V78 change vs V71: flow_completion full credit ONLY when 100% specs PASS
+# (was: ≥17 of N PASS). Forces full playwright suite green.
+#
+# This is the V73.1-fragility-detection-gap closure (3-retro carry).
+#
+# V92 (DEC-V92-charter D2 · confirm-on-retry): playwright runs with
+# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
+# a spec PASSES if ANY attempt passed; flaky specs (eventual pass) are
+# telemetry only (0 penalty); confirmed fails (no attempt passed) drive
+# the V78 pro-rate exactly as before. Closes V90/V91 retro Open Q #1.
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="ux_playability"
+dim="使用手感"
+weight=0.15
+evidence=("placeholder")
+failures=("placeholder")
+
+pw_config="ui/frontend/playwright.config.ts"
+pw_dir="ui/frontend/e2e"
+
+flow_completion_score=0
+latency_score=0
+no_blocker_score=0
+passed=0
+total=0
+
+if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+else
+  repo_root="$(git rev-parse --show-toplevel)"
+  cd ui/frontend
+  # V92: --retries=2 → transient load-induced failures get majority vote
+  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+    pw_exit=0
+  else
+    pw_exit=$?
+  fi
+
+  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+  passed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])")
+  total=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])")
+  flaky=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['flaky'])")
+  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
+
+  if [ "${flaky:-0}" -gt 0 ]; then
+    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
+  fi
+  if [ "${flaky:-0}" -ge 3 ]; then
+    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+  fi
+
+  if [ "$total" -gt 0 ]; then
+    # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
+    # ≥17-of-N threshold loophole. Pro-rate by exact pass rate.
+    if [ "$passed" -eq "$total" ]; then
+      flow_completion_score=60
+      evidence+=("playwright: ${passed}/${total} specs PASS · 100% threshold MET (FULL=60/60)")
+    else
+      # Pro-rate by pass rate
+      flow_completion_score=$(( passed * 60 / total ))
+      evidence+=("playwright: ${passed}/${total} (${flow_completion_score}/60 pro-rated by exact pass rate)")
+      failures+=("V78 tightened: ${passed}/${total} specs PASS · need 100% for FULL")
+    fi
+
+    if [ "$pw_exit" -eq 0 ]; then
+      latency_score=25
+      evidence+=("latency: PASS (all specs within timeout)")
+    else
+      latency_score=12
+      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+    fi
+
+    blockers=$(grep -cE "click intercepted|Target closed|Test timeout" /tmp/v78_pw.stderr 2>/dev/null || echo 0)
+    blockers=$(echo "$blockers" | head -1 | tr -d ' \n')
+    blockers=${blockers:-0}
+    if [ "$blockers" -eq 0 ]; then
+      no_blocker_score=15
+      evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+      # V92 D2: signals from attempts that eventually passed = transient noise
+      no_blocker_score=15
+      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+    else
+      no_blocker_score=0
+      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+    fi
+  else
+    failures+=("playwright json parse failure · 0 tests recognized")
+  fi
+  cd - > /dev/null
+fi
+
+evidence=("${evidence[@]:1}")
+failures=("${failures[@]:1}")
+score=$((flow_completion_score + latency_score + no_blocker_score))
+
+python3 - <<PYEOF
+import json
+ev_raw = """$(printf '%s\n' "${evidence[@]+"${evidence[@]}"}")"""
+fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+ev = [l for l in ev_raw.split("\n") if l.strip()]
+fa = [l for l in fa_raw.split("\n") if l.strip()]
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "flow_completion": $flow_completion_score,
+    "latency_band": $latency_score,
+    "no_blocker_clicks": $no_blocker_score,
+    "specs_pass_count": ${passed:-0},
+    "specs_total_count": ${total:-0},
+    "flaky_specs_count": ${flaky:-0},
+    "confirmed_failed_count": ${confirmed_failed:-0},
+  },
+  "evidence": ev,
+  "failures": fa,
+  "honest_note": "V78 TIGHTENED (100% specs PASS) + V92 confirm-on-retry (--retries=2 · flaky=telemetry-only · confirmed fails drive pro-rate) per DEC-V92-charter"
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+exec
+/bin/zsh -lc "sed -n '1,260p' ui/frontend/playwright.config.ts" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "find ui/frontend/e2e -type f | sed -n '1,200p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+// Playwright config · V67-C bootstrap (V67-C.1).
+// Headless browser e2e tests for the workbench UI · run via `npx playwright test`.
+// Spawns vite dev server on :5173 if not already running.
+
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  // V68-A.4: snapshots land in __visual_baselines__/<projectName>/<test>/<name>
+  // so score_visualization.sh's find under __visual_baselines__/ picks them up.
+  snapshotPathTemplate:
+    "__visual_baselines__/{projectName}/{testFilePath}-snapshots/{arg}{ext}",
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  workers: 1,
+  reporter: process.env.CI ? "github" : "list",
+  timeout: 30_000,
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    headless: true,
+  },
+  // V79.2 · Cross-browser matrix · env-gated to keep default `npx playwright
+  // test` chromium-only (CI default), while `CROSSBROWSER=1 npx playwright
+  // test` runs the full firefox + webkit + chromium matrix.
+  //
+  // Browsers must be installed first: `npx playwright install firefox webkit`.
+  // V79.2 disclosed at close DEC §5 that browsers may not be installed in the
+  // session that opens the arc; the config-level enablement is the landed
+  // substrate either way.
+  projects:
+    process.env.CROSSBROWSER === "1"
+      ? [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+          {
+            name: "firefox",
+            use: { ...devices["Desktop Firefox"] },
+          },
+          {
+            name: "webkit",
+            use: { ...devices["Desktop Safari"] },
+          },
+        ]
+      : [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              // V76.5 · V77.6 · enable software WebGL (SwiftShader) so headless
+              // Chromium renders vtk.js canvases. Without these flags, WebGL is
+              // disabled in headless mode and VtkCanvasV3 takes the fallback
+              // branch — that's fine for graceful-degradation tests but the
+              // baselines that snapshot WebGL-only overlays (camera reset, axes
+              // widget, color legend, FPS indicator) can't render.
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+        ],
+  // V68-B.5 · webServer is an ARRAY · spawns BOTH fastapi backend (port 8001
+  // to avoid colliding with a developer's already-running :8000 backend) AND
+  // vite frontend (port 5173 · proxies /api → 127.0.0.1:8001).
+  //
+  // MSW is intentionally OFF here (no VITE_MSW env). The whole point of V68-B
+  // is that e2e runs against the real fastapi serving real corpus data.
+  // V68-A's MSW-on configuration is still available via `VITE_MSW=1` env var
+  // for offline-airplane work or isolation specs that want MSW intercept.
+  webServer: [
+    {
+      command:
+        "uv run uvicorn ui.backend.main:app --port 8001 --host 127.0.0.1",
+      url: "http://127.0.0.1:8001/api/cases",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      cwd: "../../",
+    },
+    {
+      command: "npm run dev -- --port 5173",
+      env: { CFD_BACKEND_PORT: "8001" },
+      url: "http://localhost:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
+});
+
+ succeeded in 0ms:
+ui/frontend/e2e/v68c-apu-bay-catalog.spec.ts
+ui/frontend/e2e/v87-v7-live-solver.spec.ts
+ui/frontend/e2e/full-flow.spec.ts
+ui/frontend/e2e/v88-v8-solver-config.spec.ts
+ui/frontend/e2e/visual-baseline.spec.ts
+ui/frontend/e2e/viewport-mode.spec.ts
+ui/frontend/e2e/v68c-material-card.spec.ts
+ui/frontend/e2e/v69-strictmode-investigation.spec.ts
+ui/frontend/e2e/topbar.spec.ts
+ui/frontend/e2e/v70-novice-onboarding.spec.ts
+ui/frontend/e2e/user-journey-v3.spec.ts
+ui/frontend/e2e/v3-keyboard-nav.spec.ts
+ui/frontend/e2e/v69-advisor-regression.spec.ts
+ui/frontend/e2e/v68c-ai-diagnose.spec.ts
+ui/frontend/e2e/v3-a11y-audit.spec.ts
+ui/frontend/e2e/v89-injection-harness.spec.ts
+ui/frontend/e2e/v69-eval-harness-wire.spec.ts
+ui/frontend/e2e/v79-ssim-active-gate.spec.ts
+ui/frontend/e2e/industrial-dogfood.spec.ts
+ui/frontend/e2e/v81-demo-banner-behavior.spec.ts
+ui/frontend/e2e/v70-shortcut-palette.spec.ts
+ui/frontend/e2e/v84-v5-substrate.spec.ts
+ui/frontend/e2e/v69-followups-reachable.spec.ts
+ui/frontend/e2e/v79-keyboard-tab-walk.spec.ts
+ui/frontend/e2e/v68c-ai-review.spec.ts
+ui/frontend/e2e/truth-chain.spec.ts
+
+exec
+/bin/zsh -lc "grep -Rin \"test\\.skip\\|browserName\\|project.name\\|skip(\" ui/frontend/e2e ui/frontend/tests 2>/dev/null | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "grep -Rin '\"tests\"' ui/frontend/e2e reports scripts tests 2>/dev/null | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 627ms:
+reports/codex_tool_reports/m6_0_round1_20260427_233034.log:2969:testpaths = ["tests"]
+reports/codex_tool_reports/m6_0_round1_20260427_233034.log:3116:    94	testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round2.md:1843:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round2.md:2115:    33	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/m_render_api_arc/round2.log:4132:testpaths = ["tests"]
+reports/codex_tool_reports/m_panels_arc_round5_2026-04-28.log:2735:    99	testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bc_render_report_codex_review.md:1257:_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7bc_render_report_codex_review.md:3383:    36	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/dec_v61_074_t1b1_round2.log:2898:testpaths = ["tests"]
+reports/codex_tool_reports/20260422_dec036b_codex_review.md:1328:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec036b_codex_review.md:2248:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/m_panels_arc_round4_2026-04-28.log:1091:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/adr_001_import_verify.log:836: testpaths = ["tests"]
+reports/codex_tool_reports/adr_001_import_verify.log:2391:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/adr_001_import_verify.log:4850:    56	testpaths = ["tests"]
+reports/codex_tool_reports/adr_001_import_verify.log:6367:    58	FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/m5_0_round2_postfix_20260427_223950.log:352: testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:690:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:4370:   143	    fixtures = tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:4383:   156	                        tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/2026-04-21_phase7c_tier_c_codex_review_round1.md:4852:    44	RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/dec_v61_074_t1b23_postcommit_round2.log:2842:testpaths = ["tests"]
+reports/codex_tool_reports/dec_v61_053_round4.log:2376:   241	    meas_dir = (repo_root / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/dec_v61_053_round4.log:5496:    54	RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/dec_v61_053_round4.log:6566:+    meas_dir = (repo_root / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/m6_1_round4_20260428_011502.log:1290:testpaths = ["tests"]
+reports/codex_tool_reports/m_panels_arc_round9_2026-04-28.log:2604:    58	FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/dec_v61_055_p1_t2_t3_review.log:2740:testpaths = ["tests"]
+reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:3449:    56	testpaths = ["tests"]
+reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:9643:    56	testpaths = ["tests"]
+reports/codex_tool_reports/dec_v61_057_plan_review.log:6044:    33	    Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/v61_112_phase1_r1_r2_r3_chain.md:16:| 1 | P2 | New solver-profile gate not collected by CI — `pyproject.toml` `testpaths = ["tests"]` skips `ui/backend/tests/test_solver_profiles.py`; only `test_report_bundle.py` is explicit-included. | `ui/backend/tests/test_solver_profiles.py:1-7` | Added file to BOTH ci.yml pytest invocations (mainline + plane-guard WARN-mode dogfood). |
+reports/codex_tool_reports/20260422_dec045_wave4_H_a6_promote_result.md:1329:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/m6_0_round4_20260427_235436.log:2074:testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round4.md:459:    fixtures = tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round4.md:472:                        tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/m_panels_arc_round8_2026-04-28.log:4072:    58	FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/m_panels_arc_round8_2026-04-28.log:4573:testpaths = ["tests"]
+reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:1240:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/20260422_dec045_wave2_E_tests_result.md:1563:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/adr_002_w2_impl_review.log:3429:testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round3.md:316:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round3.md:906:   143	    fixtures = tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round3.md:919:   156	                        tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round3.md:1029:    79	    fixture_case = root / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round3.md:1042:    92	    monkeypatch.setattr(svc, "_FIXTURE_ROOT", root / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/20260422_dec045_wave3_G_tests_result.md:2307:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec045_wave3_G_tests_result.md:3988:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/20260422_dec045_wave3_F_taskrunner_reorder_result.md:3267:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/20260422_dec045_wave3_F_taskrunner_reorder_result.md:5357:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec045_wave3_F_taskrunner_reorder_result.md:5490:54:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/m5_0_round3_postfix_20260427_225325.log:3327:testpaths = ["tests"]
+reports/codex_tool_reports/adr_002_w4_prep_review.log:1678:    56	testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:459:_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:1332:    fixture_case = root / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:1345:    monkeypatch.setattr(svc, "_FIXTURE_ROOT", root / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:1682:    79	    fixture_case = root / "ui" / "backend" / "tests" / "fixtures" / "runs" / case
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:1695:    92	    monkeypatch.setattr(svc, "_FIXTURE_ROOT", root / "ui" / "backend" / "tests" / "fixtures" / "runs")
+reports/codex_tool_reports/2026-04-21_phase7bc_codex_review_round2.md:1830:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec045_wave2_D_hazard_tier_uref_result.md:2643:FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/20260422_dec045_wave2_D_hazard_tier_uref_result.md:3500:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/m6_0_round2_20260427_233931.log:3453:testpaths = ["tests"]
+reports/codex_tool_reports/dec_v61_054_p1_t1_arc_review.log:5335:    56	testpaths = ["tests"]
+reports/codex_tool_reports/dec_v61_053_plan_review.log:3279:_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/2026-04-21_phase7a_field_capture_codex_review.md:1724:    28	RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec038_codex_review.md:1981:    53	RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/20260422_dec038_codex_review.md:2249:    55	FIXTURE_DIR = _HERE.parents[1] / "tests" / "fixtures"
+reports/codex_tool_reports/codex_audit_0208929.log:783:    63	testpaths = ["tests"]
+reports/codex_tool_reports/codex_audit_0208929.log:1112: testpaths = ["tests"]
+reports/codex_tool_reports/codex_audit_0208929.log:3235:    43	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+reports/codex_tool_reports/m6_0_round3_20260427_234740.log:2011:testpaths = ["tests"]
+reports/codex_tool_reports/2026-04-21_phase7bde_codex_review_round1.md:1686:    33	_FIXTURE_ROOT = _REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+scripts/smoke/dogfood_loop.py:713:        # ui/backend/tests/, but pytest's testpaths = ["tests"] means
+scripts/smoke/dogfood_loop.py:776:            if "Tests" in line and "passed" in line
+scripts/phase5_audit_run.py:54:RUNS_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures" / "runs"
+scripts/p2_acceptance_run.py:45:FIXTURE_DIR = REPO_ROOT / "ui" / "backend" / "tests" / "fixtures"
+scripts/governance/v78_fleet/score_visualization.sh:95:                for t in sp.get("tests", []):
+scripts/governance/v68b_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v68b_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v68c_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v68c_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v68a_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v68a_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v71_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v71_fleet/score_visualization.sh:66:                for t in sp.get("tests", []):
+scripts/governance/v73_fleet/score_interaction_polish.sh:45:                for t in sp.get("tests", []):
+scripts/governance/v73_fleet/score_interaction_polish.sh:136:                for t in sp.get("tests", []):
+scripts/governance/v73_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v73_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v72_fleet/score_interaction_polish.sh:43:                for t in sp.get("tests", []):
+scripts/governance/v72_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v72_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v67c_fleet/score_ux.sh:41:                for t in sp.get("tests", []):
+scripts/governance/v67c_fleet/score_visualization.sh:54:                for t in sp.get("tests", []):
+scripts/governance/v70_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v70_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v69_fleet/score_ux.sh:40:                for t in sp.get("tests", []):
+scripts/governance/v69_fleet/score_visualization.sh:64:                for t in sp.get("tests", []):
+scripts/governance/v74_fleet/score_interaction_polish.sh:45:                for t in sp.get("tests", []):
+scripts/governance/v74_fleet/score_interaction_polish.sh:136:                for t in sp.get("tests", []):
+scripts/governance/v92_fleet/pw_vote.py:31:            if sp.get("tests", []):
+scripts/governance/v92_fleet/pw_vote.py:32:                yield sp.get("title", "?"), sp["tests"]
+tests/test_preflight_multi_scalar.py:35:    meas_path = (tmp_path / "ui" / "backend" / "tests" / "fixtures" / "runs"
+tests/governance/test_v92_scorer_vote.py:26:    return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
+tests/governance/test_v92_scorer_vote.py:33:        "tests": [{"results": [{"status": s} for s in statuses]} for statuses in per_project_statuses],
+
+exec
+/bin/zsh -lc "grep -RinE 'test\\.skip|skip\\(|browserName|project\\.name|webkit|firefox|chromium' ui/frontend/e2e 2>/dev/null | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/frontend/e2e/visual-baseline.spec.ts:4:// __visual_baselines__/chromium/visual-baseline.spec.ts-snapshots/
+ui/frontend/e2e/v79-ssim-active-gate.spec.ts:28:  "ui/frontend/__visual_baselines__/chromium/visual-baseline.spec.ts-snapshots",
+
+exec
+/bin/zsh -lc 'git show 2d06799''^:scripts/governance/v92_fleet/pw_vote.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git show 2d06799''^:tests/governance/test_v92_scorer_vote.py | sed -n '"'1,140p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 2546ms:
+2026-06-10 10:28:38.457 xcodebuild[16290:2025799]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:28:38.706 xcodebuild[16290:2025796] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-1sFapxn5' (errno=Operation not permitted)
+2026-06-10 10:28:39.360 xcodebuild[16294:2025886]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:28:39.557 xcodebuild[16294:2025885] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+#!/usr/bin/env python3
+"""V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
+
+A spec PASSES if ANY attempt passed (playwright --retries semantics).
+  - flaky          = eventually passed, but >=1 failed attempt (telemetry, 0 penalty)
+  - confirmed_fail = no attempt passed (drives the pro-rate penalty)
+
+Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
+spec on a single load-induced transient (V90/V91 retro Open Q #1).
+
+Usage: pw_vote.py <playwright_report.json>
+Emits one JSON object on stdout:
+  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+"""
+import json
+import sys
+
+
+def walk(suites):
+    for s in suites:
+        for sp in s.get("specs", []):
+            for t in sp.get("tests", []):
+                yield sp.get("title", "?"), t
+        yield from walk(s.get("suites", []))
+
+
+def vote(report: dict) -> dict:
+    out = {
+        "passed": 0,
+        "total": 0,
+        "flaky": 0,
+        "confirmed_failed": 0,
+        "flaky_titles": [],
+        "failed_titles": [],
+        "parse_error": None,
+    }
+    for title, t in walk(report.get("suites", [])):
+        results = t.get("results", [])
+        out["total"] += 1
+        any_pass = any(r.get("status") == "passed" for r in results)
+        any_fail = any(r.get("status") != "passed" for r in results)
+        if any_pass:
+            out["passed"] += 1
+            if any_fail:
+                out["flaky"] += 1
+                out["flaky_titles"].append(title)
+        else:
+            out["confirmed_failed"] += 1
+            out["failed_titles"].append(title)
+    return out
+
+
+def main(path: str) -> dict:
+    try:
+        with open(path) as f:
+            report = json.load(f)
+        return vote(report)
+    except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
+        return {
+            "passed": 0,
+            "total": 0,
+            "flaky": 0,
+            "confirmed_failed": 0,
+            "flaky_titles": [],
+            "failed_titles": [],
+            "parse_error": str(exc),
+        }
+
+
+if __name__ == "__main__":
+    print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+
+ succeeded in 2512ms:
+2026-06-10 10:28:38.457 xcodebuild[16289:2025798]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:28:38.706 xcodebuild[16289:2025797] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-MjdGiPG0' (errno=Operation not permitted)
+2026-06-10 10:28:39.360 xcodebuild[16293:2025887]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:28:39.557 xcodebuild[16293:2025884] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+"""V92 confirm-on-retry scorer semantics (DEC-V92-charter).
+
+Covers:
+  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+     nested suites / parse-error (fail-closed 0/0).
+  2. score_stability.sh integration via STABILITY_TEST_CMD fake command —
+     fail-once (transient, 0 penalty) vs fail-always (confirmed, −30 each).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+STABILITY = REPO / "scripts" / "governance" / "v71_fleet" / "score_stability.sh"
+
+sys.path.insert(0, str(PW_VOTE.parent))
+from pw_vote import vote, main as pw_vote_main  # noqa: E402
+
+
+def _spec(title, statuses):
+    return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
+
+
+def _report(specs, nested=None):
+    suite = {"specs": specs, "suites": nested or []}
+    return {"suites": [suite]}
+
+
+class TestPwVote:
+    def test_all_pass(self):
+        r = vote(_report([_spec("a", ["passed"]), _spec("b", ["passed"])]))
+        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+
+    def test_flaky_eventual_pass_is_not_penalized(self):
+        # V91 class: spec #50 timed out under load, passed on retry
+        r = vote(_report([_spec("visual #50", ["timedOut", "passed"]), _spec("b", ["passed"])]))
+        assert r["passed"] == 2  # flaky spec COUNTS as passed (V92 vote)
+        assert r["confirmed_failed"] == 0
+        assert r["flaky"] == 1
+        assert r["flaky_titles"] == ["visual #50"]
+
+    def test_confirmed_fail_all_attempts(self):
+        r = vote(_report([_spec("broken", ["failed", "failed", "failed"]), _spec("b", ["passed"])]))
+        assert r["passed"] == 1
+        assert r["confirmed_failed"] == 1
+        assert r["failed_titles"] == ["broken"]
+        assert r["flaky"] == 0
+
+    def test_nested_suites_walked(self):
+        inner = {"specs": [_spec("deep", ["failed", "passed"])], "suites": []}
+        r = vote(_report([_spec("top", ["passed"])], nested=[inner]))
+        assert r["total"] == 2
+        assert r["passed"] == 2
+        assert r["flaky"] == 1
+
+    def test_v78_regression_class_would_have_scored_86(self):
+        # 184 clean + 1 flaky-pass: V78 rule → 184/185 (pro-rate 59 → min 86);
+        # V92 vote → 185/185 (full 60).
+        specs = [_spec(f"s{i}", ["passed"]) for i in range(184)]
+        specs.append(_spec("s50", ["timedOut", "passed"]))
+        r = vote(_report(specs))
+        assert r["passed"] == r["total"] == 185
+        v78_passed = 184  # old all()-rule
+        assert v78_passed * 60 // 185 == 59  # documents the V91 dip this fixes
+
+    def test_parse_error_fails_closed(self, tmp_path):
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not json")
+        r = pw_vote_main(str(bad))
+        assert (r["passed"], r["total"]) == (0, 0)
+        assert r["parse_error"] is not None
+
+    def test_cli_emits_json(self, tmp_path):
+        f = tmp_path / "rep.json"
+        f.write_text(json.dumps(_report([_spec("a", ["passed"])])))
+        out = subprocess.run(
+            [sys.executable, str(PW_VOTE), str(f)], capture_output=True, text=True, check=True
+        )
+        assert json.loads(out.stdout)["passed"] == 1
+
+
+@pytest.fixture
+def fake_test_cmd(tmp_path):
+    """Returns a cmd that fails on invocation numbers listed in FAIL_ON."""
+    counter = tmp_path / "count"
+    counter.write_text("0")
+    script = tmp_path / "fake.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        f'c=$(cat "{counter}"); c=$((c+1)); echo "$c" > "{counter}"\n'
+        'for n in $FAIL_ON; do [ "$c" -eq "$n" ] && exit 1; done\n'
+        "exit 0\n"
+    )
+    script.chmod(0o755)
+    return str(script)
+
+
+def _run_stability(cmd, fail_on):
+    env = dict(os.environ, STABILITY_TEST_CMD=cmd, FAIL_ON=fail_on)
+    out = subprocess.run(
+        ["bash", str(STABILITY)], capture_output=True, text=True, env=env, cwd=str(REPO)
+    )
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+@pytest.mark.skipif(not (REPO / "ui" / "frontend").is_dir(), reason="ui/frontend required")
+class TestStabilityConfirmOnRetry:
+    def test_transient_flake_zero_penalty(self, fake_test_cmd):
+        # run1 fails, its retry (invocation 2) passes → transient, score 100
+        r = _run_stability(fake_test_cmd, "1")
+        assert r["score"] == 100
+        assert r["subscores"]["flake_count"] == 0
+        assert r["subscores"]["transient_flake_count"] == 1
+
+    def test_clean_run_score_100(self, fake_test_cmd):
+        r = _run_stability(fake_test_cmd, "")
+        assert r["score"] == 100
+        assert r["subscores"]["transient_flake_count"] == 0
+
+    def test_confirmed_fail_full_penalty(self, fake_test_cmd):
+        # every invocation fails → 3 confirmed fails → 100 − 3×30 = 10
+        r = _run_stability(fake_test_cmd, "1 2 3 4 5 6")
+        assert r["score"] == 10
+        assert r["subscores"]["flake_count"] == 3
+        assert r["subscores"]["transient_flake_count"] == 0
+
+    def test_d4_guard_flags_two_transients(self, fake_test_cmd):
+        # run1 + run2 fail, both retries pass → 2 transients → D4 mini-retro flag
+        r = _run_stability(fake_test_cmd, "1 3")
+        assert r["score"] == 100
+        assert r["subscores"]["transient_flake_count"] == 2
+        assert any("mini-retro" in f for f in r["failures"])
+
+exec
+/bin/zsh -lc "sed -n '80,150p' scripts/governance/v78_fleet/score_visualization.sh && printf '\\n---\\n' && sed -n '1,120p' scripts/governance/v68b_fleet/score_ux.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+  pw_bin="./node_modules/.bin/playwright"
+  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+  if $pw_bin test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v78_viz.json 2>/tmp/v78_viz.stderr; then
+    pw_exit=0
+  else
+    pw_exit=$?
+  fi
+
+  read passed total viz_specific_pass viz_specific_total <<<"$(python3 - <<'PYEOF'
+import json
+try:
+    d = json.load(open("/tmp/v78_viz.json"))
+    def walk(suites):
+        for s in suites:
+            for sp in s.get("specs", []):
+                for t in sp.get("tests", []):
+                    yield s, sp, t
+            yield from walk(s.get("suites", []))
+    items = list(walk(d.get("suites", [])))
+    total = len(items)
+    passed = sum(
+        1 for _, _, t in items
+        if all(r.get("status") == "passed" for r in t.get("results", []))
+    )
+    viz = [it for it in items if "viewport-mode" in (it[1].get("file", "") or "").lower()]
+    viz_total = len(viz)
+    viz_pass = sum(
+        1 for _, _, t in viz
+        if all(r.get("status") == "passed" for r in t.get("results", []))
+    )
+    print(f"{passed} {total} {viz_pass} {viz_total}")
+except Exception as exc:
+    print(f"0 0 0 0 # parse error: {exc}")
+PYEOF
+)"
+
+  if [ "${total:-0}" -gt 0 ]; then
+    # render: 35 (was 40)
+    render_score=$(python3 -c "print(round($passed / $total * 35))")
+    evidence+=("viz+truth specs: ${passed}/${total} PASS (render=${render_score}/35)")
+
+    # mode: 25 (was 30)
+    if [ "${viz_specific_pass:-0}" -ge 4 ]; then
+      mode_score=25
+      evidence+=("viewport-mode: ${viz_specific_pass} PASS ≥4 threshold (FULL=25/25)")
+    elif [ "${viz_specific_pass:-0}" -gt 0 ]; then
+      mode_score=$(( viz_specific_pass * 25 / 4 ))
+      evidence+=("viewport-mode: ${viz_specific_pass}/4 (pro-rated=${mode_score}/25)")
+    else
+      failures+=("viewport-mode: 0 specs PASS")
+    fi
+  fi
+  cd - > /dev/null
+fi
+
+evidence=("${evidence[@]:1}")
+failures=("${failures[@]:1}")
+score=$((render_score + mode_score + baseline_score + ssim_score))
+if [ "$score" -gt 100 ]; then score=100; fi
+
+python3 - <<PYEOF
+import json
+ev_raw = """$(printf '%s\n' "${evidence[@]+"${evidence[@]}"}")"""
+fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+ev = [l for l in ev_raw.split("\n") if l.strip()]
+fa = [l for l in fa_raw.split("\n") if l.strip()]
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+
+---
+#!/usr/bin/env bash
+# V68-A Fleet Agent #3: UX / Playability (tightened vs V67-C)
+# V68-A criteria:
+#   - flow_completion (60) · ≥5 specs PASS required for FULL · pro-rated below
+#   - latency_band (25) · pw_exit 0 within timeouts
+#   - no_blocker (15) · no click-intercepted / timeout in stderr
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="ux_playability"
+dim="使用手感"
+weight=0.20
+evidence=("placeholder")
+failures=("placeholder")
+
+pw_config="ui/frontend/playwright.config.ts"
+pw_dir="ui/frontend/e2e"
+
+flow_completion_score=0
+latency_score=0
+no_blocker_score=0
+
+if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+else
+  cd ui/frontend
+  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+    pw_exit=0
+  else
+    pw_exit=$?
+  fi
+
+  pass_total=$(python3 - <<'PYEOF'
+import json
+try:
+    d = json.load(open("/tmp/v68a_pw.json"))
+    def walk(suites):
+        for s in suites:
+            for sp in s.get("specs", []):
+                for t in sp.get("tests", []):
+                    yield t
+            yield from walk(s.get("suites", []))
+    tests = list(walk(d.get("suites", [])))
+    total = len(tests)
+    passed = sum(
+        1 for t in tests
+        if all(r.get("status") == "passed" for r in t.get("results", []))
+    )
+    print(f"{passed} {total}")
+except Exception as exc:
+    print(f"0 0 # parse error: {exc}")
+PYEOF
+)
+  passed=$(echo "$pass_total" | awk '{print $1}')
+  total=$(echo "$pass_total" | awk '{print $2}')
+
+  if [ "$total" -gt 0 ]; then
+    # V68-B (tightened): ≥7 specs PASS for FULL flow_score=60 · pro-rated otherwise
+    if [ "$passed" -ge 7 ]; then
+      flow_completion_score=60
+      evidence+=("playwright: ${passed} specs PASS ≥7 threshold (FULL=60/60)")
+    else
+      flow_completion_score=$(( passed * 60 / 7 ))
+      evidence+=("playwright: ${passed}/7 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+      failures+=("ux below V68-B threshold: ${passed}/7 specs PASS (need ≥7 for V68-B close)")
+    fi
+
+    if [ "$pw_exit" -eq 0 ]; then
+      latency_score=25
+      evidence+=("latency: PASS (all specs within timeout)")
+    else
+      latency_score=12
+      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+    fi
+
+    blockers=$(grep -cE "click intercepted|Target closed|Test timeout" /tmp/v68a_pw.stderr 2>/dev/null || echo 0)
+    blockers=$(echo "$blockers" | head -1 | tr -d ' \n')
+    blockers=${blockers:-0}
+    if [ "$blockers" -eq 0 ]; then
+      no_blocker_score=15
+      evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    else
+      no_blocker_score=0
+      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+    fi
+  else
+    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+  fi
+  cd - > /dev/null
+fi
+
+evidence=("${evidence[@]:1}")
+failures=("${failures[@]:1}")
+score=$((flow_completion_score + latency_score + no_blocker_score))
+
+python3 - <<PYEOF
+import json
+ev_raw = """$(printf '%s\n' "${evidence[@]+"${evidence[@]}"}")"""
+fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+ev = [l for l in ev_raw.split("\n") if l.strip()]
+fa = [l for l in fa_raw.split("\n") if l.strip()]
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "flow_completion": $flow_completion_score,
+    "latency_band": $latency_score,
+    "no_blocker_clicks": $no_blocker_score,
+    "specs_pass_count": ${passed:-0},
+    "specs_total_count": ${total:-0},
+  },
+  "evidence": ev,
+  "failures": fa,
+  "honest_note": "V68-B tightened · ≥7 specs PASS for FULL · pro-rated below"
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+exec
+/bin/zsh -lc "grep -Rin \"repeatEach\\|--repeat-each\" . 2>/dev/null | sed -n '1,200p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "grep -RinE 'test\\.(skip|fixme|fail)\\(|\\.skip\\(|\\.fixme\\(|\\.fail\\(' ui/frontend/e2e 2>/dev/null | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "grep -Rin \"CROSSBROWSER=1\\|score_ux.sh\\|v78_fleet/score_ux.sh\" scripts .github .planning reports 2>/dev/null | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 8223ms:
+scripts/governance/v78_fleet/score_all.sh:62:    script_path="scripts/governance/v78_fleet/score_ux.sh"
+Binary file scripts/governance/v92_fleet/__pycache__/pw_vote.cpython-312.pyc matches
+scripts/governance/v92_fleet/pw_vote.py:5:playwright project, e.g. CROSSBROWSER=1 matrix) votes instance-level
+.planning/V79_ARC_GOAL.md:29:- [x] **V79.2 · Cross-browser playwright** — config landed (env-gated CROSSBROWSER=1) · firefox+webkit install pending (external lockfile)
+.planning/decisions/2026-05-16_v67c_sub_v67c457_scaffolding.md:14:substrate: ui/frontend/__visual_baselines__/ (NEW dir + README) + e2e/viewport-mode.spec.ts (NEW) + e2e/truth-chain.spec.ts (NEW) + e2e/topbar.spec.ts (revised) + score_ux.sh + score_visualization.sh (rewritten · pro-rated)
+.planning/decisions/2026-05-16_v67c_sub_v67c457_scaffolding.md:55:- `scripts/governance/v67c_fleet/score_ux.sh` (rewritten)
+.planning/decisions/2026-05-17_v78_close_dec.md:50:| V78.4 | B226 | Accepted | UX scorer 100% specs PASS threshold (v78_fleet/score_ux.sh) |
+.planning/decisions/2026-06-10_v92_charter_dec.md:56:**D2 · ux scorer** (`scripts/governance/v78_fleet/score_ux.sh`): run
+.planning/decisions/2026-05-17_v79_close_dec.md:29:5. **Cross-browser**: playwright config matrix landed (chromium + firefox + webkit · env-gated via `CROSSBROWSER=1`) — honest disclosure that firefox + webkit browsers couldn't install in-session due to external lockfile holder.
+.planning/decisions/2026-05-17_v79_close_dec.md:46:| V79.2 | B232 | Accepted | Cross-browser playwright config · env-gated (CROSSBROWSER=1) · firefox + webkit projects declared · browser install pending (external lockfile) |
+.planning/decisions/2026-05-17_v79_close_dec.md:70:- ❌ **Firefox + Webkit browsers actually run** — config landed but browsers not installed in this session because another playwright install (from `~/Desktop/Jerry Rusty Lake/`) held the `~/Library/Caches/ms-playwright/__dirlock` since 12:17 (4+ hours, presumed stuck). User runs `npx playwright install firefox webkit` followed by `CROSSBROWSER=1 npx playwright test` to actually exercise the matrix. **V79.2 is config-ready, not capture-ready.**
+.planning/decisions/2026-05-17_v79_close_dec.md:144:  - 跨浏览器 playwright 配置（firefox + webkit · 环境变量 CROSSBROWSER=1 启用 · 浏览器装包本会话被别的进程的锁挡住了）
+
+exec
+/bin/zsh -lc "grep -Rin \"interface JSONReport\\|class JSONReporter\\|type JSONReport\" ui/frontend/node_modules/@playwright/test ui/frontend/node_modules/playwright 2>/dev/null | sed -n '1,80p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 107ms:
+ui/frontend/node_modules/playwright/types/test.d.ts:24:export type JsonReporterOptions = { outputFile?: string };
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:235:export interface JSONReport {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:262:export interface JSONReportSuite {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:271:export interface JSONReportSpec {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:282:export interface JSONReportTest {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:292:export interface JSONReportError {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:297:export interface JSONReportTestResult {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:320:export interface JSONReportTestStep {
+ui/frontend/node_modules/playwright/types/testReporter.d.ts:327:export type JSONReportSTDIOEntry = { text: string } | { buffer: string };
+ui/frontend/node_modules/playwright/lib/reporters/json.js:40:class JSONReporter {
+
+exec
+/bin/zsh -lc "sed -n '235,315p' ui/frontend/node_modules/playwright/types/testReporter.d.ts" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,220p' ui/frontend/node_modules/playwright/lib/reporters/json.js" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+export interface JSONReport {
+  config: Omit<FullConfig, 'projects'> & {
+    projects: {
+      outputDir: string,
+      repeatEach: number,
+      retries: number,
+      metadata: Metadata,
+      id: string,
+      name: string,
+      testDir: string,
+      testIgnore: string[],
+      testMatch: string[],
+      timeout: number,
+    }[],
+  };
+  suites: JSONReportSuite[];
+  errors: TestError[];
+  stats: {
+    startTime: string; // Date in ISO 8601 format.
+    duration: number; // In milliseconds;
+    expected: number;
+    unexpected: number;
+    flaky: number;
+    skipped: number;
+  }
+}
+
+export interface JSONReportSuite {
+  title: string;
+  file: string;
+  column: number;
+  line: number;
+  specs: JSONReportSpec[];
+  suites?: JSONReportSuite[];
+}
+
+export interface JSONReportSpec {
+  tags: string[],
+  title: string;
+  ok: boolean;
+  tests: JSONReportTest[];
+  id: string;
+  file: string;
+  line: number;
+  column: number;
+}
+
+export interface JSONReportTest {
+  timeout: number;
+  annotations: { type: string, description?: string }[],
+  expectedStatus: TestStatus;
+  projectName: string;
+  projectId: string;
+  results: JSONReportTestResult[];
+  status: 'skipped' | 'expected' | 'unexpected' | 'flaky';
+}
+
+export interface JSONReportError {
+  message: string;
+  location?: Location;
+}
+
+export interface JSONReportTestResult {
+  workerIndex: number;
+  parallelIndex: number;
+  shardIndex?: number;
+  status: TestStatus | undefined;
+  duration: number;
+  error: TestError | undefined;
+  errors: JSONReportError[];
+  stdout: JSONReportSTDIOEntry[];
+  stderr: JSONReportSTDIOEntry[];
+  retry: number;
+  steps?: JSONReportTestStep[];
+  startTime: string; // Date in ISO 8601 format.
+  attachments: {
+    name: string;
+    path?: string;
+    body?: string;
+    contentType: string;
+  }[];
+
+ succeeded in 0ms:
+"use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var json_exports = {};
+__export(json_exports, {
+  default: () => json_default,
+  serializePatterns: () => serializePatterns
+});
+module.exports = __toCommonJS(json_exports);
+var import_fs = __toESM(require("fs"));
+var import_path = __toESM(require("path"));
+var import_utils = require("playwright-core/lib/utils");
+var import_base = require("./base");
+var import_config = require("../common/config");
+class JSONReporter {
+  constructor(options) {
+    this._errors = [];
+    this._resolvedOutputFile = (0, import_base.resolveOutputFile)("JSON", options)?.outputFile;
+  }
+  version() {
+    return "v2";
+  }
+  printsToStdio() {
+    return !this._resolvedOutputFile;
+  }
+  onConfigure(config) {
+    this.config = config;
+  }
+  onBegin(suite) {
+    this.suite = suite;
+  }
+  onError(error) {
+    this._errors.push(error);
+  }
+  async onEnd(result) {
+    await outputReport(this._serializeReport(result), this._resolvedOutputFile);
+  }
+  _serializeReport(result) {
+    const report = {
+      config: {
+        ...removePrivateFields(this.config),
+        rootDir: (0, import_utils.toPosixPath)(this.config.rootDir),
+        projects: this.config.projects.map((project) => {
+          return {
+            outputDir: (0, import_utils.toPosixPath)(project.outputDir),
+            repeatEach: project.repeatEach,
+            retries: project.retries,
+            metadata: project.metadata,
+            id: (0, import_config.getProjectId)(project),
+            name: project.name,
+            testDir: (0, import_utils.toPosixPath)(project.testDir),
+            testIgnore: serializePatterns(project.testIgnore),
+            testMatch: serializePatterns(project.testMatch),
+            timeout: project.timeout
+          };
+        })
+      },
+      suites: this._mergeSuites(this.suite.suites),
+      errors: this._errors,
+      stats: {
+        startTime: result.startTime.toISOString(),
+        duration: result.duration,
+        expected: 0,
+        skipped: 0,
+        unexpected: 0,
+        flaky: 0
+      }
+    };
+    for (const test of this.suite.allTests())
+      ++report.stats[test.outcome()];
+    return report;
+  }
+  _mergeSuites(suites) {
+    const fileSuites = new import_utils.MultiMap();
+    for (const projectSuite of suites) {
+      const projectId = (0, import_config.getProjectId)(projectSuite.project());
+      const projectName = projectSuite.project().name;
+      for (const fileSuite of projectSuite.suites) {
+        const file = fileSuite.location.file;
+        const serialized = this._serializeSuite(projectId, projectName, fileSuite);
+        if (serialized)
+          fileSuites.set(file, serialized);
+      }
+    }
+    const results = [];
+    for (const [, suites2] of fileSuites) {
+      const result = {
+        title: suites2[0].title,
+        file: suites2[0].file,
+        column: 0,
+        line: 0,
+        specs: []
+      };
+      for (const suite of suites2)
+        this._mergeTestsFromSuite(result, suite);
+      results.push(result);
+    }
+    return results;
+  }
+  _relativeLocation(location) {
+    if (!location)
+      return { file: "", line: 0, column: 0 };
+    return {
+      file: (0, import_utils.toPosixPath)(import_path.default.relative(this.config.rootDir, location.file)),
+      line: location.line,
+      column: location.column
+    };
+  }
+  _locationMatches(s1, s2) {
+    return s1.file === s2.file && s1.line === s2.line && s1.column === s2.column;
+  }
+  _mergeTestsFromSuite(to, from) {
+    for (const fromSuite of from.suites || []) {
+      const toSuite = (to.suites || []).find((s) => s.title === fromSuite.title && this._locationMatches(s, fromSuite));
+      if (toSuite) {
+        this._mergeTestsFromSuite(toSuite, fromSuite);
+      } else {
+        if (!to.suites)
+          to.suites = [];
+        to.suites.push(fromSuite);
+      }
+    }
+    for (const spec of from.specs || []) {
+      const toSpec = to.specs.find((s) => s.title === spec.title && s.file === (0, import_utils.toPosixPath)(import_path.default.relative(this.config.rootDir, spec.file)) && s.line === spec.line && s.column === spec.column);
+      if (toSpec)
+        toSpec.tests.push(...spec.tests);
+      else
+        to.specs.push(spec);
+    }
+  }
+  _serializeSuite(projectId, projectName, suite) {
+    if (!suite.allTests().length)
+      return null;
+    const suites = suite.suites.map((suite2) => this._serializeSuite(projectId, projectName, suite2)).filter((s) => s);
+    return {
+      title: suite.title,
+      ...this._relativeLocation(suite.location),
+      specs: suite.tests.map((test) => this._serializeTestSpec(projectId, projectName, test)),
+      suites: suites.length ? suites : void 0
+    };
+  }
+  _serializeTestSpec(projectId, projectName, test) {
+    return {
+      title: test.title,
+      ok: test.ok(),
+      tags: test.tags.map((tag) => tag.substring(1)),
+      // Strip '@'.
+      tests: [this._serializeTest(projectId, projectName, test)],
+      id: test.id,
+      ...this._relativeLocation(test.location)
+    };
+  }
+  _serializeTest(projectId, projectName, test) {
+    return {
+      timeout: test.timeout,
+      annotations: test.annotations,
+      expectedStatus: test.expectedStatus,
+      projectId,
+      projectName,
+      results: test.results.map((r) => this._serializeTestResult(r, test)),
+      status: test.outcome()
+    };
+  }
+  _serializeTestResult(result, test) {
+    const steps = result.steps.filter((s) => s.category === "test.step");
+    const jsonResult = {
+      workerIndex: result.workerIndex,
+      parallelIndex: result.parallelIndex,
+      status: result.status,
+      duration: result.duration,
+      error: result.error,
+      errors: result.errors.map((e) => this._serializeError(e)),
+      stdout: result.stdout.map((s) => stdioEntry(s)),
+      stderr: result.stderr.map((s) => stdioEntry(s)),
+      retry: result.retry,
+      steps: steps.length ? steps.map((s) => this._serializeTestStep(s)) : void 0,
+      startTime: result.startTime.toISOString(),
+      annotations: result.annotations,
+      attachments: result.attachments.map((a) => ({
+        name: a.name,
+        contentType: a.contentType,
+        path: a.path,
+        body: a.body?.toString("base64")
+      }))
+    };
+    if (result.error?.stack)
+      jsonResult.errorLocation = (0, import_base.prepareErrorStack)(result.error.stack).location;
+    return jsonResult;
+  }
+  _serializeError(error) {
+    return (0, import_base.formatError)(import_base.nonTerminalScreen, error);
+  }
+  _serializeTestStep(step) {
+    const steps = step.steps.filter((s) => s.category === "test.step");
+    return {
+
+exec
+/bin/zsh -lc "sed -n '1,140p' scripts/governance/v78_fleet/score_all.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V78 Fleet Aggregator · 16 pillars (NO new pillar · V77 retro Open Q #6 honored)
+# V78 changes:
+#   - Pillar 3 ux: 100% specs PASS threshold (was ≥17)
+#   - Pillar 4 visualization: SSIM tool subscore + 76 PNG threshold
+#   - Pillar 13 data_fidelity: + audit_package_e2e subscore (V78.3)
+#   - Pillar 16 rt_solver_obs: + backend_sse_e2e subscore (V78.1)
+# Usage (V78 backward-compat default):
+#   bash scripts/governance/v78_fleet/score_all.sh <iter_number>
+#   → writes .planning/scores/V78_iter_${N}.md
+# Usage (V81.4 · explicit arc label):
+#   bash scripts/governance/v78_fleet/score_all.sh <iter_number> --arc-label V81
+#   → writes .planning/scores/V81_iter_${N}.md
+# Rationale: V79 + V80 retros both flagged the manual-copy workaround when
+# V79/V80 iterations would otherwise overwrite V78 close evidence. The
+# --arc-label flag is OPTIONAL + additive: without it, behavior matches the
+# original V78/V79/V80 invocations exactly (V81 charter reverse-stop #9).
+
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+iter="${1:-0}"
+arc_label="V78"
+# V81.4 · parse --arc-label flag (optional · positional iter remains $1)
+shift 2>/dev/null || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --arc-label)
+      shift
+      arc_label="${1:-V78}"
+      ;;
+    --arc-label=*)
+      arc_label="${1#*=}"
+      ;;
+    *)
+      ;;  # unknown flag · ignore for forward-compat
+  esac
+  shift 2>/dev/null || true
+done
+
+out=".planning/scores/${arc_label}_iter_${iter}.md"
+mkdir -p "$(dirname "$out")"
+
+ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+sha=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+
+agents=(quality physics ux visualization smoke functional stability cfd_breadth novice_onboarding industrial_ui interaction_polish backend_integration data_fidelity resumability_observability visualization_fidelity real_time_solver_observability)
+results_dir=$(mktemp -d)
+trap "rm -rf $results_dir" EXIT
+
+echo ">>> V78 Fleet · Iter $iter · $ts · commit $sha · TIGHTENED scoring (NO new pillar)" >&2
+
+for a in "${agents[@]}"; do
+  echo ">>> running agent: $a" >&2
+  # V78 scorers: ux (tightened) · visualization (SSIM-aware) · data_fidelity (+e2e) · rt_solver_obs (+e2e)
+  # V77 carries: backend_integration (≥35 useQuery)
+  # V76: visualization_fidelity
+  # V75: resumability_observability
+  # V74: interaction_polish
+  # Rest: v71_fleet
+  if [ "$a" = "ux" ]; then
+    script_path="scripts/governance/v78_fleet/score_ux.sh"
+  elif [ "$a" = "visualization" ]; then
+    script_path="scripts/governance/v78_fleet/score_visualization.sh"
+  elif [ "$a" = "data_fidelity" ]; then
+    script_path="scripts/governance/v78_fleet/score_data_fidelity.sh"
+  elif [ "$a" = "real_time_solver_observability" ]; then
+    script_path="scripts/governance/v78_fleet/score_real_time_solver_observability.sh"
+  elif [ "$a" = "backend_integration" ]; then
+    script_path="scripts/governance/v77_fleet/score_${a}.sh"
+  elif [ "$a" = "visualization_fidelity" ]; then
+    script_path="scripts/governance/v76_fleet/score_${a}.sh"
+  elif [ "$a" = "resumability_observability" ]; then
+    script_path="scripts/governance/v75_fleet/score_${a}.sh"
+  elif [ "$a" = "interaction_polish" ]; then
+    script_path="scripts/governance/v74_fleet/score_${a}.sh"
+  else
+    script_path="scripts/governance/v71_fleet/score_${a}.sh"
+  fi
+  bash "$script_path" > "$results_dir/${a}.json" 2> "$results_dir/${a}.stderr.log"
+  if ! jq empty < "$results_dir/${a}.json" 2>/dev/null; then
+    python3 - "$a" "$results_dir/${a}.json" "$results_dir/${a}.stderr.log" <<'PYEOF'
+import json, sys
+agent_name, json_path, stderr_path = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    stderr_tail = open(stderr_path).read()[-500:] if open(stderr_path).read() else ""
+except Exception:
+    stderr_tail = "(unreadable)"
+json.dump({
+    "agent": agent_name,
+    "dim": "INFRA_FAILURE",
+    "weight": 0.0,
+    "score": 0,
+    "evidence": [],
+    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+    "honest_note": "infra failure forces 0 score per honesty rule #3"
+}, open(json_path, "w"), ensure_ascii=False, indent=2)
+PYEOF
+  fi
+done
+
+python3 - "$results_dir" "$out" "$iter" "$ts" "$sha" <<'PYEOF'
+import json, sys, os
+results_dir, out, iter_n, ts, sha = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+
+agents_order = ["quality", "physics", "ux", "visualization", "smoke", "functional", "stability",
+                "cfd_breadth", "novice_onboarding", "industrial_ui", "interaction_polish",
+                "backend_integration", "data_fidelity", "resumability_observability",
+                "visualization_fidelity", "real_time_solver_observability"]
+data = {}
+for a in agents_order:
+    p = os.path.join(results_dir, f"{a}.json")
+    with open(p) as f:
+        data[a] = json.load(f)
+
+scores = [data[a]["score"] for a in agents_order]
+min_score = min(scores)
+weights = [data[a]["weight"] for a in agents_order]
+weighted_sum = sum(s * w for s, w in zip(scores, weights))
+
+if min_score >= 99:
+    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+elif min_score >= 90:
+    verdict = "PROCEED (high-fidelity iteration)"
+elif min_score >= 50:
+    verdict = "PROCEED (lift lowest dim)"
+else:
+    verdict = "PROCEED (multiple dims need attention)"
+
+sorted_by_score = sorted(zip(agents_order, scores), key=lambda x: x[1])
+lowest_dim = sorted_by_score[0][0]
+
+md = []
+md.append(f"# V78 Fleet Score · Iter {iter_n} · TIGHTENED scoring\n")
+md.append(f"**Generated**: {ts}  ")
+md.append(f"**Commit**: `{sha}`  ")
+md.append(f"**Total (min one-vote-veto across 16 pillars)**: **{min_score} / 100**  ")
+md.append(f"**Weighted sum (informational)**: {weighted_sum:.2f}  ")
+md.append(f"**Verdict**: {verdict}  ")
+md.append(f"**Next-iter target dim**: `{lowest_dim}` (score={sorted_by_score[0][1]})\n")
+
+exec
+/bin/zsh -lc "sed -n '1,180p' .planning/decisions/2026-06-10_v92_charter_dec.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+decision_id: DEC-V92-charter
+title: V92 Scoring-Evolution Arc · V78 scorer family 1-vote-veto → confirm-on-retry majority semantics (load-sensitive pillars only)
+status: Accepted
+accepted: 2026-06-10 (user verdict, same session as implementation commit a448e9d)
+parent_dec: DEC-V91-close (2026-05-18_v91_close_dec.md) · V90/V91 retro Open Q #1
+phase: V92 (scoring-evolution arc · user-mandated 2026-06-10)
+notion_sync_status: n/a (Notion archive channel retired 2026-06-10 · DEC-V92-notion-retirement)
+autonomous_governance: false  # external gate — user explicitly mandated direction ("V78 scorer 演进"); counter N/A per RETRO-V61-001
+confidence: high
+date: 2026-06-10
+---
+
+# DEC-V92-charter · Scorer confirm-on-retry semantics
+
+## TL;DR
+
+Evolve the two **load-sensitive** V78-family scorers (pillar #7 stability,
+pillar #3 ux) from 1-vote-veto to **confirm-on-retry majority semantics**:
+a failing unit (vitest run / playwright spec) only counts toward the score
+penalty if it **fails again on retry**. Transient flakes are recorded as
+telemetry subscores (auditable, zero penalty). Formulas, weights, the
+16-pillar min one-vote-veto aggregation, and all 14 deterministic pillars
+are **unchanged**.
+
+This intentionally **ends the 14-arc no-scoring-change streak (V78→V91)**
+— V90 retro explicitly deferred this evolution "until next real
+scoring-evolution arc"; V92 is that arc, by user mandate (2026-06-10).
+New streak baseline starts at the V92 scorer family.
+
+## Evidence (2-arc CRITICAL · verbatim-anchored)
+
+- **V90 iter-1** stability=70: 1-in-9 statistical vitest flake (9 isolation
+  runs all PASS) cost a full extra close iteration. V90 retro:
+  "treats any single flaky vitest subrun as −30 points, which is a 1-vote
+  veto for a 1-in-N statistical noise event … consistently costing us
+  1 extra iteration per arc (or per 2 arcs)."
+  (`.planning/retrospectives/2026-05-18_v90_retro.md` L74-81)
+- **V91 iter-2/3** ux=86: Playwright visual-baseline spec #50 timed out at
+  5s under multi-process scoring load; isolation reproduces 1/1 PASS in
+  8.9s. V91 retro: "Two pillars × one root cause = strong evidence the V78
+  scorer family should evolve toward 'median of N runs' or 'majority-vote'
+  semantics." (`.planning/retrospectives/2026-05-18_v91_retro.md` L60-72)
+
+## Decision
+
+**D1 · stability scorer** (`scripts/governance/v71_fleet/score_stability.sh`):
+each failing vitest run gets exactly **one isolation retry**. Confirmed
+fail (initial FAIL + retry FAIL) → counts in `flake_count` exactly as
+before (−30 each). Transient flake (retry PASS) → `transient_flake_count`
+subscore + evidence line, **0 penalty**. Formula
+`100 − confirmed_fail×30 − mem_growth×5` shape unchanged. Test command
+overridable via `STABILITY_TEST_CMD` env (default `npm run test`) to make
+the vote logic testable.
+
+**D2 · ux scorer** (`scripts/governance/v78_fleet/score_ux.sh`): run
+playwright with `--retries=2`; per-spec vote via new helper
+`scripts/governance/v92_fleet/pw_vote.py`: spec = PASS if **any attempt
+passed**; `flaky` (eventually passed, ≥1 failed attempt) logged in
+subscores + honest_note; `confirmed_failed` (no attempt passed) drives the
+pro-rate exactly as before. Blocker subscore: when `confirmed_failed == 0`,
+stderr timeout/click signals from eventually-passing attempts are classified
+transient (no_blocker=15 + noise note); otherwise original grep behavior.
+
+**D3 · unchanged**: pillar weights, the 60/25/15 ux split, the −30 flake
+penalty, min-aggregation across 16 pillars, all deterministic pillars,
+`score_all.sh` wiring (in-place edit; disposition: **extend**, no parallel
+v92_fleet copy of the aggregator).
+
+**D4 · anti-inflation guard** (SCORING-FRAMEWORK discipline): retries must
+not silently mask real load-sensitivity regressions. Hard rule:
+`flaky_specs ≥ 3` or `transient_flake_count ≥ 2` in a single iter →
+mandatory mini-retro entry naming the flaky units. All transient counts are
+emitted in the score artifact JSON/MD so the audit trail keeps the noise
+visible.
+
+**D5 · streak disposition**: 14-arc no-scoring-change streak (V78→V91)
+ends here **by design**, recorded in this DEC. Historical scores remain
+comparable for persistent failures (identical penalty); only transient-noise
+events score differently (100 instead of 70/86) — i.e. strictly
+noise-reduction, never threshold-loosening for confirmed regressions.
+
+## Scope / blast radius
+
+- Files: 2 scorer scripts (in-place) + 1 new helper + 1 new pytest module.
+- No product code (src/, ui/) touched. No auth/signing/security boundary →
+  no v2.2 1-sync Codex trigger; async post-merge Codex review optional.
+- Reversibility: HIGH (git revert of 1 commit restores V78 semantics).
+- Strategic package (intent/merge_risk YAML) not required — not a
+  high-risk PR per DEC-V61-087 §4.4; Kogami opt-in not invoked (user may
+  invoke per V133).
+
+## Verification
+
+- `pytest -q tests/governance/test_v92_scorer_vote.py` — pw_vote.py unit
+  fixtures (all-pass / flaky-pass / confirmed-fail / parse-error / nested
+  suites) + score_stability.sh integration via `STABILITY_TEST_CMD` fake
+  (fail-once → score 100 + transient=1; fail-always → score 10 + confirmed=3).
+- `bash -n` both edited scorers.
+- Rollback trigger: any V92+ close iter where a confirmed regression was
+  retried-away (found by D4 audit) → revert + retro.
+
+## Open Qs carried
+
+- Pillar-level min one-vote-veto across 16 pillars (different layer; not
+  load-sensitive; out of scope here).
+- Median-of-N as alternative semantics: rejected for now — full-suite ×N
+  reruns are minutes-expensive (OpenFOAM-adjacent stacks); confirm-on-retry
+  achieves the same noise rejection at marginal cost of retrying failures
+  only.
+
+exec
+/bin/zsh -lc "nl -ba scripts/governance/v92_fleet/pw_vote.py | sed -n '1,140p' && printf '\\n---\\n' && nl -ba tests/governance/test_v92_scorer_vote.py | sed -n '1,130p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	#!/usr/bin/env python3
+     2	"""V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
+     3	
+     4	Vote unit = spec (not test instance). Each tests[] entry (one per
+     5	playwright project, e.g. CROSSBROWSER=1 matrix) votes instance-level
+     6	first — instance ok if ANY attempt passed (--retries semantics) — then
+     7	aggregates to the spec:
+     8	  - passed         = every project instance has >=1 passing attempt
+     9	  - flaky          = passed, but >=1 instance needed a retry (telemetry, 0 penalty)
+    10	  - confirmed_fail = >=1 instance where NO attempt passed (drives the
+    11	                     pro-rate penalty; a hard fail on one browser is
+    12	                     never masked by a pass on another)
+    13	A spec is counted exactly once regardless of project count (Codex R0 P2).
+    14	
+    15	Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
+    16	spec on a single load-induced transient (V90/V91 retro Open Q #1).
+    17	
+    18	Usage: pw_vote.py <playwright_report.json>
+    19	Emits one JSON object on stdout:
+    20	  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+    21	   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+    22	On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+    23	"""
+    24	import json
+    25	import sys
+    26	
+    27	
+    28	def walk(suites):
+    29	    for s in suites:
+    30	        for sp in s.get("specs", []):
+    31	            if sp.get("tests", []):
+    32	                yield sp.get("title", "?"), sp["tests"]
+    33	        yield from walk(s.get("suites", []))
+    34	
+    35	
+    36	def vote(report: dict) -> dict:
+    37	    out = {
+    38	        "passed": 0,
+    39	        "total": 0,
+    40	        "flaky": 0,
+    41	        "confirmed_failed": 0,
+    42	        "flaky_titles": [],
+    43	        "failed_titles": [],
+    44	        "parse_error": None,
+    45	    }
+    46	    for title, tests in walk(report.get("suites", [])):
+    47	        out["total"] += 1
+    48	        inst_ok, inst_flaky = [], []
+    49	        for t in tests:
+    50	            results = t.get("results", [])
+    51	            any_pass = any(r.get("status") == "passed" for r in results)
+    52	            any_fail = any(r.get("status") != "passed" for r in results)
+    53	            inst_ok.append(any_pass)
+    54	            inst_flaky.append(any_pass and any_fail)
+    55	        if all(inst_ok):
+    56	            out["passed"] += 1
+    57	            if any(inst_flaky):
+    58	                out["flaky"] += 1
+    59	                out["flaky_titles"].append(title)
+    60	        else:
+    61	            out["confirmed_failed"] += 1
+    62	            out["failed_titles"].append(title)
+    63	    return out
+    64	
+    65	
+    66	def main(path: str) -> dict:
+    67	    try:
+    68	        with open(path) as f:
+    69	            report = json.load(f)
+    70	        return vote(report)
+    71	    except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
+    72	        return {
+    73	            "passed": 0,
+    74	            "total": 0,
+    75	            "flaky": 0,
+    76	            "confirmed_failed": 0,
+    77	            "flaky_titles": [],
+    78	            "failed_titles": [],
+    79	            "parse_error": str(exc),
+    80	        }
+    81	
+    82	
+    83	if __name__ == "__main__":
+    84	    print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+
+---
+     1	"""V92 confirm-on-retry scorer semantics (DEC-V92-charter).
+     2	
+     3	Covers:
+     4	  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+     5	     nested suites / parse-error (fail-closed 0/0).
+     6	  2. score_stability.sh integration via STABILITY_TEST_CMD fake command —
+     7	     fail-once (transient, 0 penalty) vs fail-always (confirmed, −30 each).
+     8	"""
+     9	import json
+    10	import os
+    11	import subprocess
+    12	import sys
+    13	from pathlib import Path
+    14	
+    15	import pytest
+    16	
+    17	REPO = Path(__file__).resolve().parents[2]
+    18	PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+    19	STABILITY = REPO / "scripts" / "governance" / "v71_fleet" / "score_stability.sh"
+    20	
+    21	sys.path.insert(0, str(PW_VOTE.parent))
+    22	from pw_vote import vote, main as pw_vote_main  # noqa: E402
+    23	
+    24	
+    25	def _spec(title, statuses):
+    26	    return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
+    27	
+    28	
+    29	def _multi_spec(title, *per_project_statuses):
+    30	    """One spec with one tests[] entry per playwright project (CROSSBROWSER matrix)."""
+    31	    return {
+    32	        "title": title,
+    33	        "tests": [{"results": [{"status": s} for s in statuses]} for statuses in per_project_statuses],
+    34	    }
+    35	
+    36	
+    37	def _report(specs, nested=None):
+    38	    suite = {"specs": specs, "suites": nested or []}
+    39	    return {"suites": [suite]}
+    40	
+    41	
+    42	class TestPwVote:
+    43	    def test_all_pass(self):
+    44	        r = vote(_report([_spec("a", ["passed"]), _spec("b", ["passed"])]))
+    45	        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+    46	
+    47	    def test_flaky_eventual_pass_is_not_penalized(self):
+    48	        # V91 class: spec #50 timed out under load, passed on retry
+    49	        r = vote(_report([_spec("visual #50", ["timedOut", "passed"]), _spec("b", ["passed"])]))
+    50	        assert r["passed"] == 2  # flaky spec COUNTS as passed (V92 vote)
+    51	        assert r["confirmed_failed"] == 0
+    52	        assert r["flaky"] == 1
+    53	        assert r["flaky_titles"] == ["visual #50"]
+    54	
+    55	    def test_confirmed_fail_all_attempts(self):
+    56	        r = vote(_report([_spec("broken", ["failed", "failed", "failed"]), _spec("b", ["passed"])]))
+    57	        assert r["passed"] == 1
+    58	        assert r["confirmed_failed"] == 1
+    59	        assert r["failed_titles"] == ["broken"]
+    60	        assert r["flaky"] == 0
+    61	
+    62	    def test_nested_suites_walked(self):
+    63	        inner = {"specs": [_spec("deep", ["failed", "passed"])], "suites": []}
+    64	        r = vote(_report([_spec("top", ["passed"])], nested=[inner]))
+    65	        assert r["total"] == 2
+    66	        assert r["passed"] == 2
+    67	        assert r["flaky"] == 1
+    68	
+    69	    def test_v78_regression_class_would_have_scored_86(self):
+    70	        # 184 clean + 1 flaky-pass: V78 rule → 184/185 (pro-rate 59 → min 86);
+    71	        # V92 vote → 185/185 (full 60).
+    72	        specs = [_spec(f"s{i}", ["passed"]) for i in range(184)]
+    73	        specs.append(_spec("s50", ["timedOut", "passed"]))
+    74	        r = vote(_report(specs))
+    75	        assert r["passed"] == r["total"] == 185
+    76	        v78_passed = 184  # old all()-rule
+    77	        assert v78_passed * 60 // 185 == 59  # documents the V91 dip this fixes
+    78	
+    79	    def test_multi_project_flaky_counted_once(self):
+    80	        # Codex R0 P2: CROSSBROWSER matrix — same spec flaky on both projects
+    81	        # must count 1 spec / 1 flaky, not 2 (else D4 flaky>=3 guard inflates)
+    82	        r = vote(_report([_multi_spec("x", ["timedOut", "passed"], ["failed", "passed"])]))
+    83	        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 1, 0)
+    84	        assert r["flaky_titles"] == ["x"]
+    85	
+    86	    def test_multi_project_hard_fail_not_masked_by_other_project(self):
+    87	        # chromium passes, firefox never passes → spec is confirmed_failed
+    88	        # (a pass on one browser must not retry-away a hard cross-browser fail)
+    89	        r = vote(_report([_multi_spec("y", ["passed"], ["failed", "failed", "failed"])]))
+    90	        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
+    91	        assert r["failed_titles"] == ["y"]
+    92	
+    93	    def test_parse_error_fails_closed(self, tmp_path):
+    94	        bad = tmp_path / "bad.json"
+    95	        bad.write_text("{not json")
+    96	        r = pw_vote_main(str(bad))
+    97	        assert (r["passed"], r["total"]) == (0, 0)
+    98	        assert r["parse_error"] is not None
+    99	
+   100	    def test_cli_emits_json(self, tmp_path):
+   101	        f = tmp_path / "rep.json"
+   102	        f.write_text(json.dumps(_report([_spec("a", ["passed"])])))
+   103	        out = subprocess.run(
+   104	            [sys.executable, str(PW_VOTE), str(f)], capture_output=True, text=True, check=True
+   105	        )
+   106	        assert json.loads(out.stdout)["passed"] == 1
+   107	
+   108	
+   109	@pytest.fixture
+   110	def fake_test_cmd(tmp_path):
+   111	    """Returns a cmd that fails on invocation numbers listed in FAIL_ON."""
+   112	    counter = tmp_path / "count"
+   113	    counter.write_text("0")
+   114	    script = tmp_path / "fake.sh"
+   115	    script.write_text(
+   116	        "#!/usr/bin/env bash\n"
+   117	        f'c=$(cat "{counter}"); c=$((c+1)); echo "$c" > "{counter}"\n'
+   118	        'for n in $FAIL_ON; do [ "$c" -eq "$n" ] && exit 1; done\n'
+   119	        "exit 0\n"
+   120	    )
+   121	    script.chmod(0o755)
+   122	    return str(script)
+   123	
+   124	
+   125	def _run_stability(cmd, fail_on):
+   126	    env = dict(os.environ, STABILITY_TEST_CMD=cmd, FAIL_ON=fail_on)
+   127	    out = subprocess.run(
+   128	        ["bash", str(STABILITY)], capture_output=True, text=True, env=env, cwd=str(REPO)
+   129	    )
+   130	    assert out.returncode == 0, out.stderr
+
+codex
+The new aggregation fixes double-counting across Playwright projects, but it now misclassifies skipped project instances as confirmed failures. That makes some valid cross-browser reports score as hard failures, so the patch is not fully correct yet.
+
+Review comment:
+
+- [P2] Treat skipped browser legs as neutral before spec aggregation — /Users/Zhuanz/Desktop/cfd-harness-unified/scripts/governance/v92_fleet/pw_vote.py:50-55
+  When a `CROSSBROWSER=1` report contains a browser-specific `test.skip()`/`test.fixme()`, Playwright emits a `tests[]` entry with no passing result. In `pw_vote.vote()`, that makes `any_pass` false for the skipped leg, so the new `all(inst_ok)` check turns the whole spec into `confirmed_failed`, which can drop `passed/total` to `0/1` and spuriously trip the D4/flow-completion penalties even though no browser actually failed. Skipped project legs need to be distinguished from real failures before they veto the spec.
+The new aggregation fixes double-counting across Playwright projects, but it now misclassifies skipped project instances as confirmed failures. That makes some valid cross-browser reports score as hard failures, so the patch is not fully correct yet.
+
+Review comment:
+
+- [P2] Treat skipped browser legs as neutral before spec aggregation — /Users/Zhuanz/Desktop/cfd-harness-unified/scripts/governance/v92_fleet/pw_vote.py:50-55
+  When a `CROSSBROWSER=1` report contains a browser-specific `test.skip()`/`test.fixme()`, Playwright emits a `tests[]` entry with no passing result. In `pw_vote.vote()`, that makes `any_pass` false for the skipped leg, so the new `all(inst_ok)` check turns the whole spec into `confirmed_failed`, which can drop `passed/total` to `0/1` and spuriously trip the D4/flow-completion penalties even though no browser actually failed. Skipped project legs need to be distinguished from real failures before they veto the spec.
+2026-06-10T02:39:31.365803Z ERROR codex_core::session: failed to record rollout items: thread 019eaf5a-0037-76c1-a9cd-e3a243e234bd not found

@@ -1,0 +1,2692 @@
+OpenAI Codex v0.128.0 (research preview)
+--------
+workdir: /Users/Zhuanz/Desktop/cfd-harness-unified
+model: gpt-5.4
+provider: OpenAI
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019eaf4c-cca0-7481-9ac7-03316a7444e4
+--------
+user
+commit a448e9d
+exec
+/bin/zsh -lc 'cat /Users/Zhuanz/.agents/skills/gsd-code-review/SKILL.md' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+name: gsd-code-review
+description: "Review source files changed during a phase for bugs, security issues, and code quality problems"
+argument-hint: "<phase-number> [--depth=quick|standard|deep] [--files file1,file2,...]"
+allowed-tools:
+  - Read
+  - Bash
+  - Glob
+  - Grep
+  - Write
+  - Task
+---
+
+<objective>
+Review source files changed during a phase for bugs, security vulnerabilities, and code quality problems.
+
+Spawns the gsd-code-reviewer agent to analyze code at the specified depth level. Produces REVIEW.md artifact in the phase directory with severity-classified findings.
+
+Arguments:
+- Phase number (required) — which phase's changes to review (e.g., "2" or "02")
+- `--depth=quick|standard|deep` (optional) — review depth level, overrides workflow.code_review_depth config
+  - quick: Pattern-matching only (~2 min)
+  - standard: Per-file analysis with language-specific checks (~5-15 min, default)
+  - deep: Cross-file analysis including import graphs and call chains (~15-30 min)
+- `--files file1,file2,...` (optional) — explicit comma-separated file list, skips SUMMARY/git scoping (highest precedence for scoping)
+
+Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
+</objective>
+
+<execution_context>
+@$HOME/.Codex/get-shit-done/workflows/code-review.md
+</execution_context>
+
+<context>
+Phase: $ARGUMENTS (first positional argument is phase number)
+
+Optional flags parsed from $ARGUMENTS:
+- `--depth=VALUE` — Depth override (quick|standard|deep). If provided, overrides workflow.code_review_depth config.
+- `--files=file1,file2,...` — Explicit file list override. Has highest precedence for file scoping per D-08. When provided, workflow skips SUMMARY.md extraction and git diff fallback entirely.
+
+Context files (AGENTS.md, SUMMARY.md, phase state) are resolved inside the workflow via `gsd-tools init phase-op` and delegated to agent via `<files_to_read>` blocks.
+</context>
+
+<process>
+This command is a thin dispatch layer. It parses arguments and delegates to the workflow.
+
+Execute the code-review workflow from @$HOME/.Codex/get-shit-done/workflows/code-review.md end-to-end.
+
+The workflow (not this command) enforces these gates:
+- Phase validation (before config gate)
+- Config gate check (workflow.code_review)
+- File scoping (--files override > SUMMARY.md > git diff fallback)
+- Empty scope check (skip if no files)
+- Agent spawning (gsd-code-reviewer)
+- Result presentation (inline summary + next steps)
+</process>
+
+  → Inspect commit diff and changed files
+  • Analyze impacted code paths for correctness regressions
+  • Summarize prioritized findings in required JSON
+exec
+/bin/zsh -lc 'git show --stat --summary --find-renames a448e9d' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git show --name-only --format=fuller a448e9d' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 2142ms:
+2026-06-10 10:12:15.532 xcodebuild[65208:1949990]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:15.694 xcodebuild[65208:1949989] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-ACI9tDHM' (errno=Operation not permitted)
+2026-06-10 10:12:16.259 xcodebuild[65213:1950019]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:16.416 xcodebuild[65213:1950018] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+commit a448e9ddfb38ca04baf06dd8d1bde36f09add7b3
+Author: claude-opus47-app <claude-opus47-app@anthropic.com>
+Date:   Wed Jun 10 10:00:01 2026 +0800
+
+    feat(v92): scorer confirm-on-retry semantics on load-sensitive pillars · confidence:h
+    
+    DEC-V92-charter (.planning/decisions/2026-06-10_v92_charter_dec.md,
+    Status=Proposed, external gate, counter N/A per RETRO-V61-001):
+    V78 scorer family 1-vote-veto -> confirm-on-retry majority semantics,
+    load-sensitive pillars only (stability #7, ux #3). Formulas, weights,
+    16-pillar min aggregation, deterministic pillars unchanged; 14-arc
+    no-scoring-change streak (V78->V91) ends by design per DEC D5.
+    
+    四问门控:
+    - LLM 离线可跑: N/A — 纯评分脚本，无 LLM 路径
+    - artifacts: score 报告含 transient telemetry
+      (transient_flake_count / flaky_specs_count subscores + evidence)
+    - TrustGate: 不涉及
+    - AI advisory-only: 是
+    
+    Verification: pytest -q tests/governance/ 15/15 green · bash -n both
+    scorers · 5-agent read-only pre-commit verify vs DEC D1-D5 all PASS
+    (incl. verbatim anchor check of V90/V91 retro citations).
+    
+    Surface-scan-found: score_stability.sh, score_ux.sh · disposition: extend
+    
+    Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+ .planning/decisions/2026-06-10_v92_charter_dec.md | 109 +++++++++++++++++
+ scripts/governance/v71_fleet/score_stability.sh   |  36 ++++--
+ scripts/governance/v78_fleet/score_ux.sh          |  56 +++++----
+ scripts/governance/v92_fleet/pw_vote.py           |  73 ++++++++++++
+ tests/governance/test_v92_scorer_vote.py          | 138 ++++++++++++++++++++++
+ 5 files changed, 379 insertions(+), 33 deletions(-)
+ create mode 100644 .planning/decisions/2026-06-10_v92_charter_dec.md
+ create mode 100644 scripts/governance/v92_fleet/pw_vote.py
+ create mode 100644 tests/governance/test_v92_scorer_vote.py
+
+ succeeded in 2066ms:
+2026-06-10 10:12:15.862 xcodebuild[65211:1950009]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:16.011 xcodebuild[65211:1950007] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-v5QsqxTt' (errno=Operation not permitted)
+2026-06-10 10:12:16.583 xcodebuild[65279:1950101]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:16.739 xcodebuild[65279:1950100] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+commit a448e9ddfb38ca04baf06dd8d1bde36f09add7b3
+Author:     claude-opus47-app <claude-opus47-app@anthropic.com>
+AuthorDate: Wed Jun 10 10:00:01 2026 +0800
+Commit:     claude-opus47-app <claude-opus47-app@anthropic.com>
+CommitDate: Wed Jun 10 10:00:01 2026 +0800
+
+    feat(v92): scorer confirm-on-retry semantics on load-sensitive pillars · confidence:h
+    
+    DEC-V92-charter (.planning/decisions/2026-06-10_v92_charter_dec.md,
+    Status=Proposed, external gate, counter N/A per RETRO-V61-001):
+    V78 scorer family 1-vote-veto -> confirm-on-retry majority semantics,
+    load-sensitive pillars only (stability #7, ux #3). Formulas, weights,
+    16-pillar min aggregation, deterministic pillars unchanged; 14-arc
+    no-scoring-change streak (V78->V91) ends by design per DEC D5.
+    
+    四问门控:
+    - LLM 离线可跑: N/A — 纯评分脚本，无 LLM 路径
+    - artifacts: score 报告含 transient telemetry
+      (transient_flake_count / flaky_specs_count subscores + evidence)
+    - TrustGate: 不涉及
+    - AI advisory-only: 是
+    
+    Verification: pytest -q tests/governance/ 15/15 green · bash -n both
+    scorers · 5-agent read-only pre-commit verify vs DEC D1-D5 all PASS
+    (incl. verbatim anchor check of V90/V91 retro citations).
+    
+    Surface-scan-found: score_stability.sh, score_ux.sh · disposition: extend
+    
+    Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
+.planning/decisions/2026-06-10_v92_charter_dec.md
+scripts/governance/v71_fleet/score_stability.sh
+scripts/governance/v78_fleet/score_ux.sh
+scripts/governance/v92_fleet/pw_vote.py
+tests/governance/test_v92_scorer_vote.py
+
+exec
+/bin/zsh -lc 'git diff a448e9d''^ a448e9d -- scripts/governance/v92_fleet/pw_vote.py' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git diff a448e9d''^ a448e9d -- scripts/governance/v78_fleet/score_ux.sh' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git diff a448e9d''^ a448e9d -- scripts/governance/v71_fleet/score_stability.sh' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 2316ms:
+2026-06-10 10:12:32.775 xcodebuild[66826:1951992]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:32.949 xcodebuild[66826:1951989] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-oogg2r33' (errno=Operation not permitted)
+2026-06-10 10:12:33.579 xcodebuild[66895:1952101]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:33.750 xcodebuild[66895:1952097] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+diff --git a/scripts/governance/v92_fleet/pw_vote.py b/scripts/governance/v92_fleet/pw_vote.py
+new file mode 100644
+index 0000000..9744d4f
+--- /dev/null
++++ b/scripts/governance/v92_fleet/pw_vote.py
+@@ -0,0 +1,73 @@
++#!/usr/bin/env python3
++"""V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
++
++A spec PASSES if ANY attempt passed (playwright --retries semantics).
++  - flaky          = eventually passed, but >=1 failed attempt (telemetry, 0 penalty)
++  - confirmed_fail = no attempt passed (drives the pro-rate penalty)
++
++Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
++spec on a single load-induced transient (V90/V91 retro Open Q #1).
++
++Usage: pw_vote.py <playwright_report.json>
++Emits one JSON object on stdout:
++  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
++   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
++On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
++"""
++import json
++import sys
++
++
++def walk(suites):
++    for s in suites:
++        for sp in s.get("specs", []):
++            for t in sp.get("tests", []):
++                yield sp.get("title", "?"), t
++        yield from walk(s.get("suites", []))
++
++
++def vote(report: dict) -> dict:
++    out = {
++        "passed": 0,
++        "total": 0,
++        "flaky": 0,
++        "confirmed_failed": 0,
++        "flaky_titles": [],
++        "failed_titles": [],
++        "parse_error": None,
++    }
++    for title, t in walk(report.get("suites", [])):
++        results = t.get("results", [])
++        out["total"] += 1
++        any_pass = any(r.get("status") == "passed" for r in results)
++        any_fail = any(r.get("status") != "passed" for r in results)
++        if any_pass:
++            out["passed"] += 1
++            if any_fail:
++                out["flaky"] += 1
++                out["flaky_titles"].append(title)
++        else:
++            out["confirmed_failed"] += 1
++            out["failed_titles"].append(title)
++    return out
++
++
++def main(path: str) -> dict:
++    try:
++        with open(path) as f:
++            report = json.load(f)
++        return vote(report)
++    except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
++        return {
++            "passed": 0,
++            "total": 0,
++            "flaky": 0,
++            "confirmed_failed": 0,
++            "flaky_titles": [],
++            "failed_titles": [],
++            "parse_error": str(exc),
++        }
++
++
++if __name__ == "__main__":
++    print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+
+ succeeded in 2308ms:
+2026-06-10 10:12:32.775 xcodebuild[66825:1951991]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:32.950 xcodebuild[66825:1951988] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-uW9hgO2i' (errno=Operation not permitted)
+2026-06-10 10:12:33.579 xcodebuild[66894:1952100]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:33.751 xcodebuild[66894:1952096] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+diff --git a/scripts/governance/v78_fleet/score_ux.sh b/scripts/governance/v78_fleet/score_ux.sh
+index 383096a..6cd94b2 100755
+--- a/scripts/governance/v78_fleet/score_ux.sh
++++ b/scripts/governance/v78_fleet/score_ux.sh
+@@ -4,6 +4,12 @@
+ # (was: ≥17 of N PASS). Forces full playwright suite green.
+ #
+ # This is the V73.1-fragility-detection-gap closure (3-retro carry).
++#
++# V92 (DEC-V92-charter D2 · confirm-on-retry): playwright runs with
++# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
++# a spec PASSES if ANY attempt passed; flaky specs (eventual pass) are
++# telemetry only (0 penalty); confirmed fails (no attempt passed) drive
++# the V78 pro-rate exactly as before. Closes V90/V91 retro Open Q #1.
+ set -o pipefail
+ cd "$(git rev-parse --show-toplevel)" || exit 1
+ 
+@@ -25,36 +31,28 @@ total=0
+ if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+   failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+ else
++  repo_root="$(git rev-parse --show-toplevel)"
+   cd ui/frontend
+-  if npx playwright test --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
++  # V92: --retries=2 → transient load-induced failures get majority vote
++  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+     pw_exit=0
+   else
+     pw_exit=$?
+   fi
+ 
+-  pass_total=$(python3 - <<'PYEOF'
+-import json
+-try:
+-    d = json.load(open("/tmp/v78_pw.json"))
+-    def walk(suites):
+-        for s in suites:
+-            for sp in s.get("specs", []):
+-                for t in sp.get("tests", []):
+-                    yield t
+-            yield from walk(s.get("suites", []))
+-    tests = list(walk(d.get("suites", [])))
+-    total = len(tests)
+-    passed = sum(
+-        1 for t in tests
+-        if all(r.get("status") == "passed" for r in t.get("results", []))
+-    )
+-    print(f"{passed} {total}")
+-except Exception as exc:
+-    print(f"0 0 # parse error: {exc}")
+-PYEOF
+-)
+-  passed=$(echo "$pass_total" | awk '{print $1}')
+-  total=$(echo "$pass_total" | awk '{print $2}')
++  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
++  passed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])")
++  total=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])")
++  flaky=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['flaky'])")
++  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
++  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
++
++  if [ "${flaky:-0}" -gt 0 ]; then
++    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
++  fi
++  if [ "${flaky:-0}" -ge 3 ]; then
++    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
++  fi
+ 
+   if [ "$total" -gt 0 ]; then
+     # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
+@@ -83,9 +81,13 @@ PYEOF
+     if [ "$blockers" -eq 0 ]; then
+       no_blocker_score=15
+       evidence+=("no-blocker: 0 click-intercepted / timeout signals")
++    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
++      # V92 D2: signals from attempts that eventually passed = transient noise
++      no_blocker_score=15
++      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+     else
+       no_blocker_score=0
+-      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
++      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+     fi
+   else
+     failures+=("playwright json parse failure · 0 tests recognized")
+@@ -114,9 +116,11 @@ print(json.dumps({
+     "no_blocker_clicks": $no_blocker_score,
+     "specs_pass_count": ${passed:-0},
+     "specs_total_count": ${total:-0},
++    "flaky_specs_count": ${flaky:-0},
++    "confirmed_failed_count": ${confirmed_failed:-0},
+   },
+   "evidence": ev,
+   "failures": fa,
+-  "honest_note": "V78 TIGHTENED · flow_completion requires 100% specs PASS (was ≥17) · 3-arc deferred V73.1-fragility-gap closed"
++  "honest_note": "V78 TIGHTENED (100% specs PASS) + V92 confirm-on-retry (--retries=2 · flaky=telemetry-only · confirmed fails drive pro-rate) per DEC-V92-charter"
+ }, ensure_ascii=False, indent=2))
+ PYEOF
+
+ succeeded in 2302ms:
+2026-06-10 10:12:32.775 xcodebuild[66827:1951990]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:32.949 xcodebuild[66827:1951987] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-KcIHdko8' (errno=Operation not permitted)
+2026-06-10 10:12:33.579 xcodebuild[66896:1952099]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:33.750 xcodebuild[66896:1952098] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+diff --git a/scripts/governance/v71_fleet/score_stability.sh b/scripts/governance/v71_fleet/score_stability.sh
+index 2ab1439..166988e 100755
+--- a/scripts/governance/v71_fleet/score_stability.sh
++++ b/scripts/governance/v71_fleet/score_stability.sh
+@@ -1,7 +1,13 @@
+ #!/usr/bin/env bash
+ # V67-C Fleet Agent #7: Stability
+ # Repeated vitest runs (N=3) — detect flake. Memory growth via repeated build.
+-# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
++# Score = 100 - confirmed_fail*30 - mem_growth_pct*5 (clip [0,100])
++#
++# V92 (DEC-V92-charter D1 · confirm-on-retry): a failing run gets exactly
++# ONE isolation retry. Penalty only on CONFIRMED fail (initial FAIL + retry
++# FAIL). Transient flake (retry PASS) = telemetry subscore, 0 penalty.
++# Closes V90/V91 retro Open Q #1 (1-vote-veto on 1-in-N statistical noise).
++# STABILITY_TEST_CMD env overrides the test command (testability hook).
+ set -o pipefail
+ cd "$(git rev-parse --show-toplevel)" || exit 1
+ 
+@@ -11,25 +17,40 @@ weight=0.08
+ evidence=()
+ failures=()
+ 
+-flake_count=0
++flake_count=0            # V92: confirmed fails only
++transient_flake_count=0  # V92: retry-cleared noise (0 penalty, audited)
+ runs=3
+ results=()
++test_cmd="${STABILITY_TEST_CMD:-npm run test}"
+ 
+ if [ -d "ui/frontend" ]; then
+   cd ui/frontend
+   for i in 1 2 3; do
+-    if npm run test > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
++    if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
+       results+=("run${i}=PASS")
+     else
+-      results+=("run${i}=FAIL")
+-      flake_count=$((flake_count + 1))
++      # V92 confirm-on-retry: single isolation retry before penalizing
++      if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}_retry.log" 2>&1; then
++        results+=("run${i}=TRANSIENT(retry PASS)")
++        transient_flake_count=$((transient_flake_count + 1))
++      else
++        results+=("run${i}=CONFIRMED_FAIL")
++        flake_count=$((flake_count + 1))
++      fi
+     fi
+   done
+ 
+   if [ "$flake_count" -eq 0 ]; then
+-    evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
++    if [ "$transient_flake_count" -eq 0 ]; then
++      evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
++    else
++      evidence+=("stability: 0 confirmed fail · ${transient_flake_count} transient flake(s) retry-cleared (V92 confirm-on-retry · 0 penalty · audited)")
++    fi
+   else
+-    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
++    failures+=("stability: ${flake_count}/${runs} runs CONFIRMED FAIL · " "${results[@]}")
++  fi
++  if [ "$transient_flake_count" -ge 2 ]; then
++    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+   fi
+   cd - > /dev/null
+ else
+@@ -55,6 +76,7 @@ print(json.dumps({
+   "subscores": {
+     "vitest_runs": $runs,
+     "flake_count": $flake_count,
++    "transient_flake_count": $transient_flake_count,
+     "memory_growth_pct": $mem_growth_pct,
+   },
+   "evidence": $(printf '%s\n' "${evidence[@]}" | jq -R . | jq -sc .),
+
+exec
+/bin/zsh -lc "sed -n '1,220p' scripts/governance/v71_fleet/score_stability.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V67-C Fleet Agent #7: Stability
+# Repeated vitest runs (N=3) — detect flake. Memory growth via repeated build.
+# Score = 100 - confirmed_fail*30 - mem_growth_pct*5 (clip [0,100])
+#
+# V92 (DEC-V92-charter D1 · confirm-on-retry): a failing run gets exactly
+# ONE isolation retry. Penalty only on CONFIRMED fail (initial FAIL + retry
+# FAIL). Transient flake (retry PASS) = telemetry subscore, 0 penalty.
+# Closes V90/V91 retro Open Q #1 (1-vote-veto on 1-in-N statistical noise).
+# STABILITY_TEST_CMD env overrides the test command (testability hook).
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="stability"
+dim="稳定性"
+weight=0.08
+evidence=()
+failures=()
+
+flake_count=0            # V92: confirmed fails only
+transient_flake_count=0  # V92: retry-cleared noise (0 penalty, audited)
+runs=3
+results=()
+test_cmd="${STABILITY_TEST_CMD:-npm run test}"
+
+if [ -d "ui/frontend" ]; then
+  cd ui/frontend
+  for i in 1 2 3; do
+    if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
+      results+=("run${i}=PASS")
+    else
+      # V92 confirm-on-retry: single isolation retry before penalizing
+      if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}_retry.log" 2>&1; then
+        results+=("run${i}=TRANSIENT(retry PASS)")
+        transient_flake_count=$((transient_flake_count + 1))
+      else
+        results+=("run${i}=CONFIRMED_FAIL")
+        flake_count=$((flake_count + 1))
+      fi
+    fi
+  done
+
+  if [ "$flake_count" -eq 0 ]; then
+    if [ "$transient_flake_count" -eq 0 ]; then
+      evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
+    else
+      evidence+=("stability: 0 confirmed fail · ${transient_flake_count} transient flake(s) retry-cleared (V92 confirm-on-retry · 0 penalty · audited)")
+    fi
+  else
+    failures+=("stability: ${flake_count}/${runs} runs CONFIRMED FAIL · " "${results[@]}")
+  fi
+  if [ "$transient_flake_count" -ge 2 ]; then
+    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+  fi
+  cd - > /dev/null
+else
+  failures+=("ui/frontend not found")
+  flake_count=$runs
+fi
+
+# Memory growth: track 2 sequential build sizes; if dist size differs > 5%, flag.
+mem_growth_pct=0
+# (Baseline iter 0: skip mem check; iter 1+ will compare to baseline)
+evidence+=("memory growth check deferred to iter 1+ (needs baseline)")
+
+score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+if [ "$score" -lt 0 ]; then score=0; fi
+
+python3 - <<PYEOF
+import json
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "vitest_runs": $runs,
+    "flake_count": $flake_count,
+    "transient_flake_count": $transient_flake_count,
+    "memory_growth_pct": $mem_growth_pct,
+  },
+  "evidence": $(printf '%s\n' "${evidence[@]}" | jq -R . | jq -sc .),
+  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+exec
+/bin/zsh -lc "sed -n '1,240p' tests/governance/test_v92_scorer_vote.py" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,260p' scripts/governance/v78_fleet/score_ux.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+"""V92 confirm-on-retry scorer semantics (DEC-V92-charter).
+
+Covers:
+  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+     nested suites / parse-error (fail-closed 0/0).
+  2. score_stability.sh integration via STABILITY_TEST_CMD fake command —
+     fail-once (transient, 0 penalty) vs fail-always (confirmed, −30 each).
+"""
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+STABILITY = REPO / "scripts" / "governance" / "v71_fleet" / "score_stability.sh"
+
+sys.path.insert(0, str(PW_VOTE.parent))
+from pw_vote import vote, main as pw_vote_main  # noqa: E402
+
+
+def _spec(title, statuses):
+    return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
+
+
+def _report(specs, nested=None):
+    suite = {"specs": specs, "suites": nested or []}
+    return {"suites": [suite]}
+
+
+class TestPwVote:
+    def test_all_pass(self):
+        r = vote(_report([_spec("a", ["passed"]), _spec("b", ["passed"])]))
+        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (2, 2, 0, 0)
+
+    def test_flaky_eventual_pass_is_not_penalized(self):
+        # V91 class: spec #50 timed out under load, passed on retry
+        r = vote(_report([_spec("visual #50", ["timedOut", "passed"]), _spec("b", ["passed"])]))
+        assert r["passed"] == 2  # flaky spec COUNTS as passed (V92 vote)
+        assert r["confirmed_failed"] == 0
+        assert r["flaky"] == 1
+        assert r["flaky_titles"] == ["visual #50"]
+
+    def test_confirmed_fail_all_attempts(self):
+        r = vote(_report([_spec("broken", ["failed", "failed", "failed"]), _spec("b", ["passed"])]))
+        assert r["passed"] == 1
+        assert r["confirmed_failed"] == 1
+        assert r["failed_titles"] == ["broken"]
+        assert r["flaky"] == 0
+
+    def test_nested_suites_walked(self):
+        inner = {"specs": [_spec("deep", ["failed", "passed"])], "suites": []}
+        r = vote(_report([_spec("top", ["passed"])], nested=[inner]))
+        assert r["total"] == 2
+        assert r["passed"] == 2
+        assert r["flaky"] == 1
+
+    def test_v78_regression_class_would_have_scored_86(self):
+        # 184 clean + 1 flaky-pass: V78 rule → 184/185 (pro-rate 59 → min 86);
+        # V92 vote → 185/185 (full 60).
+        specs = [_spec(f"s{i}", ["passed"]) for i in range(184)]
+        specs.append(_spec("s50", ["timedOut", "passed"]))
+        r = vote(_report(specs))
+        assert r["passed"] == r["total"] == 185
+        v78_passed = 184  # old all()-rule
+        assert v78_passed * 60 // 185 == 59  # documents the V91 dip this fixes
+
+    def test_parse_error_fails_closed(self, tmp_path):
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not json")
+        r = pw_vote_main(str(bad))
+        assert (r["passed"], r["total"]) == (0, 0)
+        assert r["parse_error"] is not None
+
+    def test_cli_emits_json(self, tmp_path):
+        f = tmp_path / "rep.json"
+        f.write_text(json.dumps(_report([_spec("a", ["passed"])])))
+        out = subprocess.run(
+            [sys.executable, str(PW_VOTE), str(f)], capture_output=True, text=True, check=True
+        )
+        assert json.loads(out.stdout)["passed"] == 1
+
+
+@pytest.fixture
+def fake_test_cmd(tmp_path):
+    """Returns a cmd that fails on invocation numbers listed in FAIL_ON."""
+    counter = tmp_path / "count"
+    counter.write_text("0")
+    script = tmp_path / "fake.sh"
+    script.write_text(
+        "#!/usr/bin/env bash\n"
+        f'c=$(cat "{counter}"); c=$((c+1)); echo "$c" > "{counter}"\n'
+        'for n in $FAIL_ON; do [ "$c" -eq "$n" ] && exit 1; done\n'
+        "exit 0\n"
+    )
+    script.chmod(0o755)
+    return str(script)
+
+
+def _run_stability(cmd, fail_on):
+    env = dict(os.environ, STABILITY_TEST_CMD=cmd, FAIL_ON=fail_on)
+    out = subprocess.run(
+        ["bash", str(STABILITY)], capture_output=True, text=True, env=env, cwd=str(REPO)
+    )
+    assert out.returncode == 0, out.stderr
+    return json.loads(out.stdout)
+
+
+@pytest.mark.skipif(not (REPO / "ui" / "frontend").is_dir(), reason="ui/frontend required")
+class TestStabilityConfirmOnRetry:
+    def test_transient_flake_zero_penalty(self, fake_test_cmd):
+        # run1 fails, its retry (invocation 2) passes → transient, score 100
+        r = _run_stability(fake_test_cmd, "1")
+        assert r["score"] == 100
+        assert r["subscores"]["flake_count"] == 0
+        assert r["subscores"]["transient_flake_count"] == 1
+
+    def test_clean_run_score_100(self, fake_test_cmd):
+        r = _run_stability(fake_test_cmd, "")
+        assert r["score"] == 100
+        assert r["subscores"]["transient_flake_count"] == 0
+
+    def test_confirmed_fail_full_penalty(self, fake_test_cmd):
+        # every invocation fails → 3 confirmed fails → 100 − 3×30 = 10
+        r = _run_stability(fake_test_cmd, "1 2 3 4 5 6")
+        assert r["score"] == 10
+        assert r["subscores"]["flake_count"] == 3
+        assert r["subscores"]["transient_flake_count"] == 0
+
+    def test_d4_guard_flags_two_transients(self, fake_test_cmd):
+        # run1 + run2 fail, both retries pass → 2 transients → D4 mini-retro flag
+        r = _run_stability(fake_test_cmd, "1 3")
+        assert r["score"] == 100
+        assert r["subscores"]["transient_flake_count"] == 2
+        assert any("mini-retro" in f for f in r["failures"])
+
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V78 Fleet Agent #3: UX / Playability (V78 TIGHTENED · 100% specs PASS)
+# V78 change vs V71: flow_completion full credit ONLY when 100% specs PASS
+# (was: ≥17 of N PASS). Forces full playwright suite green.
+#
+# This is the V73.1-fragility-detection-gap closure (3-retro carry).
+#
+# V92 (DEC-V92-charter D2 · confirm-on-retry): playwright runs with
+# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
+# a spec PASSES if ANY attempt passed; flaky specs (eventual pass) are
+# telemetry only (0 penalty); confirmed fails (no attempt passed) drive
+# the V78 pro-rate exactly as before. Closes V90/V91 retro Open Q #1.
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="ux_playability"
+dim="使用手感"
+weight=0.15
+evidence=("placeholder")
+failures=("placeholder")
+
+pw_config="ui/frontend/playwright.config.ts"
+pw_dir="ui/frontend/e2e"
+
+flow_completion_score=0
+latency_score=0
+no_blocker_score=0
+passed=0
+total=0
+
+if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+else
+  repo_root="$(git rev-parse --show-toplevel)"
+  cd ui/frontend
+  # V92: --retries=2 → transient load-induced failures get majority vote
+  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+    pw_exit=0
+  else
+    pw_exit=$?
+  fi
+
+  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+  passed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])")
+  total=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])")
+  flaky=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['flaky'])")
+  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
+
+  if [ "${flaky:-0}" -gt 0 ]; then
+    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
+  fi
+  if [ "${flaky:-0}" -ge 3 ]; then
+    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+  fi
+
+  if [ "$total" -gt 0 ]; then
+    # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
+    # ≥17-of-N threshold loophole. Pro-rate by exact pass rate.
+    if [ "$passed" -eq "$total" ]; then
+      flow_completion_score=60
+      evidence+=("playwright: ${passed}/${total} specs PASS · 100% threshold MET (FULL=60/60)")
+    else
+      # Pro-rate by pass rate
+      flow_completion_score=$(( passed * 60 / total ))
+      evidence+=("playwright: ${passed}/${total} (${flow_completion_score}/60 pro-rated by exact pass rate)")
+      failures+=("V78 tightened: ${passed}/${total} specs PASS · need 100% for FULL")
+    fi
+
+    if [ "$pw_exit" -eq 0 ]; then
+      latency_score=25
+      evidence+=("latency: PASS (all specs within timeout)")
+    else
+      latency_score=12
+      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+    fi
+
+    blockers=$(grep -cE "click intercepted|Target closed|Test timeout" /tmp/v78_pw.stderr 2>/dev/null || echo 0)
+    blockers=$(echo "$blockers" | head -1 | tr -d ' \n')
+    blockers=${blockers:-0}
+    if [ "$blockers" -eq 0 ]; then
+      no_blocker_score=15
+      evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+      # V92 D2: signals from attempts that eventually passed = transient noise
+      no_blocker_score=15
+      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+    else
+      no_blocker_score=0
+      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+    fi
+  else
+    failures+=("playwright json parse failure · 0 tests recognized")
+  fi
+  cd - > /dev/null
+fi
+
+evidence=("${evidence[@]:1}")
+failures=("${failures[@]:1}")
+score=$((flow_completion_score + latency_score + no_blocker_score))
+
+python3 - <<PYEOF
+import json
+ev_raw = """$(printf '%s\n' "${evidence[@]+"${evidence[@]}"}")"""
+fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+ev = [l for l in ev_raw.split("\n") if l.strip()]
+fa = [l for l in fa_raw.split("\n") if l.strip()]
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "flow_completion": $flow_completion_score,
+    "latency_band": $latency_score,
+    "no_blocker_clicks": $no_blocker_score,
+    "specs_pass_count": ${passed:-0},
+    "specs_total_count": ${total:-0},
+    "flaky_specs_count": ${flaky:-0},
+    "confirmed_failed_count": ${confirmed_failed:-0},
+  },
+  "evidence": ev,
+  "failures": fa,
+  "honest_note": "V78 TIGHTENED (100% specs PASS) + V92 confirm-on-retry (--retries=2 · flaky=telemetry-only · confirmed fails drive pro-rate) per DEC-V92-charter"
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+exec
+/bin/zsh -lc "grep -RIn \"playwright test --reporter=json\\|all(r.get(\\\"status\\\") == \\\"passed\\\")\\|STABILITY_TEST_CMD\\|v78_pw.json\\|flake_count\" scripts tests | sed -n '1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git show a448e9d''^:scripts/governance/v78_fleet/score_ux.sh | sed -n '"'1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'git show a448e9d''^:scripts/governance/v71_fleet/score_stability.sh | sed -n '"'1,220p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 165ms:
+scripts/governance/v78_fleet/score_ux.sh:37:  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+scripts/governance/v78_fleet/score_ux.sh:43:  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+scripts/governance/v68b_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68b_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v68b_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v68b_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v68b_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v68b_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68b_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v68b_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v68b_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v68c_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68c_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v68c_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v68c_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v68c_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v68c_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68c_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v68c_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v68c_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v68a_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68a_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v68a_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v68a_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v68a_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v68a_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68a_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v68a_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v68a_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v71_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v71_fleet/score_stability.sh:10:# STABILITY_TEST_CMD env overrides the test command (testability hook).
+scripts/governance/v71_fleet/score_stability.sh:20:flake_count=0            # V92: confirmed fails only
+scripts/governance/v71_fleet/score_stability.sh:21:transient_flake_count=0  # V92: retry-cleared noise (0 penalty, audited)
+scripts/governance/v71_fleet/score_stability.sh:24:test_cmd="${STABILITY_TEST_CMD:-npm run test}"
+scripts/governance/v71_fleet/score_stability.sh:35:        transient_flake_count=$((transient_flake_count + 1))
+scripts/governance/v71_fleet/score_stability.sh:38:        flake_count=$((flake_count + 1))
+scripts/governance/v71_fleet/score_stability.sh:43:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v71_fleet/score_stability.sh:44:    if [ "$transient_flake_count" -eq 0 ]; then
+scripts/governance/v71_fleet/score_stability.sh:47:      evidence+=("stability: 0 confirmed fail · ${transient_flake_count} transient flake(s) retry-cleared (V92 confirm-on-retry · 0 penalty · audited)")
+scripts/governance/v71_fleet/score_stability.sh:50:    failures+=("stability: ${flake_count}/${runs} runs CONFIRMED FAIL · " "${results[@]}")
+scripts/governance/v71_fleet/score_stability.sh:52:  if [ "$transient_flake_count" -ge 2 ]; then
+scripts/governance/v71_fleet/score_stability.sh:53:    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+scripts/governance/v71_fleet/score_stability.sh:58:  flake_count=$runs
+scripts/governance/v71_fleet/score_stability.sh:66:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v71_fleet/score_stability.sh:78:    "flake_count": $flake_count,
+scripts/governance/v71_fleet/score_stability.sh:79:    "transient_flake_count": $transient_flake_count,
+scripts/governance/v73_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v73_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v73_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v73_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v73_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v73_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v73_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v73_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v73_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v72_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v72_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v72_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v72_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v72_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v72_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v72_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v72_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v72_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v67c_fleet/score_ux.sh:28:  if npx playwright test --reporter=json > /tmp/v67c_pw.json 2>/tmp/v67c_pw.stderr; then
+scripts/governance/v67c_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v67c_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v67c_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v67c_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v67c_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v67c_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v67c_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v67c_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v70_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v70_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v70_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v70_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v70_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v70_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v70_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v70_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v70_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+scripts/governance/v69_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v69_fleet/score_stability.sh:4:# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+scripts/governance/v69_fleet/score_stability.sh:14:flake_count=0
+scripts/governance/v69_fleet/score_stability.sh:25:      flake_count=$((flake_count + 1))
+scripts/governance/v69_fleet/score_stability.sh:29:  if [ "$flake_count" -eq 0 ]; then
+scripts/governance/v69_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v69_fleet/score_stability.sh:37:  flake_count=$runs
+scripts/governance/v69_fleet/score_stability.sh:45:score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+scripts/governance/v69_fleet/score_stability.sh:57:    "flake_count": $flake_count,
+tests/governance/test_v92_scorer_vote.py:6:  2. score_stability.sh integration via STABILITY_TEST_CMD fake command —
+tests/governance/test_v92_scorer_vote.py:104:    env = dict(os.environ, STABILITY_TEST_CMD=cmd, FAIL_ON=fail_on)
+tests/governance/test_v92_scorer_vote.py:118:        assert r["subscores"]["flake_count"] == 0
+tests/governance/test_v92_scorer_vote.py:119:        assert r["subscores"]["transient_flake_count"] == 1
+tests/governance/test_v92_scorer_vote.py:124:        assert r["subscores"]["transient_flake_count"] == 0
+tests/governance/test_v92_scorer_vote.py:130:        assert r["subscores"]["flake_count"] == 3
+tests/governance/test_v92_scorer_vote.py:131:        assert r["subscores"]["transient_flake_count"] == 0
+tests/governance/test_v92_scorer_vote.py:137:        assert r["subscores"]["transient_flake_count"] == 2
+
+ succeeded in 2112ms:
+2026-06-10 10:12:57.509 xcodebuild[69089:1954783]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:57.666 xcodebuild[69089:1954781] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-2oCk6tjG' (errno=Operation not permitted)
+2026-06-10 10:12:58.234 xcodebuild[69093:1954805]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:58.401 xcodebuild[69093:1954803] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+#!/usr/bin/env bash
+# V67-C Fleet Agent #7: Stability
+# Repeated vitest runs (N=3) — detect flake. Memory growth via repeated build.
+# Score = 100 - flake_count*30 - mem_growth_pct*5 (clip [0,100])
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="stability"
+dim="稳定性"
+weight=0.08
+evidence=()
+failures=()
+
+flake_count=0
+runs=3
+results=()
+
+if [ -d "ui/frontend" ]; then
+  cd ui/frontend
+  for i in 1 2 3; do
+    if npm run test > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
+      results+=("run${i}=PASS")
+    else
+      results+=("run${i}=FAIL")
+      flake_count=$((flake_count + 1))
+    fi
+  done
+
+  if [ "$flake_count" -eq 0 ]; then
+    evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
+  else
+    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+  fi
+  cd - > /dev/null
+else
+  failures+=("ui/frontend not found")
+  flake_count=$runs
+fi
+
+# Memory growth: track 2 sequential build sizes; if dist size differs > 5%, flag.
+mem_growth_pct=0
+# (Baseline iter 0: skip mem check; iter 1+ will compare to baseline)
+evidence+=("memory growth check deferred to iter 1+ (needs baseline)")
+
+score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+if [ "$score" -lt 0 ]; then score=0; fi
+
+python3 - <<PYEOF
+import json
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "vitest_runs": $runs,
+    "flake_count": $flake_count,
+    "memory_growth_pct": $mem_growth_pct,
+  },
+  "evidence": $(printf '%s\n' "${evidence[@]}" | jq -R . | jq -sc .),
+  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+ succeeded in 2125ms:
+2026-06-10 10:12:57.509 xcodebuild[69088:1954782]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:57.667 xcodebuild[69088:1954779] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+git: warning: confstr() failed with code 5: couldn't get path of DARWIN_USER_TEMP_DIR; using /tmp instead
+git: error: couldn't create cache file '/tmp/xcrun_db-M1qzdpLe' (errno=Operation not permitted)
+2026-06-10 10:12:58.234 xcodebuild[69092:1954804]  DVTFilePathFSEvents: Failed to start fs event stream.
+2026-06-10 10:12:58.401 xcodebuild[69092:1954802] [MT] DVTDeveloperPaths: Failed to get length of DARWIN_USER_CACHE_DIR from confstr(3), error = Error Domain=NSPOSIXErrorDomain Code=5 "Input/output error". Using NSCachesDirectory instead.
+#!/usr/bin/env bash
+# V78 Fleet Agent #3: UX / Playability (V78 TIGHTENED · 100% specs PASS)
+# V78 change vs V71: flow_completion full credit ONLY when 100% specs PASS
+# (was: ≥17 of N PASS). Forces full playwright suite green.
+#
+# This is the V73.1-fragility-detection-gap closure (3-retro carry).
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+agent="ux_playability"
+dim="使用手感"
+weight=0.15
+evidence=("placeholder")
+failures=("placeholder")
+
+pw_config="ui/frontend/playwright.config.ts"
+pw_dir="ui/frontend/e2e"
+
+flow_completion_score=0
+latency_score=0
+no_blocker_score=0
+passed=0
+total=0
+
+if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+else
+  cd ui/frontend
+  if npx playwright test --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+    pw_exit=0
+  else
+    pw_exit=$?
+  fi
+
+  pass_total=$(python3 - <<'PYEOF'
+import json
+try:
+    d = json.load(open("/tmp/v78_pw.json"))
+    def walk(suites):
+        for s in suites:
+            for sp in s.get("specs", []):
+                for t in sp.get("tests", []):
+                    yield t
+            yield from walk(s.get("suites", []))
+    tests = list(walk(d.get("suites", [])))
+    total = len(tests)
+    passed = sum(
+        1 for t in tests
+        if all(r.get("status") == "passed" for r in t.get("results", []))
+    )
+    print(f"{passed} {total}")
+except Exception as exc:
+    print(f"0 0 # parse error: {exc}")
+PYEOF
+)
+  passed=$(echo "$pass_total" | awk '{print $1}')
+  total=$(echo "$pass_total" | awk '{print $2}')
+
+  if [ "$total" -gt 0 ]; then
+    # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
+    # ≥17-of-N threshold loophole. Pro-rate by exact pass rate.
+    if [ "$passed" -eq "$total" ]; then
+      flow_completion_score=60
+      evidence+=("playwright: ${passed}/${total} specs PASS · 100% threshold MET (FULL=60/60)")
+    else
+      # Pro-rate by pass rate
+      flow_completion_score=$(( passed * 60 / total ))
+      evidence+=("playwright: ${passed}/${total} (${flow_completion_score}/60 pro-rated by exact pass rate)")
+      failures+=("V78 tightened: ${passed}/${total} specs PASS · need 100% for FULL")
+    fi
+
+    if [ "$pw_exit" -eq 0 ]; then
+      latency_score=25
+      evidence+=("latency: PASS (all specs within timeout)")
+    else
+      latency_score=12
+      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+    fi
+
+    blockers=$(grep -cE "click intercepted|Target closed|Test timeout" /tmp/v78_pw.stderr 2>/dev/null || echo 0)
+    blockers=$(echo "$blockers" | head -1 | tr -d ' \n')
+    blockers=${blockers:-0}
+    if [ "$blockers" -eq 0 ]; then
+      no_blocker_score=15
+      evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    else
+      no_blocker_score=0
+      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+    fi
+  else
+    failures+=("playwright json parse failure · 0 tests recognized")
+  fi
+  cd - > /dev/null
+fi
+
+evidence=("${evidence[@]:1}")
+failures=("${failures[@]:1}")
+score=$((flow_completion_score + latency_score + no_blocker_score))
+
+python3 - <<PYEOF
+import json
+ev_raw = """$(printf '%s\n' "${evidence[@]+"${evidence[@]}"}")"""
+fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+ev = [l for l in ev_raw.split("\n") if l.strip()]
+fa = [l for l in fa_raw.split("\n") if l.strip()]
+print(json.dumps({
+  "agent": "$agent",
+  "dim": "$dim",
+  "weight": $weight,
+  "score": $score,
+  "subscores": {
+    "flow_completion": $flow_completion_score,
+    "latency_band": $latency_score,
+    "no_blocker_clicks": $no_blocker_score,
+    "specs_pass_count": ${passed:-0},
+    "specs_total_count": ${total:-0},
+  },
+  "evidence": ev,
+  "failures": fa,
+  "honest_note": "V78 TIGHTENED · flow_completion requires 100% specs PASS (was ≥17) · 3-arc deferred V73.1-fragility-gap closed"
+}, ensure_ascii=False, indent=2))
+PYEOF
+
+exec
+/bin/zsh -lc "grep -RIn '\"status\": \"passed\"\\|timedOut\\|playwright' tests ui/frontend/e2e scripts/governance | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+tests/governance/test_v92_scorer_vote.py:41:        r = vote(_report([_spec("visual #50", ["timedOut", "passed"]), _spec("b", ["passed"])]))
+tests/governance/test_v92_scorer_vote.py:65:        specs.append(_spec("s50", ["timedOut", "passed"]))
+ui/frontend/e2e/v68c-apu-bay-catalog.spec.ts:11:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v87-v7-live-solver.spec.ts:16:import { test, expect, type Request, type Route } from "@playwright/test";
+ui/frontend/e2e/full-flow.spec.ts:18:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v88-v8-solver-config.spec.ts:15:import { test, expect, type Request, type Route } from "@playwright/test";
+ui/frontend/e2e/visual-baseline.spec.ts:15:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/visual-baseline.spec.ts:1077:  const vtkSettleMount = async (page: import("@playwright/test").Page, mode: "geometry" | "mesh") => {
+ui/frontend/e2e/visual-baseline.spec.ts:1201:  const sseSettleStatus = async (page: import("@playwright/test").Page) => {
+ui/frontend/e2e/visual-baseline.spec.ts:1333:    // intermittently fails when run as part of the full playwright
+ui/frontend/e2e/viewport-mode.spec.ts:13:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v68c-material-card.spec.ts:9:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v69-strictmode-investigation.spec.ts:15:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/topbar.spec.ts:9:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v70-novice-onboarding.spec.ts:7:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/user-journey-v3.spec.ts:4:// a single playwright test that exercises the full happy path a novice engineer
+ui/frontend/e2e/user-journey-v3.spec.ts:29:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/user-journey-v3.spec.ts:160:  // playwright tier because the live shell's offline path triggers a longer
+ui/frontend/e2e/v3-keyboard-nav.spec.ts:14:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v69-advisor-regression.spec.ts:9:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v68c-ai-diagnose.spec.ts:8:// Both routes are loopback-guarded; from playwright we run on the same
+ui/frontend/e2e/v68c-ai-diagnose.spec.ts:13:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v3-a11y-audit.spec.ts:1:// V73.2 · Runtime a11y audit via @axe-core/playwright.
+ui/frontend/e2e/v3-a11y-audit.spec.ts:15:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v3-a11y-audit.spec.ts:16:import AxeBuilder from "@axe-core/playwright";
+ui/frontend/e2e/v3-a11y-audit.spec.ts:25:  page: import("@playwright/test").Page,
+ui/frontend/e2e/v89-injection-harness.spec.ts:12:import { test, expect, type Request } from "@playwright/test";
+ui/frontend/e2e/v69-eval-harness-wire.spec.ts:8:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v79-ssim-active-gate.spec.ts:4:// the tool ACTIVELY gate at playwright-test time: this spec
+ui/frontend/e2e/v79-ssim-active-gate.spec.ts:10:// Why a separate spec instead of replacing playwright's
+ui/frontend/e2e/v79-ssim-active-gate.spec.ts:20:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/industrial-dogfood.spec.ts:17:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v81-demo-banner-behavior.spec.ts:18:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v70-shortcut-palette.spec.ts:6:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v84-v5-substrate.spec.ts:13:import { test, expect, type Request } from "@playwright/test";
+ui/frontend/e2e/v69-followups-reachable.spec.ts:7:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v79-keyboard-tab-walk.spec.ts:15:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/v68c-ai-review.spec.ts:10:import { test, expect } from "@playwright/test";
+ui/frontend/e2e/truth-chain.spec.ts:8:import { test, expect } from "@playwright/test";
+scripts/governance/v78_fleet/score_ux.sh:4:# (was: ≥17 of N PASS). Forces full playwright suite green.
+scripts/governance/v78_fleet/score_ux.sh:8:# V92 (DEC-V92-charter D2 · confirm-on-retry): playwright runs with
+scripts/governance/v78_fleet/score_ux.sh:22:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v78_fleet/score_ux.sh:37:  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+scripts/governance/v78_fleet/score_ux.sh:62:      evidence+=("playwright: ${passed}/${total} specs PASS · 100% threshold MET (FULL=60/60)")
+scripts/governance/v78_fleet/score_ux.sh:66:      evidence+=("playwright: ${passed}/${total} (${flow_completion_score}/60 pro-rated by exact pass rate)")
+scripts/governance/v78_fleet/score_ux.sh:93:    failures+=("playwright json parse failure · 0 tests recognized")
+scripts/governance/v78_fleet/score_visualization.sh:80:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v78_fleet/score_visualization.sh:81:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v68b_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v68b_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68b_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥7 threshold (FULL=60/60)")
+scripts/governance/v68b_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/7 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v68b_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68b_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v68c_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v68c_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68c_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥7 threshold (FULL=60/60)")
+scripts/governance/v68c_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/9 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v68c_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68c_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v68a_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v68a_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v68a_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥5 threshold (FULL=60/60)")
+scripts/governance/v68a_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/5 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v68a_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68a_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v71_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v71_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v71_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥17 threshold (FULL=60/60)")
+scripts/governance/v71_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/17 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v71_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v71_fleet/score_visualization.sh:51:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v71_fleet/score_visualization.sh:52:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v73_fleet/score_interaction_polish.sh:11:#   - wcag_runtime (20 · NEW) · @axe-core/playwright runtime audit PASS
+scripts/governance/v73_fleet/score_interaction_polish.sh:31:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v73_fleet/score_interaction_polish.sh:32:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v73_fleet/score_interaction_polish.sh:122:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v73_fleet/score_interaction_polish.sh:123:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v73_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v73_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v73_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥17 threshold (FULL=60/60)")
+scripts/governance/v73_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/17 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v73_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v73_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v72_fleet/score_interaction_polish.sh:28:  # playwright that's a different version than the one in node_modules.
+scripts/governance/v72_fleet/score_interaction_polish.sh:29:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v72_fleet/score_interaction_polish.sh:30:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v72_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v72_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v72_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥17 threshold (FULL=60/60)")
+scripts/governance/v72_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/17 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v72_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v72_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v67c_fleet/score_ux.sh:17:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v67c_fleet/score_ux.sh:28:  if npx playwright test --reporter=json > /tmp/v67c_pw.json 2>/tmp/v67c_pw.stderr; then
+scripts/governance/v67c_fleet/score_ux.sh:61:    evidence+=("playwright: ${passed}/${total} specs PASS (flow=${flow_completion_score}/60)")
+scripts/governance/v67c_fleet/score_ux.sh:84:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v67c_pw.json")
+scripts/governance/v67c_fleet/score_visualization.sh:41:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v67c_viz.json 2>/tmp/v67c_viz.stderr; then
+scripts/governance/v70_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v70_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v70_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥13 threshold (FULL=60/60)")
+scripts/governance/v70_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/13 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v70_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v70_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v69_fleet/score_ux.sh:16:pw_config="ui/frontend/playwright.config.ts"
+scripts/governance/v69_fleet/score_ux.sh:27:  if npx playwright test --reporter=json > /tmp/v68a_pw.json 2>/tmp/v68a_pw.stderr; then
+scripts/governance/v69_fleet/score_ux.sh:61:      evidence+=("playwright: ${passed} specs PASS ≥11 threshold (FULL=60/60)")
+scripts/governance/v69_fleet/score_ux.sh:64:      evidence+=("playwright: ${passed}/11 PASS threshold (pro-rated=${flow_completion_score}/60 · ${passed}/${total} total)")
+scripts/governance/v69_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v69_fleet/score_visualization.sh:51:  if npx playwright test viewport-mode.spec.ts truth-chain.spec.ts --reporter=json > /tmp/v68a_viz.json 2>/tmp/v68a_viz.stderr; then
+scripts/governance/v74_fleet/score_interaction_polish.sh:11:#   - wcag_runtime (20 · NEW) · @axe-core/playwright runtime audit PASS
+scripts/governance/v74_fleet/score_interaction_polish.sh:31:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v74_fleet/score_interaction_polish.sh:32:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v74_fleet/score_interaction_polish.sh:122:  pw_bin="./node_modules/.bin/playwright"
+scripts/governance/v74_fleet/score_interaction_polish.sh:123:  if [ ! -x "$pw_bin" ]; then pw_bin="npx playwright"; fi
+scripts/governance/v92_fleet/pw_vote.py:4:A spec PASSES if ANY attempt passed (playwright --retries semantics).
+scripts/governance/v92_fleet/pw_vote.py:11:Usage: pw_vote.py <playwright_report.json>
+
+exec
+/bin/zsh -lc "grep -RIn \"confirmed_failed\\|flaky_specs_count\\|transient_flake_count\\|playwright json parse failure\\|blocker:\" . | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "sed -n '1,260p' .planning/decisions/2026-06-10_v92_charter_dec.md" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+---
+decision_id: DEC-V92-charter
+title: V92 Scoring-Evolution Arc · V78 scorer family 1-vote-veto → confirm-on-retry majority semantics (load-sensitive pillars only)
+status: Accepted
+accepted: 2026-06-10 (user verdict, same session as implementation commit a448e9d)
+parent_dec: DEC-V91-close (2026-05-18_v91_close_dec.md) · V90/V91 retro Open Q #1
+phase: V92 (scoring-evolution arc · user-mandated 2026-06-10)
+notion_sync_status: n/a (Notion archive channel retired 2026-06-10 · DEC-V92-notion-retirement)
+autonomous_governance: false  # external gate — user explicitly mandated direction ("V78 scorer 演进"); counter N/A per RETRO-V61-001
+confidence: high
+date: 2026-06-10
+---
+
+# DEC-V92-charter · Scorer confirm-on-retry semantics
+
+## TL;DR
+
+Evolve the two **load-sensitive** V78-family scorers (pillar #7 stability,
+pillar #3 ux) from 1-vote-veto to **confirm-on-retry majority semantics**:
+a failing unit (vitest run / playwright spec) only counts toward the score
+penalty if it **fails again on retry**. Transient flakes are recorded as
+telemetry subscores (auditable, zero penalty). Formulas, weights, the
+16-pillar min one-vote-veto aggregation, and all 14 deterministic pillars
+are **unchanged**.
+
+This intentionally **ends the 14-arc no-scoring-change streak (V78→V91)**
+— V90 retro explicitly deferred this evolution "until next real
+scoring-evolution arc"; V92 is that arc, by user mandate (2026-06-10).
+New streak baseline starts at the V92 scorer family.
+
+## Evidence (2-arc CRITICAL · verbatim-anchored)
+
+- **V90 iter-1** stability=70: 1-in-9 statistical vitest flake (9 isolation
+  runs all PASS) cost a full extra close iteration. V90 retro:
+  "treats any single flaky vitest subrun as −30 points, which is a 1-vote
+  veto for a 1-in-N statistical noise event … consistently costing us
+  1 extra iteration per arc (or per 2 arcs)."
+  (`.planning/retrospectives/2026-05-18_v90_retro.md` L74-81)
+- **V91 iter-2/3** ux=86: Playwright visual-baseline spec #50 timed out at
+  5s under multi-process scoring load; isolation reproduces 1/1 PASS in
+  8.9s. V91 retro: "Two pillars × one root cause = strong evidence the V78
+  scorer family should evolve toward 'median of N runs' or 'majority-vote'
+  semantics." (`.planning/retrospectives/2026-05-18_v91_retro.md` L60-72)
+
+## Decision
+
+**D1 · stability scorer** (`scripts/governance/v71_fleet/score_stability.sh`):
+each failing vitest run gets exactly **one isolation retry**. Confirmed
+fail (initial FAIL + retry FAIL) → counts in `flake_count` exactly as
+before (−30 each). Transient flake (retry PASS) → `transient_flake_count`
+subscore + evidence line, **0 penalty**. Formula
+`100 − confirmed_fail×30 − mem_growth×5` shape unchanged. Test command
+overridable via `STABILITY_TEST_CMD` env (default `npm run test`) to make
+the vote logic testable.
+
+**D2 · ux scorer** (`scripts/governance/v78_fleet/score_ux.sh`): run
+playwright with `--retries=2`; per-spec vote via new helper
+`scripts/governance/v92_fleet/pw_vote.py`: spec = PASS if **any attempt
+passed**; `flaky` (eventually passed, ≥1 failed attempt) logged in
+subscores + honest_note; `confirmed_failed` (no attempt passed) drives the
+pro-rate exactly as before. Blocker subscore: when `confirmed_failed == 0`,
+stderr timeout/click signals from eventually-passing attempts are classified
+transient (no_blocker=15 + noise note); otherwise original grep behavior.
+
+**D3 · unchanged**: pillar weights, the 60/25/15 ux split, the −30 flake
+penalty, min-aggregation across 16 pillars, all deterministic pillars,
+`score_all.sh` wiring (in-place edit; disposition: **extend**, no parallel
+v92_fleet copy of the aggregator).
+
+**D4 · anti-inflation guard** (SCORING-FRAMEWORK discipline): retries must
+not silently mask real load-sensitivity regressions. Hard rule:
+`flaky_specs ≥ 3` or `transient_flake_count ≥ 2` in a single iter →
+mandatory mini-retro entry naming the flaky units. All transient counts are
+emitted in the score artifact JSON/MD so the audit trail keeps the noise
+visible.
+
+**D5 · streak disposition**: 14-arc no-scoring-change streak (V78→V91)
+ends here **by design**, recorded in this DEC. Historical scores remain
+comparable for persistent failures (identical penalty); only transient-noise
+events score differently (100 instead of 70/86) — i.e. strictly
+noise-reduction, never threshold-loosening for confirmed regressions.
+
+## Scope / blast radius
+
+- Files: 2 scorer scripts (in-place) + 1 new helper + 1 new pytest module.
+- No product code (src/, ui/) touched. No auth/signing/security boundary →
+  no v2.2 1-sync Codex trigger; async post-merge Codex review optional.
+- Reversibility: HIGH (git revert of 1 commit restores V78 semantics).
+- Strategic package (intent/merge_risk YAML) not required — not a
+  high-risk PR per DEC-V61-087 §4.4; Kogami opt-in not invoked (user may
+  invoke per V133).
+
+## Verification
+
+- `pytest -q tests/governance/test_v92_scorer_vote.py` — pw_vote.py unit
+  fixtures (all-pass / flaky-pass / confirmed-fail / parse-error / nested
+  suites) + score_stability.sh integration via `STABILITY_TEST_CMD` fake
+  (fail-once → score 100 + transient=1; fail-always → score 10 + confirmed=3).
+- `bash -n` both edited scorers.
+- Rollback trigger: any V92+ close iter where a confirmed regression was
+  retried-away (found by D4 audit) → revert + retro.
+
+## Open Qs carried
+
+- Pillar-level min one-vote-veto across 16 pillars (different layer; not
+  load-sensitive; out of scope here).
+- Median-of-N as alternative semantics: rejected for now — full-suite ×N
+  reruns are minutes-expensive (OpenFOAM-adjacent stacks); confirm-on-retry
+  achieves the same noise rejection at marginal cost of retrying failures
+  only.
+
+exec
+/bin/zsh -lc "grep -RIn \"failures\" scripts/governance | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+scripts/governance/v78_fleet/score_all.sh:95:    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+scripts/governance/v78_fleet/score_all.sh:179:    if d.get("failures"):
+scripts/governance/v78_fleet/score_all.sh:181:        for f in d["failures"]:
+scripts/governance/v78_fleet/score_ux.sh:20:failures=("placeholder")
+scripts/governance/v78_fleet/score_ux.sh:32:  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+scripts/governance/v78_fleet/score_ux.sh:36:  # V92: --retries=2 → transient load-induced failures get majority vote
+scripts/governance/v78_fleet/score_ux.sh:54:    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+scripts/governance/v78_fleet/score_ux.sh:67:      failures+=("V78 tightened: ${passed}/${total} specs PASS · need 100% for FULL")
+scripts/governance/v78_fleet/score_ux.sh:75:      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+scripts/governance/v78_fleet/score_ux.sh:90:      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+scripts/governance/v78_fleet/score_ux.sh:93:    failures+=("playwright json parse failure · 0 tests recognized")
+scripts/governance/v78_fleet/score_ux.sh:99:failures=("${failures[@]:1}")
+scripts/governance/v78_fleet/score_ux.sh:105:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v78_fleet/score_ux.sh:123:  "failures": fa,
+scripts/governance/v78_fleet/score_data_fidelity.sh:19:failures=("placeholder")
+scripts/governance/v78_fleet/score_data_fidelity.sh:33:  failures+=("TopBar lacks data-testid='topbar-run-id' (V74.3)")
+scripts/governance/v78_fleet/score_data_fidelity.sh:48:  failures+=("0 gold-delta rows in v3 (V74.4)")
+scripts/governance/v78_fleet/score_data_fidelity.sh:57:  failures+=("audit-package download wire missing from v3 (V74.5)")
+scripts/governance/v78_fleet/score_data_fidelity.sh:72:  failures+=("0 provenance-hash chips in TruthChain (V74.3)")
+scripts/governance/v78_fleet/score_data_fidelity.sh:86:    failures+=("audit-package E2E smoke FAILED · see /tmp/v78_audit_e2e.log")
+scripts/governance/v78_fleet/score_data_fidelity.sh:89:  failures+=("audit-package E2E smoke test file missing: ${e2e_test_path}")
+scripts/governance/v78_fleet/score_data_fidelity.sh:93:failures=("${failures[@]:1}")
+scripts/governance/v78_fleet/score_data_fidelity.sh:100:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v78_fleet/score_data_fidelity.sh:118:  "failures": fa,
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:13:failures=("placeholder")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:36:  failures+=("0 SSE substrate")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:51:  failures+=("0 residual-live-{var} testids")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:62:  failures+=("0 solver-state-badge testid")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:73:  failures+=("0 solver-inflight-residual testid")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:87:    failures+=("backend SSE E2E FAILED · see /tmp/v78_solver_e2e.log")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:93:  failures+=("backend SSE route + test missing (V78.1 not landed)")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:97:failures=("${failures[@]:1}")
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:104:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:124:  "failures": fa,
+scripts/governance/v78_fleet/score_visualization.sh:14:failures=("placeholder")
+scripts/governance/v78_fleet/score_visualization.sh:39:    failures+=("V78 tightened: ${png_count}/76 PNG (need 76 for FULL)")
+scripts/governance/v78_fleet/score_visualization.sh:41:    failures+=("visual baseline empty: 0 PNG files in ${baseline_dir}")
+scripts/governance/v78_fleet/score_visualization.sh:44:  failures+=("visual baseline dir missing: ${baseline_dir}")
+scripts/governance/v78_fleet/score_visualization.sh:59:      failures+=("SSIM tool present but self-pair check unexpected: ${ssim_output}")
+scripts/governance/v78_fleet/score_visualization.sh:66:  failures+=("V78.2 SSIM tool missing: ${ssim_script}")
+scripts/governance/v78_fleet/score_visualization.sh:75:  failures+=("e2e dir missing: ${pw_dir}")
+scripts/governance/v78_fleet/score_visualization.sh:77:  failures+=("missing viz specs: viewport-mode.spec.ts or truth-chain.spec.ts")
+scripts/governance/v78_fleet/score_visualization.sh:129:      failures+=("viewport-mode: 0 specs PASS")
+scripts/governance/v78_fleet/score_visualization.sh:136:failures=("${failures[@]:1}")
+scripts/governance/v78_fleet/score_visualization.sh:143:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v78_fleet/score_visualization.sh:160:  "failures": fa,
+scripts/governance/v68b_fleet/score_smoke.sh:16:failures=("placeholder")
+scripts/governance/v68b_fleet/score_smoke.sh:30:  failures+=("backend import FAILED · tail: ${tail}")
+scripts/governance/v68b_fleet/score_smoke.sh:54:    failures+=("backend HTTP /api/cases probe FAILED · port=${probe_port} · tail: ${tail}")
+scripts/governance/v68b_fleet/score_smoke.sh:57:  failures+=("backend HTTP probe skipped (app import already failed)")
+scripts/governance/v68b_fleet/score_smoke.sh:69:    failures+=("frontend build FAILED · tail: ${tail}")
+scripts/governance/v68b_fleet/score_smoke.sh:77:    failures+=("typecheck: ${err} TS errors")
+scripts/governance/v68b_fleet/score_smoke.sh:85:    failures+=("lint: ${err} errors")
+scripts/governance/v68b_fleet/score_smoke.sh:89:  failures+=("ui/frontend/node_modules absent · run 'npm install' first")
+scripts/governance/v68b_fleet/score_smoke.sh:93:failures=("${failures[@]:1}")
+scripts/governance/v68b_fleet/score_smoke.sh:100:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68b_fleet/score_smoke.sh:116:  "failures": fa,
+scripts/governance/v68b_fleet/score_all.sh:41:    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+scripts/governance/v68b_fleet/score_all.sh:124:    if d.get("failures"):
+scripts/governance/v68b_fleet/score_all.sh:126:        for f in d["failures"]:
+scripts/governance/v68b_fleet/score_ux.sh:14:failures=("placeholder")
+scripts/governance/v68b_fleet/score_ux.sh:24:  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+scripts/governance/v68b_fleet/score_ux.sh:65:      failures+=("ux below V68-B threshold: ${passed}/7 specs PASS (need ≥7 for V68-B close)")
+scripts/governance/v68b_fleet/score_ux.sh:73:      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+scripts/governance/v68b_fleet/score_ux.sh:84:      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+scripts/governance/v68b_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68b_fleet/score_ux.sh:93:failures=("${failures[@]:1}")
+scripts/governance/v68b_fleet/score_ux.sh:99:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68b_fleet/score_ux.sh:115:  "failures": fa,
+scripts/governance/v68b_fleet/score_quality.sh:13:failures=()
+scripts/governance/v68b_fleet/score_quality.sh:29:    failures+=("typecheck: ${err_count} TS errors · see /tmp/v67c_typecheck.log")
+scripts/governance/v68b_fleet/score_quality.sh:37:    failures+=("lint: ${err_count} errors · see /tmp/v67c_lint.log")
+scripts/governance/v68b_fleet/score_quality.sh:47:    failures+=("vitest: ${fail_count} suites failed · see /tmp/v67c_vitest.log")
+scripts/governance/v68b_fleet/score_quality.sh:52:  failures+=("ui/frontend not found")
+scripts/governance/v68b_fleet/score_quality.sh:72:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .),
+scripts/governance/v68b_fleet/score_functional.sh:17:failures=("placeholder")
+scripts/governance/v68b_fleet/score_functional.sh:35:  failures+=("V68B_ARC_GOAL.md not yet authored · Done dims = 0/7 honest baseline")
+scripts/governance/v68b_fleet/score_functional.sh:42:failures=("${failures[@]:1}")
+scripts/governance/v68b_fleet/score_functional.sh:47:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68b_fleet/score_functional.sh:62:  "failures": fa
+scripts/governance/v68b_fleet/score_visualization.sh:15:failures=("placeholder")
+scripts/governance/v68b_fleet/score_visualization.sh:36:    failures+=("visual baseline incomplete: ${png_count}/6 PNG snapshot files (need ≥12 for V68-B.4 close)")
+scripts/governance/v68b_fleet/score_visualization.sh:38:    failures+=("visual baseline empty: 0 PNG files in ${baseline_dir} (need ≥12 for V68-B.4 close)")
+scripts/governance/v68b_fleet/score_visualization.sh:41:  failures+=("visual baseline dir missing: ${baseline_dir}")
+scripts/governance/v68b_fleet/score_visualization.sh:46:  failures+=("e2e dir missing: ${pw_dir}")
+scripts/governance/v68b_fleet/score_visualization.sh:48:  failures+=("missing viz specs: viewport-mode.spec.ts or truth-chain.spec.ts")
+scripts/governance/v68b_fleet/score_visualization.sh:97:      failures+=("viewport-mode specs below threshold: ${viz_specific_pass}/4 (need ≥4 for V68-A.4 close)")
+scripts/governance/v68b_fleet/score_visualization.sh:99:      failures+=("viewport-mode: 0 specs PASS (need ≥4 for V68-A.4 close)")
+scripts/governance/v68b_fleet/score_visualization.sh:102:    failures+=("viz json parse failure or 0 tests")
+scripts/governance/v68b_fleet/score_visualization.sh:108:failures=("${failures[@]:1}")
+scripts/governance/v68b_fleet/score_visualization.sh:115:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68b_fleet/score_visualization.sh:131:  "failures": fa,
+scripts/governance/v68b_fleet/score_physics.sh:14:failures=("placeholder")
+scripts/governance/v68b_fleet/score_physics.sh:29:    failures+=("mass_balance: ${fail} failed · see /tmp/v67c_massbal.log")
+scripts/governance/v68b_fleet/score_physics.sh:32:  failures+=("mass_balance test missing: $mb_test")
+scripts/governance/v68b_fleet/score_physics.sh:43:  failures+=("V-corpus drift: V10x=${v10x_count} (need ≥4) · adv_files=${adv_files} (need ≥2) · v66b_rules=${adv_rules_in_v66b} (need ≥3)")
+scripts/governance/v68b_fleet/score_physics.sh:53:    failures+=("case_bc route import failed · see /tmp/v67c_bc_routes.log")
+scripts/governance/v68b_fleet/score_physics.sh:56:  failures+=("case_bc route missing: $bc_route")
+scripts/governance/v68b_fleet/score_physics.sh:60:failures=("${failures[@]:1}")
+scripts/governance/v68b_fleet/score_physics.sh:67:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68b_fleet/score_physics.sh:84:  "failures": fa,
+scripts/governance/v68b_fleet/score_stability.sh:12:failures=()
+scripts/governance/v68b_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68b_fleet/score_stability.sh:36:  failures+=("ui/frontend not found")
+scripts/governance/v68b_fleet/score_stability.sh:61:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+scripts/governance/v68c_fleet/score_smoke.sh:16:failures=("placeholder")
+scripts/governance/v68c_fleet/score_smoke.sh:30:  failures+=("backend import FAILED · tail: ${tail}")
+scripts/governance/v68c_fleet/score_smoke.sh:67:      *) failures+=("/physics probe FAILED · status=${status_physics}") ;;
+scripts/governance/v68c_fleet/score_smoke.sh:71:      *) failures+=("/ai-review probe FAILED · status=${status_review}") ;;
+scripts/governance/v68c_fleet/score_smoke.sh:75:      *) failures+=("/ai-diagnose probe FAILED · status=${status_diagnose}") ;;
+scripts/governance/v68c_fleet/score_smoke.sh:79:    failures+=("backend HTTP /api/cases probe FAILED · port=${probe_port} · tail: ${tail}")
+scripts/governance/v68c_fleet/score_smoke.sh:84:  failures+=("backend HTTP probe skipped (app import already failed)")
+scripts/governance/v68c_fleet/score_smoke.sh:96:    failures+=("frontend build FAILED · tail: ${tail}")
+scripts/governance/v68c_fleet/score_smoke.sh:104:    failures+=("typecheck: ${err} TS errors")
+scripts/governance/v68c_fleet/score_smoke.sh:112:    failures+=("lint: ${err} errors")
+scripts/governance/v68c_fleet/score_smoke.sh:116:  failures+=("ui/frontend/node_modules absent · run 'npm install' first")
+scripts/governance/v68c_fleet/score_smoke.sh:120:failures=("${failures[@]:1}")
+scripts/governance/v68c_fleet/score_smoke.sh:127:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68c_fleet/score_smoke.sh:146:  "failures": fa,
+scripts/governance/v68c_fleet/score_all.sh:41:    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+scripts/governance/v68c_fleet/score_all.sh:124:    if d.get("failures"):
+scripts/governance/v68c_fleet/score_all.sh:126:        for f in d["failures"]:
+scripts/governance/v68c_fleet/score_ux.sh:14:failures=("placeholder")
+scripts/governance/v68c_fleet/score_ux.sh:24:  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+scripts/governance/v68c_fleet/score_ux.sh:65:      failures+=("ux below V68-C threshold: ${passed}/7 specs PASS (need ≥9 for V68-C close)")
+scripts/governance/v68c_fleet/score_ux.sh:73:      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+scripts/governance/v68c_fleet/score_ux.sh:84:      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+scripts/governance/v68c_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68c_fleet/score_ux.sh:93:failures=("${failures[@]:1}")
+scripts/governance/v68c_fleet/score_ux.sh:99:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68c_fleet/score_ux.sh:115:  "failures": fa,
+scripts/governance/v68c_fleet/score_quality.sh:13:failures=()
+scripts/governance/v68c_fleet/score_quality.sh:29:    failures+=("typecheck: ${err_count} TS errors · see /tmp/v67c_typecheck.log")
+scripts/governance/v68c_fleet/score_quality.sh:37:    failures+=("lint: ${err_count} errors · see /tmp/v67c_lint.log")
+scripts/governance/v68c_fleet/score_quality.sh:47:    failures+=("vitest: ${fail_count} suites failed · see /tmp/v67c_vitest.log")
+scripts/governance/v68c_fleet/score_quality.sh:52:  failures+=("ui/frontend not found")
+scripts/governance/v68c_fleet/score_quality.sh:72:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .),
+scripts/governance/v68c_fleet/score_functional.sh:17:failures=("placeholder")
+scripts/governance/v68c_fleet/score_functional.sh:35:  failures+=("V68C_ARC_GOAL.md not yet authored · Done dims = 0/7 honest baseline")
+scripts/governance/v68c_fleet/score_functional.sh:42:failures=("${failures[@]:1}")
+scripts/governance/v68c_fleet/score_functional.sh:47:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68c_fleet/score_functional.sh:62:  "failures": fa
+scripts/governance/v68c_fleet/score_visualization.sh:15:failures=("placeholder")
+scripts/governance/v68c_fleet/score_visualization.sh:36:    failures+=("visual baseline incomplete: ${png_count}/6 PNG snapshot files (need ≥16 for V68-C close close)")
+scripts/governance/v68c_fleet/score_visualization.sh:38:    failures+=("visual baseline empty: 0 PNG files in ${baseline_dir} (need ≥16 for V68-C close close)")
+scripts/governance/v68c_fleet/score_visualization.sh:41:  failures+=("visual baseline dir missing: ${baseline_dir}")
+scripts/governance/v68c_fleet/score_visualization.sh:46:  failures+=("e2e dir missing: ${pw_dir}")
+scripts/governance/v68c_fleet/score_visualization.sh:48:  failures+=("missing viz specs: viewport-mode.spec.ts or truth-chain.spec.ts")
+scripts/governance/v68c_fleet/score_visualization.sh:97:      failures+=("viewport-mode specs below threshold: ${viz_specific_pass}/4 (need ≥4 for V68-A.4 close)")
+scripts/governance/v68c_fleet/score_visualization.sh:99:      failures+=("viewport-mode: 0 specs PASS (need ≥4 for V68-A.4 close)")
+scripts/governance/v68c_fleet/score_visualization.sh:102:    failures+=("viz json parse failure or 0 tests")
+scripts/governance/v68c_fleet/score_visualization.sh:108:failures=("${failures[@]:1}")
+scripts/governance/v68c_fleet/score_visualization.sh:115:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68c_fleet/score_visualization.sh:131:  "failures": fa,
+scripts/governance/v68c_fleet/score_physics.sh:16:failures=("placeholder")
+scripts/governance/v68c_fleet/score_physics.sh:31:    failures+=("mass_balance: ${fail} failed · see /tmp/v67c_massbal.log")
+scripts/governance/v68c_fleet/score_physics.sh:34:  failures+=("mass_balance test missing: $mb_test")
+scripts/governance/v68c_fleet/score_physics.sh:45:  failures+=("V-corpus drift: V10x=${v10x_count} (need ≥4) · adv_files=${adv_files} (need ≥2) · v66b_rules=${adv_rules_in_v66b} (need ≥3)")
+scripts/governance/v68c_fleet/score_physics.sh:55:    failures+=("case_bc route import failed · see /tmp/v67c_bc_routes.log")
+scripts/governance/v68c_fleet/score_physics.sh:58:  failures+=("case_bc route missing: $bc_route")
+scripts/governance/v68c_fleet/score_physics.sh:73:  failures+=("whitelist count: ${whitelist_count} (need ≥11 for V68-C close · case_002a entry pending)")
+scripts/governance/v68c_fleet/score_physics.sh:77:failures=("${failures[@]:1}")
+scripts/governance/v68c_fleet/score_physics.sh:84:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68c_fleet/score_physics.sh:103:  "failures": fa,
+scripts/governance/v68c_fleet/score_stability.sh:12:failures=()
+scripts/governance/v68c_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68c_fleet/score_stability.sh:36:  failures+=("ui/frontend not found")
+scripts/governance/v68c_fleet/score_stability.sh:61:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+scripts/governance/v68a_fleet/score_smoke.sh:16:failures=("placeholder")
+scripts/governance/v68a_fleet/score_smoke.sh:29:  failures+=("backend import FAILED · tail: ${tail}")
+scripts/governance/v68a_fleet/score_smoke.sh:41:    failures+=("frontend build FAILED · tail: ${tail}")
+scripts/governance/v68a_fleet/score_smoke.sh:49:    failures+=("typecheck: ${err} TS errors")
+scripts/governance/v68a_fleet/score_smoke.sh:57:    failures+=("lint: ${err} errors")
+scripts/governance/v68a_fleet/score_smoke.sh:61:  failures+=("ui/frontend/node_modules absent · run 'npm install' first")
+scripts/governance/v68a_fleet/score_smoke.sh:66:failures=("${failures[@]:1}")
+scripts/governance/v68a_fleet/score_smoke.sh:73:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68a_fleet/score_smoke.sh:88:  "failures": fa,
+scripts/governance/v68a_fleet/score_all.sh:41:    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+scripts/governance/v68a_fleet/score_all.sh:124:    if d.get("failures"):
+scripts/governance/v68a_fleet/score_all.sh:126:        for f in d["failures"]:
+scripts/governance/v68a_fleet/score_ux.sh:14:failures=("placeholder")
+scripts/governance/v68a_fleet/score_ux.sh:24:  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+scripts/governance/v68a_fleet/score_ux.sh:65:      failures+=("ux below threshold: ${passed}/5 specs PASS (need ≥5 for V68-A close)")
+scripts/governance/v68a_fleet/score_ux.sh:73:      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+scripts/governance/v68a_fleet/score_ux.sh:84:      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+scripts/governance/v68a_fleet/score_ux.sh:87:    failures+=("playwright json parse failure · 0 tests recognized · /tmp/v68a_pw.json")
+scripts/governance/v68a_fleet/score_ux.sh:93:failures=("${failures[@]:1}")
+scripts/governance/v68a_fleet/score_ux.sh:99:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68a_fleet/score_ux.sh:115:  "failures": fa,
+scripts/governance/v68a_fleet/score_quality.sh:13:failures=()
+scripts/governance/v68a_fleet/score_quality.sh:29:    failures+=("typecheck: ${err_count} TS errors · see /tmp/v67c_typecheck.log")
+scripts/governance/v68a_fleet/score_quality.sh:37:    failures+=("lint: ${err_count} errors · see /tmp/v67c_lint.log")
+scripts/governance/v68a_fleet/score_quality.sh:47:    failures+=("vitest: ${fail_count} suites failed · see /tmp/v67c_vitest.log")
+scripts/governance/v68a_fleet/score_quality.sh:52:  failures+=("ui/frontend not found")
+scripts/governance/v68a_fleet/score_quality.sh:72:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .),
+scripts/governance/v68a_fleet/score_functional.sh:12:failures=("placeholder")
+scripts/governance/v68a_fleet/score_functional.sh:30:  failures+=("V68A_ARC_GOAL.md not yet authored · Done dims = 0/7 honest baseline")
+scripts/governance/v68a_fleet/score_functional.sh:37:failures=("${failures[@]:1}")
+scripts/governance/v68a_fleet/score_functional.sh:42:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68a_fleet/score_functional.sh:57:  "failures": fa
+scripts/governance/v68a_fleet/score_visualization.sh:15:failures=("placeholder")
+scripts/governance/v68a_fleet/score_visualization.sh:36:    failures+=("visual baseline incomplete: ${png_count}/6 PNG snapshot files (need ≥6 for V68-A.4 close)")
+scripts/governance/v68a_fleet/score_visualization.sh:38:    failures+=("visual baseline empty: 0 PNG files in ${baseline_dir} (need ≥6 for V68-A.4 close)")
+scripts/governance/v68a_fleet/score_visualization.sh:41:  failures+=("visual baseline dir missing: ${baseline_dir}")
+scripts/governance/v68a_fleet/score_visualization.sh:46:  failures+=("e2e dir missing: ${pw_dir}")
+scripts/governance/v68a_fleet/score_visualization.sh:48:  failures+=("missing viz specs: viewport-mode.spec.ts or truth-chain.spec.ts")
+scripts/governance/v68a_fleet/score_visualization.sh:97:      failures+=("viewport-mode specs below threshold: ${viz_specific_pass}/4 (need ≥4 for V68-A.4 close)")
+scripts/governance/v68a_fleet/score_visualization.sh:99:      failures+=("viewport-mode: 0 specs PASS (need ≥4 for V68-A.4 close)")
+scripts/governance/v68a_fleet/score_visualization.sh:102:    failures+=("viz json parse failure or 0 tests")
+scripts/governance/v68a_fleet/score_visualization.sh:108:failures=("${failures[@]:1}")
+scripts/governance/v68a_fleet/score_visualization.sh:115:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68a_fleet/score_visualization.sh:131:  "failures": fa,
+scripts/governance/v68a_fleet/score_physics.sh:14:failures=("placeholder")
+scripts/governance/v68a_fleet/score_physics.sh:29:    failures+=("mass_balance: ${fail} failed · see /tmp/v67c_massbal.log")
+scripts/governance/v68a_fleet/score_physics.sh:32:  failures+=("mass_balance test missing: $mb_test")
+scripts/governance/v68a_fleet/score_physics.sh:43:  failures+=("V-corpus drift: V10x=${v10x_count} (need ≥4) · adv_files=${adv_files} (need ≥2) · v66b_rules=${adv_rules_in_v66b} (need ≥3)")
+scripts/governance/v68a_fleet/score_physics.sh:53:    failures+=("case_bc route import failed · see /tmp/v67c_bc_routes.log")
+scripts/governance/v68a_fleet/score_physics.sh:56:  failures+=("case_bc route missing: $bc_route")
+scripts/governance/v68a_fleet/score_physics.sh:60:failures=("${failures[@]:1}")
+scripts/governance/v68a_fleet/score_physics.sh:67:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v68a_fleet/score_physics.sh:84:  "failures": fa,
+scripts/governance/v68a_fleet/score_stability.sh:12:failures=()
+scripts/governance/v68a_fleet/score_stability.sh:32:    failures+=("stability: ${flake_count}/${runs} runs FAILED · " "${results[@]}")
+scripts/governance/v68a_fleet/score_stability.sh:36:  failures+=("ui/frontend not found")
+scripts/governance/v68a_fleet/score_stability.sh:61:  "failures": $(printf '%s\n' "${failures[@]}" | jq -R . | jq -sc .)
+scripts/governance/v71_fleet/score_smoke.sh:16:failures=("placeholder")
+scripts/governance/v71_fleet/score_smoke.sh:30:  failures+=("backend import FAILED · tail: ${tail}")
+scripts/governance/v71_fleet/score_smoke.sh:67:      *) failures+=("/physics probe FAILED · status=${status_physics}") ;;
+scripts/governance/v71_fleet/score_smoke.sh:71:      *) failures+=("/ai-review probe FAILED · status=${status_review}") ;;
+scripts/governance/v71_fleet/score_smoke.sh:75:      *) failures+=("/ai-diagnose probe FAILED · status=${status_diagnose}") ;;
+scripts/governance/v71_fleet/score_smoke.sh:79:    failures+=("backend HTTP /api/cases probe FAILED · port=${probe_port} · tail: ${tail}")
+scripts/governance/v71_fleet/score_smoke.sh:84:  failures+=("backend HTTP probe skipped (app import already failed)")
+scripts/governance/v71_fleet/score_smoke.sh:96:    failures+=("frontend build FAILED · tail: ${tail}")
+scripts/governance/v71_fleet/score_smoke.sh:104:    failures+=("typecheck: ${err} TS errors")
+scripts/governance/v71_fleet/score_smoke.sh:112:    failures+=("lint: ${err} errors")
+scripts/governance/v71_fleet/score_smoke.sh:116:  failures+=("ui/frontend/node_modules absent · run 'npm install' first")
+scripts/governance/v71_fleet/score_smoke.sh:132:      failures+=("canonical eval harness: only ${canonical_harness_count} PASS (need ≥20 for V69 close)")
+scripts/governance/v71_fleet/score_smoke.sh:136:    failures+=("canonical eval harness: ${fail} failures · see /tmp/v69_canonical_harness.log")
+scripts/governance/v71_fleet/score_smoke.sh:139:  failures+=("canonical eval harness file missing: ui/backend/tests/test_canonical_advisor_eval.py (V69.2 pending)")
+scripts/governance/v71_fleet/score_smoke.sh:143:failures=("${failures[@]:1}")
+scripts/governance/v71_fleet/score_smoke.sh:153:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v71_fleet/score_smoke.sh:174:  "failures": fa,
+scripts/governance/v71_fleet/score_cfd_breadth.sh:20:failures=("placeholder")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:40:  failures+=("turbulence models below threshold: ${turb_count}/4 (need ≥4 for V70 close)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:43:  failures+=("turbulence models: 0 detected in advisor surface")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:59:  failures+=("compressibility regimes below threshold: ${comp_count}/3 (need ≥3 for V70 close)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:62:  failures+=("compressibility regimes: 0 detected")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:77:  failures+=("steadiness regimes below threshold: ${steady_count}/2 (need ≥2 for V70 close)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:93:  failures+=("BC types below threshold: ${bc_count}/10 (need ≥10 for V70 close)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:96:  failures+=("BC types: 0 detected")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:110:  failures+=("meshing strategies: ${mesh_count}/2 (need ≥2)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:128:  failures+=("capability matrix doc missing: ${matrix_doc} (V70-DONE-1)")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:135:failures=("${failures[@]:1}")
+scripts/governance/v71_fleet/score_cfd_breadth.sh:140:fa_raw = """$(printf '%s\n' "${failures[@]+"${failures[@]}"}")"""
+scripts/governance/v71_fleet/score_cfd_breadth.sh:162:  "failures": fa,
+scripts/governance/v71_fleet/score_all.sh:40:    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+scripts/governance/v71_fleet/score_all.sh:121:    if d.get("failures"):
+scripts/governance/v71_fleet/score_all.sh:123:        for f in d["failures"]:
+scripts/governance/v71_fleet/score_ux.sh:14:failures=("placeholder")
+scripts/governance/v71_fleet/score_ux.sh:24:  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+
+exec
+/bin/zsh -lc "grep -RIn \"score_ux.sh\\|score_stability.sh\\|subscores\" scripts/governance/v78_fleet scripts/governance/v71_fleet scripts/governance | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+scripts/governance/v78_fleet/score_all.sh:62:    script_path="scripts/governance/v78_fleet/score_ux.sh"
+scripts/governance/v78_fleet/score_all.sh:169:    if "subscores" in d:
+scripts/governance/v78_fleet/score_all.sh:171:        for k, v in d["subscores"].items():
+scripts/governance/v78_fleet/score_ux.sh:113:  "subscores": {
+scripts/governance/v78_fleet/score_data_fidelity.sh:4:# 4-arc carry). Existing 4 subscores rebalanced 25→20 each.
+scripts/governance/v78_fleet/score_data_fidelity.sh:108:  "subscores": {
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:5:# Existing 4 subscores rebalanced 25→20 each.
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:112:  "subscores": {
+scripts/governance/v78_fleet/score_visualization.sh:6:#   - Existing subscores rebalanced: render 35, mode 25, baseline 30, ssim 10
+scripts/governance/v78_fleet/score_visualization.sh:151:  "subscores": {
+scripts/governance/v71_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v71_fleet/score_cfd_breadth.sh:148:  "subscores": {
+scripts/governance/v71_fleet/score_all.sh:111:    if "subscores" in d:
+scripts/governance/v71_fleet/score_all.sh:113:        for k, v in d["subscores"].items():
+scripts/governance/v71_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v71_fleet/score_industrial_ui.sh:5:# V70 subscores (carried forward · re-weighted):
+scripts/governance/v71_fleet/score_industrial_ui.sh:11:# V71 NEW subscores:
+scripts/governance/v71_fleet/score_industrial_ui.sh:29:# ─────────── V70 carry-forward subscores ─────────────────────────────
+scripts/governance/v71_fleet/score_industrial_ui.sh:80:# ─────────── V71 NEW subscores ───────────────────────────────────────
+scripts/governance/v71_fleet/score_industrial_ui.sh:182:  "subscores": {
+scripts/governance/v71_fleet/score_industrial_ui.sh:199:  "honest_note": "V71 industrial-UI agent tightened with v3 blueprint compliance subscores · still enforces V70 anti-marketing gate · expects v3 route + 6 V71-UI tags + 8 baselines + blueprint INDEX + palette compliance"
+scripts/governance/v71_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v71_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v71_fleet/score_novice_onboarding.sh:121:  "subscores": {
+scripts/governance/v71_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v71_fleet/score_visualization.sh:125:  "subscores": {
+scripts/governance/v71_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v71_fleet/score_stability.sh:76:  "subscores": {
+scripts/governance/v78_fleet/score_all.sh:62:    script_path="scripts/governance/v78_fleet/score_ux.sh"
+scripts/governance/v78_fleet/score_all.sh:169:    if "subscores" in d:
+scripts/governance/v78_fleet/score_all.sh:171:        for k, v in d["subscores"].items():
+scripts/governance/v78_fleet/score_ux.sh:113:  "subscores": {
+scripts/governance/v78_fleet/score_data_fidelity.sh:4:# 4-arc carry). Existing 4 subscores rebalanced 25→20 each.
+scripts/governance/v78_fleet/score_data_fidelity.sh:108:  "subscores": {
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:5:# Existing 4 subscores rebalanced 25→20 each.
+scripts/governance/v78_fleet/score_real_time_solver_observability.sh:112:  "subscores": {
+scripts/governance/v78_fleet/score_visualization.sh:6:#   - Existing subscores rebalanced: render 35, mode 25, baseline 30, ssim 10
+scripts/governance/v78_fleet/score_visualization.sh:151:  "subscores": {
+scripts/governance/v68b_fleet/score_smoke.sh:108:  "subscores": {
+scripts/governance/v68b_fleet/score_all.sh:114:    if "subscores" in d:
+scripts/governance/v68b_fleet/score_all.sh:116:        for k, v in d["subscores"].items():
+scripts/governance/v68b_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v68b_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v68b_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v68b_fleet/score_functional.sh:55:  "subscores": {
+scripts/governance/v68b_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v68b_fleet/score_physics.sh:75:  "subscores": {
+scripts/governance/v68b_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v68c_fleet/score_smoke.sh:135:  "subscores": {
+scripts/governance/v68c_fleet/score_all.sh:114:    if "subscores" in d:
+scripts/governance/v68c_fleet/score_all.sh:116:        for k, v in d["subscores"].items():
+scripts/governance/v68c_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v68c_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v68c_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v68c_fleet/score_functional.sh:55:  "subscores": {
+scripts/governance/v68c_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v68c_fleet/score_physics.sh:92:  "subscores": {
+scripts/governance/v68c_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v68a_fleet/score_smoke.sh:81:  "subscores": {
+scripts/governance/v68a_fleet/score_all.sh:114:    if "subscores" in d:
+scripts/governance/v68a_fleet/score_all.sh:116:        for k, v in d["subscores"].items():
+scripts/governance/v68a_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v68a_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v68a_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v68a_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v68a_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v68a_fleet/score_physics.sh:75:  "subscores": {
+scripts/governance/v68a_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v71_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v71_fleet/score_cfd_breadth.sh:148:  "subscores": {
+scripts/governance/v71_fleet/score_all.sh:111:    if "subscores" in d:
+scripts/governance/v71_fleet/score_all.sh:113:        for k, v in d["subscores"].items():
+scripts/governance/v71_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v71_fleet/score_industrial_ui.sh:5:# V70 subscores (carried forward · re-weighted):
+scripts/governance/v71_fleet/score_industrial_ui.sh:11:# V71 NEW subscores:
+scripts/governance/v71_fleet/score_industrial_ui.sh:29:# ─────────── V70 carry-forward subscores ─────────────────────────────
+scripts/governance/v71_fleet/score_industrial_ui.sh:80:# ─────────── V71 NEW subscores ───────────────────────────────────────
+scripts/governance/v71_fleet/score_industrial_ui.sh:182:  "subscores": {
+scripts/governance/v71_fleet/score_industrial_ui.sh:199:  "honest_note": "V71 industrial-UI agent tightened with v3 blueprint compliance subscores · still enforces V70 anti-marketing gate · expects v3 route + 6 V71-UI tags + 8 baselines + blueprint INDEX + palette compliance"
+scripts/governance/v71_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v71_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v71_fleet/score_novice_onboarding.sh:121:  "subscores": {
+scripts/governance/v71_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v71_fleet/score_visualization.sh:125:  "subscores": {
+scripts/governance/v71_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v71_fleet/score_stability.sh:76:  "subscores": {
+scripts/governance/v73_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v73_fleet/score_cfd_breadth.sh:148:  "subscores": {
+scripts/governance/v73_fleet/score_interaction_polish.sh:3:# V73 changes: 4 subscores → 5 subscores · adds wcag_runtime (axe-core).
+scripts/governance/v73_fleet/score_interaction_polish.sh:176:  "subscores": {
+scripts/governance/v73_fleet/score_interaction_polish.sh:187:  "honest_note": "V73 extension of V72 pillar 11 · 4 subscores → 5 · adds wcag_runtime via axe-core"
+scripts/governance/v73_fleet/score_all.sh:124:    if "subscores" in d:
+scripts/governance/v73_fleet/score_all.sh:126:        for k, v in d["subscores"].items():
+scripts/governance/v73_fleet/score_backend_integration.sh:110:  "subscores": {
+scripts/governance/v73_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v73_fleet/score_industrial_ui.sh:5:# V70 subscores (carried forward · re-weighted):
+scripts/governance/v73_fleet/score_industrial_ui.sh:11:# V73 NEW subscores:
+scripts/governance/v73_fleet/score_industrial_ui.sh:29:# ─────────── V70 carry-forward subscores ─────────────────────────────
+scripts/governance/v73_fleet/score_industrial_ui.sh:80:# ─────────── V73 NEW subscores ───────────────────────────────────────
+scripts/governance/v73_fleet/score_industrial_ui.sh:182:  "subscores": {
+scripts/governance/v73_fleet/score_industrial_ui.sh:199:  "honest_note": "V73 industrial-UI agent tightened with v3 blueprint compliance subscores · still enforces V70 anti-marketing gate · expects v3 route + 6 V73-UI tags + 8 baselines + blueprint INDEX + palette compliance"
+scripts/governance/v73_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v73_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v73_fleet/score_novice_onboarding.sh:121:  "subscores": {
+scripts/governance/v73_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v73_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v73_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v73_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v77_fleet/score_all.sh:135:    if "subscores" in d:
+scripts/governance/v77_fleet/score_all.sh:137:        for k, v in d["subscores"].items():
+scripts/governance/v77_fleet/score_backend_integration.sh:102:  "subscores": {
+scripts/governance/v77_fleet/score_real_time_solver_observability.sh:105:  "subscores": {
+scripts/governance/v75_fleet/score_all.sh:126:    if "subscores" in d:
+scripts/governance/v75_fleet/score_all.sh:128:        for k, v in d["subscores"].items():
+scripts/governance/v75_fleet/score_backend_integration.sh:111:  "subscores": {
+scripts/governance/v75_fleet/score_resumability_observability.sh:100:  "subscores": {
+scripts/governance/v72_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v72_fleet/score_cfd_breadth.sh:148:  "subscores": {
+scripts/governance/v72_fleet/score_interaction_polish.sh:130:  "subscores": {
+scripts/governance/v72_fleet/score_all.sh:118:    if "subscores" in d:
+scripts/governance/v72_fleet/score_all.sh:120:        for k, v in d["subscores"].items():
+scripts/governance/v72_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v72_fleet/score_industrial_ui.sh:5:# V70 subscores (carried forward · re-weighted):
+scripts/governance/v72_fleet/score_industrial_ui.sh:11:# V72 NEW subscores:
+scripts/governance/v72_fleet/score_industrial_ui.sh:29:# ─────────── V70 carry-forward subscores ─────────────────────────────
+scripts/governance/v72_fleet/score_industrial_ui.sh:80:# ─────────── V72 NEW subscores ───────────────────────────────────────
+scripts/governance/v72_fleet/score_industrial_ui.sh:182:  "subscores": {
+scripts/governance/v72_fleet/score_industrial_ui.sh:199:  "honest_note": "V72 industrial-UI agent tightened with v3 blueprint compliance subscores · still enforces V70 anti-marketing gate · expects v3 route + 6 V72-UI tags + 8 baselines + blueprint INDEX + palette compliance"
+scripts/governance/v72_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v72_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v72_fleet/score_novice_onboarding.sh:121:  "subscores": {
+scripts/governance/v72_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v72_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v72_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v72_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v67c_fleet/score_smoke.sh:81:  "subscores": {
+scripts/governance/v67c_fleet/score_all.sh:114:    if "subscores" in d:
+scripts/governance/v67c_fleet/score_all.sh:116:        for k, v in d["subscores"].items():
+scripts/governance/v67c_fleet/score_ux.sh:104:  "subscores": {
+scripts/governance/v67c_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v67c_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v67c_fleet/score_functional.sh:44:  "subscores": {
+scripts/governance/v67c_fleet/score_visualization.sh:105:  "subscores": {
+scripts/governance/v67c_fleet/score_physics.sh:75:  "subscores": {
+scripts/governance/v67c_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v70_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v70_fleet/score_cfd_breadth.sh:148:  "subscores": {
+scripts/governance/v70_fleet/score_all.sh:111:    if "subscores" in d:
+scripts/governance/v70_fleet/score_all.sh:113:        for k, v in d["subscores"].items():
+scripts/governance/v70_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v70_fleet/score_industrial_ui.sh:131:  "subscores": {
+scripts/governance/v70_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v70_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v70_fleet/score_novice_onboarding.sh:121:  "subscores": {
+scripts/governance/v70_fleet/score_functional.sh:50:  "subscores": {
+scripts/governance/v70_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v70_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v70_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v69_fleet/score_smoke.sh:161:  "subscores": {
+scripts/governance/v69_fleet/score_all.sh:114:    if "subscores" in d:
+scripts/governance/v69_fleet/score_all.sh:116:        for k, v in d["subscores"].items():
+scripts/governance/v69_fleet/score_ux.sh:107:  "subscores": {
+scripts/governance/v69_fleet/score_quality.sh:65:  "subscores": {
+scripts/governance/v69_fleet/score_quality.sh:73:  "honest_note": "subscores binary at iter 0; refine to pass-rate weighting at iter 1+ if vitest fails partially"
+scripts/governance/v69_fleet/score_functional.sh:55:  "subscores": {
+scripts/governance/v69_fleet/score_visualization.sh:123:  "subscores": {
+scripts/governance/v69_fleet/score_physics.sh:110:  "subscores": {
+scripts/governance/v69_fleet/score_stability.sh:55:  "subscores": {
+scripts/governance/v74_fleet/score_interaction_polish.sh:3:# V73 changes: 4 subscores → 5 subscores · adds wcag_runtime (axe-core).
+scripts/governance/v74_fleet/score_interaction_polish.sh:177:  "subscores": {
+scripts/governance/v74_fleet/score_interaction_polish.sh:188:  "honest_note": "V73 extension of V72 pillar 11 · 4 subscores → 5 · adds wcag_runtime via axe-core"
+scripts/governance/v74_fleet/score_all.sh:122:    if "subscores" in d:
+scripts/governance/v74_fleet/score_all.sh:124:        for k, v in d["subscores"].items():
+scripts/governance/v74_fleet/score_backend_integration.sh:112:  "subscores": {
+scripts/governance/v74_fleet/score_data_fidelity.sh:94:  "subscores": {
+scripts/governance/v76_fleet/score_all.sh:132:    if "subscores" in d:
+scripts/governance/v76_fleet/score_all.sh:134:        for k, v in d["subscores"].items():
+scripts/governance/v76_fleet/score_backend_integration.sh:108:  "subscores": {
+scripts/governance/v76_fleet/score_visualization_fidelity.sh:113:  "subscores": {
+
+exec
+/bin/zsh -lc "sed -n '1,260p' scripts/governance/v78_fleet/score_all.sh" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+#!/usr/bin/env bash
+# V78 Fleet Aggregator · 16 pillars (NO new pillar · V77 retro Open Q #6 honored)
+# V78 changes:
+#   - Pillar 3 ux: 100% specs PASS threshold (was ≥17)
+#   - Pillar 4 visualization: SSIM tool subscore + 76 PNG threshold
+#   - Pillar 13 data_fidelity: + audit_package_e2e subscore (V78.3)
+#   - Pillar 16 rt_solver_obs: + backend_sse_e2e subscore (V78.1)
+# Usage (V78 backward-compat default):
+#   bash scripts/governance/v78_fleet/score_all.sh <iter_number>
+#   → writes .planning/scores/V78_iter_${N}.md
+# Usage (V81.4 · explicit arc label):
+#   bash scripts/governance/v78_fleet/score_all.sh <iter_number> --arc-label V81
+#   → writes .planning/scores/V81_iter_${N}.md
+# Rationale: V79 + V80 retros both flagged the manual-copy workaround when
+# V79/V80 iterations would otherwise overwrite V78 close evidence. The
+# --arc-label flag is OPTIONAL + additive: without it, behavior matches the
+# original V78/V79/V80 invocations exactly (V81 charter reverse-stop #9).
+
+set -o pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+iter="${1:-0}"
+arc_label="V78"
+# V81.4 · parse --arc-label flag (optional · positional iter remains $1)
+shift 2>/dev/null || true
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --arc-label)
+      shift
+      arc_label="${1:-V78}"
+      ;;
+    --arc-label=*)
+      arc_label="${1#*=}"
+      ;;
+    *)
+      ;;  # unknown flag · ignore for forward-compat
+  esac
+  shift 2>/dev/null || true
+done
+
+out=".planning/scores/${arc_label}_iter_${iter}.md"
+mkdir -p "$(dirname "$out")"
+
+ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+sha=$(git rev-parse HEAD 2>/dev/null || echo "no-git")
+
+agents=(quality physics ux visualization smoke functional stability cfd_breadth novice_onboarding industrial_ui interaction_polish backend_integration data_fidelity resumability_observability visualization_fidelity real_time_solver_observability)
+results_dir=$(mktemp -d)
+trap "rm -rf $results_dir" EXIT
+
+echo ">>> V78 Fleet · Iter $iter · $ts · commit $sha · TIGHTENED scoring (NO new pillar)" >&2
+
+for a in "${agents[@]}"; do
+  echo ">>> running agent: $a" >&2
+  # V78 scorers: ux (tightened) · visualization (SSIM-aware) · data_fidelity (+e2e) · rt_solver_obs (+e2e)
+  # V77 carries: backend_integration (≥35 useQuery)
+  # V76: visualization_fidelity
+  # V75: resumability_observability
+  # V74: interaction_polish
+  # Rest: v71_fleet
+  if [ "$a" = "ux" ]; then
+    script_path="scripts/governance/v78_fleet/score_ux.sh"
+  elif [ "$a" = "visualization" ]; then
+    script_path="scripts/governance/v78_fleet/score_visualization.sh"
+  elif [ "$a" = "data_fidelity" ]; then
+    script_path="scripts/governance/v78_fleet/score_data_fidelity.sh"
+  elif [ "$a" = "real_time_solver_observability" ]; then
+    script_path="scripts/governance/v78_fleet/score_real_time_solver_observability.sh"
+  elif [ "$a" = "backend_integration" ]; then
+    script_path="scripts/governance/v77_fleet/score_${a}.sh"
+  elif [ "$a" = "visualization_fidelity" ]; then
+    script_path="scripts/governance/v76_fleet/score_${a}.sh"
+  elif [ "$a" = "resumability_observability" ]; then
+    script_path="scripts/governance/v75_fleet/score_${a}.sh"
+  elif [ "$a" = "interaction_polish" ]; then
+    script_path="scripts/governance/v74_fleet/score_${a}.sh"
+  else
+    script_path="scripts/governance/v71_fleet/score_${a}.sh"
+  fi
+  bash "$script_path" > "$results_dir/${a}.json" 2> "$results_dir/${a}.stderr.log"
+  if ! jq empty < "$results_dir/${a}.json" 2>/dev/null; then
+    python3 - "$a" "$results_dir/${a}.json" "$results_dir/${a}.stderr.log" <<'PYEOF'
+import json, sys
+agent_name, json_path, stderr_path = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    stderr_tail = open(stderr_path).read()[-500:] if open(stderr_path).read() else ""
+except Exception:
+    stderr_tail = "(unreadable)"
+json.dump({
+    "agent": agent_name,
+    "dim": "INFRA_FAILURE",
+    "weight": 0.0,
+    "score": 0,
+    "evidence": [],
+    "failures": [f"agent script produced invalid JSON; stderr tail: {stderr_tail}"],
+    "honest_note": "infra failure forces 0 score per honesty rule #3"
+}, open(json_path, "w"), ensure_ascii=False, indent=2)
+PYEOF
+  fi
+done
+
+python3 - "$results_dir" "$out" "$iter" "$ts" "$sha" <<'PYEOF'
+import json, sys, os
+results_dir, out, iter_n, ts, sha = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+
+agents_order = ["quality", "physics", "ux", "visualization", "smoke", "functional", "stability",
+                "cfd_breadth", "novice_onboarding", "industrial_ui", "interaction_polish",
+                "backend_integration", "data_fidelity", "resumability_observability",
+                "visualization_fidelity", "real_time_solver_observability"]
+data = {}
+for a in agents_order:
+    p = os.path.join(results_dir, f"{a}.json")
+    with open(p) as f:
+        data[a] = json.load(f)
+
+scores = [data[a]["score"] for a in agents_order]
+min_score = min(scores)
+weights = [data[a]["weight"] for a in agents_order]
+weighted_sum = sum(s * w for s, w in zip(scores, weights))
+
+if min_score >= 99:
+    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+elif min_score >= 90:
+    verdict = "PROCEED (high-fidelity iteration)"
+elif min_score >= 50:
+    verdict = "PROCEED (lift lowest dim)"
+else:
+    verdict = "PROCEED (multiple dims need attention)"
+
+sorted_by_score = sorted(zip(agents_order, scores), key=lambda x: x[1])
+lowest_dim = sorted_by_score[0][0]
+
+md = []
+md.append(f"# V78 Fleet Score · Iter {iter_n} · TIGHTENED scoring\n")
+md.append(f"**Generated**: {ts}  ")
+md.append(f"**Commit**: `{sha}`  ")
+md.append(f"**Total (min one-vote-veto across 16 pillars)**: **{min_score} / 100**  ")
+md.append(f"**Weighted sum (informational)**: {weighted_sum:.2f}  ")
+md.append(f"**Verdict**: {verdict}  ")
+md.append(f"**Next-iter target dim**: `{lowest_dim}` (score={sorted_by_score[0][1]})\n")
+md.append(f"**Pillar count**: 16 (V77 retro Open Q #6 honored · NO new pillar in V78)\n")
+
+md.append("## Per-Dim Scores (16 pillars · V78 TIGHTENED)\n")
+md.append("| # | Agent | Dim | Score | Weight | Status |")
+md.append("|---|---|---|---|---|---|")
+for i, a in enumerate(agents_order, 1):
+    d = data[a]
+    if d["score"] >= 99:
+        status = "✅ PASS-99"
+    elif d["score"] >= 90:
+        status = "🟢 high"
+    elif d["score"] >= 50:
+        status = "🟡 mid"
+    else:
+        status = "🔴 low"
+    md.append(f"| {i} | `{a}` | {d['dim']} | **{d['score']}** | {d['weight']} | {status} |")
+
+md.append("\n## Honesty Self-Check\n")
+md.append("- ✓ V78 scoring is TIGHTENED vs V77 · same nominal score harder to achieve")
+md.append("- ✓ Pillar count unchanged at 16 · V77 retro Open Q #6 ('NOT add Pillar 17 reflexively') honored")
+md.append("- ✓ Each score has evidence (test name / log path / file ref)")
+md.append("- ✓ 0 is computed, not default")
+md.append("- ✓ min() one-vote veto applied across all 16 pillars\n")
+
+for a in agents_order:
+    d = data[a]
+    md.append(f"## Agent: `{a}` · {d['dim']}\n")
+    md.append(f"**Score**: {d['score']} / 100 · Weight: {d['weight']}\n")
+    if "subscores" in d:
+        md.append("**Subscores**:")
+        for k, v in d["subscores"].items():
+            md.append(f"- `{k}`: {v}")
+        md.append("")
+    if d.get("evidence"):
+        md.append("**Evidence**:")
+        for e in d["evidence"]:
+            md.append(f"- {e}")
+        md.append("")
+    if d.get("failures"):
+        md.append("**Failures**:")
+        for f in d["failures"]:
+            md.append(f"- {f}")
+        md.append("")
+    if "honest_note" in d:
+        md.append(f"**Honest note**: {d['honest_note']}\n")
+
+with open(out, "w") as f:
+    f.write("\n".join(md))
+
+print(f"min_score={min_score} verdict={verdict} lowest_dim={lowest_dim} -> {out}")
+PYEOF
+
+exec
+/bin/zsh -lc "grep -RIn \"\\.skip\\(|test\\.skip\\|describe\\.skip\\|fixme\\|skip:\" ui/frontend/e2e | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+grep: parentheses not balanced
+
+exec
+/bin/zsh -lc "python3 -c \"from pathlib import Path
+for path in Path('ui/frontend/e2e').rglob('*.ts'):
+    txt=path.read_text(errors='ignore')
+    if any(k in txt for k in ['test.skip', '.skip(', 'fixme', 'skip:']):
+        print(path)
+\"" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "sed -n '1,240p' ui/frontend/playwright.config.ts" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+// Playwright config · V67-C bootstrap (V67-C.1).
+// Headless browser e2e tests for the workbench UI · run via `npx playwright test`.
+// Spawns vite dev server on :5173 if not already running.
+
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  // V68-A.4: snapshots land in __visual_baselines__/<projectName>/<test>/<name>
+  // so score_visualization.sh's find under __visual_baselines__/ picks them up.
+  snapshotPathTemplate:
+    "__visual_baselines__/{projectName}/{testFilePath}-snapshots/{arg}{ext}",
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  workers: 1,
+  reporter: process.env.CI ? "github" : "list",
+  timeout: 30_000,
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    headless: true,
+  },
+  // V79.2 · Cross-browser matrix · env-gated to keep default `npx playwright
+  // test` chromium-only (CI default), while `CROSSBROWSER=1 npx playwright
+  // test` runs the full firefox + webkit + chromium matrix.
+  //
+  // Browsers must be installed first: `npx playwright install firefox webkit`.
+  // V79.2 disclosed at close DEC §5 that browsers may not be installed in the
+  // session that opens the arc; the config-level enablement is the landed
+  // substrate either way.
+  projects:
+    process.env.CROSSBROWSER === "1"
+      ? [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+          {
+            name: "firefox",
+            use: { ...devices["Desktop Firefox"] },
+          },
+          {
+            name: "webkit",
+            use: { ...devices["Desktop Safari"] },
+          },
+        ]
+      : [
+          {
+            name: "chromium",
+            use: {
+              ...devices["Desktop Chrome"],
+              // V76.5 · V77.6 · enable software WebGL (SwiftShader) so headless
+              // Chromium renders vtk.js canvases. Without these flags, WebGL is
+              // disabled in headless mode and VtkCanvasV3 takes the fallback
+              // branch — that's fine for graceful-degradation tests but the
+              // baselines that snapshot WebGL-only overlays (camera reset, axes
+              // widget, color legend, FPS indicator) can't render.
+              launchOptions: {
+                args: [
+                  "--enable-webgl",
+                  "--use-gl=angle",
+                  "--use-angle=swiftshader",
+                  "--ignore-gpu-blocklist",
+                ],
+              },
+            },
+          },
+        ],
+  // V68-B.5 · webServer is an ARRAY · spawns BOTH fastapi backend (port 8001
+  // to avoid colliding with a developer's already-running :8000 backend) AND
+  // vite frontend (port 5173 · proxies /api → 127.0.0.1:8001).
+  //
+  // MSW is intentionally OFF here (no VITE_MSW env). The whole point of V68-B
+  // is that e2e runs against the real fastapi serving real corpus data.
+  // V68-A's MSW-on configuration is still available via `VITE_MSW=1` env var
+  // for offline-airplane work or isolation specs that want MSW intercept.
+  webServer: [
+    {
+      command:
+        "uv run uvicorn ui.backend.main:app --port 8001 --host 127.0.0.1",
+      url: "http://127.0.0.1:8001/api/cases",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      cwd: "../../",
+    },
+    {
+      command: "npm run dev -- --port 5173",
+      env: { CFD_BACKEND_PORT: "8001" },
+      url: "http://localhost:5173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
+});
+
+exec
+/bin/zsh -lc "python3 -c \"from pathlib import Path
+for path in Path('ui/frontend/e2e').rglob('*.ts'):
+    txt=path.read_text(errors='ignore')
+    if 'test.fail' in txt or '.fail(' in txt:
+        print(path)
+\"" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "grep -RIn \"mini-retro\" . scripts | sed -n '1,260p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+2026-06-10T02:16:22.612286Z ERROR codex_core::tools::router: error=write_stdin failed: stdin is closed for this session; rerun exec_command with tty=true to keep stdin open
+exec
+/bin/zsh -lc 'grep -RIn "mini-retro" .planning scripts/governance tests | head -n 100' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1224ms:
+.planning/methodology/kogami_counter_rules.md:93:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md:65:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md:305:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/decisions/2026-06-10_v92_charter_dec.md:73:mandatory mini-retro entry naming the flaky units. All transient counts are
+.planning/decisions/2026-05-04_v61_121_ai_coach_action_proposals.md:23:counter_impact: +1 (autonomous_governance: true · new backend route + new UI surface element + new tool dispatch + AI-mediated case mutation, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a governance-rule change. High-risk PR check: AI-driven case-mutation is **new safety surface** — RETRO-V61-001 risk-tier dictates Codex pre-merge MANDATORY. Kogami SKIP per DEC-V61-087 §4.2 — feature DEC, not governance rule change. Counter v6.1 reaches 80; arc-size mini-retro for V120+V121 pair owed to RETRO follow-up queue per ongoing user-mandate deferral.)
+.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:3949:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:4189:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:4322:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4027:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4267:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4400:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:3700:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:3940:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:4073:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3622:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3862:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3995:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/w1_smoke_2026-04-27/prompt.txt:3781:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/w1_smoke_2026-04-27/prompt.txt:4021:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3588:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3828:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3961:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4008:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4248:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4381:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:3995:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:4235:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:4368:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:3886:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:4126:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:4259:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:3824:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:4064:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:4197:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4031:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4271:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4404:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:3791:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:4031:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:4164:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:3959:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:4199:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:4392:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:4150:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:4390:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:6858:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:3922:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:4162:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:4295:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+scripts/governance/v78_fleet/score_ux.sh:54:    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+scripts/governance/v71_fleet/score_stability.sh:53:    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+tests/governance/test_v92_scorer_vote.py:134:        # run1 + run2 fail, both retries pass → 2 transients → D4 mini-retro flag
+tests/governance/test_v92_scorer_vote.py:138:        assert any("mini-retro" in f for f in r["failures"])
+
+exec
+/bin/zsh -lc "grep -RIn \"score_ux.sh\\|pw_vote\\|playwright json\" tests/governance | sed -n '1,240p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+tests/governance/test_v92_scorer_vote.py:4:  1. pw_vote.py unit fixtures — all-pass / flaky-pass / confirmed-fail /
+tests/governance/test_v92_scorer_vote.py:18:PW_VOTE = REPO / "scripts" / "governance" / "v92_fleet" / "pw_vote.py"
+tests/governance/test_v92_scorer_vote.py:22:from pw_vote import vote, main as pw_vote_main  # noqa: E402
+tests/governance/test_v92_scorer_vote.py:74:        r = pw_vote_main(str(bad))
+
+exec
+/bin/zsh -lc "python3 -c \"from pathlib import Path
+import re,collections
+pat=re.compile(r'\\btest\\s*\\(\\s*([\\\"\\'])(.*?)\\1', re.S)
+counts=collections.Counter()
+locs=collections.defaultdict(list)
+for path in Path('ui/frontend/e2e').rglob('*.ts'):
+    txt=path.read_text(errors='ignore')
+    for m in pat.finditer(txt):
+        title=m.group(2)
+        counts[title]+=1
+        locs[title].append(str(path))
+for title,c in counts.items():
+    if c>1:
+        print(c, repr(title), '::', '; '.join(locs[title][:5]))
+\"" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+exec
+/bin/zsh -lc "nl -ba scripts/governance/v92_fleet/pw_vote.py | sed -n '1,120p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba scripts/governance/v71_fleet/score_stability.sh | sed -n '20,70p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc "nl -ba scripts/governance/v78_fleet/score_ux.sh | sed -n '30,100p'" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+     1	#!/usr/bin/env python3
+     2	"""V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
+     3	
+     4	A spec PASSES if ANY attempt passed (playwright --retries semantics).
+     5	  - flaky          = eventually passed, but >=1 failed attempt (telemetry, 0 penalty)
+     6	  - confirmed_fail = no attempt passed (drives the pro-rate penalty)
+     7	
+     8	Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
+     9	spec on a single load-induced transient (V90/V91 retro Open Q #1).
+    10	
+    11	Usage: pw_vote.py <playwright_report.json>
+    12	Emits one JSON object on stdout:
+    13	  {"passed": int, "total": int, "flaky": int, "confirmed_failed": int,
+    14	   "flaky_titles": [...], "failed_titles": [...], "parse_error": str|null}
+    15	On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
+    16	"""
+    17	import json
+    18	import sys
+    19	
+    20	
+    21	def walk(suites):
+    22	    for s in suites:
+    23	        for sp in s.get("specs", []):
+    24	            for t in sp.get("tests", []):
+    25	                yield sp.get("title", "?"), t
+    26	        yield from walk(s.get("suites", []))
+    27	
+    28	
+    29	def vote(report: dict) -> dict:
+    30	    out = {
+    31	        "passed": 0,
+    32	        "total": 0,
+    33	        "flaky": 0,
+    34	        "confirmed_failed": 0,
+    35	        "flaky_titles": [],
+    36	        "failed_titles": [],
+    37	        "parse_error": None,
+    38	    }
+    39	    for title, t in walk(report.get("suites", [])):
+    40	        results = t.get("results", [])
+    41	        out["total"] += 1
+    42	        any_pass = any(r.get("status") == "passed" for r in results)
+    43	        any_fail = any(r.get("status") != "passed" for r in results)
+    44	        if any_pass:
+    45	            out["passed"] += 1
+    46	            if any_fail:
+    47	                out["flaky"] += 1
+    48	                out["flaky_titles"].append(title)
+    49	        else:
+    50	            out["confirmed_failed"] += 1
+    51	            out["failed_titles"].append(title)
+    52	    return out
+    53	
+    54	
+    55	def main(path: str) -> dict:
+    56	    try:
+    57	        with open(path) as f:
+    58	            report = json.load(f)
+    59	        return vote(report)
+    60	    except Exception as exc:  # fail-closed: 0/0 like V78 parse-error branch
+    61	        return {
+    62	            "passed": 0,
+    63	            "total": 0,
+    64	            "flaky": 0,
+    65	            "confirmed_failed": 0,
+    66	            "flaky_titles": [],
+    67	            "failed_titles": [],
+    68	            "parse_error": str(exc),
+    69	        }
+    70	
+    71	
+    72	if __name__ == "__main__":
+    73	    print(json.dumps(main(sys.argv[1]), ensure_ascii=False))
+
+ succeeded in 0ms:
+    20	flake_count=0            # V92: confirmed fails only
+    21	transient_flake_count=0  # V92: retry-cleared noise (0 penalty, audited)
+    22	runs=3
+    23	results=()
+    24	test_cmd="${STABILITY_TEST_CMD:-npm run test}"
+    25	
+    26	if [ -d "ui/frontend" ]; then
+    27	  cd ui/frontend
+    28	  for i in 1 2 3; do
+    29	    if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}.log" 2>&1; then
+    30	      results+=("run${i}=PASS")
+    31	    else
+    32	      # V92 confirm-on-retry: single isolation retry before penalizing
+    33	      if bash -c "$test_cmd" > "/tmp/v67c_stability_run_${i}_retry.log" 2>&1; then
+    34	        results+=("run${i}=TRANSIENT(retry PASS)")
+    35	        transient_flake_count=$((transient_flake_count + 1))
+    36	      else
+    37	        results+=("run${i}=CONFIRMED_FAIL")
+    38	        flake_count=$((flake_count + 1))
+    39	      fi
+    40	    fi
+    41	  done
+    42	
+    43	  if [ "$flake_count" -eq 0 ]; then
+    44	    if [ "$transient_flake_count" -eq 0 ]; then
+    45	      evidence+=("stability: ${runs}/${runs} vitest runs PASS · no flake")
+    46	    else
+    47	      evidence+=("stability: 0 confirmed fail · ${transient_flake_count} transient flake(s) retry-cleared (V92 confirm-on-retry · 0 penalty · audited)")
+    48	    fi
+    49	  else
+    50	    failures+=("stability: ${flake_count}/${runs} runs CONFIRMED FAIL · " "${results[@]}")
+    51	  fi
+    52	  if [ "$transient_flake_count" -ge 2 ]; then
+    53	    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+    54	  fi
+    55	  cd - > /dev/null
+    56	else
+    57	  failures+=("ui/frontend not found")
+    58	  flake_count=$runs
+    59	fi
+    60	
+    61	# Memory growth: track 2 sequential build sizes; if dist size differs > 5%, flag.
+    62	mem_growth_pct=0
+    63	# (Baseline iter 0: skip mem check; iter 1+ will compare to baseline)
+    64	evidence+=("memory growth check deferred to iter 1+ (needs baseline)")
+    65	
+    66	score=$(( 100 - flake_count * 30 - mem_growth_pct * 5 ))
+    67	if [ "$score" -lt 0 ]; then score=0; fi
+    68	
+    69	python3 - <<PYEOF
+    70	import json
+
+ succeeded in 0ms:
+    30	
+    31	if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
+    32	  failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
+    33	else
+    34	  repo_root="$(git rev-parse --show-toplevel)"
+    35	  cd ui/frontend
+    36	  # V92: --retries=2 → transient load-induced failures get majority vote
+    37	  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+    38	    pw_exit=0
+    39	  else
+    40	    pw_exit=$?
+    41	  fi
+    42	
+    43	  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+    44	  passed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])")
+    45	  total=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])")
+    46	  flaky=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['flaky'])")
+    47	  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+    48	  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
+    49	
+    50	  if [ "${flaky:-0}" -gt 0 ]; then
+    51	    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
+    52	  fi
+    53	  if [ "${flaky:-0}" -ge 3 ]; then
+    54	    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+    55	  fi
+    56	
+    57	  if [ "$total" -gt 0 ]; then
+    58	    # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
+    59	    # ≥17-of-N threshold loophole. Pro-rate by exact pass rate.
+    60	    if [ "$passed" -eq "$total" ]; then
+    61	      flow_completion_score=60
+    62	      evidence+=("playwright: ${passed}/${total} specs PASS · 100% threshold MET (FULL=60/60)")
+    63	    else
+    64	      # Pro-rate by pass rate
+    65	      flow_completion_score=$(( passed * 60 / total ))
+    66	      evidence+=("playwright: ${passed}/${total} (${flow_completion_score}/60 pro-rated by exact pass rate)")
+    67	      failures+=("V78 tightened: ${passed}/${total} specs PASS · need 100% for FULL")
+    68	    fi
+    69	
+    70	    if [ "$pw_exit" -eq 0 ]; then
+    71	      latency_score=25
+    72	      evidence+=("latency: PASS (all specs within timeout)")
+    73	    else
+    74	      latency_score=12
+    75	      failures+=("latency: some specs exceeded timeout · pw_exit=${pw_exit}")
+    76	    fi
+    77	
+    78	    blockers=$(grep -cE "click intercepted|Target closed|Test timeout" /tmp/v78_pw.stderr 2>/dev/null || echo 0)
+    79	    blockers=$(echo "$blockers" | head -1 | tr -d ' \n')
+    80	    blockers=${blockers:-0}
+    81	    if [ "$blockers" -eq 0 ]; then
+    82	      no_blocker_score=15
+    83	      evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    84	    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+    85	      # V92 D2: signals from attempts that eventually passed = transient noise
+    86	      no_blocker_score=15
+    87	      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
+    88	    else
+    89	      no_blocker_score=0
+    90	      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
+    91	    fi
+    92	  else
+    93	    failures+=("playwright json parse failure · 0 tests recognized")
+    94	  fi
+    95	  cd - > /dev/null
+    96	fi
+    97	
+    98	evidence=("${evidence[@]:1}")
+    99	failures=("${failures[@]:1}")
+   100	score=$((flow_completion_score + latency_score + no_blocker_score))
+
+exec
+/bin/zsh -lc 'cat ui/frontend/package.json' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+{
+  "name": "cfd-harness-ui-frontend",
+  "private": true,
+  "version": "0.4.0-phase-1-to-4",
+  "type": "module",
+  "description": "CFD Harness UI — Path B MVP. Phases 0..4: Validation Report, Case Editor, Decisions Queue, Run Monitor, Dashboard (per DEC-V61-002 + DEC-V61-003).",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@codemirror/lang-yaml": "^6.1.1",
+    "@kitware/vtk.js": "^35.11.0",
+    "@tanstack/react-query": "^5.56.2",
+    "@uiw/react-codemirror": "^4.23.6",
+    "js-yaml": "^4.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.27.0"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
+    "@playwright/test": "1.58",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.19.17",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.7.0",
+    "@typescript-eslint/parser": "^8.7.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "@vitest/ui": "^4.1.5",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.11.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "jsdom": "^29.0.2",
+    "msw": "^2.14.6",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8",
+    "vitest": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
+  }
+}
+
+exec
+/bin/zsh -lc "python3 -c \"from pathlib import Path
+import re
+pat=re.compile(r'\\btest\\s*\\(\\s*([\\\"\\'])(.*?)\\1', re.S)
+for path in Path('ui/frontend/e2e').rglob('*.ts'):
+    txt=path.read_text(errors='ignore')
+    for m in pat.finditer(txt):
+        title=m.group(2)
+        if '\"\"\"' in title or '\\n' in title or '\"' in title:
+            print(path, repr(title))
+\"" in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ succeeded in 240335ms:
+./_external_substudies/cfd-s4-rbc/docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./_external_substudies/cfd-s4-rbc/docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./_external_substudies/cfd-s2-naca-sas/docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./_external_substudies/cfd-s2-naca-sas/docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./_external_substudies/cfd-s2-naca-cgrid/docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./_external_substudies/cfd-s2-naca-cgrid/docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./_external_substudies/cfd-harness-story/第七章_可视化图册.md:113:        3次以上触发mini-retro
+./_external_substudies/cfd-s2-naca-transition/docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./_external_substudies/cfd-s2-naca-transition/docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./_external_substudies/cfd-s3-pc/docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./_external_substudies/cfd-s3-pc/docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./tools/methodology_guards/ssot_consistency_check.py:140:    print("≥3 discrepancies in single phase audit → mini-retro within 7 days.")
+./tests/governance/test_v92_scorer_vote.py:134:        # run1 + run2 fail, both retries pass → 2 transients → D4 mini-retro flag
+./tests/governance/test_v92_scorer_vote.py:138:        assert any("mini-retro" in f for f in r["failures"])
+./docs/specs/SPEC_PROMOTION_GATE.md:4:**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./scripts/governance/v78_fleet/score_ux.sh:54:    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+./scripts/governance/v71_fleet/score_stability.sh:53:    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+./.planning/methodology/kogami_counter_rules.md:93:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md:65:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/methodology/2026-04-26_v2_section_10_5_and_11_draft.md:305:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/decisions/2026-06-10_v92_charter_dec.md:73:mandatory mini-retro entry naming the flaky units. All transient counts are
+./.planning/decisions/2026-05-04_v61_121_ai_coach_action_proposals.md:23:counter_impact: +1 (autonomous_governance: true · new backend route + new UI surface element + new tool dispatch + AI-mediated case mutation, NOT a governance-rule change. Kogami-trigger check: not a phase-close, not a RETRO draft, not a governance-rule change. High-risk PR check: AI-driven case-mutation is **new safety surface** — RETRO-V61-001 risk-tier dictates Codex pre-merge MANDATORY. Kogami SKIP per DEC-V61-087 §4.2 — feature DEC, not governance rule change. Counter v6.1 reaches 80; arc-size mini-retro for V120+V121 pair owed to RETRO follow-up queue per ongoing user-mandate deferral.)
+./.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:3949:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:4189:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m5_1_imported_verdict_cap_2026-04-27/prompt.txt:4322:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4027:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4267:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/blind_control_v61_087_v1_2026-04-27/prompt.txt:4400:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:3700:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:3940:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/v109_case_lock_pr_review_2026-05-02/prompt.txt:4073:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3622:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3862:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/addendum_3_cae_workbench_pivot_2026-04-28/prompt.txt:3995:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/w1_smoke_2026-04-27/prompt.txt:3781:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/w1_smoke_2026-04-27/prompt.txt:4021:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3588:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3828:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m_viz_kickoff_governance_clearance_2026-04-28/prompt.txt:3961:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4008:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4248:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m6_kickoff_governance_clearance_2026-04-27/prompt.txt:4381:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:3995:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:4235:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/v61_130_strategic_pivot_2026-05-06/prompt.txt:4368:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:3886:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:4126:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02/prompt.txt:4259:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:3824:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:4064:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/v107_v108_arc_retro_2026-05-02/prompt.txt:4197:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4031:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4271:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m5_kickoff_governance_clearance_2026-04-27/prompt.txt:4404:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:3791:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:4031:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/v61_088_pre_implementation_surface_scan_2026-05-02_round1/prompt.txt:4164:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:3959:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:4199:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/b_arc_strategic_retro_2026-05-07/prompt.txt:4392:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:4150:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:4390:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/oss_substitution_4pillar_charter_scope_2026-05-11/prompt.txt:6858:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:3922:| `DEGRADATION_RULE_AT_RISK` | At least one HIGH-severity finding (e.g. trust-core boundary actually crossed under workbench cover). | Land DEC. **Recall the offending merges** to a quarantine branch + open mini-retro within 48h. |
+./.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:4162:> trail. ≥3 discrepancies in a single phase audit → mini-retro within 7
+./.planning/reviews/kogami/m6_1_blockmesh_skip_2026-04-27/prompt.txt:4295:- After 3 INCONCLUSIVE outcomes within counter ≤ 5, mandatory mini-retro on Kogami reliability
+./AGENTS.md:57:- Kogami INCONCLUSIVE does NOT block but requires entry in next RETRO; 3+ INCONCLUSIVE within counter ≤5 triggers mini-retro
+./CLAUDE.md:58:- Kogami INCONCLUSIVE does NOT block but requires entry in next RETRO; 3+ INCONCLUSIVE within counter ≤5 triggers mini-retro
+./CLAUDE.md:184:2. **post-R3 live-run defect** — Codex APPROVE 之后才在 smoke test / live run 发现的 bug。每个 post-R3 defect 写进 RETRO addendum 或 mini-retro，记录：(a) bug 类型（accessor / runtime-emergent）；(b) 为什么 Codex 静态 review 没捕获；(c) 要加进 intake template 的新 risk_flag。
+./reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:10808:     4	**Effective**: 2026-04-24 (v1.0) · 2026-04-24 (v1.1 — G-D refined inline during VCP rc2 mini-retro · Opus Gate signed Option X, see §8 changelog)
+./reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:10956:   152	| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:11925:./docs/specs/SPEC_PROMOTION_GATE.md:152:| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+./reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:11964:./reports/codex_tool_reports/gov_1_version_policy_v1_verify.log:10956:   152	| v1.1 | 2026-04-24 | Opus 4.7 Gate (Option X) · Claude Code commit | G-D refined per first-usage evidence from VCP rc2. Splits "不做" items into 3 categories with differentiated evidence bars. Triggered under RETRO-V61-001 rule #3 (CHANGES_REQUIRED). Gate refinement itself is mini-retro-compliant (evidence-first, single DEC = `DEC-PIVOT-GATE-001`, reviewer = signing authority Opus 4.7). Structural invariants preserved: other 5 gates (A/B/C/E/F) unchanged; AND logic preserved.|
+scripts/governance/v78_fleet/score_ux.sh:54:    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+scripts/governance/v71_fleet/score_stability.sh:53:    failures+=("V92 D4 guard: transient_flake_count=${transient_flake_count} ≥ 2 → mandatory mini-retro entry")
+
+exec
+/bin/zsh -lc 'grep -RIn "CROSSBROWSER" . | head -n 50' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'grep -RIn "CROSSBROWSER" ui/frontend/playwright.config.ts ui/frontend/e2e scripts/governance .planning/decisions | head -n 50' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 0ms:
+ui/frontend/playwright.config.ts:26:  // test` chromium-only (CI default), while `CROSSBROWSER=1 npx playwright
+ui/frontend/playwright.config.ts:34:    process.env.CROSSBROWSER === "1"
+.planning/decisions/2026-05-17_v79_close_dec.md:29:5. **Cross-browser**: playwright config matrix landed (chromium + firefox + webkit · env-gated via `CROSSBROWSER=1`) — honest disclosure that firefox + webkit browsers couldn't install in-session due to external lockfile holder.
+.planning/decisions/2026-05-17_v79_close_dec.md:46:| V79.2 | B232 | Accepted | Cross-browser playwright config · env-gated (CROSSBROWSER=1) · firefox + webkit projects declared · browser install pending (external lockfile) |
+.planning/decisions/2026-05-17_v79_close_dec.md:70:- ❌ **Firefox + Webkit browsers actually run** — config landed but browsers not installed in this session because another playwright install (from `~/Desktop/Jerry Rusty Lake/`) held the `~/Library/Caches/ms-playwright/__dirlock` since 12:17 (4+ hours, presumed stuck). User runs `npx playwright install firefox webkit` followed by `CROSSBROWSER=1 npx playwright test` to actually exercise the matrix. **V79.2 is config-ready, not capture-ready.**
+.planning/decisions/2026-05-17_v79_close_dec.md:144:  - 跨浏览器 playwright 配置（firefox + webkit · 环境变量 CROSSBROWSER=1 启用 · 浏览器装包本会话被别的进程的锁挡住了）
+
+exec
+/bin/zsh -lc 'grep -RIn "CLOSE_ELIGIBLE" . | head -n 80' in /Users/Zhuanz/Desktop/cfd-harness-unified
+exec
+/bin/zsh -lc 'grep -RIn "CLOSE_ELIGIBLE" scripts .planning | head -n 80' in /Users/Zhuanz/Desktop/cfd-harness-unified
+ succeeded in 1165ms:
+scripts/governance/v78_fleet/score_all.sh:122:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v68b_fleet/score_all.sh:67:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v68c_fleet/score_all.sh:67:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v68a_fleet/score_all.sh:67:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v71_fleet/score_all.sh:65:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v73_fleet/score_all.sh:78:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v77_fleet/score_all.sh:89:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v75_fleet/score_all.sh:80:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v72_fleet/score_all.sh:72:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v67c_fleet/score_all.sh:67:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v70_fleet/score_all.sh:65:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v69_fleet/score_all.sh:67:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v74_fleet/score_all.sh:76:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+scripts/governance/v76_fleet/score_all.sh:86:    verdict = "CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)"
+.planning/V82_ARC_GOAL.md:36:| 0 (V82 baseline) | 2026-05-17 | **100** | 121.04 | quality (tied at 100) | charter LANDED · all V82 substrate landed before scoring · baseline 59 re-snapped (skeleton transient state) · 79 baselines clean · 492 vitest PASS · 9 backend solver_stream tests PASS · CLOSE_ELIGIBLE | V82_iter_0.md |
+.planning/V82_ARC_GOAL.md:37:| 1 (substrate re-confirm) | 2026-05-17 | **100** | 121.04 | quality (tied at 100) | CLOSE_ELIGIBLE 2nd run | V82_iter_1.md |
+.planning/V67C_ARC_GOAL.md:42:| 6 (post-close-DEC) | 2026-05-16 | **100** | **100.00** | none | Done #8 MET · CLOSE_ELIGIBLE 1st iter (need 2 consecutive) | `.planning/scores/V67-C_iter_6.md` |
+.planning/V67C_ARC_GOAL.md:43:| 7 (close-confirm) | 2026-05-16 | **100** | **100.00** | none | **2nd consecutive CLOSE_ELIGIBLE · ARC CLOSE RATIFIED** | `.planning/scores/V67-C_iter_7.md` |
+.planning/V76_ARC_GOAL.md:48:| 2 | 2026-05-17 | **100** | 121.04 | (all 100) | substrate complete · CLOSE_ELIGIBLE | V76_iter_2.md |
+.planning/V73_ARC_GOAL.md:41:| 1 | 2026-05-17 | **100** | 109.32 | (all 100) | V73.1+2+3+4+5 LANDED · CLOSE_ELIGIBLE | V73_iter_1.md |
+.planning/V87_ARC_GOAL.md:44:| 0 (V87 baseline) | 2026-05-17 | **100** | 137.00 | quality (=100) | All V87 substrate landed pre-score · iter-0 already at 100 (V83/V85/V86 pattern · V84.6 lesson held: V87.2 baselines all steady-state) · CLOSE_ELIGIBLE | V87_iter_0.md |
+.planning/V87_ARC_GOAL.md:45:| 1 (substrate re-confirm) | 2026-05-17 | **100** | 137.00 | quality (=100) | Substrate stable · CLOSE_ELIGIBLE | V87_iter_1.md |
+.planning/V84_ARC_GOAL.md:39:| 1 (post-fix re-snap) | 2026-05-17 | **100** | 137.00 | quality (=100) | Fix: `waitForTimeout(250)` settle after Finish-click + `maxDiffPixelRatio: 0.02` loosened for baseline 83 · re-snap inside scorer context · CLOSE_ELIGIBLE | V84_iter_1.md |
+.planning/V79_ARC_GOAL.md:47:| 1 | 2026-05-17 | **100** | 121.04 | (all 100) | baseline 63 re-snapped under V79.1 cluster · CLOSE_ELIGIBLE | V79_iter_1.md |
+.planning/V68A_ARC_GOAL.md:50:| 4 (post close DEC) | 2026-05-16 | **100** | **100.00** | none | Done #7 MET · 1st 100 (CLOSE_ELIGIBLE 1st iter) | `.planning/scores/V68-A_iter_4.md` |
+.planning/V68A_ARC_GOAL.md:58:- iter 6+: min(7) ≥99 for 2 consecutive · CLOSE_ELIGIBLE
+.planning/V88_ARC_GOAL.md:47:| 0 (V88 baseline · graceful-gate fix) | 2026-05-17 | **100** | 137.00 | quality (=100) | First run scored 86 (ux=86 · strict V8 gate disabled V7.A pre-hydration). Fixed via `bcSetup = ... && (!v8Hydrated || configReady)` graceful composition · re-scored 100/100 · CLOSE_ELIGIBLE | V88_iter_0.md |
+.planning/V88_ARC_GOAL.md:48:| 1 (substrate re-confirm) | 2026-05-17 | **100** | 137.00 | quality (=100) | Substrate stable · CLOSE_ELIGIBLE · 2-consecutive gate MET | V88_iter_1.md |
+.planning/V75_ARC_GOAL.md:42:| 1 | 2026-05-17 | **100** | 121.04 | (all 100) | V75.1+2+3+4 LANDED · CLOSE_ELIGIBLE | V75_iter_1.md |
+.planning/scores/V75_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V87_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V89_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V78_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V84_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V73_iter_3.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V68-C_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V90_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V81_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V70_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V73_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V90_iter_3.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V69_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V75_iter_3.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V82_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V87_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V86_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V74_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V91_iter_6.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V77_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V71_iter_5.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V79_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V80_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V85_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V68-B_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V72_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V68-B_iter_5.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V86_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V83_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V74_iter_3.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V91_iter_7.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V77_iter_5.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V79_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V91_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V85_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V72_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V86_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V67-C_iter_6.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V68-A_iter_4.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V83_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V88_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V67-C_iter_7.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V68-A_iter_5.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V74_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V83_iter_0.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V88_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V71_iter_6.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)  
+.planning/scores/V79_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V80_iter_2.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V91_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+.planning/scores/V85_iter_1.md:7:**Verdict**: CLOSE_ELIGIBLE (this iter only; needs 2 consecutive)
+
+Reviewed the modified scorer scripts, helper, tests, and surrounding scoring workflow; one actionable regression stands out in the new helper’s spec counting semantics.
+  ✓ Inspect commit diff and changed files
+  ✓ Analyze impacted code paths for correctness regressions
+  → Summarize prioritized findings in required JSON
+codex
+The V92 helper's new flake accounting is inaccurate for supported multi-project Playwright runs, so the new telemetry and guardrail can produce wrong results. That makes the scorer change not fully correct.
+
+Review comment:
+
+- [P2] Aggregate Playwright results by spec before counting flakies — /Users/Zhuanz/Desktop/cfd-harness-unified/scripts/governance/v92_fleet/pw_vote.py:23-25
+  When Playwright produces more than one `tests[]` entry for a single spec — notably in the supported `CROSSBROWSER=1` matrix, or any future multi-project/repeat setup — this helper increments `total`, `flaky`, and `confirmed_failed` once per test instance instead of once per spec. The new V92 scorer then reports these as spec counts and uses them for the `flaky>=3` D4 guard in `score_ux.sh`, so one logical flaky spec can be counted multiple times and spuriously trigger a mini-retro or misleading telemetry.
+The V92 helper's new flake accounting is inaccurate for supported multi-project Playwright runs, so the new telemetry and guardrail can produce wrong results. That makes the scorer change not fully correct.
+
+Review comment:
+
+- [P2] Aggregate Playwright results by spec before counting flakies — /Users/Zhuanz/Desktop/cfd-harness-unified/scripts/governance/v92_fleet/pw_vote.py:23-25
+  When Playwright produces more than one `tests[]` entry for a single spec — notably in the supported `CROSSBROWSER=1` matrix, or any future multi-project/repeat setup — this helper increments `total`, `flaky`, and `confirmed_failed` once per test instance instead of once per spec. The new V92 scorer then reports these as spec counts and uses them for the `flaky>=3` D4 guard in `score_ux.sh`, so one logical flaky spec can be counted multiple times and spuriously trigger a mini-retro or misleading telemetry.
+2026-06-10T02:24:05.790226Z ERROR codex_core::session: failed to record rollout items: thread 019eaf4c-cca8-7b00-9b00-4f9d81c4a334 not found
+2026-06-10T02:24:05.792363Z ERROR codex_core::session: failed to record rollout items: thread 019eaf4c-cca8-7b00-9b00-4f9d81c4a334 not found
+2026-06-10T02:24:05.792479Z ERROR codex_core::session: failed to record rollout items: thread 019eaf4c-cca8-7b00-9b00-4f9d81c4a334 not found

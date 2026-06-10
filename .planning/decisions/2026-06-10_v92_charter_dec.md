@@ -9,6 +9,8 @@ notion_sync_status: n/a (Notion archive channel retired 2026-06-10 · DEC-V92-no
 autonomous_governance: false  # external gate — user explicitly mandated direction ("V78 scorer 演进"); counter N/A per RETRO-V61-001
 confidence: high
 date: 2026-06-10
+codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v92_scorer_cadence_R{0,1,2}.txt
+codex_review_relay: 86gs (gpt-5.4 xhigh · cadence-floor review, cap=3 reached; R2 P2 → .planning/retrospectives/codex_round3_overflow_v92_scorer.md)
 ---
 
 # DEC-V92-charter · Scorer confirm-on-retry semantics
