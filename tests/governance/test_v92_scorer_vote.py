@@ -105,10 +105,32 @@ class TestPwVote:
     def test_fully_skipped_spec_not_a_vote_unit(self):
         spec = {
             "title": "all-skipped",
-            "tests": [{"status": "skipped", "results": []}, {"results": [{"status": "skipped"}]}],
+            "tests": [{"results": [{"status": "skipped"}]}, {"results": [{"status": "skipped"}]}],
         }
         r = vote(_report([spec, _spec("ran", ["passed"])]))
         assert (r["passed"], r["total"], r["confirmed_failed"]) == (1, 1, 0)
+
+    def test_interrupted_leg_fails_closed_despite_outcome_skipped(self):
+        # Codex R2 P1: tests[].status is the playwright OUTCOME; an aborted
+        # leg reports outcome "skipped" with interrupted/empty results.
+        # It must veto the spec, not be neutralized as an intentional skip.
+        interrupted = {
+            "title": "w",
+            "tests": [
+                {"results": [{"status": "passed"}]},
+                {"status": "skipped", "results": [{"status": "interrupted"}]},
+            ],
+        }
+        did_not_run = {
+            "title": "v",
+            "tests": [
+                {"results": [{"status": "passed"}]},
+                {"status": "skipped", "results": []},
+            ],
+        }
+        r = vote(_report([interrupted, did_not_run]))
+        assert (r["passed"], r["total"], r["confirmed_failed"]) == (0, 2, 2)
+        assert r["failed_titles"] == ["w", "v"]
 
     def test_empty_results_without_skip_marker_fails_closed(self):
         spec = {"title": "ghost", "tests": [{"results": []}]}

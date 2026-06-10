@@ -11,11 +11,12 @@ aggregates to the spec:
                      pro-rate penalty; a hard fail on one browser is
                      never masked by a pass on another)
 A spec is counted exactly once regardless of project count (Codex R0 P2).
-Skipped legs (test.skip()/fixme(): instance status "skipped" or all
-results "skipped") are neutral — they neither veto nor pass the spec;
-a spec skipped on every project is not a vote unit at all (Codex R1 P2).
-An instance with empty results and NO skip marker stays fail-closed
-(confirmed fail).
+Skipped legs (test.skip()/fixme(): >=1 result, all status "skipped")
+are neutral — they neither veto nor pass the spec; a spec skipped on
+every project is not a vote unit at all (Codex R1 P2). The marker is
+result-level only: tests[].status is the playwright OUTCOME and its
+"skipped" also covers interrupted/did-not-run legs, which stay
+fail-closed (Codex R2 P1) — as does any instance with empty results.
 
 Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
 spec on a single load-induced transient (V90/V91 retro Open Q #1).
@@ -31,11 +32,12 @@ import sys
 
 
 def _is_skipped(t):
-    """Skipped project leg: playwright marks the test instance status
-    "skipped", or every result it has is "skipped". Empty results without
-    a skip marker is NOT skipped (fail-closed)."""
-    if t.get("status") == "skipped":
-        return True
+    """Skipped project leg: every result it has is status "skipped"
+    (>=1 result required). Deliberately does NOT consult tests[].status —
+    that field is the playwright OUTCOME (expected/unexpected/flaky/skipped)
+    and outcome "skipped" also covers interrupted / did-not-run legs, which
+    must stay fail-closed, not neutral (Codex R2 P1). Empty results without
+    skipped result entries is NOT skipped (fail-closed)."""
     results = t.get("results", [])
     return bool(results) and all(r.get("status") == "skipped" for r in results)
 
