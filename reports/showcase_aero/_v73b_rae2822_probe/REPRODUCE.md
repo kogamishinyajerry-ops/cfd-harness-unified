@@ -41,8 +41,11 @@ blockMesh > log.blockMesh 2>&1
 checkMesh > log.checkMesh 2>&1
 decomposePar -force > log.decomposePar 2>&1
 mpirun --allow-run-as-root -np 8 rhoSimpleFoam -parallel > log.rhoSimpleFoam 2>&1
+echo "solver exit=$?" >> log.rhoSimpleFoam
 reconstructPar -latestTime > log.reconstructPar 2>&1
 touch RUN_DONE'
+# (under set -e the echo runs only after a 0-exit solve, so it always appends
+# "solver exit=0" — byte-matching the frozen logs/log.rhoSimpleFoam.headtail)
 ```
 
 The run STOPS ITSELF on `residualControl 5e-5` (SIMPLE convergence statement
