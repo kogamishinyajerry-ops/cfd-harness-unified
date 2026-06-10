@@ -35,7 +35,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 | `icoFoam` | INCOMP-LAMINAR-STEADY/TRANS | lid_driven_cavity / plane_channel_flow | ✅ PR |
 | `simpleFoam` | INCOMP-RANS-STEADY | naca0012_airfoil / backward_facing_step | ✅ PR |
 | `pimpleFoam` | INCOMP-RANS/DNS-TRANSIENT | circular_cylinder_wake | ✅ PR |
-| `rhoSimpleFoam` | COMP-RANS-STEADY | rae2822_case9 (V73.B) | ✅ PR (live probe DEC-V61-240: converged transonic-SIMPLEC solve on ESI v2312, tier-1 SANITY-PASS ×9, tier-2 ENFORCED **honest CONFLICT** — Cl +9.3% / shock +0.075c aft vs AGARD AR-138, the known pressure-based-solver bias, frozen `reports/showcase_aero/_v73b_rae2822_probe/`. CORRECTION: the previous `naca0012_transonic ✅ PR` listing was aspirational — no live transonic rhoSimpleFoam run ever existed; first real anchor is V73.B) |
+| `rhoSimpleFoam` | COMP-RANS-STEADY | rae2822_case9 (V73.B) | GAP-TRACKED (live probe DEC-V61-240: solver IS runnable end-to-end — converged transonic-SIMPLEC solve on ESI v2312, tier-1 SANITY-PASS ×9 — but the tier-2 anchor is an ENFORCED **honest CONFLICT**: Cl +9.3% / shock +0.075c aft vs AGARD AR-138, the known pressure-based aft-shock bias, frozen `reports/showcase_aero/_v73b_rae2822_probe/`. NOT ✅ PR: the matrix contract requires a TrustGate=PASS anchor (Codex V73.B R0 P2, same rule as the V61-233 R0 correction). PR path: rhoCentralFoam-LTS fallback or Cp-band QoI. DOUBLE CORRECTION: the previous `naca0012_transonic ✅ PR` listing was aspirational — no live transonic run ever existed) |
 | `buoyantFoam` | INCOMP-BUOYANT (Boussinesq) | rayleigh_benard_convection | ✅ PR |
 | `chtMultiRegionFoam` | CONJUGATE-HEAT-TRANSFER | apu_bay_ventilation | ✅ PR (case_002a gold_pending) |
 | `rhoCentralFoam` | COMP-CENTRAL-EXPLICIT | wedge_oblique_shock (M=2.0 15° wedge) | ✅ PR (V71.A · **workbench-runnable end-to-end**, DEC-V61-234: `foam_agent_adapter.execute(SUPERSONIC_WEDGE)` launches a LIVE rhoCentralFoam solve on ESI v2312 in a fresh `--rm` container, and the Control-plane oblique-shock gate PASSES on the backend output — every observable within 0.5% of analytical θ-β-M, all 6 hard gates · backend-e2e evidence + tamper manifest `reports/showcase_aero/_w71a_wedge_backend_e2e/` · `cfdtrust` backend reconciled to dispatch the same solver+image+profile per DEC-V61-224(b)) |
@@ -43,8 +43,8 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 | `interFoam` (VOF) | MULTI-PHASE | (not in scope) | GAP-TRACKED: V72+ candidate |
 | `sonicFoam` (super/transonic) | COMP-TRANSIENT | (not in scope) | GAP-TRACKED: V72+ candidate |
 
-**Solvers PR**: 7/10 (70%)
-**Solvers GAP-TRACKED**: 3/10 (30%)
+**Solvers PR**: 6/10 (60%) *(rhoSimpleFoam demoted from the aspirational naca0012_transonic ✅ PR — V73.B landed the first real run and its anchor is an honest ENFORCED CONFLICT, DEC-V61-240)*
+**Solvers GAP-TRACKED**: 4/10 (40%)
 **Solvers wired in advisor without anchor case**: 1 (`rhoPimpleFoam`)  *(rhoCentralFoam is now workbench-runnable end-to-end with a backend-launched e2e anchor, DEC-V61-234)*
 **Runnable-coverage compute types**: 3 (incompressible RANS · conjugate-heat-transfer · compressible supersonic shock-capturing). *rhoCentralFoam FLIPPED 2→3 (DEC-V61-234): the workbench execution backend (`foam_agent_adapter`) launches a live supersonic-wedge rhoCentralFoam solve on the ESI image end-to-end with the oblique-shock gate PASS, reconciled with the `cfdtrust` V&V backend, satisfying Law-1 + DEC-V61-224(b). The earlier DEC-V61-233 V&V LIVE_VALIDATED milestone (direct-container solve) is the V&V half; this slice added the backend-launch half.*
 

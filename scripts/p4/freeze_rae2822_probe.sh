@@ -16,9 +16,19 @@ T_SNAP="${2:?snapshot time (surface write dir name)}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 BUNDLE="$REPO/reports/showcase_aero/_v73b_rae2822_probe"
 
-[ -f "$RUN_DIR/RUN_DONE" ] || { echo "RUN_DONE missing in $RUN_DIR" >&2; exit 1; }
-[ -f "$RUN_DIR/postProcessing/airfoilSurface/$T_SNAP/p_aerofoil.raw" ] || {
-    echo "no surface write at t=$T_SNAP" >&2; exit 1; }
+# ---- validate EVERY input BEFORE any destructive step (Codex R0 P2:
+# a failed refresh must not wipe the last good frozen bundle) ----------------
+require() { [ -f "$1" ] || { echo "missing required input: $1" >&2; exit 1; }; }
+require "$RUN_DIR/RUN_DONE"
+require "$RUN_DIR/postProcessing/airfoilSurface/$T_SNAP/p_aerofoil.raw"
+require "$RUN_DIR/postProcessing/forceCoeffs1/0/coefficient.dat"
+require "$RUN_DIR/postProcessing/freestreamProbe/0/surfaceFieldValue.dat"
+require "$RUN_DIR/postProcessing/yPlus1/0/yPlus.dat"
+require "$RUN_DIR/log.blockMesh"
+require "$RUN_DIR/log.checkMesh"
+require "$RUN_DIR/log.rhoSimpleFoam"
+require "$BUNDLE/REPRODUCE.md"
+require "$BUNDLE/RESULT.md"
 
 # REPRODUCE.md / RESULT.md are authored, not generated — carry them across
 # the wipe (they are also required below, fail-closed)
@@ -55,10 +65,7 @@ tail -60 "$RUN_DIR/log.checkMesh" > "$BUNDLE/logs/log.checkMesh.tail"
 { head -80 "$RUN_DIR/log.rhoSimpleFoam"; echo; echo "[... trimmed ...]"; echo;
   tail -120 "$RUN_DIR/log.rhoSimpleFoam"; } > "$BUNDLE/logs/log.rhoSimpleFoam.headtail"
 
-# manifest LAST (REPRODUCE.md / RESULT.md must already be in place)
-for f in REPRODUCE.md RESULT.md; do
-    [ -f "$BUNDLE/$f" ] || { echo "write $BUNDLE/$f before freezing" >&2; exit 1; }
-done
+# manifest LAST (docs were pre-validated above and carried across the wipe)
 ( cd "$BUNDLE" && find . -type f ! -name SHA256SUMS | sort | xargs shasum -a 256 > SHA256SUMS )
 echo "frozen: $BUNDLE"
 ( cd "$BUNDLE" && shasum -a 256 -c SHA256SUMS --quiet ) && echo "manifest verifies"

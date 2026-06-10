@@ -27,13 +27,19 @@ length).
 ## 2. Solve (fresh ESI --rm container, 8-way parallel)
 
 ```bash
+# this exact script (log names + RUN_DONE marker) is what
+# scripts/p4/freeze_rae2822_probe.sh consumes — Codex R0 P2 alignment
 docker run --rm --entrypoint bash -v /path/to/run_dir:/work \
   opencfd/openfoam-default:2312 -c '
 source /openfoam/profile.rc >/dev/null 2>&1
 cd /work
-blockMesh && checkMesh && decomposePar -force
-mpirun --allow-run-as-root -np 8 rhoSimpleFoam -parallel
-reconstructPar -latestTime'
+blockMesh > log.blockMesh 2>&1 || exit 1
+checkMesh > log.checkMesh 2>&1
+decomposePar -force > log.decomposePar 2>&1 || exit 1
+mpirun --allow-run-as-root -np 8 rhoSimpleFoam -parallel > log.rhoSimpleFoam 2>&1
+echo "solver exit=$?" >> log.rhoSimpleFoam
+reconstructPar -latestTime > log.reconstructPar 2>&1
+touch RUN_DONE'
 ```
 
 The run STOPS ITSELF on `residualControl 5e-5` (SIMPLE convergence statement
