@@ -9,8 +9,8 @@ autonomous_governance: true
 confidence: high
 date: 2026-06-10
 spec: .planning/V93_CREW_UI_SPEC.md
-codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v93_crew_ui_R0.md
-codex_review_relay: 86gs (gpt-5.4 xhigh · async post-merge per risk-tier 2)
+codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v93_crew_ui_R{0,1,2}.md
+codex_review_relay: 86gs (gpt-5.4 xhigh · R0 CHANGES_REQUIRED [P1 annotated refs, P2 fabricated fix step] -> R1 CHANGES_REQUIRED [P2 directory refs] -> R2 CHANGES_REQUIRED [P2 self-arc report discoverability, fixed verbatim] · chain closed cap=3)
 ---
 
 # DEC-V61-239 · Agent Crew Observatory
