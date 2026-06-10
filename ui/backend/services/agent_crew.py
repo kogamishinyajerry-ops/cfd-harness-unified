@@ -302,14 +302,15 @@ def _build_codex_rounds(fm: dict[str, Any], dec_id: str) -> list[CodexRound]:
             if not raw_p:
                 continue
             abs_path = REPO_ROOT / raw_p
-            # only repo-internal relative refs are readable; absolute paths
-            # (e.g. /tmp/x.log in old DECs) or ../ escapes are reported as
-            # missing-from-repo, never read (path-containment guard)
+            # only repo-internal relative FILE refs are readable; absolute
+            # paths (/tmp/x.log), ../ escapes, and directory refs (e.g.
+            # DEC-V61-095's `reports/.../m_render_api_arc/`) are reported as
+            # missing, never read (containment guard + Codex V93 R1 P2)
             inside_repo = (
                 not Path(raw_p).is_absolute()
                 and ".." not in Path(raw_p).parts
             )
-            missing = not (inside_repo and abs_path.exists())
+            missing = not (inside_repo and abs_path.is_file())
             round_num = _round_from_path(raw_p)
             if missing:
                 verdict = "MISSING"
@@ -333,6 +334,8 @@ def _build_codex_rounds(fm: dict[str, Any], dec_id: str) -> list[CodexRound]:
         slug_alt = slug_base.replace("-", "_")  # e.g. "v61_238"
 
         for p in sorted(CODEX_REPORTS_DIR.iterdir()):
+            if not p.is_file():  # subdirectories are not reports (R1 P2)
+                continue
             name_lower = p.name.lower()
             if slug_base in name_lower or slug_alt in name_lower:
                 rel = str(p.relative_to(REPO_ROOT))
@@ -583,7 +586,7 @@ def get_arc_detail(decision_id: str) -> ArcDetail | None:
             reports: list[ReportExcerpt] = []
             for cr in codex_rounds:
                 abs_path = REPO_ROOT / cr.report_path
-                if cr.missing or not abs_path.exists():
+                if cr.missing or not abs_path.is_file():
                     reports.append(ReportExcerpt(
                         round=cr.round,
                         path=cr.report_path,

@@ -287,3 +287,35 @@ def test_clean_report_refs_unit():
         "a/b_R0.md", "a/b_R1.md", "c/d.txt",
     ]
     assert _clean_report_refs("/tmp/x.log (last round APPROVE)") == ["/tmp/x.log"]
+
+
+def test_directory_ref_is_missing_not_500(tmp_path: Path, monkeypatch):
+    """Codex V93 R1 P2: DEC-V61-095-style annotated DIRECTORY refs must be
+    treated as missing — never read_text() a directory (was a 500)."""
+    repo = tmp_path / "repo"
+    decisions_dir = repo / ".planning" / "decisions"
+    decisions_dir.mkdir(parents=True)
+    reports_dir = repo / "reports" / "codex_tool_reports"
+    arc_dir = reports_dir / "m_render_api_arc"
+    arc_dir.mkdir(parents=True)
+    (decisions_dir / "2026-06-10_v61_996_dirref.md").write_text(
+        "---\n"
+        "decision_id: DEC-V61-996\n"
+        "confidence: high\n"
+        "codex_tool_report_path: reports/codex_tool_reports/m_render_api_arc/ (full arc dir)\n"
+        "---\n\n# DEC-V61-996 · dir ref\n",
+        encoding="utf-8",
+    )
+    import ui.backend.services.agent_crew as svc
+    monkeypatch.setattr(svc, "REPO_ROOT", repo)
+    monkeypatch.setattr(svc, "DECISIONS_DIR", decisions_dir)
+    monkeypatch.setattr(svc, "CODEX_REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(svc, "KOGAMI_DIR", repo / ".planning" / "reviews" / "kogami")
+    snap = svc.build_snapshot()
+    arc = next(a for a in snap.arcs if a.decision_id == "DEC-V61-996")
+    assert len(arc.codex_rounds) == 1
+    assert arc.codex_rounds[0].missing is True
+    assert arc.codex_rounds[0].verdict == "MISSING"
+    detail = svc.get_arc_detail("DEC-V61-996")  # must not raise IsADirectoryError
+    assert detail is not None
+    assert detail.reports[0].missing is True
