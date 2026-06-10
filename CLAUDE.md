@@ -15,7 +15,7 @@ This project uses three review layers, with strategic layer **opt-in** post-V133
 |---|---|---|---|
 | **Strategic** (opt-in) | Kogami-Claude-cosplay (`claude -p` subprocess, `--tools ""`) | **User explicitly invokes** when wanting an independent strategic review (auto-triggers废止) | `.planning/reviews/kogami/<topic>_<date>/` |
 | **Code** | Codex GPT-5.4 / GPT-5.5 (relay CLI) | per RETRO-V61-001 risk-tier · v2.2 1-sync-trigger (security boundary / auth / signing) · **round cap = 3** per V133 | `reports/codex_tool_reports/` |
-| **Archive** | Notion (write-only, session-end batch sync) | DEC landing + post-incident retro | Notion Decisions/Sessions DB |
+| **Archive** | git + GitHub（Notion 已废止 2026-06-10 · DEC-V92-notion-retirement） | DEC landing + post-incident retro | `.planning/decisions/` + `.planning/retrospectives/`（GitHub remote = 人可读门户） |
 
 **v2.3 changes from v6.2**:
 - Strategic layer is opt-in only; Codex APPROVE alone is sufficient gate for high-risk PR merge (no longer double-necessary)
@@ -151,7 +151,7 @@ User-level CLAUDE.md is the cross-project baseline. Genuinely inherited (lives i
 - DEC scope-driven 完整 DEC 触发 (charter / 跨 ≥3 共享代码路径 / governance-rule-change) · sub-DEC 6-field 最小 schema
 - Cadence floor THRESHOLD 30 · Surface-scan trailer (V61-088, optional) · Pre-implementation surface scan (V61-088)
 - Counter telemetry rules (above) · retrospective cadence · external-gate handling
-- Notion 深度同步规则 + 指挥中枢一致性 (below) · Kogami three-layer governance (above)
+- ~~Notion 深度同步规则 + 指挥中枢一致性~~（已废止 2026-06-10 · DEC-V92-notion-retirement）· Kogami three-layer governance (above)
 - /goal CFD-specific Patterns A-D (below)
 
 Kogami strategic layer (per V61-087) is **opt-in only** post-V133 (user explicitly invokes); manual
@@ -164,28 +164,18 @@ invocation path operational with all contract files (P-1..P-5) preserved and Q1 
 > De-cfd-ified out of global `~/CLAUDE.md` on 2026-05-29 — these rules are cfd-harness-unified-only
 > and previously polluted every session. Cross-project rules stay in global (see "Inherited rules" above).
 
-### Notion 深度同步规则（2026-04-21 · 收敛 2026-05-11 仅 Accepted）
+### Notion 渠道已废止（2026-06-10 · DEC-V92-notion-retirement · 外部门控=用户裁决）
 
-本项目用 Notion MCP 作为决策 SSOT。
+原「Notion 深度同步规则」（2026-04-21）与「Notion 指挥中枢模型分工一致性」（2026-05-03）两节**全部废止**，
+原文见 git history。归档层只走 git + GitHub：`.planning/decisions/` + `.planning/retrospectives/` = SSOT。
+不再做任何 Notion sync；skill `notion-sync-cfd-harness` dormant；DEC frontmatter `notion_sync_status`
+字段冻结为历史字段（新 DEC 写 `n/a` 或省略）。
 
-**同步频率（仅 Accepted）**：
-- **DEC 批量 sync**：session-end 一次性把本会话新增 / 改动且 **Status=Accepted** 的 DEC 同步到 Notion
-- **不 sync**：retro 文件、spike commits、charter draft、Status=Proposed 但未 Accepted 的 DEC（DEC ID 仅在 Accepted 时占用）
-- **会话结束前**：创建/更新 Session Summary 页（Sessions DB 或 Project 根页下）— 只列已 Accepted 决策
-- **每个 Phase 完成后**：创建 Phase Completion Report 页，链接所有相关 Accepted DEC
-
-**同步 checklist（session 结束 / phase 关闭时跑一遍）**：
-1. `.planning/decisions/` 里每个 DEC 的 frontmatter `notion_sync_status` 是否都是 `synced <date> (<url>)`？
+**Session-end checklist（继承自原同步 checklist 的非 Notion 项）**：
+1. 本会话新增 / 改动的 Accepted DEC 是否都已 commit（push 视用户指示）？
 2. STATE.md 最新 timestamp 是否反映最新工作？
 3. `external_gate_queue.md` 标 CLOSED 的项目是否都 strike-through？
 4. `reports/codex_tool_reports/` 新增审查报告是否已链接到对应 DEC frontmatter `codex_tool_report_path`？
-5. Notion Decisions DB 是否有任何 Status=Proposed 的 DEC（需跟进）？
-
-**与 git 关系**：Notion = 人可读决策门户；git = 可验证真值。冲突时以 git 为准，修 Notion。
-
-### Notion 指挥中枢模型分工一致性（硬性 · 2026-05-03）
-
-全局 `~/CLAUDE.md` 顶部 `模型分工` 节 = SSOT。本项目 Notion 指挥中枢里任何"模型分工 / 角色定义"页面只是镜像，必须与全局节一致。检测时机（拉到含模型分工字段的 Notion 内容 / 用户提及指挥中枢 / 调 `notion-sync-cfd-harness` skill / session-end checklist）发现不一致时，用 `notion-update-page` 把 Notion 改写为全局节当前版本 + 页顶标注 `> Synced from local CLAUDE.md on YYYY-MM-DD`，并在主对话告知用户。**绝对禁止反向同步**（Notion 覆盖本地）。唯一例外：用户当前会话显式说"先别动 Notion"。
 
 ### v6.1 retrospective cadence + external-gate（RETRO-V61-001）
 
@@ -235,10 +225,10 @@ source session RESUME.md 标记 arc CLOSED；或 20 turn 后停下让我审视�
 2. **评估器只看对话**：让 Claude 把 `checkMesh` / `pytest` stdout 粘进 transcript，每 turn 末 echo 进度摘要。
 3. **四问门控不能省**（advisor-not-driver SSOT）：condition 里包含「每个新文件/PR 把四问回答写入 commit body 或 PR description」。
 4. **/goal 不触发 Kogami opt-in**。若命中 charter trigger（≥3 共享代码路径 / governance-rule-change），加 `若命中 charter trigger 立即 /goal clear 并报告`。
-5. **Notion 不能并入 /goal**：仅 sync Status=Accepted 的 DEC，session-end 批量。
+5. **Notion 已废止**（2026-06-10 · DEC-V92-notion-retirement）：归档只走 git/GitHub，/goal 无 sync 路径可并。
 
 ### 项目专用子代理（建议沉淀到 `.claude/agents/`）
 
 - **cfd-physics-reviewer**：验证 OpenFOAM 物理/边界条件正确性
-- **notion-sync-worker**：批量把 DEC 文件同步到 Notion Decisions DB
+- ~~notion-sync-worker~~（已随 Notion 废止 2026-06-10）
 - **v61-counter-auditor**：检查 v6.1 autonomous_governance counter
