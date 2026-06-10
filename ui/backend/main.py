@@ -49,6 +49,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ui.backend.services.llm_provider import close_cached_provider
 
 from ui.backend.routes import (
+    agent_crew,
     ai_advisor,
     ai_chat,
     ai_coach,
@@ -222,6 +223,7 @@ app.include_router(cases.router,        prefix="/api", tags=["cases"])
 app.include_router(case_editor.router,  prefix="/api", tags=["case-editor"])
 app.include_router(validation.router,   prefix="/api", tags=["validation"])
 app.include_router(decisions.router,    prefix="/api", tags=["decisions"])
+app.include_router(agent_crew.router,   prefix="/api", tags=["agent-crew"])
 app.include_router(dashboard.router,    prefix="/api", tags=["dashboard"])
 app.include_router(audit_package.router, prefix="/api", tags=["audit-package"])
 app.include_router(case_export.router,  prefix="/api", tags=["case-export"])

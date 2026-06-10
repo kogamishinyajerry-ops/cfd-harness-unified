@@ -5,6 +5,7 @@ import { AuditPackagePage } from "@/pages/AuditPackagePage";
 import { DecisionsQueuePage } from "@/pages/DecisionsQueuePage";
 import { ValidationReportPage } from "@/pages/ValidationReportPage";
 import { WorkflowMonitorRoute } from "@/pages/workflow_monitor/WorkflowMonitorRoute";
+import { AgentCrewPage } from "@/pages/agent_crew/AgentCrewPage";
 import { ShortcutPalette } from "@/components/ShortcutPalette";
 import { ThemeRoot } from "@/components/ThemeRoot";
 import { WorkbenchShellV4 } from "@/pages/workbench/v4/WorkbenchShellV4";
@@ -45,6 +46,7 @@ import { WorkbenchShellV4 } from "@/pages/workbench/v4/WorkbenchShellV4";
 //   /audit-package                      → AuditPackagePage
 //   /decisions                          → DecisionsQueuePage
 //   /cases/:id/report                   → ValidationReportPage (deep-link evidence)
+//   /agent-crew                         → AgentCrewPage
 //
 // Tracked in .planning/transitions/2026-05-18_industrial_minimalist_pivot.md
 // + 2026-05-18_blueprint_read.md (Phase E `cutover` step now done early).
@@ -66,6 +68,7 @@ export default function App() {
           {/* DEC-V61-226 · Workflow Monitor (in-house, mock-first design
               preview). Observation surface — NOT the frozen workbench shell. */}
           <Route path="/workflow-monitor" element={<WorkflowMonitorRoute />} />
+          <Route path="/agent-crew" element={<AgentCrewPage />} />
           <Route path="/audit-package" element={<AuditPackagePage />} />
           <Route path="/decisions" element={<DecisionsQueuePage />} />
           <Route
