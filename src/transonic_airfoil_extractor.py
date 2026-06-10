@@ -57,14 +57,13 @@ MAX_CROSSINGS: int = 2
 # Contour chaining: a step longer than this multiple of the median step
 # means the chain jumped across the profile (corrupt/duplicate points).
 CHAIN_JUMP_FACTOR: float = 8.0
-# Surface x-extent vs declared chord: the raw file samples FACE CENTRES,
-# which sit inboard of the true LE/TE on a coarse mesh — the span can
-# legitimately fall SHORT of the chord by discretization (Codex R1 P2),
-# but it can never legitimately EXCEED it. Asymmetric band: generous on
-# the short side (still catches partial/scaled surfaces), tight on the
-# long side.
-_CHORD_SPAN_UNDER_RTOL: float = 0.10
-_CHORD_SPAN_OVER_RTOL: float = 0.02
+# The raw file samples FACE CENTRES: the end centre sits at most HALF the
+# local end-face length inboard of the true LE/TE vertex. We compensate by
+# exactly that data-derived amount (vertex-recovered chord estimate) and
+# then hold a TIGHT symmetric band — a genuinely clipped/mis-scaled surface
+# shrinks far beyond its own end-face half-lengths, so it cannot hide
+# inside the compensation (Codex R1 P2 + R2 P1/P2 joint resolution).
+_CHORD_EST_RTOL: float = 0.02
 
 
 class TransonicExtractionError(ValueError):
@@ -359,6 +358,50 @@ def split_surfaces(chain: List[Tuple[float, float, float]]
     return upper, lower  # type: ignore[return-value]
 
 
+def _recover_vertex_chord(
+    upper3: List[Tuple[float, float, float]],
+    lower3: List[Tuple[float, float, float]],
+) -> Tuple[float, float]:
+    """Estimate the TRUE leading-edge x and chord from face-centre samples.
+
+    A surface patch is written one row per FACE CENTRE, so the extreme
+    sample sits at most half its own face length inboard of the true LE/TE
+    vertex. The compensation is therefore data-derived and bounded: half the
+    end gap of whichever branch owns the extreme point. A clipped or
+    mis-scaled surface is missing far more than its own end-face
+    half-lengths, so it cannot pass the tight chord check downstream.
+    Returns (le_true_x, chord_estimate).
+    """
+    if len(upper3) < 2 or len(lower3) < 2:
+        raise TransonicExtractionError(
+            "a surface branch has fewer than 2 points — too sparse to "
+            "recover the vertex chord (fail-closed)"
+        )
+
+    def _end_gap(branch: List[Tuple[float, float, float]], at_te: bool) -> float:
+        # measure to the first STRICTLY different x — a blunt TE can put two
+        # face centres at identical x in one branch (duplicate-x plateau)
+        xs = [p[0] for p in branch]
+        if at_te:
+            x0 = xs[-1]
+            nxt = next((x for x in reversed(xs) if x < x0), None)
+        else:
+            x0 = xs[0]
+            nxt = next((x for x in xs if x > x0), None)
+        if nxt is None:
+            raise TransonicExtractionError(
+                "degenerate end spacing on a surface branch (all points at "
+                "one x — fail-closed)"
+            )
+        return abs(x0 - nxt)
+
+    le_branch = upper3 if upper3[0][0] <= lower3[0][0] else lower3
+    te_branch = upper3 if upper3[-1][0] >= lower3[-1][0] else lower3
+    le_true = le_branch[0][0] - 0.5 * _end_gap(le_branch, at_te=False)
+    te_true = te_branch[-1][0] + 0.5 * _end_gap(te_branch, at_te=True)
+    return le_true, te_true - le_true
+
+
 # --------------------------------------------------------------------------
 # Shock detection (loop-auditor F3 guards)
 # --------------------------------------------------------------------------
@@ -530,21 +573,21 @@ def extract_transonic_airfoil(
     # global origin (Codex V73.A R0 P2: a translated-but-correct mesh must
     # not shift the Cp profile / shock position). The x-extent must agree
     # with the declared chord — a scaled/partial surface is rejected.
-    x_le = min(x for x, _z, _cp in chain_cp)
-    x_te = max(x for x, _z, _cp in chain_cp)
-    span_x = x_te - x_le
-    if (span_x > chord * (1.0 + _CHORD_SPAN_OVER_RTOL)
-            or span_x < chord * (1.0 - _CHORD_SPAN_UNDER_RTOL)):
-        raise TransonicExtractionError(
-            f"surface x-extent {span_x:.6g} outside "
-            f"[{1.0 - _CHORD_SPAN_UNDER_RTOL:.0%}, "
-            f"{1.0 + _CHORD_SPAN_OVER_RTOL:.0%}] of declared chord {chord:g} "
-            f"— geometry/chord mismatch (fail-closed; face-centre sampling "
-            f"may shrink the span, never extend it)"
-        )
     upper3, lower3 = split_surfaces(chain_cp)
-    upper_cp = [((x - x_le) / chord, cp) for x, _z, cp in upper3]
-    lower_cp = [((x - x_le) / chord, cp) for x, _z, cp in lower3]
+    le_true, chord_est = _recover_vertex_chord(upper3, lower3)
+    if abs(chord_est - chord) / chord > _CHORD_EST_RTOL:
+        raise TransonicExtractionError(
+            f"vertex-recovered chord {chord_est:.6g} disagrees with declared "
+            f"chord {chord:g} by more than {_CHORD_EST_RTOL:.0%} — geometry/"
+            f"chord mismatch (fail-closed; the face-centre compensation is "
+            f"bounded by the surface's own end-face lengths, so a clipped or "
+            f"mis-scaled surface cannot hide inside it)"
+        )
+    # x/c anchored at the RECOVERED leading edge and normalized by the
+    # recovered chord — no systematic left-shift from the missing LE face
+    # segment (Codex R2 P2), no origin dependence (Codex R0 P2)
+    upper_cp = [((x - le_true) / chord_est, cp) for x, _z, cp in upper3]
+    lower_cp = [((x - le_true) / chord_est, cp) for x, _z, cp in lower3]
 
     all_cp = [cp for _x, _z, cp in chain_cp]
     min_cp_upper = min(cp for _x, cp in upper_cp)

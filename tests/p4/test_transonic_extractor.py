@@ -70,13 +70,17 @@ def _camber(x):
 
 
 def profile_chain(cp_upper=cp_upper_default, cp_lower=cp_lower_default, n=N_SIDE,
-                  x_offset=0.0, x_scale=1.0):
+                  x_offset=0.0, x_scale=1.0, face_centres=False):
     """Closed CCW (x, z, cp) contour: upper TE->LE then lower LE->TE.
 
     x_offset/x_scale transform ONLY the emitted x coordinate (Cp/z stay tied
     to the untransformed station) — used by the origin-invariance and
-    chord-mismatch regressions (Codex R0 P2)."""
+    chord-mismatch regressions (Codex R0 P2). face_centres=True emits the
+    MIDPOINTS of consecutive stations (what a real surfaces-FO patch write
+    looks like — Codex R1 P2 / R2 P1)."""
     xs = [0.5 * (1.0 - math.cos(math.pi * i / n)) for i in range(n + 1)]
+    if face_centres:
+        xs = [0.5 * (a + b) for a, b in zip(xs, xs[1:])]
     upper = [(x * x_scale + x_offset, _camber(x) + _thickness(x), cp_upper(x))
              for x in reversed(xs)]
     lower = [(x * x_scale + x_offset, _camber(x) - _thickness(x), cp_lower(x))
@@ -155,12 +159,14 @@ def build_case(
     alpha_for_cl=ALPHA_DEG,
     x_offset=0.0,
     x_scale=1.0,
+    face_centres=False,
 ) -> Path:
     """Self-consistent synthetic case. cl_fc defaults to the contour-integrated
     pressure Cl of the SAME synthetic Cp field (so C6 holds by construction);
     doctored cases override individual pieces."""
     case = tmp_path / "case"
-    chain = profile_chain(cp_upper, cp_lower, x_offset=x_offset, x_scale=x_scale)
+    chain = profile_chain(cp_upper, cp_lower, x_offset=x_offset, x_scale=x_scale,
+                          face_centres=face_centres)
     _write_probe(case, **(probe or {}))
     _write_declared(case, **(declared or {}))
     _write_transport(case, **(transport or {}))
@@ -449,28 +455,38 @@ class TestCoordinateOrigin:
         assert mt.shock_xc == pytest.approx(m0.shock_xc, abs=1e-9)
         assert mt.min_cp_upper == pytest.approx(m0.min_cp_upper, abs=1e-9)
         assert mt.cl_p == pytest.approx(m0.cl_p, rel=1e-9)
-        # x/c domain stays [0, 1] regardless of where the mesh sits in x
-        assert min(x for x, _ in mt.upper_cp) == pytest.approx(0.0, abs=1e-9)
-        assert max(x for x, _ in mt.upper_cp) == pytest.approx(1.0, abs=1e-9)
+        # x/c domain stays ~[0, 1] regardless of where the mesh sits in x
+        # (sub-permille offsets come from the vertex-recovery compensation)
+        lo = min(x for x, _ in mt.upper_cp)
+        hi = max(x for x, _ in mt.upper_cp)
+        assert 0.0 <= lo < 5e-3 and 0.995 < hi <= 1.0
 
     def test_chord_mismatched_geometry_rejected(self, tmp_path):
         with pytest.raises(TransonicExtractionError, match="declared chord"):
             _extract(build_case(tmp_path, x_scale=1.5))
 
-    def test_face_centre_shrunk_span_accepted(self, tmp_path):
-        """Codex R1 P2: raw rows are FACE CENTRES — on a coarse mesh the
-        span legitimately falls a few % short of the chord. 5% shrink must
-        extract cleanly (LE-anchored x/c just spans [0, 0.95])."""
-        m = _extract(build_case(tmp_path / "shrunk", x_scale=0.95))
-        assert m.shock_decline_reason is None
-        assert max(x for x, _ in m.upper_cp) == pytest.approx(0.95, abs=1e-9)
+    def test_face_centre_sampling_accepted_and_unbiased(self, tmp_path):
+        """Codex R1 P2 + R2 P2: a REAL face-centre write (midpoints of the
+        mesh stations) must extract cleanly, and the vertex-recovered x/c
+        frame must keep the shock where the vertex-sampled fixture puts it."""
+        m_vertex = _extract(build_case(tmp_path / "v"))
+        m_fc = _extract(build_case(tmp_path / "fc", face_centres=True))
+        assert m_fc.shock_decline_reason is None
+        assert m_fc.shock_xc == pytest.approx(m_vertex.shock_xc, abs=0.02)
+
+    def test_uniform_5pct_shrink_rejected_as_ambiguous(self, tmp_path):
+        """Codex R2 P1: a 5% uniform shrink is indistinguishable from a
+        clipped surface — the compensation is bounded by the surface's own
+        end-face half-lengths, so this must FAIL CLOSED (it far exceeds
+        them on this fine mesh)."""
+        with pytest.raises(TransonicExtractionError, match="declared chord"):
+            _extract(build_case(tmp_path, x_scale=0.95))
 
     def test_partial_surface_still_rejected(self, tmp_path):
-        # 15% short is beyond any face-centre effect: partial surface
         with pytest.raises(TransonicExtractionError, match="declared chord"):
             _extract(build_case(tmp_path, x_scale=0.85))
 
     def test_overlong_span_still_rejected(self, tmp_path):
-        # the span can never legitimately EXCEED the chord: tight 2% gate
+        # the recovered chord can never legitimately EXCEED the declared one
         with pytest.raises(TransonicExtractionError, match="declared chord"):
             _extract(build_case(tmp_path, x_scale=1.05))
