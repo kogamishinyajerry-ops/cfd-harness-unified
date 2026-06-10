@@ -90,6 +90,31 @@ class TestPwVote:
         assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
         assert r["failed_titles"] == ["y"]
 
+    def test_skipped_leg_is_neutral(self):
+        # Codex R1 P2: browser-specific test.skip() leg must not veto the spec
+        spec = {
+            "title": "z",
+            "tests": [
+                {"results": [{"status": "passed"}]},
+                {"status": "skipped", "results": [{"status": "skipped"}]},
+            ],
+        }
+        r = vote(_report([spec]))
+        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 0, 0)
+
+    def test_fully_skipped_spec_not_a_vote_unit(self):
+        spec = {
+            "title": "all-skipped",
+            "tests": [{"status": "skipped", "results": []}, {"results": [{"status": "skipped"}]}],
+        }
+        r = vote(_report([spec, _spec("ran", ["passed"])]))
+        assert (r["passed"], r["total"], r["confirmed_failed"]) == (1, 1, 0)
+
+    def test_empty_results_without_skip_marker_fails_closed(self):
+        spec = {"title": "ghost", "tests": [{"results": []}]}
+        r = vote(_report([spec]))
+        assert (r["passed"], r["total"], r["confirmed_failed"]) == (0, 1, 1)
+
     def test_parse_error_fails_closed(self, tmp_path):
         bad = tmp_path / "bad.json"
         bad.write_text("{not json")

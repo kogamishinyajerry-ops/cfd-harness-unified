@@ -11,6 +11,11 @@ aggregates to the spec:
                      pro-rate penalty; a hard fail on one browser is
                      never masked by a pass on another)
 A spec is counted exactly once regardless of project count (Codex R0 P2).
+Skipped legs (test.skip()/fixme(): instance status "skipped" or all
+results "skipped") are neutral — they neither veto nor pass the spec;
+a spec skipped on every project is not a vote unit at all (Codex R1 P2).
+An instance with empty results and NO skip marker stays fail-closed
+(confirmed fail).
 
 Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
 spec on a single load-induced transient (V90/V91 retro Open Q #1).
@@ -23,6 +28,16 @@ On parse failure: zeros + parse_error set (matches V78 fail-closed behavior).
 """
 import json
 import sys
+
+
+def _is_skipped(t):
+    """Skipped project leg: playwright marks the test instance status
+    "skipped", or every result it has is "skipped". Empty results without
+    a skip marker is NOT skipped (fail-closed)."""
+    if t.get("status") == "skipped":
+        return True
+    results = t.get("results", [])
+    return bool(results) and all(r.get("status") == "skipped" for r in results)
 
 
 def walk(suites):
@@ -44,10 +59,14 @@ def vote(report: dict) -> dict:
         "parse_error": None,
     }
     for title, tests in walk(report.get("suites", [])):
+        active = [t for t in tests if not _is_skipped(t)]
+        if not active:
+            continue  # spec skipped on every project: neutral, not a vote unit
         out["total"] += 1
         inst_ok, inst_flaky = [], []
-        for t in tests:
-            results = t.get("results", [])
+        for t in active:
+            # skipped results inside a ran instance are not attempts
+            results = [r for r in t.get("results", []) if r.get("status") != "skipped"]
             any_pass = any(r.get("status") == "passed" for r in results)
             any_fail = any(r.get("status") != "passed" for r in results)
             inst_ok.append(any_pass)
