@@ -1,7 +1,7 @@
 ---
 decision_id: DEC-V61-237
 title: P4 V72.A · VOF dam-break vertical scaffold (gold + extractor + gate + tests; NO solve, NO coverage claim)
-status: Proposed
+status: Accepted (autonomous under sponsor full-delegation 2026-06-10 · Codex chain R0 2×P2 fixed 480e1c7 → R1 clean zero-finding)
 parent_dec: DEC-V61-207 (Blueprint v4 vertical-first) · DEC-V61-224(b) (image-gating provision) · DEC-V61-234 (wedge backend-wiring precedent)
 phase: P4 (V72 arc · first multiphase-VOF compute type · capability matrix "interFoam (VOF) — GAP-TRACKED V72+ candidate")
 notion_sync_status: n/a (Notion retired per sponsor 2026-06-09)
@@ -9,7 +9,8 @@ autonomous_governance: true   # sponsor mandate 2026-06-10: "批准你全权推�
 confidence: high
 date: 2026-06-10
 loop_auditor: "FLAG (design review, pre-implementation) — all 6 must-fixes adopted, see §4"
-codex_tool_report_path: TBD (review chain runs on this slice's diff)
+codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v72a_scaffold_R{0,1}.md
+codex_review_relay: 86gs (gpt-5.4 xhigh · R0 [P2 anchor-completeness, P2 pinned-time] both fixed -> R1 zero-finding clean)
 ---
 
 # DEC-V61-237 · V72.A VOF dam-break scaffold
