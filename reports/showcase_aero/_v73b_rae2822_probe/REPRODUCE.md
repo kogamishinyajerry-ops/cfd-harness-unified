@@ -29,15 +29,18 @@ length).
 ```bash
 # this exact script (log names + RUN_DONE marker) is what
 # scripts/p4/freeze_rae2822_probe.sh consumes — Codex R0 P2 alignment
+# RUN_DONE is the freeze script's success gate — it is touched ONLY if
+# every step (incl. solver and reconstruct) exited 0 (Codex R1 P2:
+# a partial/failed refresh must never look freezable)
 docker run --rm --entrypoint bash -v /path/to/run_dir:/work \
   opencfd/openfoam-default:2312 -c '
+set -e
 source /openfoam/profile.rc >/dev/null 2>&1
 cd /work
-blockMesh > log.blockMesh 2>&1 || exit 1
+blockMesh > log.blockMesh 2>&1
 checkMesh > log.checkMesh 2>&1
-decomposePar -force > log.decomposePar 2>&1 || exit 1
+decomposePar -force > log.decomposePar 2>&1
 mpirun --allow-run-as-root -np 8 rhoSimpleFoam -parallel > log.rhoSimpleFoam 2>&1
-echo "solver exit=$?" >> log.rhoSimpleFoam
 reconstructPar -latestTime > log.reconstructPar 2>&1
 touch RUN_DONE'
 ```

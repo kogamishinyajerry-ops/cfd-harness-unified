@@ -20,11 +20,11 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 |---|---|---|---|---|---|---|
 | **laminar** | ✅ PR (lid_driven_cavity Re=100 · icoFoam · Ghia 1982) | ✅ PR (rayleigh_benard_convection Ra=1e6 · buoyantFoam · long-time-avg) | ✅ PR (wedge_oblique_shock M=2.0 15° · rhoCentralFoam · θ-β-M · **supersonic inviscid**, DEC-V61-234 · low-Mach laminar sub-regime still unanchored) | GAP-TRACKED: V71 candidate — chtMultiRegionFoam laminar substrate | GAP-TRACKED: weakly-compressible laminar regime not yet defined | GAP-TRACKED: V71 candidate |
 | **k-epsilon** | ✅ PR (backward_facing_step Re=36000 · simpleFoam · Driver-Seegmiller 1985) | GAP-TRACKED: V71 candidate — pimpleFoam k-epsilon transient | GAP-TRACKED: V71 candidate | GAP-TRACKED: V71 candidate | GAP-TRACKED: not in V69 scope | GAP-TRACKED: not in V69 scope |
-| **k-omega SST** | ✅ PR (naca0012_airfoil Re=3M α=10° · simpleFoam · NASA TMR · **wall-functioned**; + **wall-RESOLVED** treatment anchored by backward_facing_step_lowre Re_H=5000 · y+<1 integrate-to-wall · DEC-V61-235 — turbulence-TREATMENT breadth, SAME INCOMP-RANS compute type, cell already PR so counts unchanged) | ✅ PR (circular_cylinder_wake Re=3900 · pimpleFoam · Norberg 1987) | ✅ PR (NACA0012 transonic M=0.8 · rhoSimpleFoam · AGARD AR-138) | GAP-TRACKED: V71 candidate · rhoPimpleFoam transient compressible | GAP-TRACKED: low-Mach steady not yet anchored | GAP-TRACKED: V71 candidate |
+| **k-omega SST** | ✅ PR (naca0012_airfoil Re=3M α=10° · simpleFoam · NASA TMR · **wall-functioned**; + **wall-RESOLVED** treatment anchored by backward_facing_step_lowre Re_H=5000 · y+<1 integrate-to-wall · DEC-V61-235 — turbulence-TREATMENT breadth, SAME INCOMP-RANS compute type, cell already PR so counts unchanged) | ✅ PR (circular_cylinder_wake Re=3900 · pimpleFoam · Norberg 1987) | GAP-TRACKED (V73.B DEC-V61-240: the old `NACA0012 transonic M=0.8` PR claim was ASPIRATIONAL — no live run existed. First real anchor rae2822_case9: runnable end-to-end, tier-1 SANITY-PASS ×9, but tier-2 ENFORCED honest CONFLICT vs AGARD AR-138 → not PASS, not PR; PR path = rhoCentralFoam-LTS fallback or Cp-band QoI) | GAP-TRACKED: V71 candidate · rhoPimpleFoam transient compressible | GAP-TRACKED: low-Mach steady not yet anchored | GAP-TRACKED: V71 candidate |
 | **DNS / resolved-scale** | ✅ PR (plane_channel_flow Re_tau=180 · icoFoam · Moser-Kim-Mansour 1999) | GAP-TRACKED: V71 candidate — pimpleFoam DNS transient | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope | GAP-TRACKED: not in V69/V70 scope |
 
-**Cells PR**: 8/24 (33%)
-**Cells GAP-TRACKED**: 16/24 (67%)
+**Cells PR**: 7/24 (29%) *(SST×COMP-STEADY demoted — V73.B honest correction, DEC-V61-240)*
+**Cells GAP-TRACKED**: 17/24 (71%)
 **Cells empty**: 0/24 (0%)
 **PR + GAP-TRACKED**: 24/24 (100%) → V70 charter §3 ≥80% threshold EXCEEDED
 
@@ -59,7 +59,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 | `symmetry` | backward_facing_step span | ✅ advisor-aware |
 | `wallFunction` (nutkWallFunction / kqRWallFunction / etc.) | naca0012 / BFS / channel | ✅ advisor-aware via yPlus rules |
 | `fixedFluxPressure` | buoyantFoam (rayleigh_benard) | ✅ used |
-| `totalPressure` | rhoSimpleFoam (transonic) | ✅ used |
+| `totalPressure` | advisor surface (bc_type_name_validity_advisor · case_completeness) — evidence re-pointed off the aspirational naca0012_transonic case, V73.B | ✅ used |
 | `pressureInletVelocity` | apu_bay (CHT) | ✅ used |
 | `cyclic` (periodic) | plane_channel_flow | ✅ used |
 | `patch` (generic) | All | ✅ scaffolded |
@@ -101,7 +101,7 @@ Compressibility regimes: **INCOMPRESSIBLE** · **COMPRESSIBLE** · **WEAKLY-COMP
 ### What the workbench CANNOT do yet (≥1 V70 charter promise unmet):
 
 1. **Multi-phase flows (`interFoam` / VOF / Euler-Lagrange)** — entirely out of scope through V70; needs V72+ multi-phase arc
-2. **Supersonic shock-capturing (TRANSIENT · `sonicFoam`)** — steady oblique-shock is **NOW RUNNABLE end-to-end** (`rhoCentralFoam` V71.A, DEC-V61-234: the workbench backend launches a live supersonic-wedge solve on ESI + Control-plane gate PASS; runnable-coverage flipped 2→3). The remaining gap is TRANSIENT super/transonic — `sonicFoam` is still referenced in the advisor surface without an anchor case. (The rhoSimpleFoam transonic NACA0012 is M=0.8, just below shock-formation threshold. **V73 arc OPEN (DEC-V61-238, 2026-06-10)**: RAE 2822 Case 9 transonic-SBLI anchor scaffolded — gold + extractor + two-tier gate target shock capture ON a lifting surface, ABOVE threshold; civil-aircraft cruise scope; breadth-depth on the covered COMP-STEADY cell, runnable-coverage STAYS 3; live validation = V73.B/C.)
+2. **Supersonic shock-capturing (TRANSIENT · `sonicFoam`)** — steady oblique-shock is **NOW RUNNABLE end-to-end** (`rhoCentralFoam` V71.A, DEC-V61-234: the workbench backend launches a live supersonic-wedge solve on ESI + Control-plane gate PASS; runnable-coverage flipped 2→3). The remaining gap is TRANSIENT super/transonic — `sonicFoam` is still referenced in the advisor surface without an anchor case. (The previously-listed rhoSimpleFoam transonic NACA0012 M=0.8 case was aspirational — no live run ever existed (corrected V73.B, DEC-V61-240). **V73 arc OPEN (DEC-V61-238, 2026-06-10)**: RAE 2822 Case 9 transonic-SBLI anchor scaffolded — gold + extractor + two-tier gate target shock capture ON a lifting surface, ABOVE threshold; civil-aircraft cruise scope; breadth-depth on the covered COMP-STEADY cell, runnable-coverage STAYS 3; live validation = V73.B/C.)
 3. **Sliding-mesh / rotating geometries (e.g., turbomachinery)** — no AMI/cyclic-AMI integration tested
 4. **Advanced turbulence models (Spalart-Allmaras / Reynolds Stress / LES Smagorinsky)** — only k-epsilon / k-omega SST / DNS resolved-scale anchored; LES grep-detected in advisor surface but no canonical case fires LES rule. (V69.2's `low_re_kOmegaSST_trigger` KNOWN_F_NEW skip is **CLOSED** by DEC-V61-235 — `low_re_komegasst_trigger_advisor` + the wall-RESOLVED kOmegaSST BFS anchor LANDED, Codex cap=3 APPROVE; Spalart-Allmaras / RSM / LES remain open → V71.C+)
 5. **Adaptive mesh refinement (AMR)** — not in workbench scope
@@ -131,8 +131,8 @@ bash scripts/governance/v70_fleet/score_cfd_breadth.sh | jq '.subscores'
 ## 8 · Counter & telemetry
 
 - **Cells declared**: 24 (turbulence × compressibility × steadiness) + 10 (solvers) + 12 (BCs) + 5 (meshing) + 8 (post-proc) = 59 total
-- **Cells PR**: 35 / 59 (59%)
-- **Cells GAP-TRACKED**: 24 / 59 (41%)
+- **Cells PR**: 33 / 59 (56%) *(−2 V73.B honest correction: SST×COMP-STEADY cell + rhoSimpleFoam solver row both demoted off the aspirational naca0012_transonic claim, DEC-V61-240)*
+- **Cells GAP-TRACKED**: 26 / 59 (44%)
 - **Cells empty (no status)**: 0 / 59 (0%)
 - **V70-DONE-1 PR + GAP-TRACKED coverage ≥80%**: ✅ MET (100%)
 
