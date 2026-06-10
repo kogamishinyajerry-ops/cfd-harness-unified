@@ -1,0 +1,118 @@
+# Gold Standard — VOF Dam Break (collapsing water column, Martin & Moyce n^2=2)
+#
+# V72.A (DEC-V61-237) scaffold anchor for the FIRST multiphase-VOF compute type
+# (capability matrix line "interFoam (VOF)" — GAP-TRACKED V72+ candidate).
+#
+# Geometry: the OpenFOAM-tutorial damBreak column WITHOUT the obstacle —
+#   column width a = 0.1461 m, height h0 = 0.2922 m (= 2a exactly), tank length
+#   0.584 m, 2D. Aspect ratio h0/a = 2 makes this EXACTLY a Martin & Moyce
+#   (1952) n^2 = 2 column, so the M&M dimensionless variables apply directly:
+#       Z = x_front / a          T = n * t * sqrt(g/a),  n = sqrt(2)
+#   so t(T) = T * sqrt(a / (2 g)):  t(1.0) = 0.086293 s, t(2.0) = 0.172586 s
+#   (re-derived by tests/p4/test_dam_break_gold.py — no magic times).
+#
+# TWO-TIER ORACLE (loop-auditor V72.A design review: FLAG, all must-fixes adopted)
+# -------------------------------------------------------------------------------
+# Tier 1 — SANITY (closed-form, always enforced, SSOT thresholds in
+#   src/dam_break_gate.py): G0 initial column intact; G1 STRICT Ritter upper
+#   bound Z(T) < 2T; G2 monotone collapse; G3 collapse floor Z(T_last) > 1.5
+#   (kills the Z=1.0 unrun-case tautology); G4 water-volume conservation <= 1%;
+#   G5 alpha boundedness.
+#   Ritter reduction (any n): x = 2 t sqrt(g h0) = 2 t sqrt(g n^2 a) = 2 n t
+#   sqrt(g a)  =>  Z = x/a = 2 n t sqrt(g/a) = 2T.  Experiment runs ~15% slower
+#   (gate-release + viscosity), so 2T is a one-sided UPPER BOUND ONLY — using it
+#   as a band target would be a false oracle.
+#   A tier-1 pass is "SANITY-PASS": kinematic plausibility + conservation +
+#   boundedness. It does NOT establish experimental validation, does NOT carry
+#   run-provenance (a fabricated conservation-satisfying field would pass tier
+#   1 — provenance comes from the V72.B/C frozen-evidence chain), and MUST NOT
+#   be described as "validated" or counted toward runnable-coverage.
+#
+# Tier 2 — Martin & Moyce experimental band (NOT YET CONSUMABLE):
+#   anchor_verification below is DECLARED-NOT-VERIFIED and the candidate Z
+#   values are null. Reason (loop-auditor F1, the live catch): the commonly
+#   quoted "Z~2.0 @ T=1.0, Z~3.3 @ T=2.0" VIOLATES the Ritter bound Z < 2T
+#   under THIS file's T convention (2.0 is not < 2.0) — those numbers belong to
+#   a DIFFERENT time normalization (likely T' = t*sqrt(g/a), without n; under
+#   the M&M convention used here the n^2=2 literature reads Z(T=1) ~ 1.3-1.5).
+#   Baking curve-recollections in as verbatim anchors is exactly the
+#   fake-anchor failure mode; the values stay null until digitized from the
+#   primary source (Martin & Moyce 1952, Phil. Trans. R. Soc. A 244(882),
+#   312-324, Part IV tables/figures) or a trusted reproduction (Ubbink 1997
+#   thesis; Hirt & Nichols 1981 comparisons), with the digitized points and
+#   convention recorded in the provenance block.
+#   CONSUMER-SIDE ENFORCEMENT (gate, F2 three pins): tier 2 is consumed ONLY if
+#   (a) anchor_verification == "VERIFIED" (enum fail-closed: anything else,
+#   including a missing field, refuses enforcement), (b) a non-empty provenance
+#   block exists, (c) every candidate passes the ANCHOR META-GATE
+#   Z*(1+tolerance) < 2T (an anchor whose band crosses its own Ritter bound
+#   marks this file corrupt -> REJECTED_ANCHOR). tests/p4/test_dam_break_gold.py
+#   pins the CURRENT state (DECLARED-NOT-VERIFIED + null candidates) so any
+#   flip of this file leaves an audit trail in the test diff.
+#
+# Coverage discipline (Blueprint v4 Law 1 + DEC-V61-224 image-gating provision):
+#   This scaffold makes NO runnable or validated claim. runnable-coverage stays
+#   3 until V72.C lands: adapter-launched live solve + tier-2 VERIFIED + gate
+#   coverage_eligible == true + frozen backend-e2e evidence.
+#   Image gating (probed 2026-06-10, this machine): PRIMARY = ESI
+#   opencfd/openfoam-default:2312 `interFoam` (native linuxARM64 binary at
+#   /usr/lib/openfoam/openfoam2312/platforms/linuxARM64GccDPInt32Opt/bin/interFoam;
+#   reuses the wedge `_docker_run_esi_rm` fresh --rm runner, DEC-V61-234).
+#   FALLBACK = OF11 Foundation openfoam/openfoam11-paraview510
+#   `foamRun -solver incompressibleVoF` (VoF module libs present; image is
+#   linux/amd64 EMULATED on this arm64 host — slower, acceptable fallback only).
+
+quantity: surge_front_position
+description: >
+  Dimensionless surge-front position Z = x_front/a of a collapsing water column
+  (Martin & Moyce 1952, n^2=2) measured at pinned dimensionless times T. The
+  front is the max wet (alpha >= 0.5) cell-centre x within the floor band
+  y <= 0.1*a, recomputed from raw alpha.water + C + V fields by
+  src/dam_break_extractor.py (never read from solver functionObject output).
+tolerance: 0.10            # tier-2 band; justified by M&M scatter + published
+                           # interFoam-vs-M&M agreement 5-10% for T <= 2, and by
+                           # project precedent (BFS experimental anchor 10% vs
+                           # wedge analytical 3%). Tier-1 bounds are exact.
+sample_T: [0.0, 1.0, 2.0]  # T=0 feeds G0 (initial column); T>0 feed G1..G3 + tier 2
+
+tier2_anchor:
+  convention: "Z = x/a ; T = n*t*sqrt(g/a) with n^2 = h0/a = 2 (Martin & Moyce 1952). Ritter bound in these variables: Z_Ritter(T) = 2T exactly."
+  anchor_verification: "DECLARED-NOT-VERIFIED"   # F2 pin: tests assert this value
+  provenance: null         # REQUIRED non-empty {source, digitization} before VERIFIED
+  candidates:              # Z null until digitized from primary/trusted source
+    - {T: 1.0, Z: null, literature_note: "n^2=2 reproductions read ~1.3-1.5 under THIS convention; the often-quoted 2.0 belongs to T'=t*sqrt(g/a) and violates Z<2T here (loop-auditor F1)"}
+    - {T: 2.0, Z: null, literature_note: "n^2=2 reproductions read ~2.2-2.5 under THIS convention; the often-quoted 3.3 belongs to T'=t*sqrt(g/a)"}
+  verification_requirement: >
+    Fill Z only after digitizing the primary table/figure (M&M 1952 Part IV) or
+    a trusted reproduction (Ubbink 1997), recording {source, digitization} in
+    provenance and flipping anchor_verification to VERIFIED. The anchor
+    meta-gate Z*(1+tolerance) < 2T is enforced BOTH by
+    tests/p4/test_dam_break_gold.py and by src/dam_break_gate.py at runtime;
+    a violating anchor is REJECTED_ANCHOR, never silently consumed.
+
+case_info:
+  id: dam_break_collapse
+  validation_status: SCAFFOLD_AUTHORED   # machine-readable; test-enforced honesty
+                                         # invariant (same posture as the wedge gold's
+                                         # validation_status): NO live run has been
+                                         # gated against this gold; tier-1-only
+                                         # verdicts are SANITY, not validation.
+  geometry:
+    column_width_a_m: 0.1461
+    column_height_m: 0.2922     # = 2a exactly -> n^2 = 2 (gate hard-asserts this)
+    tank_length_m: 0.584
+    gravity_m_s2: 9.81
+    note: "OpenFOAM tutorial damBreak column geometry WITHOUT the obstacle; 2D."
+  solver_inputs:
+    primary: "interFoam (ESI opencfd/openfoam-default:2312, fresh --rm container per wedge _docker_run_esi_rm pattern)"
+    fallback: "foamRun -solver incompressibleVoF (OF11 Foundation openfoam/openfoam11-paraview510; amd64 emulated on arm64 host)"
+    write_format: ascii          # extractor parses ascii only (fail-closed)
+    required_postprocess: "postProcess -func writeCellCentres + writeCellVolumes (extractor needs C and V; missing V is a hard error, no uniform-mesh fallback)"
+    write_times_s: "t = T*sqrt(a/(2g)) for sample_T; 0.086293 and 0.172586 at a=0.1461, g=9.81 (re-derived in tests; controlDict must pin writeControl to land these dirs)"
+  physics_preconditions:
+    - condition: "Impulsive t=0 start (no diaphragm-release transient as in the M&M experiment)"
+      status: "DECLARED — known systematic early-time offset vs experiment; one reason tier-2 tolerance is 10%, documented not tuned"
+    - condition: "Laminar (no turbulence model) for the T <= 2.0 pre-impact window"
+      status: "DECLARED — to be pinned in the V72.B case_definition; M&M front propagation in this window is gravity-inertia dominated"
+    - condition: "Front sampled before first wall impact (T <= 2.0; tank is 4a long)"
+      status: "DECLARED — Z stays < 4 = tank_length/a; samples beyond T=2.5 would mix in 3D/floor-friction effects"

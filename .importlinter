@@ -38,6 +38,7 @@ source_modules =
     src.wedge_oblique_shock_extractor
     src.bfs_lowre_extractor
     src.bfs_floor_region
+    src.dam_break_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -76,6 +77,7 @@ forbidden_modules =
     src.wedge_oblique_shock_extractor
     src.bfs_lowre_extractor
     src.bfs_floor_region
+    src.dam_break_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -94,6 +96,7 @@ forbidden_modules =
     src.cht_conjugate_gate
     src.wedge_oblique_shock_gate
     src.bfs_lowre_gate
+    src.dam_break_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -107,6 +110,7 @@ forbidden_modules =
     src.wedge_oblique_shock_extractor
     src.bfs_lowre_extractor
     src.bfs_floor_region
+    src.dam_break_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -133,6 +137,7 @@ forbidden_modules =
     src.cht_conjugate_gate
     src.wedge_oblique_shock_gate
     src.bfs_lowre_gate
+    src.dam_break_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -146,6 +151,7 @@ forbidden_modules =
     src.wedge_oblique_shock_extractor
     src.bfs_lowre_extractor
     src.bfs_floor_region
+    src.dam_break_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors
@@ -174,6 +180,7 @@ forbidden_modules =
     src.cht_conjugate_gate
     src.wedge_oblique_shock_gate
     src.bfs_lowre_gate
+    src.dam_break_gate
     src.notion_client
     src.notion_sync
     src.audit_package
@@ -187,6 +194,7 @@ forbidden_modules =
     src.wedge_oblique_shock_extractor
     src.bfs_lowre_extractor
     src.bfs_floor_region
+    src.dam_break_extractor
     src.plane_channel_uplus_emitter
     src.wall_gradient
     src.dhc_extractors

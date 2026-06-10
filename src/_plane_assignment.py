@@ -49,6 +49,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.cht_conjugate_gate": Plane.CONTROL,  # P3 W3.3b cht_conjugate Gnielinski gate
     "src.wedge_oblique_shock_gate": Plane.CONTROL,  # P4 V71.A wedge oblique-shock gate
     "src.bfs_lowre_gate": Plane.CONTROL,  # P4 V71.B low-Re BFS resolved-wall reattachment gate
+    "src.dam_break_gate": Plane.CONTROL,  # P4 V72.A VOF dam-break two-tier sanity/anchor gate
     "src.notion_client": Plane.CONTROL,
     "src.notion_sync": Plane.CONTROL,
     "src.audit_package": Plane.CONTROL,
@@ -63,6 +64,7 @@ PLANE_OF: Mapping[str, Plane] = {
     "src.wedge_oblique_shock_extractor": Plane.EXECUTION,  # P4 V71.A wedge shock extractor
     "src.bfs_lowre_extractor": Plane.EXECUTION,  # P4 V71.B low-Re BFS reattachment + floor-y+ extractor
     "src.bfs_floor_region": Plane.EXECUTION,  # P4 V71.B shared BFS reattachment-floor mask (SSOT)
+    "src.dam_break_extractor": Plane.EXECUTION,  # P4 V72.A VOF dam-break surge-front extractor
     "src.plane_channel_uplus_emitter": Plane.EXECUTION,
     "src.wall_gradient": Plane.EXECUTION,
     "src.dhc_extractors": Plane.EXECUTION,
