@@ -1,10 +1,11 @@
 ---
 decision_id: DEC-V92-charter
 title: V92 Scoring-Evolution Arc · V78 scorer family 1-vote-veto → confirm-on-retry majority semantics (load-sensitive pillars only)
-status: Proposed
+status: Accepted
+accepted: 2026-06-10 (user verdict, same session as implementation commit a448e9d)
 parent_dec: DEC-V91-close (2026-05-18_v91_close_dec.md) · V90/V91 retro Open Q #1
 phase: V92 (scoring-evolution arc · user-mandated 2026-06-10)
-notion_sync_status: not_synced (Proposed · per v2.3 Accepted-only sync rule)
+notion_sync_status: n/a (Notion archive channel retired 2026-06-10 · DEC-V92-notion-retirement)
 autonomous_governance: false  # external gate — user explicitly mandated direction ("V78 scorer 演进"); counter N/A per RETRO-V61-001
 confidence: high
 date: 2026-06-10
