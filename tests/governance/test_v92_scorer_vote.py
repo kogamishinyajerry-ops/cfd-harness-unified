@@ -26,6 +26,14 @@ def _spec(title, statuses):
     return {"title": title, "tests": [{"results": [{"status": s} for s in statuses]}]}
 
 
+def _multi_spec(title, *per_project_statuses):
+    """One spec with one tests[] entry per playwright project (CROSSBROWSER matrix)."""
+    return {
+        "title": title,
+        "tests": [{"results": [{"status": s} for s in statuses]} for statuses in per_project_statuses],
+    }
+
+
 def _report(specs, nested=None):
     suite = {"specs": specs, "suites": nested or []}
     return {"suites": [suite]}
@@ -67,6 +75,20 @@ class TestPwVote:
         assert r["passed"] == r["total"] == 185
         v78_passed = 184  # old all()-rule
         assert v78_passed * 60 // 185 == 59  # documents the V91 dip this fixes
+
+    def test_multi_project_flaky_counted_once(self):
+        # Codex R0 P2: CROSSBROWSER matrix — same spec flaky on both projects
+        # must count 1 spec / 1 flaky, not 2 (else D4 flaky>=3 guard inflates)
+        r = vote(_report([_multi_spec("x", ["timedOut", "passed"], ["failed", "passed"])]))
+        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (1, 1, 1, 0)
+        assert r["flaky_titles"] == ["x"]
+
+    def test_multi_project_hard_fail_not_masked_by_other_project(self):
+        # chromium passes, firefox never passes → spec is confirmed_failed
+        # (a pass on one browser must not retry-away a hard cross-browser fail)
+        r = vote(_report([_multi_spec("y", ["passed"], ["failed", "failed", "failed"])]))
+        assert (r["passed"], r["total"], r["flaky"], r["confirmed_failed"]) == (0, 1, 0, 1)
+        assert r["failed_titles"] == ["y"]
 
     def test_parse_error_fails_closed(self, tmp_path):
         bad = tmp_path / "bad.json"

@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """V92 confirm-on-retry vote for Playwright JSON reports (DEC-V92-charter D2).
 
-A spec PASSES if ANY attempt passed (playwright --retries semantics).
-  - flaky          = eventually passed, but >=1 failed attempt (telemetry, 0 penalty)
-  - confirmed_fail = no attempt passed (drives the pro-rate penalty)
+Vote unit = spec (not test instance). Each tests[] entry (one per
+playwright project, e.g. CROSSBROWSER=1 matrix) votes instance-level
+first — instance ok if ANY attempt passed (--retries semantics) — then
+aggregates to the spec:
+  - passed         = every project instance has >=1 passing attempt
+  - flaky          = passed, but >=1 instance needed a retry (telemetry, 0 penalty)
+  - confirmed_fail = >=1 instance where NO attempt passed (drives the
+                     pro-rate penalty; a hard fail on one browser is
+                     never masked by a pass on another)
+A spec is counted exactly once regardless of project count (Codex R0 P2).
 
 Replaces the V78 rule `all(r.status == "passed")` which 1-vote-vetoed a
 spec on a single load-induced transient (V90/V91 retro Open Q #1).
@@ -21,8 +28,8 @@ import sys
 def walk(suites):
     for s in suites:
         for sp in s.get("specs", []):
-            for t in sp.get("tests", []):
-                yield sp.get("title", "?"), t
+            if sp.get("tests", []):
+                yield sp.get("title", "?"), sp["tests"]
         yield from walk(s.get("suites", []))
 
 
@@ -36,14 +43,18 @@ def vote(report: dict) -> dict:
         "failed_titles": [],
         "parse_error": None,
     }
-    for title, t in walk(report.get("suites", [])):
-        results = t.get("results", [])
+    for title, tests in walk(report.get("suites", [])):
         out["total"] += 1
-        any_pass = any(r.get("status") == "passed" for r in results)
-        any_fail = any(r.get("status") != "passed" for r in results)
-        if any_pass:
+        inst_ok, inst_flaky = [], []
+        for t in tests:
+            results = t.get("results", [])
+            any_pass = any(r.get("status") == "passed" for r in results)
+            any_fail = any(r.get("status") != "passed" for r in results)
+            inst_ok.append(any_pass)
+            inst_flaky.append(any_pass and any_fail)
+        if all(inst_ok):
             out["passed"] += 1
-            if any_fail:
+            if any(inst_flaky):
                 out["flaky"] += 1
                 out["flaky_titles"].append(title)
         else:
