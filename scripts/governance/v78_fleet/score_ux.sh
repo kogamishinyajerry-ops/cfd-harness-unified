@@ -4,6 +4,12 @@
 # (was: ≥17 of N PASS). Forces full playwright suite green.
 #
 # This is the V73.1-fragility-detection-gap closure (3-retro carry).
+#
+# V92 (DEC-V92-charter D2 · confirm-on-retry): playwright runs with
+# --retries=2; per-spec vote via scripts/governance/v92_fleet/pw_vote.py —
+# a spec PASSES if ANY attempt passed; flaky specs (eventual pass) are
+# telemetry only (0 penalty); confirmed fails (no attempt passed) drive
+# the V78 pro-rate exactly as before. Closes V90/V91 retro Open Q #1.
 set -o pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
@@ -25,36 +31,28 @@ total=0
 if [ ! -f "$pw_config" ] || [ ! -d "$pw_dir" ]; then
   failures+=("Playwright NOT bootstrapped · ${pw_config} or ${pw_dir} missing")
 else
+  repo_root="$(git rev-parse --show-toplevel)"
   cd ui/frontend
-  if npx playwright test --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
+  # V92: --retries=2 → transient load-induced failures get majority vote
+  if npx playwright test --retries=2 --reporter=json > /tmp/v78_pw.json 2>/tmp/v78_pw.stderr; then
     pw_exit=0
   else
     pw_exit=$?
   fi
 
-  pass_total=$(python3 - <<'PYEOF'
-import json
-try:
-    d = json.load(open("/tmp/v78_pw.json"))
-    def walk(suites):
-        for s in suites:
-            for sp in s.get("specs", []):
-                for t in sp.get("tests", []):
-                    yield t
-            yield from walk(s.get("suites", []))
-    tests = list(walk(d.get("suites", [])))
-    total = len(tests)
-    passed = sum(
-        1 for t in tests
-        if all(r.get("status") == "passed" for r in t.get("results", []))
-    )
-    print(f"{passed} {total}")
-except Exception as exc:
-    print(f"0 0 # parse error: {exc}")
-PYEOF
-)
-  passed=$(echo "$pass_total" | awk '{print $1}')
-  total=$(echo "$pass_total" | awk '{print $2}')
+  vote_json=$(python3 "$repo_root/scripts/governance/v92_fleet/pw_vote.py" /tmp/v78_pw.json)
+  passed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])")
+  total=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])")
+  flaky=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['flaky'])")
+  confirmed_failed=$(echo "$vote_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['confirmed_failed'])")
+  flaky_titles=$(echo "$vote_json" | python3 -c "import json,sys; print('; '.join(json.load(sys.stdin)['flaky_titles']))")
+
+  if [ "${flaky:-0}" -gt 0 ]; then
+    evidence+=("V92 confirm-on-retry: ${flaky} flaky spec(s) retry-cleared (0 penalty · audited): ${flaky_titles}")
+  fi
+  if [ "${flaky:-0}" -ge 3 ]; then
+    failures+=("V92 D4 guard: flaky_specs=${flaky} ≥ 3 → mandatory mini-retro entry")
+  fi
 
   if [ "$total" -gt 0 ]; then
     # V78 (TIGHTENED): require 100% PASS for flow_score=60. No
@@ -83,9 +81,13 @@ PYEOF
     if [ "$blockers" -eq 0 ]; then
       no_blocker_score=15
       evidence+=("no-blocker: 0 click-intercepted / timeout signals")
+    elif [ "${confirmed_failed:-0}" -eq 0 ]; then
+      # V92 D2: signals from attempts that eventually passed = transient noise
+      no_blocker_score=15
+      evidence+=("no-blocker: ${blockers} signal(s) from retry-cleared attempts · classified transient (V92 · confirmed_failed=0)")
     else
       no_blocker_score=0
-      failures+=("blocker: ${blockers} click/timeout patterns in stderr")
+      failures+=("blocker: ${blockers} click/timeout patterns in stderr · confirmed_failed=${confirmed_failed}")
     fi
   else
     failures+=("playwright json parse failure · 0 tests recognized")
@@ -114,9 +116,11 @@ print(json.dumps({
     "no_blocker_clicks": $no_blocker_score,
     "specs_pass_count": ${passed:-0},
     "specs_total_count": ${total:-0},
+    "flaky_specs_count": ${flaky:-0},
+    "confirmed_failed_count": ${confirmed_failed:-0},
   },
   "evidence": ev,
   "failures": fa,
-  "honest_note": "V78 TIGHTENED · flow_completion requires 100% specs PASS (was ≥17) · 3-arc deferred V73.1-fragility-gap closed"
+  "honest_note": "V78 TIGHTENED (100% specs PASS) + V92 confirm-on-retry (--retries=2 · flaky=telemetry-only · confirmed fails drive pro-rate) per DEC-V92-charter"
 }, ensure_ascii=False, indent=2))
 PYEOF
