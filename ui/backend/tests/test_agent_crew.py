@@ -216,3 +216,74 @@ def test_arc_detail_invalid_id_with_slash_rejected():
     """Double-encoded or otherwise non-DEC id → rejected."""
     resp = client.get("/api/agent-crew/arc/NOT_A_DEC_ID")
     assert resp.status_code in (404, 422)
+
+
+# ---------- annotated report-path refs (Codex V93 R0 P1) ----------------------
+
+
+def test_annotated_semicolon_paths_resolved(tmp_path: Path, monkeypatch):
+    """Real DECs carry `path1 (note); path2` — both must resolve, not MISSING."""
+    decisions_dir = tmp_path / ".planning" / "decisions"
+    decisions_dir.mkdir(parents=True)
+    reports_dir = tmp_path / "reports" / "codex_tool_reports"
+    reports_dir.mkdir(parents=True)
+    (reports_dir / "a_R0.md").write_text("VERDICT: CHANGES_REQUIRED\n", encoding="utf-8")
+    (reports_dir / "a_R1.md").write_text("VERDICT: APPROVE\n", encoding="utf-8")
+    (decisions_dir / "2026-06-10_v61_998_annotated.md").write_text(
+        "---\n"
+        "decision_id: DEC-V61-998\n"
+        "confidence: high\n"
+        "codex_tool_report_path: reports/codex_tool_reports/a_R0.md (filled by main session); reports/codex_tool_reports/a_R1.md\n"
+        "---\n\n# DEC-V61-998 · annotated\n",
+        encoding="utf-8",
+    )
+    import ui.backend.services.agent_crew as svc
+    monkeypatch.setattr(svc, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(svc, "DECISIONS_DIR", decisions_dir)
+    monkeypatch.setattr(svc, "CODEX_REPORTS_DIR", reports_dir)
+    monkeypatch.setattr(svc, "KOGAMI_DIR", tmp_path / ".planning" / "reviews" / "kogami")
+    snap = svc.build_snapshot()
+    arc = next(a for a in snap.arcs if a.decision_id == "DEC-V61-998")
+    assert len(arc.codex_rounds) == 2
+    assert all(not r.missing for r in arc.codex_rounds), (
+        "annotated-but-real report refs must not be marked MISSING"
+    )
+    assert {r.verdict for r in arc.codex_rounds} == {"CHANGES_REQUIRED", "APPROVE"}
+
+
+def test_absolute_path_ref_is_missing_never_read(tmp_path: Path, monkeypatch):
+    """Old DECs reference /tmp/x.log — must be reported missing-from-repo and
+    NEVER read (path-containment guard)."""
+    repo = tmp_path / "repo"
+    decisions_dir = repo / ".planning" / "decisions"
+    decisions_dir.mkdir(parents=True)
+    outside = tmp_path / "outside.log"  # genuinely OUTSIDE the repo root
+    outside.write_text("VERDICT: APPROVE\n", encoding="utf-8")
+    (decisions_dir / "2026-06-10_v61_997_abs.md").write_text(
+        "---\n"
+        "decision_id: DEC-V61-997\n"
+        "confidence: high\n"
+        f"codex_tool_report_path: {outside} (last round APPROVE)\n"
+        "---\n\n# DEC-V61-997 · abs path\n",
+        encoding="utf-8",
+    )
+    import ui.backend.services.agent_crew as svc
+    monkeypatch.setattr(svc, "REPO_ROOT", repo)
+    monkeypatch.setattr(svc, "DECISIONS_DIR", decisions_dir)
+    monkeypatch.setattr(svc, "CODEX_REPORTS_DIR", repo / "reports" / "codex_tool_reports")
+    monkeypatch.setattr(svc, "KOGAMI_DIR", repo / ".planning" / "reviews" / "kogami")
+    snap = svc.build_snapshot()
+    arc = next(a for a in snap.arcs if a.decision_id == "DEC-V61-997")
+    assert len(arc.codex_rounds) == 1
+    assert arc.codex_rounds[0].missing is True
+    assert arc.codex_rounds[0].verdict == "MISSING", (
+        "absolute/outside-repo refs must never be read, even if the file exists"
+    )
+
+
+def test_clean_report_refs_unit():
+    from ui.backend.services.agent_crew import _clean_report_refs
+    assert _clean_report_refs("a/b_R{0,1}.md (note); c/d.txt") == [
+        "a/b_R0.md", "a/b_R1.md", "c/d.txt",
+    ]
+    assert _clean_report_refs("/tmp/x.log (last round APPROVE)") == ["/tmp/x.log"]

@@ -226,3 +226,69 @@ describe("AgentCrewPage", () => {
     expect(submitButtons.length).toBe(0);
   });
 });
+
+// ---------- step honesty (Codex V93 R0 P2) ----------------------------------
+// 步骤只从真实工件推导：末轮非放行 verdict 之后不得虚构「总师修复」，
+// 也不得显示「收口」。
+import { ArcReplay } from "../components/ArcReplay";
+import type { CrewArc } from "@/api/agentCrew";
+
+function arcWithRounds(rounds: CrewArc["codex_rounds"]): CrewArc {
+  return {
+    decision_id: "DEC-TEST-1",
+    title: "t",
+    date: "2026-06-10",
+    phase: null,
+    autonomous: true,
+    confidence: "high",
+    loop_auditor: null,
+    codex_relay: null,
+    codex_rounds: rounds,
+    kogami: null,
+    relative_path: "x.md",
+  };
+}
+
+describe("ArcReplay step honesty", () => {
+  it("does NOT fabricate a fix step after a final CHANGES_REQUIRED round", () => {
+    render(
+      <ArcReplay
+        arc={arcWithRounds([
+          { round: 0, verdict: "CHANGES_REQUIRED", p1: 1, p2: 0, p3: 0, report_path: "r0.md", missing: false },
+        ])}
+        onActiveEdgesChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/总师修复/)).toBeNull();
+    expect(screen.queryByText(/收口 \/ 归档/)).toBeNull();
+    expect(screen.getByText(/未收口 · 最后一轮 CHANGES_REQUIRED/)).toBeTruthy();
+  });
+
+  it("inserts a fix step only BETWEEN rounds and closes on final APPROVE", () => {
+    render(
+      <ArcReplay
+        arc={arcWithRounds([
+          { round: 0, verdict: "CHANGES_REQUIRED", p1: 1, p2: 0, p3: 0, report_path: "r0.md", missing: false },
+          { round: 1, verdict: "APPROVE", p1: 0, p2: 0, p3: 0, report_path: "r1.md", missing: false },
+        ])}
+        onActiveEdgesChange={() => {}}
+      />,
+    );
+    expect(screen.getAllByText(/总师修复 \(after R0\)/).length).toBe(1);
+    expect(screen.getByText(/收口 \/ 归档/)).toBeTruthy();
+    expect(screen.queryByText(/未收口/)).toBeNull();
+  });
+
+  it("a final MISSING round is reported unresolved, never closed", () => {
+    render(
+      <ArcReplay
+        arc={arcWithRounds([
+          { round: 0, verdict: "MISSING", p1: 0, p2: 0, p3: 0, report_path: "gone.md", missing: true },
+        ])}
+        onActiveEdgesChange={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/总师修复/)).toBeNull();
+    expect(screen.getByText(/未收口 · 最后一轮 MISSING/)).toBeTruthy();
+  });
+});

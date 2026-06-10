@@ -37,27 +37,42 @@ function buildSteps(arc: CrewArc): Step[] {
     label: "总师实现",
     edgeIds: ["e1", "e2", "e3"],
   });
-  for (const r of arc.codex_rounds) {
+  arc.codex_rounds.forEach((r, i) => {
     steps.push({
       id: `codex_r${r.round}`,
       label: `Codex R${r.round} · ${r.verdict}`,
       edgeIds: ["e4", "e5"],
       artifactKey: `codex_r${r.round}`,
     });
-    // If not the last round, add a chief fix step
-    if (r.verdict !== "APPROVE" && r.verdict !== "APPROVE_WITH_COMMENTS") {
+    // 步骤只从真实工件推导：仅当存在后续一轮审查时才插入「总师修复」——
+    // 后续轮的存在就是修复发生过的证据；末轮之后从不虚构修复步
+    //（Codex V93 R0 P2）。
+    if (i < arc.codex_rounds.length - 1) {
       steps.push({
         id: `chief_fix_r${r.round}`,
         label: `总师修复 (after R${r.round})`,
         edgeIds: ["e1", "e2", "e3"],
       });
     }
-  }
-  steps.push({
-    id: "archive",
-    label: "收口 / 归档",
-    edgeIds: ["e8"],
   });
+  // 末步诚实化：只有末轮 verdict 是放行类（APPROVE / APPROVE_WITH_COMMENTS /
+  // RESOLVED）或没有任何 Codex 轮（如 spike/无审查 DEC）才显示「收口」；
+  // 否则如实显示「未收口 · 最后一轮 <verdict>」。
+  const last = arc.codex_rounds[arc.codex_rounds.length - 1];
+  const closed =
+    !last ||
+    last.verdict === "APPROVE" ||
+    last.verdict === "APPROVE_WITH_COMMENTS" ||
+    last.verdict === "RESOLVED";
+  steps.push(
+    closed
+      ? { id: "archive", label: "收口 / 归档", edgeIds: ["e8"] }
+      : {
+          id: "unresolved",
+          label: `未收口 · 最后一轮 ${last.verdict}`,
+          edgeIds: [],
+        },
+  );
   return steps;
 }
 

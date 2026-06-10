@@ -257,6 +257,25 @@ def _expand_brace_path(raw: str) -> list[str]:
         return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+def _clean_report_refs(raw: str) -> list[str]:
+    """Sanitize a `codex_tool_report_path` frontmatter value into bare paths.
+
+    Real DECs carry annotated values — `path1; path2`, `path.md (filled by
+    main session ...)`, `/tmp/x.log (last round APPROVE)` — which must not be
+    treated as literal filenames (Codex V93 R0 P1). Order matters: strip
+    parenthetical annotations FIRST, split on ';' SECOND, and only then run
+    brace/comma expansion per fragment (the brace body itself contains commas).
+    """
+    no_paren = re.sub(r"\([^)]*\)", " ", raw)
+    out: list[str] = []
+    for fragment in no_paren.split(";"):
+        fragment = fragment.strip()
+        if not fragment:
+            continue
+        out.extend(p for p in _expand_brace_path(fragment) if p)
+    return out
+
+
 def _round_from_path(path_str: str) -> int | None:
     """Extract round number from file path/name."""
     m = _ROUND_RE.search(Path(path_str).name)
@@ -274,16 +293,23 @@ def _build_codex_rounds(fm: dict[str, Any], dec_id: str) -> list[CodexRound]:
     """
     seen_paths: dict[str, CodexRound] = {}  # path -> CodexRound
 
-    # Path (a): frontmatter field
+    # Path (a): frontmatter field (annotation-tolerant, Codex V93 R0 P1)
     fm_path_raw = str(fm.get("codex_tool_report_path") or "").strip()
     if fm_path_raw:
-        expanded = _expand_brace_path(fm_path_raw)
+        expanded = _clean_report_refs(fm_path_raw)
         for raw_p in expanded:
             raw_p = raw_p.strip()
             if not raw_p:
                 continue
             abs_path = REPO_ROOT / raw_p
-            missing = not abs_path.exists()
+            # only repo-internal relative refs are readable; absolute paths
+            # (e.g. /tmp/x.log in old DECs) or ../ escapes are reported as
+            # missing-from-repo, never read (path-containment guard)
+            inside_repo = (
+                not Path(raw_p).is_absolute()
+                and ".." not in Path(raw_p).parts
+            )
+            missing = not (inside_repo and abs_path.exists())
             round_num = _round_from_path(raw_p)
             if missing:
                 verdict = "MISSING"
