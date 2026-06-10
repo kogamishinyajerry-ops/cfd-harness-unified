@@ -69,21 +69,30 @@ def _camber(x):
     return 0.05 * x**3
 
 
-def profile_chain(cp_upper=cp_upper_default, cp_lower=cp_lower_default, n=N_SIDE):
-    """Closed CCW (x, z, cp) contour: upper TE->LE then lower LE->TE."""
+def profile_chain(cp_upper=cp_upper_default, cp_lower=cp_lower_default, n=N_SIDE,
+                  x_offset=0.0, x_scale=1.0):
+    """Closed CCW (x, z, cp) contour: upper TE->LE then lower LE->TE.
+
+    x_offset/x_scale transform ONLY the emitted x coordinate (Cp/z stay tied
+    to the untransformed station) — used by the origin-invariance and
+    chord-mismatch regressions (Codex R0 P2)."""
     xs = [0.5 * (1.0 - math.cos(math.pi * i / n)) for i in range(n + 1)]
-    upper = [(x, _camber(x) + _thickness(x), cp_upper(x)) for x in reversed(xs)]
-    lower = [(x, _camber(x) - _thickness(x), cp_lower(x)) for x in xs[1:]]
+    upper = [(x * x_scale + x_offset, _camber(x) + _thickness(x), cp_upper(x))
+             for x in reversed(xs)]
+    lower = [(x * x_scale + x_offset, _camber(x) - _thickness(x), cp_lower(x))
+             for x in xs[1:]]
     return upper + lower
 
 
-def _write_probe(case: Path, p=P_INF, t=T_INF, u=(UX, 0.0, UZ), tname="500"):
+def _write_probe(case: Path, p=P_INF, t=T_INF, u=(UX, 0.0, UZ), tname="500",
+                 extra_rows=()):
     d = case / "postProcessing" / "freestreamProbe" / tname
     d.mkdir(parents=True, exist_ok=True)
+    rows = list(extra_rows) + [f"{tname} {p} {t} ({u[0]} {u[1]} {u[2]})"]
     (d / "surfaceFieldValue.dat").write_text(
         "# Region    : sampled upstream plane\n"
         "# Time areaAverage(p) areaAverage(T) areaAverage(U)\n"
-        f"500 {p} {t} ({u[0]} {u[1]} {u[2]})\n"
+        + "\n".join(rows) + "\n"
     )
 
 
@@ -104,14 +113,21 @@ def _write_transport(case: Path, suth_as=SUTH_AS, suth_ts=SUTH_TS):
     )
 
 
-def _write_forces(case: Path, cd, cl, tname="500"):
+def _write_forces(case: Path, cd, cl, tname="500", rows=None):
+    """Default history has a pre-snapshot row AND a post-snapshot junk row:
+    only snapshot-time selection (Codex R0 P1) reads the correct values."""
     d = case / "postProcessing" / "forceCoeffs1" / tname
     d.mkdir(parents=True, exist_ok=True)
+    if rows is None:
+        rows = [
+            f"400 {cd} {cl * 0.99} 0.01",
+            f"500 {cd} {cl} 0.01",
+            f"600 {cd * 5.0} {cl * 1.5} 0.01",   # later junk state: must be ignored
+        ]
     (d / "coefficient.dat").write_text(
         "# Force coefficients\n"
         "# Time Cd Cl Cm\n"
-        f"400 {cd} {cl * 0.99} 0.01\n"
-        f"500 {cd} {cl} 0.01\n"
+        + "\n".join(rows) + "\n"
     )
 
 
@@ -137,12 +153,14 @@ def build_case(
     cl_fc=None,
     cd_fc=0.0168,
     alpha_for_cl=ALPHA_DEG,
+    x_offset=0.0,
+    x_scale=1.0,
 ) -> Path:
     """Self-consistent synthetic case. cl_fc defaults to the contour-integrated
     pressure Cl of the SAME synthetic Cp field (so C6 holds by construction);
     doctored cases override individual pieces."""
     case = tmp_path / "case"
-    chain = profile_chain(cp_upper, cp_lower)
+    chain = profile_chain(cp_upper, cp_lower, x_offset=x_offset, x_scale=x_scale)
     _write_probe(case, **(probe or {}))
     _write_declared(case, **(declared or {}))
     _write_transport(case, **(transport or {}))
@@ -362,3 +380,57 @@ class TestFailClosed:
         case = build_case(tmp_path, probe={"p": -100.0})
         with pytest.raises(TransonicExtractionError, match="non-physical measured"):
             _extract(case)
+
+
+class TestSnapshotAlignment:
+    """Codex V73.A R0 P1: every judged quantity from ONE solver state."""
+
+    def test_forces_taken_at_snapshot_not_last_row(self, tmp_path):
+        # default fixture carries a junk t=600 row after the t=500 snapshot;
+        # the matching t=500 row must win (cl_p == cl_fc only holds there)
+        m = _extract(build_case(tmp_path))
+        assert m.cl_p == pytest.approx(m.cl_fc, rel=1e-6)
+        assert m.cd_fc == pytest.approx(0.0168, abs=1e-12)
+
+    def test_no_forces_row_at_snapshot_raises(self, tmp_path):
+        case = build_case(tmp_path)
+        dat = case / "postProcessing" / "forceCoeffs1" / "500" / "coefficient.dat"
+        dat.write_text("# Time Cd Cl Cm\n400 0.0168 0.5 0.01\n450 0.0168 0.5 0.01\n")
+        with pytest.raises(TransonicExtractionError, match="mix solver states"):
+            _extract(case)
+
+    def test_probe_row_selected_at_snapshot(self, tmp_path):
+        # earlier junk probe row (half velocity) must be ignored
+        junk = f"400 {P_INF} {T_INF} ({UX * 0.5} 0.0 {UZ * 0.5})"
+        case = build_case(tmp_path, probe={"extra_rows": (junk,)})
+        m = _extract(case)
+        assert m.measured.mach == pytest.approx(MACH, abs=1e-6)
+
+    def test_no_probe_row_at_snapshot_raises(self, tmp_path):
+        case = build_case(tmp_path)
+        dat = (case / "postProcessing" / "freestreamProbe" / "500"
+               / "surfaceFieldValue.dat")
+        dat.write_text(
+            "# Time areaAverage(p) areaAverage(T) areaAverage(U)\n"
+            f"400 {P_INF} {T_INF} ({UX} 0.0 {UZ})\n"
+        )
+        with pytest.raises(TransonicExtractionError, match="mix solver states"):
+            _extract(case)
+
+
+class TestCoordinateOrigin:
+    """Codex V73.A R0 P2: x/c must be LE-anchored, not origin-anchored."""
+
+    def test_translated_geometry_is_invariant(self, tmp_path):
+        m0 = _extract(build_case(tmp_path))
+        mt = _extract(build_case(tmp_path / "shifted", x_offset=0.37))
+        assert mt.shock_xc == pytest.approx(m0.shock_xc, abs=1e-9)
+        assert mt.min_cp_upper == pytest.approx(m0.min_cp_upper, abs=1e-9)
+        assert mt.cl_p == pytest.approx(m0.cl_p, rel=1e-9)
+        # x/c domain stays [0, 1] regardless of where the mesh sits in x
+        assert min(x for x, _ in mt.upper_cp) == pytest.approx(0.0, abs=1e-9)
+        assert max(x for x, _ in mt.upper_cp) == pytest.approx(1.0, abs=1e-9)
+
+    def test_chord_mismatched_geometry_rejected(self, tmp_path):
+        with pytest.raises(TransonicExtractionError, match="declared chord"):
+            _extract(build_case(tmp_path, x_scale=1.5))

@@ -9,8 +9,8 @@ autonomous_governance: true   # sponsor mandate 2026-06-10: "批准你全权推�
 confidence: high
 date: 2026-06-10
 loop_auditor: "FLAG (design review, pre-implementation) — all 7 must-fixes adopted, see §4"
-codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v73a_scaffold_R0.md
-codex_review_relay: 86gs (gpt-5.4 xhigh)
+codex_tool_report_path: reports/codex_tool_reports/2026-06-10_v73a_scaffold_R{0,1}.md
+codex_review_relay: 86gs (gpt-5.4 xhigh · R0 CHANGES_REQUIRED [P1 snapshot-mixing, P2 origin-dependent x/c, P2 missing declared-gold leg] all fixed)
 ---
 
 # DEC-V61-238 · V73.A transonic-SBLI scaffold + civil-aircraft scope pivot

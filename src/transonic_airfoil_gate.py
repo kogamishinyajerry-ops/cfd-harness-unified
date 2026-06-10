@@ -5,13 +5,14 @@ deg corrected, Re_c=6.5e6 — AGARD AR-138; civil-aircraft cruise aerodynamics).
 
 Tier 1 — SANITY gates (closed-form, re-derived in tests, ALWAYS enforced)
 -------------------------------------------------------------------------
-  C0a freestream Mach     three-way: |M_meas - M_decl| <= atol AND
-                          |M_meas - M_gold| <= atol. M_meas comes from an
-                          upstream PROBE of the SOLVED field — a doctored 0/
-                          file alone cannot satisfy this (loop-auditor F1;
-                          wedge-gate measured-freestream precedent).
-  C0b incidence           |alpha_meas - alpha_gold| <= atol_deg AND
-                          |alpha_meas - alpha_decl| <= atol_deg
+  C0a freestream Mach     ALL THREE pairwise legs within atol:
+                          |M_meas - M_decl|, |M_meas - M_gold|, |M_decl -
+                          M_gold| (Codex R0 P2: without the declared-gold leg
+                          a measured value sitting between them hides a 2x
+                          drift). M_meas comes from an upstream PROBE of the
+                          SOLVED field — a doctored 0/ file alone cannot
+                          satisfy this (loop-auditor F1; wedge precedent).
+  C0b incidence           same three pairwise legs on alpha within atol_deg
   C0c Reynolds (rough)    |Re_decl - Re_gold| / Re_gold <= rtol, with
                           Re_decl = rho_inf |U| c / mu(T_inf) from the case's
                           own transport dict (catches a wrong-fluid setup)
@@ -323,13 +324,20 @@ def gate_transonic_airfoil_against_gold(
     m_decl = metrics.declared.mach
 
     # --- tier-1 sanity gates -------------------------------------------------
+    # all THREE pairwise legs (Codex V73.A R0 P2: with only the two
+    # measured-* legs, a measured value sitting between declared and gold
+    # lets a declared operating point drift to 2x the band undetected)
     freestream_mach_ok = (
         abs(m_meas - m_decl) <= tol["mach_atol"]
         and abs(m_meas - op["mach"]) <= tol["mach_atol"]
+        and abs(m_decl - op["mach"]) <= tol["mach_atol"]
     )
+    a_meas = metrics.measured.alpha_deg
+    a_decl = metrics.declared.alpha_deg
     alpha_ok = (
-        abs(metrics.measured.alpha_deg - op["alpha_deg"]) <= tol["alpha_atol_deg"]
-        and abs(metrics.measured.alpha_deg - metrics.declared.alpha_deg) <= tol["alpha_atol_deg"]
+        abs(a_meas - op["alpha_deg"]) <= tol["alpha_atol_deg"]
+        and abs(a_meas - a_decl) <= tol["alpha_atol_deg"]
+        and abs(a_decl - op["alpha_deg"]) <= tol["alpha_atol_deg"]
     )
     reynolds_ok = (
         abs(metrics.reynolds_declared - op["reynolds"]) / op["reynolds"]

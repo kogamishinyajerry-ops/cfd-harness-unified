@@ -57,6 +57,9 @@ MAX_CROSSINGS: int = 2
 # Contour chaining: a step longer than this multiple of the median step
 # means the chain jumped across the profile (corrupt/duplicate points).
 CHAIN_JUMP_FACTOR: float = 8.0
+# Surface x-extent must match the declared chord within this relative
+# tolerance, else the x/c normalization would be silently wrong.
+_CHORD_SPAN_RTOL: float = 0.02
 
 
 class TransonicExtractionError(ValueError):
@@ -152,11 +155,19 @@ def _declared_uniform_vector(path: Path) -> Tuple[float, float, float]:
 _PROBE_VEC_RE = re.compile(r"\(\s*([0-9eE+.\-]+)\s+([0-9eE+.\-]+)\s+([0-9eE+.\-]+)\s*\)")
 
 
-def _parse_freestream_probe(case_dir: Path) -> Tuple[float, float, Tuple[float, float, float]]:
-    """Last row of postProcessing/freestreamProbe/<t>/surfaceFieldValue.dat.
+def _snapshot_atol(t_snap: float) -> float:
+    """Time-matching tolerance for snapshot alignment (Codex V73.A R0 P1)."""
+    return max(1.0e-9, 1.0e-6 * max(1.0, abs(t_snap)))
+
+
+def _parse_freestream_probe(case_dir: Path, t_snap: float
+                            ) -> Tuple[float, float, Tuple[float, float, float]]:
+    """Row of postProcessing/freestreamProbe/<t>/surfaceFieldValue.dat whose
+    Time matches the SURFACE snapshot time (Codex V73.A R0 P1: every judged
+    quantity must come from the same solver state — never "last row").
 
     Contract (the V73.B case template emits exactly this): name-based header
-    with areaAverage(p), areaAverage(T), areaAverage(U); U as '(ux uy uz)'.
+    with Time, areaAverage(p), areaAverage(T), areaAverage(U); U as '(ux uy uz)'.
     """
     parent = case_dir / "postProcessing" / "freestreamProbe"
     tdir = _latest_time_dir(parent)
@@ -169,7 +180,7 @@ def _parse_freestream_probe(case_dir: Path) -> Tuple[float, float, Tuple[float, 
     if not dat.is_file():
         raise TransonicExtractionError(f"missing {dat}")
     header_cols: List[str] = []
-    last: Optional[str] = None
+    rows: List[str] = []
     for line in dat.read_text(encoding="utf-8").splitlines():
         s = line.strip()
         if s.startswith("#"):
@@ -178,23 +189,57 @@ def _parse_freestream_probe(case_dir: Path) -> Tuple[float, float, Tuple[float, 
                 header_cols = cols
             continue
         if s:
-            last = s
-    if not header_cols or last is None:
+            rows.append(s)
+    if not header_cols or not rows:
         raise TransonicExtractionError(f"{dat}: missing header or data rows")
+    if "Time" not in header_cols:
+        raise TransonicExtractionError(f"{dat}: header has no Time column")
+    i_time = header_cols.index("Time")
     i_p = header_cols.index("areaAverage(p)")
     i_t = header_cols.index("areaAverage(T)")
     i_u = header_cols.index("areaAverage(U)")
-    vecs = _PROBE_VEC_RE.findall(last)
-    scalars = re.sub(_PROBE_VEC_RE, "VEC", last).split()
-    # scalars list now has 'VEC' placeholders where vectors were
+
+    best: Optional[Tuple[float, List[str], List[Tuple[str, str, str]]]] = None
+    for row in rows:
+        vecs = _PROBE_VEC_RE.findall(row)
+        scalars = re.sub(_PROBE_VEC_RE, "VEC", row).split()
+        try:
+            t_row = float(scalars[i_time])
+        except (ValueError, IndexError):
+            continue
+        dt = abs(t_row - t_snap)
+        if best is None or dt < best[0]:
+            best = (dt, scalars, vecs)
+    if best is None or best[0] > _snapshot_atol(t_snap):
+        raise TransonicExtractionError(
+            f"{dat}: no probe row at the surface snapshot time t={t_snap:g} "
+            f"(closest {'none' if best is None else f'{best[0]:.3g} away'}) — "
+            f"refusing to mix solver states (fail-closed)"
+        )
+    _dt, scalars, vecs = best
     try:
         p = float(scalars[i_p])
         t = float(scalars[i_t])
         n_vec_before = sum(1 for c in scalars[:i_u] if c == "VEC")
         u = tuple(float(v) for v in vecs[n_vec_before])
     except (ValueError, IndexError) as exc:
-        raise TransonicExtractionError(f"{dat}: cannot parse last row") from exc
+        raise TransonicExtractionError(
+            f"{dat}: cannot parse probe row at t={t_snap:g}"
+        ) from exc
     return p, t, u  # type: ignore[return-value]
+
+
+def _select_at_time(times: List[float], t_snap: float, what: str) -> int:
+    """Index of the history row matching the snapshot time (fail-closed)."""
+    if not times:
+        raise TransonicExtractionError(f"{what}: empty history")
+    idx = min(range(len(times)), key=lambda i: abs(times[i] - t_snap))
+    if abs(times[idx] - t_snap) > _snapshot_atol(t_snap):
+        raise TransonicExtractionError(
+            f"{what}: no row at the surface snapshot time t={t_snap:g} "
+            f"(closest {times[idx]:g}) — refusing to mix solver states"
+        )
+    return idx
 
 
 def _freestream_state(p: float, t: float, u: Tuple[float, float, float],
@@ -279,12 +324,13 @@ def order_contour(points: List[Tuple[float, float, float]]
 
 
 def split_surfaces(chain: List[Tuple[float, float, float]]
-                   ) -> Tuple[List[Tuple[float, float]], List[Tuple[float, float]]]:
-    """Split the ordered closed contour at LE (min x) into two branches;
-    upper = branch with the higher mean z. Returns (upper, lower) as
-    (x, p) pairs? -- NO: returns (x, z, p) reduced to (x, p) later; here we
-    keep (x, z, p) split, sorted by x ascending, as (x, p) pairs plus z used
-    for the caller's geometry integration."""
+                   ) -> Tuple[List[Tuple[float, float, float]], List[Tuple[float, float, float]]]:
+    """Split the ordered closed contour at the LE (min x) into two branches,
+    upper = branch with the higher MEAN z (never a per-point z-sign test —
+    RAE 2822's aft-loaded lower surface crosses z=0, loop-auditor F6).
+
+    Returns (upper, lower) as (x, z, value) triples sorted by x ascending;
+    the third element is whatever the chain carried (p or Cp)."""
     i_le = min(range(len(chain)), key=lambda i: chain[i][0])
     branch_a = chain[: i_le + 1]
     branch_b = chain[i_le:]
@@ -400,8 +446,23 @@ def extract_transonic_airfoil(
     if chord <= 0:
         raise TransonicExtractionError(f"non-physical chord {chord}")
 
-    # freestream: measured (solved field) + declared (0/ BCs)
-    p_m, t_m, u_m = _parse_freestream_probe(case_dir)
+    # The SURFACE write defines the judged snapshot; probe + forceCoeffs rows
+    # are then selected AT that time (Codex V73.A R0 P1: a forceCoeffs FO
+    # writing every step must not contribute a later state than the Cp field).
+    sdir = _latest_time_dir(case_dir / "postProcessing" / surface_dirname)
+    if sdir is None:
+        raise TransonicExtractionError(
+            f"no surface output under postProcessing/{surface_dirname}"
+        )
+    try:
+        t_snap = float(sdir.name)
+    except ValueError as exc:
+        raise TransonicExtractionError(
+            f"surface time directory {sdir.name!r} is not numeric"
+        ) from exc
+
+    # freestream: measured (solved field, at t_snap) + declared (0/ BCs)
+    p_m, t_m, u_m = _parse_freestream_probe(case_dir, t_snap)
     measured = _freestream_state(p_m, t_m, u_m, gamma, r_specific, "measured")
     declared = _freestream_state(
         _declared_uniform_scalar(case_dir / "0" / "p"),
@@ -413,7 +474,7 @@ def extract_transonic_airfoil(
     umag_d = math.sqrt(sum(c * c for c in declared.u_vec))
     reynolds = declared.rho_inf * umag_d * chord / mu
 
-    # forces from the solver FO (cross-checked below by ∮Cp)
+    # forces from the solver FO at t_snap (cross-checked below by ∮Cp)
     fc_parent = case_dir / "postProcessing" / "forceCoeffs1"
     tdir = _latest_time_dir(fc_parent)
     if tdir is None:
@@ -429,16 +490,14 @@ def extract_transonic_airfoil(
         raise TransonicExtractionError(f"forceCoeffs parse failed: {exc}") from exc
     if not times:
         raise TransonicExtractionError(f"{dat}: empty coefficient history")
-    cl_fc, cd_fc = cls[-1], cds[-1]
+    i_fc = _select_at_time(times, t_snap, f"{dat}")
+    cl_fc, cd_fc = cls[i_fc], cds[i_fc]
     if not all(math.isfinite(v) for v in (cl_fc, cd_fc)):
-        raise TransonicExtractionError(f"{dat}: non-finite final coefficients")
+        raise TransonicExtractionError(
+            f"{dat}: non-finite coefficients at t={t_snap:g}"
+        )
 
     # surface Cp (compressible normalization off the MEASURED freestream)
-    sdir = _latest_time_dir(case_dir / "postProcessing" / surface_dirname)
-    if sdir is None:
-        raise TransonicExtractionError(
-            f"no surface output under postProcessing/{surface_dirname}"
-        )
     rows = _read_rows_xyzv(sdir / raw_filename)
     if any(r[3] <= 0 for r in rows):
         raise TransonicExtractionError(
@@ -449,9 +508,23 @@ def extract_transonic_airfoil(
     dedup = _dedup_span(rows)
     chain = order_contour(dedup)
     chain_cp = [(x, z, (p - measured.p_inf) / q_inf) for x, z, p in chain]
+
+    # x/c is normalized against the surface's OWN leading edge, not the
+    # global origin (Codex V73.A R0 P2: a translated-but-correct mesh must
+    # not shift the Cp profile / shock position). The x-extent must agree
+    # with the declared chord — a scaled/partial surface is rejected.
+    x_le = min(x for x, _z, _cp in chain_cp)
+    x_te = max(x for x, _z, _cp in chain_cp)
+    span_x = x_te - x_le
+    if abs(span_x - chord) / chord > _CHORD_SPAN_RTOL:
+        raise TransonicExtractionError(
+            f"surface x-extent {span_x:.6g} disagrees with declared chord "
+            f"{chord:g} by more than {_CHORD_SPAN_RTOL:.0%} — geometry/chord "
+            f"mismatch (fail-closed; x/c normalization would be wrong)"
+        )
     upper3, lower3 = split_surfaces(chain_cp)
-    upper_cp = [(x / chord, cp) for x, _z, cp in upper3]
-    lower_cp = [(x / chord, cp) for x, _z, cp in lower3]
+    upper_cp = [((x - x_le) / chord, cp) for x, _z, cp in upper3]
+    lower_cp = [((x - x_le) / chord, cp) for x, _z, cp in lower3]
 
     all_cp = [cp for _x, _z, cp in chain_cp]
     min_cp_upper = min(cp for _x, cp in upper_cp)

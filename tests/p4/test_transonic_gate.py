@@ -121,6 +121,33 @@ class TestTier1SanityGates:
         assert not r.freestream_mach_ok
         assert not r.sanity_passed
 
+    def test_c0a_declared_gold_leg_bites_with_measured_in_between(self, tmp_path):
+        """Codex R0 P2: measured M=0.738 sits within atol of BOTH declared
+        (0.742) and gold (0.734) — only the declared-gold leg catches the
+        2x drift of the declared operating point."""
+        f_meas, f_decl = 0.738 / 0.734, 0.742 / 0.734
+        case = build_case(
+            tmp_path,
+            probe={"u": (UX * f_meas, 0.0, UZ * f_meas)},
+            declared={"u": (UX * f_decl, 0.0, UZ * f_decl)},
+        )
+        r = _gate(case, _gold(tmp_path))
+        assert not r.freestream_mach_ok
+        assert not r.sanity_passed
+
+    def test_c0b_declared_gold_leg_bites_with_measured_in_between(self, tmp_path):
+        # alpha_meas = gold + 0.15 (inside both measured legs), alpha_decl =
+        # gold + 0.30 (outside the declared-gold leg)
+        case = build_case(
+            tmp_path,
+            probe={"u": _rotated(ALPHA_DEG + 0.15)},
+            declared={"u": _rotated(ALPHA_DEG + 0.30)},
+        )
+        r = _gate(case, _gold(tmp_path))
+        assert r.freestream_mach_ok, "|U| unchanged on both sides"
+        assert not r.alpha_ok
+        assert not r.sanity_passed
+
     def test_c0b_wrong_incidence_bites(self, tmp_path):
         u = _rotated(ALPHA_DEG + 1.2)
         case = build_case(tmp_path, probe={"u": u}, declared={"u": u})
