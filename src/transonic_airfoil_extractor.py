@@ -57,9 +57,14 @@ MAX_CROSSINGS: int = 2
 # Contour chaining: a step longer than this multiple of the median step
 # means the chain jumped across the profile (corrupt/duplicate points).
 CHAIN_JUMP_FACTOR: float = 8.0
-# Surface x-extent must match the declared chord within this relative
-# tolerance, else the x/c normalization would be silently wrong.
-_CHORD_SPAN_RTOL: float = 0.02
+# Surface x-extent vs declared chord: the raw file samples FACE CENTRES,
+# which sit inboard of the true LE/TE on a coarse mesh — the span can
+# legitimately fall SHORT of the chord by discretization (Codex R1 P2),
+# but it can never legitimately EXCEED it. Asymmetric band: generous on
+# the short side (still catches partial/scaled surfaces), tight on the
+# long side.
+_CHORD_SPAN_UNDER_RTOL: float = 0.10
+_CHORD_SPAN_OVER_RTOL: float = 0.02
 
 
 class TransonicExtractionError(ValueError):
@@ -208,7 +213,10 @@ def _parse_freestream_probe(case_dir: Path, t_snap: float
         except (ValueError, IndexError):
             continue
         dt = abs(t_row - t_snap)
-        if best is None or dt < best[0]:
+        # <= so the LAST row wins ties: restarted runs append duplicate
+        # Time rows and only the post-restart one matches the fresh surface
+        # write (Codex V73.A R1 P1)
+        if best is None or dt <= best[0]:
             best = (dt, scalars, vecs)
     if best is None or best[0] > _snapshot_atol(t_snap):
         raise TransonicExtractionError(
@@ -230,11 +238,20 @@ def _parse_freestream_probe(case_dir: Path, t_snap: float
 
 
 def _select_at_time(times: List[float], t_snap: float, what: str) -> int:
-    """Index of the history row matching the snapshot time (fail-closed)."""
+    """Index of the history row matching the snapshot time (fail-closed).
+
+    Ties pick the LAST matching row: restarted runs append duplicate Time
+    rows, and only the post-restart one belongs to the fresh surface write
+    (Codex V73.A R1 P1).
+    """
     if not times:
         raise TransonicExtractionError(f"{what}: empty history")
-    idx = min(range(len(times)), key=lambda i: abs(times[i] - t_snap))
-    if abs(times[idx] - t_snap) > _snapshot_atol(t_snap):
+    idx, best = 0, math.inf
+    for i, t in enumerate(times):
+        dt = abs(t - t_snap)
+        if dt <= best:
+            best, idx = dt, i
+    if best > _snapshot_atol(t_snap):
         raise TransonicExtractionError(
             f"{what}: no row at the surface snapshot time t={t_snap:g} "
             f"(closest {times[idx]:g}) — refusing to mix solver states"
@@ -516,11 +533,14 @@ def extract_transonic_airfoil(
     x_le = min(x for x, _z, _cp in chain_cp)
     x_te = max(x for x, _z, _cp in chain_cp)
     span_x = x_te - x_le
-    if abs(span_x - chord) / chord > _CHORD_SPAN_RTOL:
+    if (span_x > chord * (1.0 + _CHORD_SPAN_OVER_RTOL)
+            or span_x < chord * (1.0 - _CHORD_SPAN_UNDER_RTOL)):
         raise TransonicExtractionError(
-            f"surface x-extent {span_x:.6g} disagrees with declared chord "
-            f"{chord:g} by more than {_CHORD_SPAN_RTOL:.0%} — geometry/chord "
-            f"mismatch (fail-closed; x/c normalization would be wrong)"
+            f"surface x-extent {span_x:.6g} outside "
+            f"[{1.0 - _CHORD_SPAN_UNDER_RTOL:.0%}, "
+            f"{1.0 + _CHORD_SPAN_OVER_RTOL:.0%}] of declared chord {chord:g} "
+            f"— geometry/chord mismatch (fail-closed; face-centre sampling "
+            f"may shrink the span, never extend it)"
         )
     upper3, lower3 = split_surfaces(chain_cp)
     upper_cp = [((x - x_le) / chord, cp) for x, _z, cp in upper3]

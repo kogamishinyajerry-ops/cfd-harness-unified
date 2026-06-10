@@ -417,6 +417,28 @@ class TestSnapshotAlignment:
         with pytest.raises(TransonicExtractionError, match="mix solver states"):
             _extract(case)
 
+    def test_duplicate_probe_rows_prefer_post_restart_last(self, tmp_path):
+        """Codex R1 P1: a restarted run appends a second row at the SAME
+        time; the stale pre-restart row (half velocity) must lose the tie."""
+        stale = f"500 {P_INF} {T_INF} ({UX * 0.5} 0.0 {UZ * 0.5})"
+        case = build_case(tmp_path, probe={"extra_rows": (stale,)})
+        m = _extract(case)
+        assert m.measured.mach == pytest.approx(MACH, abs=1e-6)
+
+    def test_duplicate_forces_rows_prefer_post_restart_last(self, tmp_path):
+        case = build_case(tmp_path)
+        dat = case / "postProcessing" / "forceCoeffs1" / "500" / "coefficient.dat"
+        good = dat.read_text()
+        # prepend a stale duplicate-time row BEFORE the good t=500 row
+        lines = good.splitlines()
+        idx = next(i for i, l in enumerate(lines) if l.startswith("500 "))
+        lines.insert(idx, "500 0.09 1.9 0.01")  # stale pre-restart junk
+        dat.write_text("\n".join(lines) + "\n")
+        m = _extract(case)
+        assert m.cl_p == pytest.approx(m.cl_fc, rel=1e-6), (
+            "the post-restart (last) duplicate row must win"
+        )
+
 
 class TestCoordinateOrigin:
     """Codex V73.A R0 P2: x/c must be LE-anchored, not origin-anchored."""
@@ -434,3 +456,21 @@ class TestCoordinateOrigin:
     def test_chord_mismatched_geometry_rejected(self, tmp_path):
         with pytest.raises(TransonicExtractionError, match="declared chord"):
             _extract(build_case(tmp_path, x_scale=1.5))
+
+    def test_face_centre_shrunk_span_accepted(self, tmp_path):
+        """Codex R1 P2: raw rows are FACE CENTRES — on a coarse mesh the
+        span legitimately falls a few % short of the chord. 5% shrink must
+        extract cleanly (LE-anchored x/c just spans [0, 0.95])."""
+        m = _extract(build_case(tmp_path / "shrunk", x_scale=0.95))
+        assert m.shock_decline_reason is None
+        assert max(x for x, _ in m.upper_cp) == pytest.approx(0.95, abs=1e-9)
+
+    def test_partial_surface_still_rejected(self, tmp_path):
+        # 15% short is beyond any face-centre effect: partial surface
+        with pytest.raises(TransonicExtractionError, match="declared chord"):
+            _extract(build_case(tmp_path, x_scale=0.85))
+
+    def test_overlong_span_still_rejected(self, tmp_path):
+        # the span can never legitimately EXCEED the chord: tight 2% gate
+        with pytest.raises(TransonicExtractionError, match="declared chord"):
+            _extract(build_case(tmp_path, x_scale=1.05))
