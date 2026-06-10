@@ -54,8 +54,12 @@ ALPHA_WET_THRESHOLD: float = 0.5
 DEFAULT_MIN_WET_CELLS: int = 3
 
 # Absolute tolerance when matching a requested sample time to an on-disk
-# OpenFOAM time directory name (adjustableRunTime write snapping).
-_TIME_DIR_ATOL: float = 1.0e-3
+# OpenFOAM time directory name. Sized to absorb DIRECTORY-NAME FORMATTING
+# noise ONLY (timePrecision rounding of a ~0.1 s value: <=5e-7) — NOT
+# write-control sloppiness: a run that writes 0.086 instead of the pinned
+# 0.086293 (~1% of the physical time at T=1) must FAIL CLOSED, never be
+# silently graded as the pinned sample (Codex V72.A R0 P2-2).
+_TIME_DIR_ATOL: float = 1.0e-6
 
 
 class DamBreakExtractionError(ValueError):

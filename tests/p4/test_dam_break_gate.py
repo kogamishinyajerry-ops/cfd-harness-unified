@@ -206,6 +206,15 @@ class TestTier2ConsumptionTriad:
         r = gate_dam_break_against_gold(_sane_case(tmp_path), _gold(tmp_path, bad))
         assert r.tier2_mode == "PROVISIONAL" and not r.coverage_eligible
 
+    def test_incomplete_anchor_set_cannot_enforce(self, tmp_path):
+        # Codex R0 P2-1: VERIFIED with only T=1.0 digitized (T=2.0 missing)
+        # must NOT enforce — one-point match must never flip coverage
+        bad = dict(VERIFIED_TIER2)
+        bad["candidates"] = [{"T": 1.0, "Z": 1.40}]
+        r = gate_dam_break_against_gold(_sane_case(tmp_path), _gold(tmp_path, bad))
+        assert r.tier2_mode == "PROVISIONAL" and not r.coverage_eligible
+        assert "missing sampled T" in r.summary
+
 
 class TestGoldFailClosed:
     def test_wrong_aspect_ratio_gold_is_rejected(self, tmp_path):

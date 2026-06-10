@@ -146,7 +146,9 @@ def _geometry(doc: Dict[str, Any]) -> Tuple[float, float, List[float]]:
 # Tier-2 consumption rules (loop-auditor F2: three pins, fail-closed)
 # --------------------------------------------------------------------------
 
-def _tier2_mode(doc: Dict[str, Any], tolerance: float) -> Tuple[str, List[str]]:
+def _tier2_mode(
+    doc: Dict[str, Any], tolerance: float, positive_T: List[float]
+) -> Tuple[str, List[str]]:
     notes: List[str] = []
     tier2 = doc.get("tier2_anchor") or {}
     status = tier2.get("anchor_verification")
@@ -179,6 +181,17 @@ def _tier2_mode(doc: Dict[str, Any], tolerance: float) -> Tuple[str, List[str]]:
                 f"REJECTED_ANCHOR (gold corrupt; loop-auditor F1)"
             )
             return "REJECTED_ANCHOR", notes
+    # Codex V72.A R0 P2-1: a VERIFIED-but-incomplete anchor set (e.g. only
+    # T=1.0 digitized) must not enforce — coverage would flip on a one-point
+    # match while the contract samples both positive T. Fail closed.
+    cand_T = {float(c["T"]) for c in candidates}
+    missing_T = [T for T in positive_T if T not in cand_T]
+    if missing_T:
+        notes.append(
+            f"tier-2 VERIFIED but candidates missing sampled T {missing_T} -> "
+            f"PROVISIONAL (incomplete anchor set must not promote coverage)"
+        )
+        return "PROVISIONAL", notes
     return "ENFORCED", notes
 
 
@@ -232,7 +245,7 @@ def gate_dam_break_against_gold(
     )
 
     # --- tier-2 (consumer-side enforced) --------------------------------------
-    tier2_mode, tier2_notes = _tier2_mode(doc, tolerance)
+    tier2_mode, tier2_notes = _tier2_mode(doc, tolerance, positive_T)
     tier2_passed: Optional[bool] = None
     if tier2_mode == "ENFORCED":
         checks = []

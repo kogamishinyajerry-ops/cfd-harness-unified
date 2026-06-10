@@ -105,10 +105,19 @@ class TestFailClosed:
             _extract(case, [0.172586])
 
     def test_ambiguous_time_dirs_raise(self, tmp_path):
+        # same numeric time, two formatting variants -> ambiguous, fail-closed
         alpha = [1.0] * 8
-        case = _case(tmp_path, {"0.0863": alpha, "0.08631": alpha})
+        case = _case(tmp_path, {"0.086293": alpha, "0.0862930": alpha})
         with pytest.raises(DamBreakExtractionError, match="ambiguous"):
-            _extract(case, [0.0863])
+            _extract(case, [0.086293])
+
+    def test_off_target_write_time_fails_closed(self, tmp_path):
+        # Codex R0 P2-2: a run that wrote 0.086 instead of the pinned 0.086293
+        # (~1% of the physical time) must NOT be silently graded as the sample
+        alpha = [1.0] * 8
+        case = _case(tmp_path, {"0.086": alpha})
+        with pytest.raises(DamBreakExtractionError, match="no time directory"):
+            _extract(case, [0.086293])
 
     def test_missing_volumes_raises_no_uniform_fallback(self, tmp_path):
         case = _case(tmp_path, {"0.086293": [1.0] * 8})
