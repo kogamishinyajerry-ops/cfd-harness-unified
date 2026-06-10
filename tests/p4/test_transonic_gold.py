@@ -71,7 +71,7 @@ class TestGoldPins:
     def test_quantity_and_id(self, doc):
         assert doc["quantity"] == "transonic_airfoil_sbli"
         assert doc["case_info"]["id"] == "rae2822_case9"
-        assert doc["case_info"]["validation_status"] == "SCAFFOLD_AUTHORED"
+        assert doc["case_info"]["validation_status"] == "LIVE_PROBE_V73B"
 
     def test_operating_point_corrected_values(self, doc):
         op = doc["operating_point"]
@@ -82,20 +82,36 @@ class TestGoldPins:
         assert op["gamma"] == pytest.approx(1.4)
         assert op["r_specific_J_kgK"] == pytest.approx(287.058)
 
-    def test_operating_point_is_declared_not_verified(self, doc):
-        assert doc["operating_point_verification"] == "DECLARED-NOT-VERIFIED"
-        dispute = doc["user_adjudication_pending"]
-        assert "0.730" in dispute and "0.734" in dispute, (
-            "the nominal-vs-corrected dispute must stay visible until adjudicated"
-        )
+    def test_operating_point_resolved_with_audit_trail(self, doc):
+        # V73.B (DEC-V61-240): corrected point adopted; the adjudication
+        # string must keep the decision basis + override right visible
+        assert doc["operating_point_verification"] == "CROSS-CONFIRMED-SECONDARY"
+        adj = doc["operating_point_adjudication"]
+        assert "0.734" in adj and "2.79" in adj
+        assert "DEC-V61-240" in adj
+        assert "override" in adj, "sponsor override right must stay visible"
 
-    def test_tier2_anchor_is_null_and_not_verified(self, doc):
+    def test_tier2_anchor_numerized_with_provenance(self, doc):
+        # V73.B (DEC-V61-240): anchors numerized per the pre-registered
+        # V73.A criterion (trusted reproductions). VERIFIED without a
+        # provenance block would be refused by the gate meta-gate — pin
+        # both sides here so the YAML cannot drift apart from the code.
         t2 = doc["tier2_anchor"]
-        assert t2["anchor_verification"] == "DECLARED-NOT-VERIFIED"
-        assert t2["provenance"] is None
-        assert all(c["value"] is None for c in t2["candidates"]), (
-            "undigitized ballparks must stay prose, never values (fake-anchor lesson)"
+        assert t2["anchor_verification"] == "VERIFIED"
+        prov = t2["provenance"]
+        # source + digitization are the GATE-consumed keys (_tier2_mode
+        # refuses VERIFIED without both) — pin the seam contract here
+        assert prov and "AGARD" in prov["source"]
+        assert "not directly digitized" in prov["digitization"], (
+            "the primary-source honesty boundary must stay visible"
         )
+        assert len(prov["carriers"]) >= 3, "3 independent secondary carriers"
+        values = {c["qoi"]: c["value"] for c in t2["candidates"]}
+        assert values["cl"] == pytest.approx(0.803)
+        assert values["shock_xc"] == pytest.approx(0.525), (
+            "TABULATED shock location, not the ~0.55 prose figure"
+        )
+        assert values["cd"] == pytest.approx(0.0168)
 
     def test_tier2_role_skeleton_matches_code_pin(self, doc):
         roles = {c["qoi"]: c["role"] for c in doc["tier2_anchor"]["candidates"]}

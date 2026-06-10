@@ -57,7 +57,7 @@ The workbench ships with 11 cases:
 | naca0012_airfoil | k-omega-SST steady | NASA TMR | External aero anchor |
 | circular_cylinder_wake | k-omega-SST transient | Norberg 1987 | Vortex shedding anchor |
 | rayleigh_benard_convection | buoyantFoam Ra=1e6 | Bénard 1900 | Natural convection anchor |
-| naca0012_transonic | rhoSimpleFoam M=0.8 | AGARD AR-138 | Compressible aero anchor |
+| rae2822_case9 | rhoSimpleFoam M=0.734 (V73.B live probe) | AGARD AR-138 Case 9 | Transonic SBLI anchor (supersedes unbacked naca0012_transonic listing) |
 | apu_bay_ventilation (case_002a · gold_pending) | chtMultiRegionFoam | Industry vendor data | First imported_user case · ⏳ gold pending |
 | (3 more documented in catalog) |
 

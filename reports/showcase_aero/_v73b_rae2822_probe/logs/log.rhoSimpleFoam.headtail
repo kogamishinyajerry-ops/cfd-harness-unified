@@ -1,0 +1,203 @@
+/*---------------------------------------------------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2312                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+Build  : _c39a0f64-20231220 OPENFOAM=2312 version=2312
+Arch   : "LSB;label=32;scalar=64"
+Exec   : rhoSimpleFoam -parallel
+Date   : Jun 10 2026
+Time   : 15:57:00
+Host   : ac8b43f84dc8
+PID    : 227
+I/O    : uncollated
+Case   : /work
+nProcs : 8
+Hosts  :
+(
+    (ac8b43f84dc8 8)
+)
+Pstream initialized with:
+    floatTransfer      : false
+    nProcsSimpleSum    : 0
+    nonBlockingExchange: 0 (tuning: 0)
+    exchange algorithm : 0
+    commsType          : nonBlocking
+    polling iterations : 0
+trapFpe: Floating point exception trapping enabled (FOAM_SIGFPE).
+fileModificationChecking : Monitoring run-time modified files using timeStampMaster (fileModificationSkew 5, maxFileModificationPolls 20)
+allowSystemOperations : Allowing user-supplied system call operations
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+Create time
+
+Create mesh for time = 0
+
+
+SIMPLE: convergence criteria
+    field p	 tolerance 5e-05
+    field U	 tolerance 5e-05
+    field "(k|omega|e)"	 tolerance 5e-05
+
+Reading thermophysical properties
+
+Selecting thermodynamics package 
+{
+    type            hePsiThermo;
+    mixture         pureMixture;
+    transport       sutherland;
+    thermo          hConst;
+    equationOfState perfectGas;
+    specie          specie;
+    energy          sensibleInternalEnergy;
+}
+
+Reading field U
+
+Reading/calculating face flux field phi
+
+pressureControl
+    pMax 77076.618
+    pMin 3853.8309
+
+Creating turbulence model
+
+Selecting turbulence model type RAS
+Selecting RAS turbulence model kOmegaSST
+Selecting patchDistMethod meshWave
+RAS
+{
+    RASModel        kOmegaSST;
+    turbulence      on;
+    printCoeffs     on;
+    alphaK1         0.85;
+    alphaK2         1;
+    alphaOmega1     0.5;
+    alphaOmega2     0.856;
+    gamma1          0.55555556;
+    gamma2          0.44;
+
+[... trimmed ...]
+
+    Cl(r):	0.56562672	0.56567134	-4.4616323e-05	0
+    CmPitch:	-0.12676732	-0.12682847	6.1148794e-05	0
+    CmRoll:	9.7308745e-21	1.9216328e-20	-9.4854532e-21	0
+    CmYaw:	-9.5391419e-20	-6.0544965e-20	-3.4846455e-20	0
+    Cs:	-3.7469704e-21	1.7876726e-19	-1.8251423e-19	0
+    Cs(f):	-9.7264904e-20	2.8838665e-20	-1.2610357e-19	0
+    Cs(r):	9.3517934e-20	1.4992859e-19	-5.641066e-20	0
+
+    writing force and moment coefficient files.
+
+Time = 2625
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 1.5928496e-05, Final residual = 7.4868175e-07, No Iterations 2
+DILUPBiCGStab:  Solving for Uz, Initial residual = 5.0402976e-05, Final residual = 2.9360053e-06, No Iterations 1
+DILUPBiCGStab:  Solving for e, Initial residual = 2.1479324e-05, Final residual = 1.0131925e-06, No Iterations 1
+limitTemperature limitT Lower limited 0 (0%) of cells, with min limit 101
+limitTemperature limitT Upper limited 0 (0%) of cells, with max limit 1000
+limitTemperature limitT Unlimited Tmin 237.35294
+limitTemperature limitT Unlimited Tmax 319.17029
+GAMG:  Solving for p, Initial residual = 6.6439302e-06, Final residual = 9.7164397e-07, No Iterations 19
+GAMG:  Solving for p, Initial residual = 1.8074338e-06, Final residual = 9.7897786e-07, No Iterations 6
+time step continuity errors : sum local = 9.1943848e-06, global = 2.2865211e-06, cumulative = -0.015175915
+DILUPBiCGStab:  Solving for omega, Initial residual = 3.0365782e-07, Final residual = 3.0365782e-07, No Iterations 0
+DILUPBiCGStab:  Solving for k, Initial residual = 1.1205203e-05, Final residual = 8.890859e-07, No Iterations 1
+ExecutionTime = 903.3 s  ClockTime = 909 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.030367511	0.02477007	0.005597441	0
+    Cd(f):	0.015183756	0.012385035	0.0027987205	0
+    Cd(r):	0.015183756	0.012385035	0.0027987205	0
+    Cl:	0.87770741	0.87767436	3.3052751e-05	0
+    Cl(f):	0.31208826	0.31201057	7.7683559e-05	0
+    Cl(r):	0.56561915	0.56566378	-4.4630809e-05	0
+    CmPitch:	-0.12676545	-0.12682661	6.1157184e-05	0
+    CmRoll:	9.7308507e-21	1.9216178e-20	-9.4853277e-21	0
+    CmYaw:	-9.5392264e-20	-6.0545688e-20	-3.4846576e-20	0
+    Cs:	-3.7468694e-21	1.787672e-19	-1.8251407e-19	0
+    Cs(f):	-9.7265699e-20	2.883791e-20	-1.2610361e-19	0
+    Cs(r):	9.351883e-20	1.4992929e-19	-5.6410457e-20	0
+
+    writing force and moment coefficient files.
+
+Time = 2626
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 1.5850865e-05, Final residual = 7.4458862e-07, No Iterations 2
+DILUPBiCGStab:  Solving for Uz, Initial residual = 5.0040792e-05, Final residual = 2.9415008e-06, No Iterations 1
+DILUPBiCGStab:  Solving for e, Initial residual = 2.1394828e-05, Final residual = 1.0086245e-06, No Iterations 1
+limitTemperature limitT Lower limited 0 (0%) of cells, with min limit 101
+limitTemperature limitT Upper limited 0 (0%) of cells, with max limit 1000
+limitTemperature limitT Unlimited Tmin 237.35257
+limitTemperature limitT Unlimited Tmax 319.17027
+GAMG:  Solving for p, Initial residual = 6.6500669e-06, Final residual = 9.6974648e-07, No Iterations 19
+GAMG:  Solving for p, Initial residual = 1.8010361e-06, Final residual = 9.6805639e-07, No Iterations 6
+time step continuity errors : sum local = 9.0639619e-06, global = 2.1763032e-06, cumulative = -0.015173739
+DILUPBiCGStab:  Solving for omega, Initial residual = 2.7895714e-07, Final residual = 2.7895714e-07, No Iterations 0
+DILUPBiCGStab:  Solving for k, Initial residual = 1.1198747e-05, Final residual = 8.8793031e-07, No Iterations 1
+ExecutionTime = 903.41 s  ClockTime = 909 s
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.030367442	0.024769954	0.0055974879	0
+    Cd(f):	0.015183721	0.012384977	0.0027987439	0
+    Cd(r):	0.015183721	0.012384977	0.0027987439	0
+    Cl:	0.8776963	0.87766326	3.3040391e-05	0
+    Cl(f):	0.31208438	0.3120067	7.7685703e-05	0
+    Cl(r):	0.56561192	0.56565656	-4.4645312e-05	0
+    CmPitch:	-0.12676377	-0.12682493	6.1165508e-05	0
+    CmRoll:	9.7308265e-21	1.9216042e-20	-9.4852152e-21	0
+    CmYaw:	-9.539313e-20	-6.0546148e-20	-3.4846983e-20	0
+    Cs:	-3.7467546e-21	1.7876756e-19	-1.8251431e-19	0
+    Cs(f):	-9.7266507e-20	2.8837631e-20	-1.2610414e-19	0
+    Cs(r):	9.3519753e-20	1.4992993e-19	-5.6410174e-20	0
+
+    writing force and moment coefficient files.
+
+Time = 2627
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 1.5790067e-05, Final residual = 7.4319928e-07, No Iterations 2
+DILUPBiCGStab:  Solving for Uz, Initial residual = 4.969786e-05, Final residual = 2.9477215e-06, No Iterations 1
+DILUPBiCGStab:  Solving for e, Initial residual = 2.134133e-05, Final residual = 1.0009382e-06, No Iterations 1
+limitTemperature limitT Lower limited 0 (0%) of cells, with min limit 101
+limitTemperature limitT Upper limited 0 (0%) of cells, with max limit 1000
+limitTemperature limitT Unlimited Tmin 237.35408
+limitTemperature limitT Unlimited Tmax 319.17026
+GAMG:  Solving for p, Initial residual = 6.6067113e-06, Final residual = 9.669059e-07, No Iterations 19
+GAMG:  Solving for p, Initial residual = 1.7809355e-06, Final residual = 9.9514844e-07, No Iterations 5
+time step continuity errors : sum local = 9.2113411e-06, global = 2.1439356e-06, cumulative = -0.015171595
+DILUPBiCGStab:  Solving for omega, Initial residual = 2.5603758e-07, Final residual = 2.5603758e-07, No Iterations 0
+DILUPBiCGStab:  Solving for k, Initial residual = 1.1193166e-05, Final residual = 8.8676838e-07, No Iterations 1
+ExecutionTime = 903.51 s  ClockTime = 909 s
+
+
+SIMPLE solution converged in 2627 iterations
+
+forceCoeffs forceCoeffs1 write:
+    Coefficient	Total	Pressure	Viscous	Internal
+    Cd:	0.030367432	0.024769897	0.0055975351	0
+    Cd(f):	0.015183716	0.012384948	0.0027987675	0
+    Cd(r):	0.015183716	0.012384948	0.0027987675	0
+    Cl:	0.87768597	0.87765295	3.3027859e-05	0
+    Cl(f):	0.31208057	0.31200289	7.7687684e-05	0
+    Cl(r):	0.5656054	0.56565006	-4.4659825e-05	0
+    CmPitch:	-0.12676241	-0.12682359	6.1173755e-05	0
+    CmRoll:	9.7308007e-21	1.9215922e-20	-9.4851213e-21	0
+    CmYaw:	-9.5393931e-20	-6.0546327e-20	-3.4847604e-20	0
+    Cs:	-3.7465392e-21	1.7876833e-19	-1.8251487e-19	0
+    Cs(f):	-9.7267201e-20	2.8837837e-20	-1.2610504e-19	0
+    Cs(r):	9.3520662e-20	1.4993049e-19	-5.640983e-20	0
+
+    writing force and moment coefficient files.
+
+yPlus yPlus1 write:
+    writing field yPlus
+    patch aerofoil y+ : min = 0.022458967, max = 0.71011361, average = 0.30898935
+    functionObjects::MachNo MachNo1 writing field: Ma
+End
+
+Finalising parallel run
+solver exit=0

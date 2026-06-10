@@ -1,0 +1,60 @@
+    boundary patches: 4
+    point zones:      0
+    face zones:       0
+    cell zones:       0
+
+Overall number of cells of each type:
+    hexahedra:     184800
+    prisms:        0
+    wedges:        0
+    pyramids:      0
+    tet wedges:    0
+    tetrahedra:    0
+    polyhedra:     0
+
+Checking topology...
+    Boundary definition OK.
+    Cell to face addressing OK.
+    Point usage OK.
+    Upper triangular ordering OK.
+    Face vertices OK.
+    Number of regions: 1 (OK).
+
+Checking patch topology for multiply connected surfaces...
+    Patch               Faces    Points     Surface topology
+    aerofoil            640      1280     ok (non-closed singly connected)  
+    farfield            1280     2560     ok (non-closed singly connected)  
+    back                184800   185760   ok (non-closed singly connected)  
+    front               184800   185760   ok (non-closed singly connected)  
+    ".*"                371520   371520   ok (closed singly connected)      
+
+
+Checking faceZone topology for multiply connected surfaces...
+    No faceZones found.
+
+Checking basic cellZone addressing...
+    No cellZones found.
+
+Checking basic pointZone addressing...
+    No pointZones found.
+
+Checking geometry...
+    Overall domain bounding box (-30 -0.001 -30) (35 0.001 30)
+    Mesh has 2 geometric (non-empty/wedge) directions (1 0 1)
+    Mesh has 2 solution (non-empty) directions (1 0 1)
+    All edges aligned with or perpendicular to non-empty directions.
+    Boundary openness (-2.1820776e-20 2.093848e-15 -3.7651713e-20) OK.
+ ***High aspect ratio cells found, Max aspect ratio: 254814.03, number of cells 14487
+  <<Writing 14487 cells with high aspect ratio to set highAspectRatioCells
+    Minimum face area = 2.7309376e-09. Maximum face area = 1.5965688.  Face area magnitudes OK.
+    Min volume = 5.4618753e-12. Max volume = 0.0031931377.  Total volume = 5.9818443.  Cell volumes OK.
+    Mesh non-orthogonality Max: 63.103143 average: 21.310944
+    Non-orthogonality check OK.
+    Face pyramids OK.
+    Max skewness = 2.509375 OK.
+    Coupled point location match (average 0) OK.
+
+Failed 1 mesh checks.
+
+End
+

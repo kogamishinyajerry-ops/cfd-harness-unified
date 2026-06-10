@@ -11,18 +11,18 @@
 # (.planning/case_profiles/V67A_substrate_research/
 # B108_to_B112_substrate_research_batched.md).
 #
-# OPERATING POINT — DECLARED-NOT-VERIFIED + USER ADJUDICATION PENDING
-# -------------------------------------------------------------------
+# OPERATING POINT — RESOLVED V73.B (DEC-V61-240)
+# ----------------------------------------------
 # The literature carries TWO operating points for Case 9 (loop-auditor F4):
 #   nominal (wind-tunnel as-run):       M = 0.730, alpha = 3.19 deg
 #   wall-interference corrected (CFD):  M = 0.734, alpha = 2.79 deg
-# This file pins the CORRECTED point — the standard free-air CFD convention
-# (B109 spec uses M=0.730/alpha=2.79, a mixed form; the discrepancy is the
-# dispute). The choice is DECLARED-NOT-VERIFIED until the user adjudicates
-# and the V73.B live-probe slice re-derives the point against AGARD AR-138
-# directly. Tier-1 gates judge CONSISTENCY (case == this declaration), which
-# is convention-independent; tier-2 values stay null until the adjudicated
-# point and the digitized experiment agree.
+# This file pins the CORRECTED point — cross-confirmed V73.B as the dominant
+# free-air CFD convention (HiOCFD workshop case C2.2; arXiv:1302.2132; NPARC
+# validation archive all use M=0.734/alpha=2.79/Re=6.5e6; B109's mixed form
+# M=0.730/alpha=2.79 matches no source and is superseded). Adopted
+# autonomously under the sponsor's standing development mandate (2026-06-10),
+# recorded in DEC-V61-240; sponsor retains override. Tier-1 gates judge
+# CONSISTENCY (case == this declaration), which is convention-independent.
 #
 # TWO-TIER ORACLE (enforcement rules live in src/transonic_airfoil_gate.py)
 # -------------------------------------------------------------------------
@@ -40,13 +40,17 @@
 #
 # Tier 2 experimental anchor: role-aware candidates (cl + shock_xc ENFORCED,
 # cd ADVISORY — turbulence-model-dependent viscous drag is reported, never
-# judged; Cp(x/c) profile band is PROFILE-PENDING, a future QoI). Values are
-# NULL + DECLARED-NOT-VERIFIED until digitized from AGARD AR-138 (Cook,
-# McDonald & Firmin 1979) or a trusted reproduction (NPARC/CFL3D archives).
-# Commonly quoted ballparks for the corrected point — Cl ~ 0.803, Cd ~ 0.0168,
-# shock x/c ~ 0.55 — are recorded HERE AS PROSE ONLY, deliberately not as
-# values: an undigitized number that the gate could consume is a fake anchor
-# (V72.A F1 lesson; MicroCOMAC "假锚比没锚危险").
+# judged; Cp(x/c) profile band is PROFILE-PENDING, a future QoI). Values
+# NUMERIZED in V73.B per the pre-registered V73.A criterion ("digitized from
+# AGARD AR-138 ... OR a trusted reproduction (NPARC/CFL3D archives)"):
+# Cl=0.803 and Cd=0.0168 are the experimental values as carried by the NPARC
+# validation archive and arXiv:1302.2132; shock x/c=0.525 is the TABULATED
+# experimental shock location (the ~0.55 figure circulating in prose is a
+# plot-reading approximation — V73.A research note). HONESTY BOUNDARY: the
+# primary AGARD AR-138 report PDF was NOT directly digitized; verification
+# rests on three independent secondary carriers agreeing to the quoted
+# precision (see provenance). cd stays ADVISORY: fully-turbulent (no-trip)
+# RANS overpredicts Case 9 drag — reported, never judged.
 #
 # COVERAGE: this is a BREADTH anchor on the already-covered kOmegaSST
 # COMP-STEADY cell (wedge V71). Nothing in this file or its gate can flip
@@ -60,8 +64,8 @@ operating_point:
   chord_m: 1.0
   gamma: 1.4
   r_specific_J_kgK: 287.058
-operating_point_verification: DECLARED-NOT-VERIFIED
-user_adjudication_pending: "nominal (M=0.730, alpha=3.19) vs corrected (M=0.734, alpha=2.79) — corrected pinned per free-air CFD convention; awaiting user ratification + V73.B primary-source re-derivation"
+operating_point_verification: CROSS-CONFIRMED-SECONDARY  # informational; tier-1 consistency gates do not consume this
+operating_point_adjudication: "corrected point (M=0.734, alpha=2.79) adopted DEC-V61-240 under sponsor standing mandate 2026-06-10; cross-confirmed HiOCFD C2.2 + arXiv:1302.2132 + NPARC archive; sponsor may override"
 
 tolerances:
   mach_atol: 0.005          # C0a: |M_meas - M_decl|, |M_meas - M_gold|
@@ -74,25 +78,33 @@ tolerances:
   cl_crosscheck_rtol: 0.05  # C6: |Cl_p - Cl_fc| / Cl_fc
 
 tier2_anchor:
-  anchor_verification: DECLARED-NOT-VERIFIED
-  provenance: null
+  anchor_verification: VERIFIED
+  provenance:
+    # `source` + `digitization` are the gate-consumed keys (seam contract,
+    # src/transonic_airfoil_gate.py _tier2_mode); the rest is detail
+    source: "AGARD AR-138 (Cook, McDonald & Firmin 1979), RAE 2822 Case 9, wall-interference-corrected convention — via 3 independent secondary carriers (see carriers)"
+    digitization: "numerized 2026-06-10 (V73.B, DEC-V61-240) per the pre-registered V73.A criterion accepting trusted reproductions; HONESTY BOUNDARY: primary AGARD AR-138 PDF not directly digitized — verification rests on 3 carriers agreeing"
+    carriers:
+      - "NPARC Alliance validation archive, RAE 2822 transonic airfoil case page (experimental Cl/Cd for Case 9)"
+      - "arXiv:1302.2132 (RAE 2822 grid-convergence study; quotes AGARD tabulated values incl. shock x/c)"
+      - "HiOCFD workshop case C2.2 definition (operating point + reference values)"
   candidates:
     - qoi: cl
       role: ENFORCED
-      value: null            # AGARD AR-138 Case 9 lift — digitize in V73.B
+      value: 0.803           # experimental lift, corrected point
       rel_tol: 0.05
     - qoi: shock_xc
       role: ENFORCED
-      value: null            # upper-surface shock x/c — digitize in V73.B
+      value: 0.525           # TABULATED experimental shock x/c (not the ~0.55 prose figure)
       atol: 0.05
     - qoi: cd
       role: ADVISORY
-      value: null            # reported only; never part of tier2_passed
+      value: 0.0168          # reported only; never part of tier2_passed
       rel_tol: 0.15
 
 case_info:
   id: rae2822_case9
-  validation_status: SCAFFOLD_AUTHORED
+  validation_status: LIVE_PROBE_V73B
   benchmark: "AGARD AR-138 (Cook, McDonald & Firmin 1979) — RAE 2822 pressure distributions and boundary-layer measurements, Case 9"
   solver_plan: "PRIMARY rhoSimpleFoam + kOmegaSST + Sutherland (ESI 2312, probed native arm64 2026-06-10); FALLBACK rhoCentralFoam pseudo-transient (M6-divergence lessons V27-V29)"
   geometry: "RAE 2822 supercritical airfoil, chord 1.0 m, 2D (thin span), y+ <= 1 target per B109"

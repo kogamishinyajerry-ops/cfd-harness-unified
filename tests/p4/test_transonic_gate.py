@@ -353,12 +353,15 @@ class TestGoldFailClosed:
         with pytest.raises(TransonicGoldError, match="shock_band"):
             _gate(build_case(tmp_path), gold)
 
-    def test_real_shipped_gold_runs_provisional(self, tmp_path):
-        """The REAL gold (null candidates, DECLARED-NOT-VERIFIED) must gate a
-        sane case as SANITY-PASS + PROVISIONAL, with the breadth-anchor
-        coverage note intact."""
+    def test_real_shipped_gold_runs_enforced(self, tmp_path):
+        """The REAL gold must gate a sane case as SANITY-PASS + tier-2
+        ENFORCED (anchors numerized + provenance accepted, V73.B
+        DEC-V61-240 — supersedes the V73.A null-anchor PROVISIONAL pin),
+        with the breadth-anchor coverage note intact. The synthetic fixture
+        case is judged against the real anchors: whatever the verdict, it
+        must BE a verdict (not None)."""
         r = _gate(build_case(tmp_path), REAL_GOLD)
         assert r.sanity_passed
-        assert r.tier2_mode == "PROVISIONAL"
-        assert r.tier2_passed is None
+        assert r.tier2_mode == "ENFORCED"
+        assert r.tier2_passed is not None
         assert "stays 3" in r.coverage_impact
